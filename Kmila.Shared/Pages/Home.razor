@@ -1,0 +1,25 @@
+﻿@page "/"
+@using Kmila.Shared.Services
+
+<h1>Hello, world!</h1>
+<style>
+    #editor {
+        height: 350px;
+    }
+</style>
+<StandaloneCodeEditor ConstructionOptions="EditorConstructionOptions" Id="editor" />
+
+@code {
+    private StandaloneEditorConstructionOptions EditorConstructionOptions(StandaloneCodeEditor editor)
+    {
+        return new()
+        {
+            AutomaticLayout = true,
+            Language="vhdl",
+            Value = "function xyz() {\n" +
+                    "   console.log(\"Hello world!\");\n" +
+                    "}",
+            
+        };
+    }
+}
