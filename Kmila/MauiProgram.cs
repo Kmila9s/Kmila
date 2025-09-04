@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using Kmila.Shared.Services;
+using Kmila.Shared.Data;
 using Kmila.Services;
 
 namespace Kmila;
@@ -16,9 +17,8 @@ public static class MauiProgram
                 fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
             });
 
-        // Add device-specific services used by the Kmila.Shared project
-        builder.Services.AddSingleton<IFormFactor, FormFactor>();
-
+        /*builder.Services.AddDbContext<ApplicationDbContext>(options =>
+            options.UseSqlite($"Filename={Path.Combine(FileSystem.AppDataDirectory, "app.db")}"));*/
         builder.Services.AddMauiBlazorWebView();
 
         builder.Services.AddBlazorBootstrap();
