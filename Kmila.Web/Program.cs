@@ -1,9 +1,9 @@
 using Kmila.Web.Components;
 using Kmila.Shared.Services;
 using Kmila.Web.Services;
-using Kmila.Shared.Data;
-using Microsoft.EntityFrameworkCore;
 using Kmila.Shared.Repositories;
+using Microsoft.EntityFrameworkCore;
+using Kmila.Shared.Data;
 
 namespace Kmila;
 
@@ -20,13 +20,16 @@ public class Program
         // Add device-specific services used by the Kmila.Shared project
         builder.Services.AddSingleton<IFormFactor, FormFactor>();
 
-        builder.Services.AddScoped<ApplicationDbContext>((provider) =>
+        /*builder.Services.AddDbContext<ApplicationDbContext>(options =>
         {
-            string filePath = "tonkib.db";
-            string target = Path.Combine(Directory.GetCurrentDirectory(), filePath);
-            File.Create(target);
-            return new(target);
-		});
+            string dbPath = Path.Combine(Directory.GetCurrentDirectory(), "kmila.db");
+            options.UseSqlite($"Data Source={dbPath}");
+        });*/
+        builder.Services.AddScoped<ApplicationDbContext>(sp =>
+        {
+            string dbPath = Path.Combine(Directory.GetCurrentDirectory(), "kmila.db");
+            return new(dbPath);
+        });
 
         builder.Services.AddScoped<Projects>();
 
