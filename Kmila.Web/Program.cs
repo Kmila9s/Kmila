@@ -33,6 +33,8 @@ public class Program
 
         builder.Services.AddScoped<Projects>();
 
+        builder.Services.AddScoped<ProjectFiles>();
+
         builder.Services.AddBlazorBootstrap();
         
         var app = builder.Build();

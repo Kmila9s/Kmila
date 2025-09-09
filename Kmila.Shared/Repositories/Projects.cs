@@ -15,6 +15,7 @@ public class Projects : IRepository<Project>
     {
         _logger = logger;
         _applicationDbContext = applicationDbContext;
+        _ = _applicationDbContext.InitDBAsync();
     }
     public async Task<bool> CreateAsync(Project project)
     {
@@ -87,7 +88,10 @@ public class Projects : IRepository<Project>
                 LastError = "Project not found";
                 return false;
             }
-            Directory.Delete(oldProject.BasePath, true);
+            if(Directory.Exists(oldProject.BasePath))
+                Directory.Delete(oldProject.BasePath, true);
+            await _applicationDbContext.DeleteAsync(project);
+            return true;
         }
         catch (Exception ex)
         {
@@ -100,20 +104,29 @@ public class Projects : IRepository<Project>
         LastError = string.Empty;
         try
         {
-
+            return await _applicationDbContext.Projects.ToListAsync();
         }
         catch (Exception ex)
         {
             LastError = ex.Message;
         }
-        return null!;
+        return new();
     }
     public async Task<Project> GetByAsync(object id)
     {
         LastError = string.Empty;
         try
         {
-
+            Project project = null!;
+            if (id is int intId)
+                project = await _applicationDbContext.Projects.FirstOrDefaultAsync(p => p.Id == intId);
+            else if(id is string strId)
+                project = await _applicationDbContext.Projects.FirstOrDefaultAsync(p => p.Name.ToLower() == strId.ToLower());
+            if (project == null)
+            {
+                LastError = "Project not found";
+            }
+            return project ?? new();
         }
         catch (Exception ex)
         {
