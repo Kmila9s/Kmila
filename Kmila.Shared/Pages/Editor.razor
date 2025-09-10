@@ -20,8 +20,10 @@
         <div class="col-lg-2 col-md-6 col-sm-12">
             <div class="card h-100">
                 <ButtonCollapse 
+                    @ref="_buttonsCollapse"
                     OnNewFileButtonClicked="ShowCreateFileModalAsync"
                     OnSaveFileButtonClicked="OnSaveFile"
+                    OnBuildButtonClicked="OnBuildRequested"
                 />
             </div>
         </div>
@@ -48,6 +50,7 @@
     private int _projectId = -1;
     private Project _project = null!;
     private FilesCard _filesCard = new();
+    private ButtonCollapse _buttonsCollapse = new();
     private StandaloneCodeEditor _editor = new();
     private Modal _createFileModal = new();
     private ProjectFile _openedFile = null!;
@@ -64,8 +67,30 @@
             { "Project", _project },
             { "EditorContent", await _editor.GetValue() },
             { "OnProjectFileCreated", EventCallback.Factory.Create(this, OnFileCreatedAsync)}
+
         };
         await _createFileModal.ShowAsync<CreateFileModal>("Creating new file", parameters: parameters);
+    }
+    private async Task OnBuildRequested(){
+        try{
+            if(_openedFile != null){
+                ProgramBuilder builder = new();
+                var result = builder.Build(_openedFile);
+                ToastService.Notify(Message(
+                    result ? "Correct" : "Error",
+                    result ? "Program build succesfully" : $"Error",
+                    result ? ToastType.Success : ToastType.Danger
+                ));
+            }else{
+                ToastService.Notify(Message("Entry point not found", "To build you must open first the entry point file", ToastType.Warning));
+            }
+        }catch(Exception ex){
+            ToastService.Notify(Message("Error", ex.Message, ToastType.Danger));
+        }finally{
+            await _buttonsCollapse.ReleaseBuild();
+        }
+        
+
     }
     private async Task OnSaveFile(){
         try{

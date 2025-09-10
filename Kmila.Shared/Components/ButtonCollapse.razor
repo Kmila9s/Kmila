@@ -13,6 +13,7 @@
                         Type="ButtonType.Button"
                         Color="ButtonColor.Primary"
                         Outline=true
+                        Disabled=_building
                         TooltipTitle="Save current file"
                         @onclick="async () => await OnSaveFileButtonClicked.InvokeAsync()"
                     >
@@ -24,6 +25,7 @@
                         Type="ButtonType.Button"
                         Color="ButtonColor.Secondary"
                         Outline=true
+                        Disabled=_building
                         TooltipTitle="Add new file"
                         @onclick="async () => await OnNewFileButtonClicked.InvokeAsync()"
                     >
@@ -35,6 +37,7 @@
                         Type="ButtonType.Button"
                         Color="ButtonColor.Info"
                         Outline=true
+                        Disabled=_building
                         TooltipTitle="Execute current program"
                     >
                         Execute program <Icon Name="IconName.Play"/>
@@ -45,7 +48,11 @@
                         Type="ButtonType.Button"
                         Color="ButtonColor.Success"
                         Outline=true
+                        Disabled=_building
+                        Loading=_building
+                        LoadingText="Building program, please wait"
                         TooltipTitle="Build and validate current program"
+                        @onclick="BuildRequested"
                     >
                         Validate program <Icon Name="IconName.Check2All"/>
                     </Button>
@@ -83,4 +90,16 @@
     public EventCallback OnNewFileButtonClicked { get; set; }
     [Parameter]
     public EventCallback OnSaveFileButtonClicked { get; set; }
+    [Parameter]
+    public EventCallback OnBuildButtonClicked { get; set; }
+    private bool _building = false;
+    private async Task BuildRequested(){
+        _building = true;
+        await OnBuildButtonClicked.InvokeAsync();
+        StateHasChanged();
+    }
+    public async Task ReleaseBuild(){
+        _building = false;
+        StateHasChanged();
+    }
 }
