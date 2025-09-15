@@ -78,7 +78,35 @@ public class ProjectFiles : IRepository<ProjectFile>
         };
     }
     public async Task<ProjectFile> GetByAsync(object id) => throw new NotImplementedException();
-    public async Task<bool> UpdateAsync(ProjectFile item) => throw new NotImplementedException();
+    public async Task<bool> UpdateAsync(ProjectFile item)
+    {
+        LastError = string.Empty;
+        try
+        {
+            var oldFile = await _applicationDbContext.ProjectFiles.FirstOrDefaultAsync(p => p.Id == item.Id);
+            if (oldFile == null)
+            {
+                LastError = "File not found, consider save it first";
+                return false;
+            }
+            string path = Path.Join(item.Project.BasePath, item.FileName);
+            if (!File.Exists(path))
+            {
+                LastError = "File not found in disk";
+                return false;
+            }
+            oldFile.Content = item.Content;
+            await File.WriteAllTextAsync(path, String.IsNullOrEmpty(item.Content) ? "Hello world!" : item.Content);
+            await _applicationDbContext.UpdateAsync(oldFile);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            LastError = ex.Message;
+            _logger.LogError(ex.Message);
+        }
+        return false;
+    }
     public async Task<bool> RemoveAsync(ProjectFile item) => throw new NotImplementedException();
     public async Task<List<ProjectFile>> GetProjectFilesAsync(Project project)
     {
