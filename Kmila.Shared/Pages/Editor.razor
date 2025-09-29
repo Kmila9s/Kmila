@@ -6,6 +6,11 @@
         .editor {
             height: inherit;
         }
+        @@media (max-width: 768px) {
+            .editor {
+                height: 500px !important;
+            }
+        }
     </style>
     <h2>@_project.Name</h2>
     <div class="row my-3">
@@ -29,12 +34,12 @@
         </div>
     </div>
     <div class="row my-3">
-        <div class="col-6">
+        <div class="col-lg-6 col-sm-12">
             <div class="card h-100">
                 <p>Hello world</p>
             </div>
         </div>
-        <div class="col-6">
+        <div class="col-lg-6 col-sm-12">
             <FilesCard 
                 @ref="_filesCard"
                 OnProjectFileClicked="OnProjectFileOpened"
@@ -54,12 +59,19 @@
     private StandaloneCodeEditor _editor = new();
     private Modal _createFileModal = new();
     private ProjectFile _openedFile = null!;
+    private List<ProjectFile> _projectFiles { get; set; } = new();
     protected override async Task OnInitializedAsync(){
         if(String.IsNullOrEmpty(ProjectId)){
             ToastService.Notify(Message("Project not set", "Error opening the project", ToastType.Danger));
         }else{
             _projectId = int.Parse(ProjectId);
             _project = await Projects.GetByAsync(_projectId);
+            _projectFiles = await ProjectFiles.GetProjectFilesAsync(_project);
+            if(_projectFiles.Count > 0){
+                _openedFile = _projectFiles.First();
+                _editor.SetValue(_openedFile.Content);
+                _filesCard.SetDefaultFile(_openedFile);
+            }
         }
     }
     private async Task ShowCreateFileModalAsync(){
