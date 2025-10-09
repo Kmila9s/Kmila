@@ -29,17 +29,20 @@
                     OnNewFileButtonClicked="ShowCreateFileModalAsync"
                     OnSaveFileButtonClicked="OnSaveFile"
                     OnBuildButtonClicked="OnBuildRequested"
+                    OnSimulationStarted="OnSimulationStarted"
                 />
             </div>
         </div>
     </div>
     <div class="row my-3">
-        <div class="col-lg-6 col-sm-12">
-            <div class="card h-100">
-                <p>Hello world</p>
+        @if(_builder.Parser != null){
+            <div class="col-lg-6 col-sm-12">
+                @foreach(var entity in _builder.Parser.Entities){
+                    <EntityView Entity=entity/>
+                }
             </div>
-        </div>
-        <div class="col-lg-6 col-sm-12">
+        }
+        <div class='col-lg-@(_builder.Parser != null ? "6" : "12") col-sm-12'>
             <FilesCard 
                 @ref="_filesCard"
                 OnProjectFileClicked="OnProjectFileOpened"
@@ -54,6 +57,7 @@
     public string ProjectId { get; set; } = string.Empty;
     private int _projectId = -1;
     private Project _project = null!;
+    private ProgramBuilder _builder = new();
     private FilesCard _filesCard = new();
     private ButtonCollapse _buttonsCollapse = new();
     private StandaloneCodeEditor _editor = new();
@@ -67,6 +71,11 @@
             _projectId = int.Parse(ProjectId);
             _project = await Projects.GetByAsync(_projectId);
             _projectFiles = await ProjectFiles.GetProjectFilesAsync(_project);
+        }
+        
+    }
+    protected override void OnAfterRender(bool first){
+        if(first){
             if(_projectFiles.Count > 0){
                 _openedFile = _projectFiles.First();
                 _editor.SetValue(_openedFile.Content);
@@ -86,13 +95,14 @@
     private async Task OnBuildRequested(){
         try{
             if(_openedFile != null){
-                ProgramBuilder builder = new();
-                var result = builder.Build(_openedFile);
+                _builder = new();
+                var result = _builder.Build(_openedFile);
                 ToastService.Notify(Message(
                     result ? "Correct" : "Error",
                     result ? "Program build succesfully" : $"Error",
                     result ? ToastType.Success : ToastType.Danger
                 ));
+                _buttonsCollapse.IsValidProgram(result);
             }else{
                 ToastService.Notify(Message("Entry point not found", "To build you must open first the entry point file", ToastType.Warning));
             }
@@ -100,8 +110,11 @@
             ToastService.Notify(Message("Error", ex.Message, ToastType.Danger));
         }finally{
             await _buttonsCollapse.ReleaseBuild();
+            StateHasChanged();
         }
-        
+    }
+    private async Task OnSimulationStarted(TimeSpan timeSpan){
+        _builder.SetSimulationTime(timeSpan);
 
     }
     private async Task OnSaveFile(){

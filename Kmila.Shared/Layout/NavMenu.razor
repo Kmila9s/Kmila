@@ -1,24 +1,44 @@
-﻿<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">Kmila</a>
-    </div>
-</div>
+﻿<Sidebar2 @ref="_sidebar"
+    ImageSrc="img/Logo.png"
+    Href="/"
+    IconName="IconName.BootstrapFill"
+    Title="Kmila"
+    BadgeText="v0.5.0"
+    DataProvider="SidebarDataProvider" />
+@code{
+    private Sidebar2 _sidebar = new();
+    private IEnumerable<NavItem>? _navItems;
+    private List<Project> _projects = new();
+    private async Task<Sidebar2DataProviderResult> SidebarDataProvider(Sidebar2DataProviderRequest request)
+    {
+        _projects = await Projects.GetListAsync();
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+        _navItems = GetNavItems();
 
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
-            </NavLink>
-        </div>
+        return await Task.FromResult(request.ApplyTo(_navItems));
+    }
+    private IEnumerable<NavItem> GetNavItems()
+    {
+        var items = new List<NavItem>
+        {
+            new () { Id = "1", Text = "Project Options"},
+            new () { Id = "2", Href = "/projects", IconName = IconName.FolderPlus, Text = "Projects", IconColor = IconColor.Success, ParentId = "1" },
+            new () { Id = "3", Href = "/projects/create", IconName = IconName.Plus, Text = "Create new project", IconColor = IconColor.Info, ParentId = "1" },
+            new () { Id = "4", Text = "Projects Created", IconName = IconName.Folder2Open, ParentId = "1" }
+        };
+        int currentId = items.Count();
+        foreach(var project in _projects){
+            items.Add(new(){
+                Id = $"{currentId++}",
+                Text = project.Name,
+                ParentId = "4",
+                Href = $"/editor/{project.Id}",
+                IconName = IconName.DeviceHdd,
+                IconColor = IconColor.Warning
+            });
+        }
+        return items;
+    }
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="/projects">
-                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Projects
-            </NavLink>
-        </div>
-    </nav>
-</div>
-
+    private void ToggleSidebar() => _sidebar.ToggleSidebar();
+}

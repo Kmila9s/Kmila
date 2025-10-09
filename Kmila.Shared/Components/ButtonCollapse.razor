@@ -37,10 +37,16 @@
                         Type="ButtonType.Button"
                         Color="ButtonColor.Info"
                         Outline=true
-                        Disabled=_building
-                        TooltipTitle="Execute current program"
+                        @onclick="StartSimulationAsync"
+                        Disabled=@(_building || !_validProgram)
+                        TooltipTitle=@(!_validProgram ? "Validate first the program" : "Start simulation")
                     >
-                        Execute program <Icon Name="IconName.Play"/>
+                        @if(!_validProgram){
+                            <span>Build first <Icon Name="IconName.X"/></span>
+                        }else{
+                            <span>Start simulation <Icon Name="IconName.Play"/></span>
+                        }
+                        
                     </Button>
                 </div>
                 <div class="d-grid gap-2 my-3">
@@ -85,6 +91,7 @@
         </div>
     </div>
 </div>
+<Modal Size="ModalSize.Large" IsScrollable=true @ref="_simulationParametersModal"/>
 @code{
     [Parameter]
     public EventCallback OnNewFileButtonClicked { get; set; }
@@ -92,15 +99,32 @@
     public EventCallback OnSaveFileButtonClicked { get; set; }
     [Parameter]
     public EventCallback OnBuildButtonClicked { get; set; }
-    private bool _building = false;
+    [Parameter]
+    public EventCallback<TimeSpan> OnSimulationStarted { get; set; }
+    private bool _building = false, _validProgram = false;
+    private Modal _simulationParametersModal = new();
     private async Task BuildRequested(){
         _building = true;
         StateHasChanged();
+        await OnSaveFileButtonClicked.InvokeAsync();
         await OnBuildButtonClicked.InvokeAsync();
-        
+    }
+    private async Task StartSimulationAsync(){
+        if(!_validProgram || _building){
+            ToastService.Notify(Message("Error", "The program must be verified or not building", ToastType.Danger));
+            return;
+        }
+        Dictionary<string, object> parameters = new(){
+            {"OnSimulationStarted", EventCallback.Factory.Create<TimeSpan>(this, async p => await OnSimulationStarted.InvokeAsync(p) )}
+        };
+        await _simulationParametersModal.ShowAsync<SimulationParametersModal>("Simulation parameters");
     }
     public async Task ReleaseBuild(){
         _building = false;
+        StateHasChanged();
+    }
+    public void IsValidProgram(bool state){
+        _validProgram = state;
         StateHasChanged();
     }
 }

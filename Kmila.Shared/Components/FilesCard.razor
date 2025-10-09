@@ -72,9 +72,9 @@
     [Parameter]
     public Project Project { get; set; } = null!;
     [Parameter]
-    public EventCallback<ProjectFile> OnProjectFileClicked { get; set; }
+    public EventCallback<ProjectFile> OnProjectFileClicked { get; set; } = new();
     [Parameter]
-    public EventCallback<ProjectFile> OnProjectFileRemoved { get; set; }
+    public EventCallback<ProjectFile> OnProjectFileRemoved { get; set; } = new();
     private List<ProjectFile> _projectFiles { get; set; } = new();
     private ConfirmDialog _removeFileDialog = new();
     private ProjectFile? _selectedFile = null;
@@ -84,7 +84,12 @@
         }
     }
     public void SetDefaultFile(ProjectFile file){
-        _selectedFile = file;
+        try{
+            _selectedFile = _projectFiles.FirstOrDefault(p => p.Id == file.Id);
+        }finally{
+            InvokeAsync(StateHasChanged);
+        }
+        
     }
     public async Task ReloadFiles(){
         if(Project != null){
