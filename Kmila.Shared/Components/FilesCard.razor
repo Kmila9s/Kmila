@@ -81,6 +81,9 @@
     protected override async Task OnInitializedAsync(){
         if(Project != null){
             _projectFiles = await ProjectFiles.GetProjectFilesAsync(Project);
+            if(_projectFiles.Count > 0){
+                _selectedFile = _projectFiles.First();
+            }
         }
     }
     public void SetDefaultFile(ProjectFile file){

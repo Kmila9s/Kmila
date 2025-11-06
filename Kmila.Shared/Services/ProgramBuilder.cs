@@ -6,12 +6,15 @@ namespace Kmila.Shared.Services;
 
 public class ProgramBuilder : IDisposable
 {
+    public event Action<bool>? OnSimulationEnded;
+    public event Action<double>? OnProgressAdvanced;
     public Debugger.Repositories.Parser Parser { get; private set; } = default!;
-    private TimeMachine.Repositories.Timer _timeMachine = default!;
+    private TimeMachine.Repositories.Timer _timeMachine = new();
     private readonly CancellationTokenSource _cts = new();
     public ProgramBuilder()
     {
-        TimeMachine.Repositories.Timer.OnSimulationEnded += OnSimulationEnded;
+        _timeMachine.OnSimulationEnded += OnSimulationEnd;
+        _timeMachine.OnProgressAdvance += OnProgressAdvance;
     }
     public bool Build(ProjectFile file)
     {
@@ -24,16 +27,20 @@ public class ProgramBuilder : IDisposable
             throw new Exception("File not valid");
         return true;
     }
-    public void OnSimulationEnded(bool ended)
+    public void RestartTimer(TimeSpan WaitTime) => _timeMachine.Restart(WaitTime);
+    public void PauseTimer() => _timeMachine.Pause();
+    public void ContinueTimer() => _timeMachine.Continue();
+    public void StopTimer() => _timeMachine.Stop();
+    private void OnProgressAdvance(double progress)
     {
-        if (ended)
-        {
-            
-        }
+        OnProgressAdvanced?.Invoke(progress);
+    }
+    private void OnSimulationEnd(bool ended)
+    {
+        OnSimulationEnded?.Invoke(ended);
     }
     public void SetSimulationTime(TimeSpan WaitTime)
     {
-        _timeMachine = new();
         _timeMachine.Start(WaitTime);
     }
     public void Dispose()

@@ -1,16 +1,17 @@
-<form>
+@implements IDisposable
+<form @onsubmit="OnFormSubmited">
     <div class="input-group mb-3">
-        <input type="number" class="form-control" aria-label="Text input with dropdown button" @bind="_time" min=0 max=1000/>
-        <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Time scale: @_zone</button>
+        <input type="number" class="form-control" aria-label="Text input with dropdown button" @bind="_time" min=0 max=1000 disabled=@(_running)/>
+        <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" disabled=@_running>Time scale: @_zone</button>
         <ul class="dropdown-menu">
-            @foreach(var zone in _timeZones){
-                <li><a class="dropdown-item" @onclick="() => SetZone(zone)">@zone</a></li>
+            @foreach(var zone in Enum.GetValues(typeof(TimeScale))){
+                <li><a class="dropdown-item" @onclick="() => SetZone((TimeScale)zone)">@Enum.GetName(typeof(TimeScale), zone)</a></li>
             }
         </ul>
     </div>
     <div class="d-flex flex-row mb-3">
         <div class="flex-fill">
-            <RangeInput TValue="int" @bind-Value="_time" Min="0" Max="1000" TickMarks="list" />
+            <RangeInput TValue="int" @bind-Value="_time" Min="0" Max="1000" TickMarks="list" Disabled=_running />
         </div>
         <Badge Color="@(_time > 750 ? BadgeColor.Danger :
                 _time > 500 ? BadgeColor.Warning :
@@ -19,29 +20,219 @@
             )"
             Class="ms-2" VisuallyHiddenText="amount1">@_time @_zone</Badge>
     </div>
-    <Button
-        Type="ButtonType.Submit"
-        Color="ButtonColor.Success"
-        Outline=true
-        Disabled=_running
-        LoadingText="Running simulation, please wait..."
-        TooltipTitle="Start simulation with the current parameters"
-    >
-        Start <Icon Name=IconName.HourglassSplit/>
-    </Button>
+    <div class="d-grid gap-2">
+        <div class="btn-group">
+            <Button
+                Type="ButtonType.Submit"
+                Color="ButtonColor.Success"
+                Outline=true
+                Disabled=_running
+                Loading=_running
+                LoadingText="Running simulation, please wait..."
+                TooltipTitle="Start simulation with the current parameters"
+            >
+                Start <Icon Name=IconName.HourglassSplit/>
+            </Button>
+            @if(_running){
+                @if(!_paused){
+                    <Button
+                        Type="ButtonType.Button"
+                        Color="ButtonColor.Info"
+                        Outline=true
+                        TooltipTitle="Pause simulation at current tick"
+                        @onclick='() => { Builder.PauseTimer(); _paused = true; }'
+                    >
+                        Pause <Icon Name=IconName.Pause/>
+                    </Button>
+                }else{
+                    <Button
+                        Type="ButtonType.Button"
+                        Color="ButtonColor.Success"
+                        Outline=true
+                        Disabled=@(!_paused)
+                        TooltipTitle="Continue simulation at current tick"
+                        @onclick='() => { Builder.ContinueTimer(); _paused = false; }'
+                    >
+                        Continue <Icon Name=IconName.Play/>
+                    </Button>
+                }
+                <Button
+                    Type="ButtonType.Button"
+                    Color="ButtonColor.Warning"
+                    Outline=true
+                    TooltipTitle="Restart simulation at current tick"
+                    @onclick='RestartSimulationAsync'
+                >
+                    Restart <Icon Name=IconName.ArrowClockwise/>
+                </Button>
+                <Button
+                    Type="ButtonType.Button"
+                    Color="ButtonColor.Danger"
+                    Outline=true
+                    TooltipTitle="Stop simulation at current tick"
+                    @onclick='StopSimulationAsync'
+                >
+                    Stop <Icon Name=IconName.StopFill/>
+                </Button>
+            }
+        </div>
+    </div>
 </form>
+@if(_running){
+    <div class="mb-3 my-3">
+        <h4>Running... @_percent %</h4>
+        <Progress Class="mb-3 my-3">
+            <ProgressBar Type="ProgressType.Striped" 
+                Color="ProgressColor.Success" 
+                Width=_percent
+                Label=@_label
+                @ref=_progressBar/>
+        </Progress>
+    </div>
+}else{
+    foreach(var entity in Builder.Parser.Entities){
+        foreach(var variable in entity.Ports.Where(p => p.PortType == PortType.IN)){
+            <InputPortValueByTime 
+                Variable=variable 
+                LimitTime=_time 
+                TimeScale=_zone
+            />
+        }
+    }
+}
+
+<ConfirmDialog @ref="_confirmDialog" />
 @code{
     [Parameter]
     public EventCallback<TimeSpan> OnSimulationStarted { get; set; }
+    private ConfirmDialog _confirmDialog = new();
     private int _time = 0;
-    private string _zone = "us";
-    private bool _running = false;
-    private static List<string> _timeZones = new(){
-        "us", "ms", "s", "m", "h"
-    };
-    private void SetZone(string zone){
+    private TimeScale _zone = TimeScale.US;
+    private string _label => $"{_percent} %";
+    private bool _running = false, _paused = false, _simulationEnded = false;
+    private double _percent = 0;
+    private TimeSpan _totalTime;
+    private ProgressBar _progressBar = new();
+    protected override void OnInitialized(){
+        Builder.OnSimulationEnded += OnSimulationEnded;
+        Builder.OnProgressAdvanced += OnProgressAdvance;
+    }
+    protected override void OnParametersSet(){
+        Builder.OnSimulationEnded += OnSimulationEnded;
+        Builder.OnProgressAdvanced += OnProgressAdvance;
+    }
+    private async Task RestartSimulationAsync(){
+        var options = new ConfirmDialogOptions {
+            NoButtonColor=ButtonColor.Success,
+            AutoFocusYesButton=false,
+            YesButtonColor=ButtonColor.Danger,
+            YesButtonText="Restart simulation",
+            NoButtonText="No, go back"
+        };
+
+        var confirmation = await _confirmDialog.ShowAsync(
+            title: "Restart simulation at current tick",
+            message1: "Do you want to proceed?",
+            message2: "The variables will be reset and you will have to start again",
+            confirmDialogOptions: options);
+
+        if (confirmation)
+        {
+            Builder.RestartTimer(_totalTime);
+            _simulationEnded = false;
+        }
+    }
+    private async Task StopSimulationAsync(){
+        var options = new ConfirmDialogOptions {
+            NoButtonColor=ButtonColor.Success,
+            AutoFocusYesButton=false,
+            YesButtonColor=ButtonColor.Danger,
+            YesButtonText="Stop simulation",
+            NoButtonText="No, go back"
+        };
+
+        var confirmation = await _confirmDialog.ShowAsync(
+            title: "Restart simulation at current tick",
+            message1: "Do you want to proceed?",
+            message2: "The variables will be show with their states at the current tick. You can start again in any moment.",
+            confirmDialogOptions: options);
+
+        if (confirmation)
+        {
+            Builder.StopTimer();
+            _percent = 0;
+            _paused = false;
+            _running = false;
+            _simulationEnded = true;
+            ToastService.Notify(Message("Simulation stopped", "The simulation has been stopped successfully"));
+            StateHasChanged();
+        }
+    }
+    public void Dispose(){
+        _percent = 0;
+        Builder.OnSimulationEnded -= OnSimulationEnded;
+        Builder.OnProgressAdvanced -= OnProgressAdvance;
+    }
+    private void OnProgressAdvance(double progress){
+        _percent = progress;
+        if(_percent == 100){
+            InvokeAsync(() => {
+                _percent = 0;
+                _paused = false;
+                _running = false;
+                _simulationEnded = true;
+                Builder.StopTimer();
+                StateHasChanged();
+            });
+            
+        }else{
+            InvokeAsync(() =>{
+                _percent = progress;
+                StateHasChanged();  
+            });
+        }
+        
+    }
+    private void SetZone(TimeScale zone){
         _zone = zone;
         StateHasChanged();
+    }
+    private void OnSimulationEnded(bool ended){
+        _running = false;
+        _simulationEnded = true;
+        ToastService.Notify(Message("Success", "Simulation ended"));
+        InvokeAsync(StateHasChanged);
+    }
+    private async Task OnFormSubmited(){
+        _running = true;
+        _percent = 0;
+        StateHasChanged();
+        TimeSpan totalTime;
+        
+        switch(_zone){
+            case TimeScale.US:
+                totalTime = TimeSpan.FromMicroseconds(_time);
+            break;
+            default:
+            case TimeScale.MS:
+                totalTime = TimeSpan.FromMilliseconds(_time);
+            break;
+            case TimeScale.NS:
+                totalTime = TimeSpan.FromTicks(_time);
+            break;
+            case TimeScale.S:
+                totalTime = TimeSpan.FromSeconds(_time);
+            break;
+            case TimeScale.M:
+                totalTime = TimeSpan.FromMinutes(_time);
+            break;
+            case TimeScale.H:
+                totalTime = TimeSpan.FromHours(_time);
+            break;
+        }
+        _totalTime = totalTime;
+        _simulationEnded = false;
+        await OnSimulationStarted.InvokeAsync(totalTime);
     }
     private static IEnumerable<TickMark> list = new List<TickMark>
     {

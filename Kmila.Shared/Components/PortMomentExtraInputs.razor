@@ -1,0 +1,72 @@
+<span>
+    If a time moment is repeated, will be discarted (this if the Time scale and value are the same).
+    Eg. 
+        Moment 1: Value "1" at NS 12
+        Moment 2: Value "2" at NS 12
+    Moment 2 will be discarted.
+</span>
+@if(!PortMoment.IsClock){
+    <div class="d-grid gap-2">
+        <div class=btn-group>
+            <Button
+                Color="ButtonColor.Success"
+                Outline=true
+                Disabled=PortMoment.IsClock
+                TooltipTitle="Add new moment for this port"
+                @onclick='() => {
+                    _inputs++;
+                    _portMoments.Add(new());
+                }'
+            >
+                <Icon Name="IconName.Plugin"/>
+            </Button>
+            <Button
+                    Type=ButtonType.Button
+                    Outline=true
+                    Disabled=@(_inputs <= 0)
+                    Color="ButtonColor.Warning"
+                    TooltipTitle="Remove last moment"
+                    @onclick="() => {
+                        if(_inputs > 0){
+                            _portMoments.RemoveAt(--_inputs);
+                        }
+                    }"
+                >
+                    <Icon Name="IconName.Trash"/>
+            </Button>
+        </div>
+    </div>
+}
+@if(_inputs > 0 && !PortMoment.IsClock){
+    @for(int i = 0; i < _inputs; i++){
+        <label for="input-group-@(_inputs)" class="form-label">@Variable?.Name - @Enum.GetName(typeof(DATATYPES), Variable?.Type ?? DATATYPES.UNKNOWN)</label>
+        <div class="input-group mb-3" id="input-group-@(_inputs)">
+            <input disabled=@_portMoments[i].IsClock readonly=@_portMoments[i].IsClock type="text" class="form-control" aria-label="Text input with dropdown button" @bind="_portMoments[i].Value" placeholder="Variable value"/>
+            <input disabled=@_portMoments[i].IsClock readonly=@_portMoments[i].IsClock type="number" class="form-control" aria-label="Text input with dropdown button" min=1 max=@LimitTime @bind="_portMoments[i].TimeInput" placeholder="Time when the value will be set"/>
+            <button disabled=@_portMoments[i].IsClock class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Time scale: @_portMoments[i].TimeScale</button>
+            <ul class="dropdown-menu">
+                @foreach(var zone in items.Where(p => p <= TimeScale)){
+                    <li><a class="dropdown-item" @onclick="() => SetZone((TimeScale)zone, _portMoments[i])">@Enum.GetName(typeof(TimeScale), zone)</a></li>
+                }
+            </ul>
+        </div>
+    }
+    
+}
+
+@code{
+    [Parameter]
+    public PortMoment PortMoment { get; set; } = default!;
+    [Parameter]
+    public Variable Variable { get; set; } = default!;
+    [Parameter]
+    public TimeScale TimeScale { get; set; } = TimeScale.US;
+    [Parameter]
+    public int LimitTime { get; set; }
+    private static TimeScale[] items = Enum.GetValues<TimeScale>();
+    private List<PortMoment> _portMoments = new();
+    private int _inputs = 0; 
+    private void SetZone(TimeScale scale, PortMoment PortMoment){
+        PortMoment.TimeScale = scale;
+    }
+}

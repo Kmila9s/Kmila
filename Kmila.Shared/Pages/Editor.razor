@@ -35,14 +35,14 @@
         </div>
     </div>
     <div class="row my-3">
-        @if(_builder.Parser != null){
+        @if(Builder.Parser != null){
             <div class="col-lg-6 col-sm-12">
-                @foreach(var entity in _builder.Parser.Entities){
+                @foreach(var entity in Builder.Parser.Entities){
                     <EntityView Entity=entity/>
                 }
             </div>
         }
-        <div class='col-lg-@(_builder.Parser != null ? "6" : "12") col-sm-12'>
+        <div class='col-lg-@(Builder.Parser != null ? "6" : "12") col-sm-12'>
             <FilesCard 
                 @ref="_filesCard"
                 OnProjectFileClicked="OnProjectFileOpened"
@@ -57,7 +57,6 @@
     public string ProjectId { get; set; } = string.Empty;
     private int _projectId = -1;
     private Project _project = null!;
-    private ProgramBuilder _builder = new();
     private FilesCard _filesCard = new();
     private ButtonCollapse _buttonsCollapse = new();
     private StandaloneCodeEditor _editor = new();
@@ -95,8 +94,7 @@
     private async Task OnBuildRequested(){
         try{
             if(_openedFile != null){
-                _builder = new();
-                var result = _builder.Build(_openedFile);
+                var result = Builder.Build(_openedFile);
                 ToastService.Notify(Message(
                     result ? "Correct" : "Error",
                     result ? "Program build succesfully" : $"Error",
@@ -114,7 +112,7 @@
         }
     }
     private async Task OnSimulationStarted(TimeSpan timeSpan){
-        _builder.SetSimulationTime(timeSpan);
+        Builder.SetSimulationTime(timeSpan);
 
     }
     private async Task OnSaveFile(){

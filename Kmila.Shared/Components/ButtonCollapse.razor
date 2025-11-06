@@ -115,9 +115,12 @@
             return;
         }
         Dictionary<string, object> parameters = new(){
-            {"OnSimulationStarted", EventCallback.Factory.Create<TimeSpan>(this, async p => await OnSimulationStarted.InvokeAsync(p) )}
+            {"OnSimulationStarted", EventCallback.Factory.Create<TimeSpan>(this, OnSimulationRequested )}
         };
-        await _simulationParametersModal.ShowAsync<SimulationParametersModal>("Simulation parameters");
+        await _simulationParametersModal.ShowAsync<SimulationParametersModal>("Simulation parameters", null, parameters);
+    }
+    private async Task OnSimulationRequested(TimeSpan time){
+        await OnSimulationStarted.InvokeAsync(time);
     }
     public async Task ReleaseBuild(){
         _building = false;

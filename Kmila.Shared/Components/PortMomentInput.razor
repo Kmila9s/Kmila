@@ -1,0 +1,55 @@
+<div class="mb-3 my-3">
+    <label for="input-group-0" class="form-label">@Variable?.Name - @Enum.GetName(typeof(DATATYPES), Variable?.Type ?? DATATYPES.UNKNOWN)</label>
+    @if(!_portMoment.IsClock){
+        <div class=btn-group>
+            <Button
+                Color="ButtonColor.Success"
+                Outline=true
+                Disabled=_portMoment.IsClock
+                TooltipTitle="Add new moments for this port"
+                @onclick='AddInputParams'
+            >
+                <Icon Name="IconName.Plugin"/>
+            </Button>
+        </div>
+    }
+    <div class="input-group mb-3" id="input-group-0">
+        <Tooltip class="input-group-text" Title="Is a system clock?">
+                <input class="form-check-input mt-0" type="checkbox" @bind=_portMoment.IsClock aria-label="">
+        </Tooltip>
+        <input disabled=@_portMoment.IsClock readonly=@_portMoment.IsClock type="text" class="form-control" aria-label="Text input with dropdown button" @bind="_portMoment.Value" placeholder="Variable value"/>
+        <input disabled=@_portMoment.IsClock readonly=@_portMoment.IsClock type="number" class="form-control" aria-label="Text input with dropdown button" min=1 max=@LimitTime @bind="_portMoment.TimeInput" placeholder="Time when the value will be set"/>
+        <button disabled=@_portMoment.IsClock class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Time scale: @_portMoment.TimeScale</button>
+        <ul class="dropdown-menu">
+            @foreach(var zone in items.Where(p => p <= TimeScale)){
+                <li><a class="dropdown-item" @onclick="() => SetZone((TimeScale)zone)">@Enum.GetName(typeof(TimeScale), zone)</a></li>
+            }
+        </ul>
+    </div>
+</div>
+<Offcanvas @ref=_inputsOffCanvas/>
+@code{
+    [Parameter]
+    public Variable? Variable { get; set; } = default!;
+    [Parameter]
+    public int LimitTime { get; set; } 
+    [Parameter]
+    public TimeScale TimeScale { get; set; } = TimeScale.US;
+    private PortMoment _portMoment = new();
+    private List<PortMoment> _portMoments = new();
+    private Offcanvas _inputsOffCanvas = new();
+    private int _inputs = 0;
+    private static TimeScale[] items = Enum.GetValues<TimeScale>();
+    private void SetZone(TimeScale scale){
+        _portMoment.TimeScale = scale;
+    }
+    private async Task AddInputParams(){
+        Dictionary<string, object> parameters = new(){
+            { "PortMoment", _portMoment },
+            { "Variable", Variable },
+            { "LimitTime", LimitTime },
+            { "TimeScale", TimeScale }
+        };
+        await _inputsOffCanvas.ShowAsync<PortMomentExtraInputs>("", parameters);
+    }
+}
