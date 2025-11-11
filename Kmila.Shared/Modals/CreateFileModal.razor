@@ -36,19 +36,34 @@
 }
 
 @code{
+    /// <summary>
+    /// Gets or sets the project.
+    /// </summary>
     [Parameter]
     public Project Project { get; set; } = null!;
+    /// <summary>
+    /// Gets or sets the event callback for when a project file is created.
+    /// </summary>
     [Parameter]
     public EventCallback OnProjectFileCreated { get; set; }
+    /// <summary>
+    /// Gets or sets the content of the editor.
+    /// </summary>
     [Parameter]
     public string EditorContent { get; set; } = string.Empty;
     private ProjectFile _projectFile = new();
     private EditContext _context = default!;
     private string _extention = "txt";
     private bool _creatingFile = false;
+    /// <summary>
+    /// Method invoked when the component parameters are set.
+    /// </summary>
     protected override void OnParametersSet(){
         _context = new(_projectFile);
     }
+    /// <summary>
+    /// Creates a new project file asynchronously.
+    /// </summary>
     private async Task CreateFileAsync(){
         _creatingFile = true;
         StateHasChanged();

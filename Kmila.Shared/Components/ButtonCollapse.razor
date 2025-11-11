@@ -93,22 +93,40 @@
 </div>
 <Modal Size="ModalSize.Large" IsScrollable=true @ref="_simulationParametersModal"/>
 @code{
+    /// <summary>
+    /// Gets or sets the event callback for when the new file button is clicked.
+    /// </summary>
     [Parameter]
     public EventCallback OnNewFileButtonClicked { get; set; }
+    /// <summary>
+    /// Gets or sets the event callback for when the save file button is clicked.
+    /// </summary>
     [Parameter]
     public EventCallback OnSaveFileButtonClicked { get; set; }
+    /// <summary>
+    /// Gets or sets the event callback for when the build button is clicked.
+    /// </summary>
     [Parameter]
     public EventCallback OnBuildButtonClicked { get; set; }
+    /// <summary>
+    /// Gets or sets the event callback for when the simulation is started.
+    /// </summary>
     [Parameter]
     public EventCallback<TimeSpan> OnSimulationStarted { get; set; }
     private bool _building = false, _validProgram = false;
     private Modal _simulationParametersModal = new();
+    /// <summary>
+    /// Handles the build requested event.
+    /// </summary>
     private async Task BuildRequested(){
         _building = true;
         StateHasChanged();
         await OnSaveFileButtonClicked.InvokeAsync();
         await OnBuildButtonClicked.InvokeAsync();
     }
+    /// <summary>
+    /// Starts the simulation asynchronously.
+    /// </summary>
     private async Task StartSimulationAsync(){
         if(!_validProgram || _building){
             ToastService.Notify(Message("Error", "The program must be verified or not building", ToastType.Danger));
@@ -119,13 +137,24 @@
         };
         await _simulationParametersModal.ShowAsync<SimulationParametersModal>("Simulation parameters", null, parameters);
     }
+    /// <summary>
+    /// Handles the simulation requested event.
+    /// </summary>
+    /// <param name="time">The simulation time.</param>
     private async Task OnSimulationRequested(TimeSpan time){
         await OnSimulationStarted.InvokeAsync(time);
     }
+    /// <summary>
+    /// Releases the build lock.
+    /// </summary>
     public async Task ReleaseBuild(){
         _building = false;
         StateHasChanged();
     }
+    /// <summary>
+    /// Sets whether the program is valid.
+    /// </summary>
+    /// <param name="state">The state of the program.</param>
     public void IsValidProgram(bool state){
         _validProgram = state;
         StateHasChanged();

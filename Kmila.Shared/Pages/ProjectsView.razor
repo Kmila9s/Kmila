@@ -67,24 +67,40 @@
 <ConfirmDialog @ref="_removeProjectDialog" />
 
 @code{
+    /// <summary>
+    /// Gets or sets the option for the view.
+    /// </summary>
     [Parameter]
     public string? Option { get; set; } = null!;
     private Modal _newProjectModal = new();
     private ConfirmDialog _removeProjectDialog = new();
     private List<Project> _projects = new();
+    /// <summary>
+    /// Method invoked when the component is initialized.
+    /// </summary>
     protected override async Task OnInitializedAsync(){
         _projects = await Projects.GetListAsync();
         
     }
-    protected override async Task OnAfterRenderAsync(bool first){
-        if(!String.IsNullOrEmpty(Option)){
-            switch(Option.ToLowerInvariant()){
-                case "create":
-                    await CreateProjectAsync();
-                break;
+    /// <summary>
+    /// Method invoked after the component has rendered.
+    /// </summary>
+    /// <param name="firstRender">A boolean value indicating if it is the first render.</param>
+    protected override async Task OnAfterRenderAsync(bool firstRender){
+        if(firstRender){
+            if(!String.IsNullOrEmpty(Option)){
+                switch(Option.ToLowerInvariant()){
+                    case "create":
+                        await CreateProjectAsync();
+                    break;
+                }
             }
         }
     }
+    /// <summary>
+    /// Removes a project asynchronously.
+    /// </summary>
+    /// <param name="project">The project to remove.</param>
     private async Task RemoveProjectAsync(Project project){
         ConfirmDialogOptions options = new(){
             YesButtonColor = ButtonColor.Danger,
@@ -111,12 +127,19 @@
         }
         _projects = await Projects.GetListAsync();
     }
+    /// <summary>
+    /// Creates a new project asynchronously.
+    /// </summary>
     private async Task CreateProjectAsync(){
         Dictionary<string, object> parameters = new(){
             {"OnProjectCreated", EventCallback.Factory.Create<bool>(this, OnProjectCreatedAsync)}
         };
         await _newProjectModal.ShowAsync<ProjectDetailsModal>("New project", parameters: parameters);
     }
+    /// <summary>
+    /// Handles the project created event.
+    /// </summary>
+    /// <param name="status">The status of the project creation.</param>
     private async Task OnProjectCreatedAsync(bool status){
         _projects = await Projects.GetListAsync();
         await _newProjectModal.HideAsync();

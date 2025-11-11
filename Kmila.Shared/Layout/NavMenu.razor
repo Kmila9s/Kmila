@@ -9,6 +9,11 @@
     private Sidebar2 _sidebar = new();
     private IEnumerable<NavItem>? _navItems;
     private List<Project> _projects = new();
+    /// <summary>
+    /// Provides data to the sidebar.
+    /// </summary>
+    /// <param name="request">The request for data.</param>
+    /// <returns>The data for the sidebar.</returns>
     private async Task<Sidebar2DataProviderResult> SidebarDataProvider(Sidebar2DataProviderRequest request)
     {
         _projects = await Projects.GetListAsync();
@@ -17,6 +22,10 @@
 
         return await Task.FromResult(request.ApplyTo(_navItems));
     }
+    /// <summary>
+    /// Gets the navigation items for the sidebar.
+    /// </summary>
+    /// <returns>A collection of navigation items.</returns>
     private IEnumerable<NavItem> GetNavItems()
     {
         var items = new List<NavItem>

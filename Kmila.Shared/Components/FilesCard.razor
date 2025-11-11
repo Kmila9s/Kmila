@@ -69,15 +69,27 @@
 </div>
 <ConfirmDialog @ref=_removeFileDialog/>
 @code{
+    /// <summary>
+    /// Gets or sets the project.
+    /// </summary>
     [Parameter]
     public Project Project { get; set; } = null!;
+    /// <summary>
+    /// Gets or sets the event callback for when a project file is clicked.
+    /// </summary>
     [Parameter]
     public EventCallback<ProjectFile> OnProjectFileClicked { get; set; } = new();
+    /// <summary>
+    /// Gets or sets the event callback for when a project file is removed.
+    /// </summary>
     [Parameter]
     public EventCallback<ProjectFile> OnProjectFileRemoved { get; set; } = new();
     private List<ProjectFile> _projectFiles { get; set; } = new();
     private ConfirmDialog _removeFileDialog = new();
     private ProjectFile? _selectedFile = null;
+    /// <summary>
+    /// Method invoked when the component is initialized.
+    /// </summary>
     protected override async Task OnInitializedAsync(){
         if(Project != null){
             _projectFiles = await ProjectFiles.GetProjectFilesAsync(Project);
@@ -86,6 +98,10 @@
             }
         }
     }
+    /// <summary>
+    /// Sets the default file.
+    /// </summary>
+    /// <param name="file">The file to set as default.</param>
     public void SetDefaultFile(ProjectFile file){
         try{
             _selectedFile = _projectFiles.FirstOrDefault(p => p.Id == file.Id);
@@ -94,11 +110,18 @@
         }
         
     }
+    /// <summary>
+    /// Reloads the files for the project.
+    /// </summary>
     public async Task ReloadFiles(){
         if(Project != null){
             _projectFiles = await ProjectFiles.GetProjectFilesAsync(Project);
         }
     }
+    /// <summary>
+    /// Removes a file asynchronously.
+    /// </summary>
+    /// <param name="file">The file to remove.</param>
     private async Task RemoveFileAsync(ProjectFile file){
         ConfirmDialogOptions options = new(){
             YesButtonColor = ButtonColor.Danger,

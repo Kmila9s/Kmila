@@ -4,19 +4,34 @@ using Kmila.Shared.Models;
 using Microsoft.Extensions.Logging;
 
 namespace Kmila.Shared.Repositories;
-
+/// <summary>
+/// Repository for managing projects, implementing the <see cref="IRepository{T}"/> interface for <see cref="Project"/>.
+/// </summary>
 public class Projects : IRepository<Project>
 {
     private readonly ILogger<Projects> _logger;
     private readonly ApplicationDbContext _applicationDbContext;
     private readonly CancellationTokenSource _cts = new();
+    /// <summary>
+    /// Gets the last error message that occurred.
+    /// </summary>
     public string LastError { get; private set; } = string.Empty;
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Projects"/> class.
+    /// </summary>
+    /// <param name="logger">The logger for logging errors and information.</param>
+    /// <param name="applicationDbContext">The database context for data access.</param>
     public Projects(ILogger<Projects> logger, ApplicationDbContext applicationDbContext)
     {
         _logger = logger;
         _applicationDbContext = applicationDbContext;
         _ = _applicationDbContext.InitDBAsync();
     }
+    /// <summary>
+    /// Creates a new project asynchronously.
+    /// </summary>
+    /// <param name="project">The project to create.</param>
+    /// <returns>A task that represents the asynchronous operation. The task result contains a boolean value indicating whether the operation was successful.</returns>
     public async Task<bool> CreateAsync(Project project)
     {
         LastError = string.Empty;
@@ -40,6 +55,11 @@ public class Projects : IRepository<Project>
         }
         return false;
     }
+    /// <summary>
+    /// Updates an existing project asynchronously.
+    /// </summary>
+    /// <param name="project">The project to update.</param>
+    /// <returns>A task that represents the asynchronous operation. The task result contains a boolean value indicating whether the operation was successful.</returns>
     public async Task<bool> UpdateAsync(Project project)
     {
         LastError = string.Empty;
@@ -77,6 +97,11 @@ public class Projects : IRepository<Project>
         }
         return false;
     }
+    /// <summary>
+    /// Removes a project asynchronously.
+    /// </summary>
+    /// <param name="project">The project to remove.</param>
+    /// <returns>A task that represents the asynchronous operation. The task result contains a boolean value indicating whether the operation was successful.</returns>
     public async Task<bool> RemoveAsync(Project project)
     {
         LastError = string.Empty;
@@ -99,6 +124,10 @@ public class Projects : IRepository<Project>
         }
         return false;
     }
+    /// <summary>
+    /// Gets a list of all projects asynchronously.
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation. The task result contains a list of projects.</returns>
     public async Task<List<Project>> GetListAsync()
     {
         LastError = string.Empty;
@@ -112,6 +141,11 @@ public class Projects : IRepository<Project>
         }
         return new();
     }
+    /// <summary>
+    /// Gets a project by its identifier asynchronously.
+    /// </summary>
+    /// <param name="id">The identifier of the project.</param>
+    /// <returns>A task that represents the asynchronous operation. The task result contains the project.</returns>
     public async Task<Project> GetByAsync(object id)
     {
         LastError = string.Empty;
@@ -134,6 +168,9 @@ public class Projects : IRepository<Project>
         }
         return null!;
     }
+    /// <summary>
+    /// Releases the resources used by the <see cref="Projects"/> class.
+    /// </summary>
     public void Dispose()
     {
 

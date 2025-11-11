@@ -26,18 +26,30 @@
 </EditForm>
 
 @code{
+    /// <summary>
+    /// Gets or sets the event callback for when a project is created.
+    /// </summary>
     [Parameter]
     public EventCallback<bool> OnProjectCreated { get; set; }
     private Project _project = new();
     private EditContext _context = default!;
     private bool _creatingProject = false;
+    /// <summary>
+    /// Method invoked when the component is initialized.
+    /// </summary>
     protected override async Task OnInitializedAsync(){
         _context = new(_project);
     }
+    /// <summary>
+    /// Method invoked when the component parameters are set.
+    /// </summary>
     protected override void OnParametersSet(){
         _project = new();
         _context = new(_project);
     }
+    /// <summary>
+    /// Creates a new project asynchronously.
+    /// </summary>
     private async Task CreateProjectAsync(){
         _creatingProject = true;
         StateHasChanged();

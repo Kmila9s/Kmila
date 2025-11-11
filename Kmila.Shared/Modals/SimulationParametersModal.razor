@@ -103,6 +103,9 @@
 
 <ConfirmDialog @ref="_confirmDialog" />
 @code{
+    /// <summary>
+    /// Gets or sets the event callback for when the simulation is started.
+    /// </summary>
     [Parameter]
     public EventCallback<TimeSpan> OnSimulationStarted { get; set; }
     private ConfirmDialog _confirmDialog = new();
@@ -113,14 +116,23 @@
     private double _percent = 0;
     private TimeSpan _totalTime;
     private ProgressBar _progressBar = new();
+    /// <summary>
+    /// Method invoked when the component is initialized.
+    /// </summary>
     protected override void OnInitialized(){
         Builder.OnSimulationEnded += OnSimulationEnded;
         Builder.OnProgressAdvanced += OnProgressAdvance;
     }
+    /// <summary>
+    /// Method invoked when the component parameters are set.
+    /// </summary>
     protected override void OnParametersSet(){
         Builder.OnSimulationEnded += OnSimulationEnded;
         Builder.OnProgressAdvanced += OnProgressAdvance;
     }
+    /// <summary>
+    /// Restarts the simulation asynchronously.
+    /// </summary>
     private async Task RestartSimulationAsync(){
         var options = new ConfirmDialogOptions {
             NoButtonColor=ButtonColor.Success,
@@ -142,6 +154,9 @@
             _simulationEnded = false;
         }
     }
+    /// <summary>
+    /// Stops the simulation asynchronously.
+    /// </summary>
     private async Task StopSimulationAsync(){
         var options = new ConfirmDialogOptions {
             NoButtonColor=ButtonColor.Success,
@@ -168,11 +183,18 @@
             StateHasChanged();
         }
     }
+    /// <summary>
+    /// Disposes the component.
+    /// </summary>
     public void Dispose(){
         _percent = 0;
         Builder.OnSimulationEnded -= OnSimulationEnded;
         Builder.OnProgressAdvanced -= OnProgressAdvance;
     }
+    /// <summary>
+    /// Handles the progress advance event.
+    /// </summary>
+    /// <param name="progress">The progress of the simulation.</param>
     private void OnProgressAdvance(double progress){
         _percent = progress;
         if(_percent == 100){
@@ -193,16 +215,27 @@
         }
         
     }
+    /// <summary>
+    /// Sets the time scale.
+    /// </summary>
+    /// <param name="zone">The time scale to set.</param>
     private void SetZone(TimeScale zone){
         _zone = zone;
         StateHasChanged();
     }
+    /// <summary>
+    /// Handles the simulation ended event.
+    /// </summary>
+    /// <param name="ended">A value indicating whether the simulation ended.</param>
     private void OnSimulationEnded(bool ended){
         _running = false;
         _simulationEnded = true;
         ToastService.Notify(Message("Success", "Simulation ended"));
         InvokeAsync(StateHasChanged);
     }
+    /// <summary>
+    /// Handles the form submission.
+    /// </summary>
     private async Task OnFormSubmited(){
         _running = true;
         _percent = 0;

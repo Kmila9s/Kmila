@@ -4,19 +4,34 @@ using Kmila.Shared.Models;
 using Microsoft.Extensions.Logging;
 
 namespace Kmila.Shared.Repositories;
-
+/// <summary>
+/// Repository for managing project files, implementing the <see cref="IRepository{T}"/> interface for <see cref="ProjectFile"/>.
+/// </summary>
 public class ProjectFiles : IRepository<ProjectFile>
 {
     private readonly ILogger<ProjectFiles> _logger;
     private readonly ApplicationDbContext _applicationDbContext;
     private readonly CancellationTokenSource _cts = new();
+    /// <summary>
+    /// Gets the last error message that occurred.
+    /// </summary>
     public string LastError { get; private set; } = string.Empty;
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ProjectFiles"/> class.
+    /// </summary>
+    /// <param name="logger">The logger for logging errors and information.</param>
+    /// <param name="applicationDbContext">The database context for data access.</param>
     public ProjectFiles(ILogger<ProjectFiles> logger, ApplicationDbContext applicationDbContext)
     {
         _applicationDbContext = applicationDbContext;
         _logger = logger;
         _ = _applicationDbContext.InitDBAsync();
     }
+    /// <summary>
+    /// Creates a new project file asynchronously.
+    /// </summary>
+    /// <param name="file">The project file to create.</param>
+    /// <returns>A task that represents the asynchronous operation. The task result contains a boolean value indicating whether the operation was successful.</returns>
     public async Task<bool> CreateAsync(ProjectFile file)
     {
         LastError = string.Empty;
@@ -77,7 +92,15 @@ public class ProjectFiles : IRepository<ProjectFile>
             Project = project
         };
     }
+    /// <summary>
+    /// This method is not implemented and will throw a <see cref="NotImplementedException"/>.
+    /// </summary>
     public async Task<ProjectFile> GetByAsync(object id) => throw new NotImplementedException();
+    /// <summary>
+    /// Updates an existing project file asynchronously.
+    /// </summary>
+    /// <param name="item">The project file to update.</param>
+    /// <returns>A task that represents the asynchronous operation. The task result contains a boolean value indicating whether the operation was successful.</returns>
     public async Task<bool> UpdateAsync(ProjectFile item)
     {
         LastError = string.Empty;
@@ -107,7 +130,15 @@ public class ProjectFiles : IRepository<ProjectFile>
         }
         return false;
     }
+    /// <summary>
+    /// This method is not implemented and will throw a <see cref="NotImplementedException"/>.
+    /// </summary>
     public async Task<bool> RemoveAsync(ProjectFile item) => throw new NotImplementedException();
+    /// <summary>
+    /// Gets a list of all project files for a given project asynchronously.
+    /// </summary>
+    /// <param name="project">The project to get the files for.</param>
+    /// <returns>A task that represents the asynchronous operation. The task result contains a list of project files.</returns>
     public async Task<List<ProjectFile>> GetProjectFilesAsync(Project project)
     {
         LastError = string.Empty;
@@ -132,6 +163,10 @@ public class ProjectFiles : IRepository<ProjectFile>
         }
         return new();
     }
+    /// <summary>
+    /// Gets a list of all project files asynchronously.
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation. The task result contains a list of project files.</returns>
     public async Task<List<ProjectFile>> GetListAsync()
     {
         LastError = string.Empty;
@@ -146,6 +181,9 @@ public class ProjectFiles : IRepository<ProjectFile>
         }
         return new();
     }
+    /// <summary>
+    /// Releases the resources used by the <see cref="ProjectFiles"/> class.
+    /// </summary>
     public void Dispose()
     {
         _cts?.Cancel();
