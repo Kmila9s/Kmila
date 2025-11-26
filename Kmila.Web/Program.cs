@@ -35,6 +35,8 @@ public class Program
 
         builder.Services.AddScoped<ProjectFiles>();
 
+        builder.Services.AddSingleton<JSONFileReader>();
+
         builder.Services.AddSingleton<ProgramBuilder>();
 
         builder.Services.AddBlazorBootstrap();

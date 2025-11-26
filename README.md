@@ -101,6 +101,10 @@ The Kmila-9s simulation engine is composed of several core modules that work tog
 *   Conflict resolution for overlapping time moments
 *   Integration with TimeMachine for synchronized playback
 
+#### f. JSON File Reader Module
+*   **What it does:** This module is responsible for reading and parsing JSON files that contain FPGA device specifications. It deserializes the JSON data into `FPGA` objects, making device information available to the application.
+*   **Why it's required:** To provide the application with a list of available FPGA devices for simulation, allowing users to select a target device and use its specifications in their projects.
+
 ### 6.2 High-Level Data Flow
 
 ```mermaid
@@ -108,9 +112,12 @@ graph TD
     A["VHDL Files (.vhdl)"] --> B["Debugger.Repositories.Parser"];
     B -->|Identifies entities & architectures| C{"Interpreter Models (Entity, Architecture)"};
     C --> D["Interpreter Engine"];
+    E["JSON Files (FPGA Specs)"] --> F["JSON File Reader"];
+    F --> |Provides FPGA data| C;
 
     style B fill:#ccf,stroke:#333,stroke-width:2px
     style D fill:#bbf,stroke:#333,stroke-width:2px
+    style F fill:#cfc,stroke:#333,stroke-width:2px
 ```
 
 ## 7. System Architecture
@@ -162,11 +169,13 @@ graph TD
         Parser["Parser Module"]
         Interpreter["Interpreter Module"]
         TimeMachine["TimeMachine Module"]
+        JSONFileReader["JSON File Reader"]
     end
 
     subgraph "Data Layer"
         DB["SQLite Database"]
         FS["File System"]
+        JSONFiles["JSON Files (FPGA Specs)"]
     end
 
     UI_Controls --> Debugger
@@ -176,6 +185,7 @@ graph TD
     Debugger --> TimeMachine
     Interpreter --> TimeMachine
     Parser --> Interpreter
+    JSONFileReader --> JSONFiles
 
     Debugger -- "Reads/Writes Project Info" --> DB
     Parser -- "Reads VHDL Files" --> FS
@@ -455,6 +465,7 @@ classDiagram
 #### Repositories
 *   **Projects.cs**: Manages projects in the database (CRUD operations)
 *   **ProjectFiles.cs**: Manages project files in the database (CRUD operations)
+*   **JSONFileReader.cs**: Reads FPGA device specifications from JSON files.
 
 #### Models
 *   **Project.cs**: Represents a project in the application
@@ -479,11 +490,13 @@ graph TD
     subgraph "Repository Layer"
         ProjectsRepo[Projects Repository]
         ProjectFilesRepo[ProjectFiles Repository]
+        JSONFileReader[JSON File Reader]
     end
     
     subgraph "Data Layer"
         AppDbContext[ApplicationDbContext]
         SQLite[(SQLite Database)]
+        JSONFiles[(JSON Files)]
     end
     
     subgraph "External Dependencies"
@@ -507,6 +520,7 @@ graph TD
     ProjectsRepo --> AppDbContext
     ProjectFilesRepo --> AppDbContext
     AppDbContext --> SQLite
+    JSONFileReader --> JSONFiles
 ```
 ### 10.3 Component Interactions
 
@@ -644,7 +658,8 @@ The application uses GitHub Actions for continuous integration and deployment:
 │   └── ProjectsView.razor
 ├── Repositories/
 │   ├── Projects.cs
-│   └── ProjectFiles.cs
+│   ├── ProjectFiles.cs
+│   └── JSONFileReader.cs
 ├── Services/
 │   └── ProgramBuilder.cs
 └── Modals/
