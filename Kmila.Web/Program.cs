@@ -4,6 +4,7 @@ using Kmila.Web.Services;
 using Kmila.Shared.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Kmila.Shared.Data;
+using Kmila.Shared.Models;
 
 namespace Kmila;
 
@@ -38,6 +39,8 @@ public class Program
         builder.Services.AddSingleton<JSONFileReader>();
 
         builder.Services.AddSingleton<ProgramBuilder>();
+
+        builder.Services.AddSingleton<SelectedFPGA>();
 
         builder.Services.AddBlazorBootstrap();
         
