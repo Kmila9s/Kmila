@@ -1,71 +1,221 @@
-<div class="mb-3 my-3">
-    <label for="input-group-0" class="form-label">@Variable?.Name - @Enum.GetName(typeof(DATATYPES), Variable?.Type ?? DATATYPES.UNKNOWN)</label>
-    @if(!_portMoment.IsClock){
-        <div class=btn-group>
-            <Button
-                Color="ButtonColor.Success"
-                Outline=true
-                Disabled=_portMoment.IsClock
-                TooltipTitle="Add new moments for this port"
-                @onclick='AddInputParams'
-            >
-                <Icon Name="IconName.Plugin"/>
-            </Button>
-        </div>
-    }
-    <div class="input-group mb-3" id="input-group-0">
-        <Tooltip class="input-group-text" Title="Is a system clock?">
-                <input class="form-check-input mt-0" type="checkbox" @bind=_portMoment.IsClock aria-label="">
-        </Tooltip>
-        <input disabled=@_portMoment.IsClock readonly=@_portMoment.IsClock type="text" class="form-control" aria-label="Text input with dropdown button" @bind="_portMoment.Value" placeholder="Variable value"/>
-        <input disabled=@_portMoment.IsClock readonly=@_portMoment.IsClock type="number" class="form-control" aria-label="Text input with dropdown button" min=1 max=@LimitTime @bind="_portMoment.TimeInput" placeholder="Time when the value will be set"/>
-        <button disabled=@_portMoment.IsClock class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Time scale: @_portMoment.TimeScale</button>
-        <ul class="dropdown-menu">
-            @foreach(var zone in items.Where(p => p <= TimeScale)){
-                <li><a class="dropdown-item" @onclick="() => SetZone((TimeScale)zone)">@Enum.GetName(typeof(TimeScale), zone)</a></li>
+<!-- Port Moment Input Component -->
+<Card Class="mb-3">
+    <CardHeader>
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <Icon Name="IconName.Plugin" Class="me-2" />
+                <strong>@Variable?.Name</strong>
+                <Badge Color="BadgeColor.Info" Class="ms-2">
+                    @Enum.GetName(typeof(DATATYPES), Variable?.Type ?? DATATYPES.UNKNOWN)
+                </Badge>
+            </div>
+            @if(!_portMoment.IsClock && !IsRunning)
+            {
+                <Button
+                    Size="ButtonSize.Small"
+                    Color="ButtonColor.Success"
+                    Outline=true
+                    TooltipTitle="Add multiple moments for this port"
+                    @onclick='AddInputParams'
+                >
+                    <Icon Name="IconName.PlusCircle" Class="me-1" />
+                    Add Moments
+                </Button>
             }
-        </ul>
-    </div>
-</div>
-<Offcanvas @ref=_inputsOffCanvas/>
-@code{
+        </div>
+    </CardHeader>
+    <CardBody>
+        <!-- Clock Configuration -->
+        <div class="mb-3">
+            <div class="form-check form-switch">
+                <input
+                    class="form-check-input"
+                    type="checkbox"
+                    role="switch"
+                    id="clock-switch-@Variable?.Name"
+                    @bind="_portMoment.IsClock"
+                    disabled="@IsRunning"
+                    aria-label="Toggle system clock mode">
+                <label class="form-check-label" for="clock-switch-@Variable?.Name">
+                    <Icon Name="IconName.Clock" Class="me-1" />
+                    System Clock Signal
+                </label>
+            </div>
+            @if(_portMoment.IsClock)
+            {
+                <Alert Color="AlertColor.Info" Class="mt-2 mb-0">
+                    <Icon Name="IconName.InfoCircle" Class="me-2" />
+                    This port is configured as a system clock. Value and time inputs are disabled.
+                </Alert>
+            }
+        </div>
+
+        <!-- Value and Time Configuration -->
+        <div class="row g-3">
+            <!-- Value Input -->
+            <div class="col-md-6">
+                <label for="value-input-@Variable?.Name" class="form-label">
+                    <Icon Name="IconName.InputCursorText" Class="me-1" />
+                    Port Value
+                </label>
+                <input
+                    type="text"
+                    class="form-control"
+                    id="value-input-@Variable?.Name"
+                    @bind="_portMoment.Value"
+                    placeholder="Enter port value (e.g., '1', '0', 'Z')"
+                    disabled="@(_portMoment.IsClock || IsRunning)"
+                    readonly="@_portMoment.IsClock"
+                    aria-label="Port value input"/>
+            </div>
+
+            <!-- Time Input -->
+            <div class="col-md-6">
+                <label for="time-input-@Variable?.Name" class="form-label">
+                    <Icon Name="IconName.Clock" Class="me-1" />
+                    Time Value
+                </label>
+                <div class="input-group">
+                    <input
+                        type="number"
+                        class="form-control"
+                        id="time-input-@Variable?.Name"
+                        @bind="_portMoment.TimeInput"
+                        min="1"
+                        max="@LimitTime"
+                        placeholder="Time value"
+                        disabled="@(_portMoment.IsClock || IsRunning)"
+                        readonly="@_portMoment.IsClock"
+                        aria-label="Time value input"/>
+                    <button
+                        class="btn btn-outline-secondary dropdown-toggle"
+                        type="button"
+                        data-bs-toggle="dropdown"
+                        aria-expanded="false"
+                        disabled="@(_portMoment.IsClock || IsRunning)">
+                        @_portMoment.TimeScale
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        @foreach(var zone in _availableTimeScales.Where(p => p <= TimeScale))
+                        {
+                            <li>
+                                <a class="dropdown-item @(_portMoment.TimeScale == zone ? "active" : "")"
+                                   @onclick="() => SetZone(zone)">
+                                    <Icon Name="IconName.Clock" Class="me-2" />
+                                    @Enum.GetName(typeof(TimeScale), zone)
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                </div>
+                <div class="form-text">
+                    Maximum: @LimitTime @TimeScale
+                </div>
+            </div>
+        </div>
+    </CardBody>
+</Card>
+
+<!-- Offcanvas for Extra Inputs -->
+<Offcanvas @ref="_inputsOffCanvas"
+           Size="OffcanvasSize.Large"
+           UseStaticBackdrop="true"/>
+
+@code {
+    #region Parameters
+
     /// <summary>
-    /// Gets or sets the variable.
+    /// Gets or sets the variable associated with this port moment input.
+    /// This represents the VHDL/Verilog port being configured.
     /// </summary>
     [Parameter]
     public Variable? Variable { get; set; } = default!;
+
     /// <summary>
-    /// Gets or sets the limit time.
+    /// Gets or sets the maximum time limit for the simulation.
+    /// This constrains the time input values that can be entered.
     /// </summary>
     [Parameter]
-    public int LimitTime { get; set; } 
+    public int LimitTime { get; set; }
+
     /// <summary>
-    /// Gets or sets the time scale.
+    /// Gets or sets the time scale for the simulation (NS, US, MS, S, M, H).
+    /// This determines the available time scale options in the dropdown.
     /// </summary>
     [Parameter]
     public TimeScale TimeScale { get; set; } = TimeScale.US;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the simulation is currently running.
+    /// When true, input controls are disabled to prevent modifications during simulation.
+    /// </summary>
+    [Parameter]
+    public bool IsRunning { get; set; } = false;
+
+    #endregion
+
+    #region Private Fields
+
+    /// <summary>
+    /// The port moment instance that holds the current input values.
+    /// </summary>
     private PortMoment _portMoment = new();
+
+    /// <summary>
+    /// Collection of additional port moments for multi-value inputs.
+    /// Used when the user wants to set multiple values at different time points.
+    /// </summary>
     private List<PortMoment> _portMoments = new();
+
+    /// <summary>
+    /// Reference to the offcanvas component for displaying extra input fields.
+    /// </summary>
     private Offcanvas _inputsOffCanvas = new();
+
+    /// <summary>
+    /// Counter for the number of additional input moments added.
+    /// Note: This field is currently assigned but not actively used in the UI.
+    /// </summary>
     private int _inputs = 0;
-    private static TimeScale[] items = Enum.GetValues<TimeScale>();
+
     /// <summary>
-    /// Sets the time scale for the port moment.
+    /// Array of all available time scales (NS, US, MS, S, M, H).
     /// </summary>
-    /// <param name="scale">The time scale to set.</param>
-    private void SetZone(TimeScale scale){
+    private static readonly TimeScale[] _availableTimeScales = Enum.GetValues<TimeScale>();
+
+    #endregion
+
+    #region Event Handlers
+
+    /// <summary>
+    /// Sets the time scale for the current port moment.
+    /// Updates the UI to reflect the selected time scale.
+    /// </summary>
+    /// <param name="scale">The time scale to apply (NS, US, MS, S, M, or H).</param>
+    private void SetZone(TimeScale scale)
+    {
         _portMoment.TimeScale = scale;
+        StateHasChanged();
     }
+
     /// <summary>
-    /// Adds input parameters for the port moment.
+    /// Opens the offcanvas panel to add multiple input parameters for this port.
+    /// Allows users to define multiple value changes at different time points.
     /// </summary>
-    private async Task AddInputParams(){
-        Dictionary<string, object> parameters = new(){
+    private async Task AddInputParams()
+    {
+        var parameters = new Dictionary<string, object>
+        {
             { "PortMoment", _portMoment },
-            { "Variable", Variable },
+            { "Variable", Variable! },
             { "LimitTime", LimitTime },
             { "TimeScale", TimeScale }
         };
-        await _inputsOffCanvas.ShowAsync<PortMomentExtraInputs>("", parameters);
+
+        await _inputsOffCanvas.ShowAsync<PortMomentExtraInputs>(
+            title: $"Additional Moments for {Variable?.Name}",
+            parameters: parameters);
     }
+
+    #endregion
 }

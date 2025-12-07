@@ -1,89 +1,276 @@
-<span>
-    If a time moment is repeated, will be discarted (this if the Time scale and value are the same).
-    Eg. 
-        Moment 1: Value "1" at NS 12
-        Moment 2: Value "2" at NS 12
-    Moment 2 will be discarted.
-</span>
-@if(!PortMoment.IsClock){
-    <div class="d-grid gap-2">
-        <div class=btn-group>
-            <Button
-                Color="ButtonColor.Success"
-                Outline=true
-                Disabled=PortMoment.IsClock
-                TooltipTitle="Add new moment for this port"
-                @onclick='() => {
-                    _inputs++;
-                    _portMoments.Add(new());
-                }'
-            >
-                <Icon Name="IconName.Plugin"/>
-            </Button>
-            <Button
-                    Type=ButtonType.Button
-                    Outline=true
-                    Disabled=@(_inputs <= 0)
-                    Color="ButtonColor.Warning"
-                    TooltipTitle="Remove last moment"
-                    @onclick="() => {
-                        if(_inputs > 0){
-                            _portMoments.RemoveAt(--_inputs);
-                        }
-                    }"
-                >
-                    <Icon Name="IconName.Trash"/>
-            </Button>
+<!-- Additional Port Moments Input Component -->
+
+<!-- Important Information Alert -->
+<Alert Color="AlertColor.Warning" Class="mb-3">
+    <Icon Name="IconName.ExclamationTriangle" Class="me-2" />
+    <strong>Important:</strong> If a time moment is repeated, it will be discarded (when both time scale and value are the same).
+    <hr class="my-2" />
+    <small>
+        <strong>Example:</strong><br/>
+        Moment 1: Value "1" at NS 12<br/>
+        Moment 2: Value "2" at NS 12<br/>
+        → Moment 2 will be discarded.
+    </small>
+</Alert>
+
+@if(!PortMoment.IsClock)
+{
+    <!-- Control Buttons -->
+    <div class="d-flex gap-2 mb-3">
+        <Button
+            Color="ButtonColor.Success"
+            Outline=true
+            TooltipTitle="Add a new moment for this port"
+            @onclick='OnAddMoment'
+        >
+            <Icon Name="IconName.PlusCircle" Class="me-1" />
+            Add Moment
+        </Button>
+        <Button
+            Color="ButtonColor.Warning"
+            Outline=true
+            Disabled="@(_portMoments.Count == 0)"
+            TooltipTitle="Remove the last moment"
+            @onclick="OnRemoveMoment"
+        >
+            <Icon Name="IconName.Trash" Class="me-1" />
+            Remove Last
+        </Button>
+        <div class="ms-auto">
+            <Badge Color="BadgeColor.Primary">
+                @_portMoments.Count moment@(_portMoments.Count != 1 ? "s" : "")
+            </Badge>
         </div>
     </div>
-}
-@if(_inputs > 0 && !PortMoment.IsClock){
-    @for(int i = 0; i < _inputs; i++){
-        <label for="input-group-@(_inputs)" class="form-label">@Variable?.Name - @Enum.GetName(typeof(DATATYPES), Variable?.Type ?? DATATYPES.UNKNOWN)</label>
-        <div class="input-group mb-3" id="input-group-@(_inputs)">
-            <input disabled=@_portMoments[i].IsClock readonly=@_portMoments[i].IsClock type="text" class="form-control" aria-label="Text input with dropdown button" @bind="_portMoments[i].Value" placeholder="Variable value"/>
-            <input disabled=@_portMoments[i].IsClock readonly=@_portMoments[i].IsClock type="number" class="form-control" aria-label="Text input with dropdown button" min=1 max=@LimitTime @bind="_portMoments[i].TimeInput" placeholder="Time when the value will be set"/>
-            <button disabled=@_portMoments[i].IsClock class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Time scale: @_portMoments[i].TimeScale</button>
-            <ul class="dropdown-menu">
-                @foreach(var zone in items.Where(p => p <= TimeScale)){
-                    <li><a class="dropdown-item" @onclick="() => SetZone((TimeScale)zone, _portMoments[i])">@Enum.GetName(typeof(TimeScale), zone)</a></li>
-                }
-            </ul>
+
+    <!-- Moments List -->
+    @if(_portMoments.Count > 0)
+    {
+        <div class="list-group">
+            @for(int i = 0; i < _portMoments.Count; i++)
+            {
+                var index = i;
+                var moment = _portMoments[i];
+
+                <Card Class="mb-3">
+                    <CardHeader>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <Icon Name="IconName.Clock" Class="me-2" />
+                                <strong>Moment #@(index + 1)</strong>
+                            </div>
+                            <Button
+                                Size="ButtonSize.Small"
+                                Color="ButtonColor.Danger"
+                                Outline=true
+                                TooltipTitle="Remove this specific moment"
+                                @onclick="() => OnRemoveSpecificMoment(index)"
+                            >
+                                <Icon Name="IconName.X" />
+                            </Button>
+                        </div>
+                    </CardHeader>
+                    <CardBody>
+                        <div class="row g-3">
+                            <!-- Variable Info -->
+                            <div class="col-12">
+                                <div class="d-flex align-items-center">
+                                    <Icon Name="IconName.Plugin" Class="me-2 text-muted" />
+                                    <span class="text-muted small">
+                                        Port: <strong>@Variable?.Name</strong>
+                                        <Badge Color="BadgeColor.Secondary" Class="ms-2">
+                                            @Enum.GetName(typeof(DATATYPES), Variable?.Type ?? DATATYPES.UNKNOWN)
+                                        </Badge>
+                                    </span>
+                                </div>
+                                <hr class="my-2" />
+                            </div>
+
+                            <!-- Value Input -->
+                            <div class="col-md-6">
+                                <label for="value-input-@index" class="form-label">
+                                    <Icon Name="IconName.InputCursorText" Class="me-1" />
+                                    Port Value
+                                </label>
+                                <input
+                                    type="text"
+                                    class="form-control"
+                                    id="value-input-@index"
+                                    @bind="moment.Value"
+                                    placeholder="Enter port value"
+                                    disabled="@moment.IsClock"
+                                    aria-label="Port value for moment @(index + 1)"/>
+                            </div>
+
+                            <!-- Time Input -->
+                            <div class="col-md-6">
+                                <label for="time-input-@index" class="form-label">
+                                    <Icon Name="IconName.Clock" Class="me-1" />
+                                    Time Value
+                                </label>
+                                <div class="input-group">
+                                    <input
+                                        type="number"
+                                        class="form-control"
+                                        id="time-input-@index"
+                                        @bind="moment.TimeInput"
+                                        min="1"
+                                        max="@LimitTime"
+                                        placeholder="Time"
+                                        disabled="@moment.IsClock"
+                                        aria-label="Time value for moment @(index + 1)"/>
+                                    <button
+                                        class="btn btn-outline-secondary dropdown-toggle"
+                                        type="button"
+                                        data-bs-toggle="dropdown"
+                                        aria-expanded="false"
+                                        disabled="@moment.IsClock">
+                                        @moment.TimeScale
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end">
+                                        @foreach(var zone in _availableTimeScales.Where(p => p <= TimeScale))
+                                        {
+                                            <li>
+                                                <a class="dropdown-item @(moment.TimeScale == zone ? "active" : "")"
+                                                   @onclick="() => SetZone(zone, moment)">
+                                                    <Icon Name="IconName.Clock" Class="me-2" />
+                                                    @Enum.GetName(typeof(TimeScale), zone)
+                                                </a>
+                                            </li>
+                                        }
+                                    </ul>
+                                </div>
+                                <div class="form-text">
+                                    Maximum: @LimitTime @TimeScale
+                                </div>
+                            </div>
+                        </div>
+                    </CardBody>
+                </Card>
+            }
         </div>
     }
-    
+    else
+    {
+        <Alert Color="AlertColor.Info">
+            <Icon Name="IconName.InfoCircle" Class="me-2" />
+            No additional moments added yet. Click "Add Moment" to create time-based value changes for this port.
+        </Alert>
+    }
+}
+else
+{
+    <Alert Color="AlertColor.Warning">
+        <Icon Name="IconName.ExclamationTriangle" Class="me-2" />
+        This port is configured as a system clock. Additional moments cannot be added.
+    </Alert>
 }
 
-@code{
+@code {
+    #region Parameters
+
     /// <summary>
-    /// Gets or sets the port moment.
+    /// Gets or sets the primary port moment instance.
+    /// This is the main port moment from which additional moments are derived.
     /// </summary>
     [Parameter]
     public PortMoment PortMoment { get; set; } = default!;
+
     /// <summary>
-    /// Gets or sets the variable.
+    /// Gets or sets the variable associated with this port.
+    /// This represents the VHDL/Verilog port being configured.
     /// </summary>
     [Parameter]
     public Variable Variable { get; set; } = default!;
+
     /// <summary>
-    /// Gets or sets the time scale.
+    /// Gets or sets the time scale for the simulation (NS, US, MS, S, M, H).
+    /// This determines the maximum time scale available in dropdowns.
     /// </summary>
     [Parameter]
     public TimeScale TimeScale { get; set; } = TimeScale.US;
+
     /// <summary>
-    /// Gets or sets the limit time.
+    /// Gets or sets the maximum time limit for the simulation.
+    /// This constrains the time input values that can be entered.
     /// </summary>
     [Parameter]
     public int LimitTime { get; set; }
-    private static TimeScale[] items = Enum.GetValues<TimeScale>();
-    private List<PortMoment> _portMoments = new();
-    private int _inputs = 0; 
+
+    #endregion
+
+    #region Private Fields
+
     /// <summary>
-    /// Sets the time scale for a port moment.
+    /// Array of all available time scales (NS, US, MS, S, M, H).
     /// </summary>
-    /// <param name="scale">The time scale to set.</param>
-    /// <param name="PortMoment">The port moment to update.</param>
-    private void SetZone(TimeScale scale, PortMoment PortMoment){
-        PortMoment.TimeScale = scale;
+    private static readonly TimeScale[] _availableTimeScales = Enum.GetValues<TimeScale>();
+
+    /// <summary>
+    /// Collection of port moments representing different values at different time points.
+    /// Each moment in this list represents a state change for the port.
+    /// </summary>
+    private List<PortMoment> _portMoments = new();
+
+    #endregion
+
+    #region Event Handlers
+
+    /// <summary>
+    /// Adds a new port moment to the collection.
+    /// Creates a new moment with default values that the user can configure.
+    /// </summary>
+    private void OnAddMoment()
+    {
+        _portMoments.Add(new PortMoment
+        {
+            Variable = Variable,
+            TimeScale = TimeScale,
+            TimeInput = 0,
+            Value = string.Empty,
+            IsClock = false
+        });
+        StateHasChanged();
     }
+
+    /// <summary>
+    /// Removes the last port moment from the collection.
+    /// Only removes if there are moments available to remove.
+    /// </summary>
+    private void OnRemoveMoment()
+    {
+        if (_portMoments.Count > 0)
+        {
+            _portMoments.RemoveAt(_portMoments.Count - 1);
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Removes a specific port moment at the given index.
+    /// Allows users to remove individual moments instead of just the last one.
+    /// </summary>
+    /// <param name="index">The zero-based index of the moment to remove.</param>
+    private void OnRemoveSpecificMoment(int index)
+    {
+        if (index >= 0 && index < _portMoments.Count)
+        {
+            _portMoments.RemoveAt(index);
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Sets the time scale for a specific port moment.
+    /// Updates the time scale and refreshes the UI to show the change.
+    /// </summary>
+    /// <param name="scale">The time scale to apply (NS, US, MS, S, M, or H).</param>
+    /// <param name="portMoment">The port moment to update.</param>
+    private void SetZone(TimeScale scale, PortMoment portMoment)
+    {
+        portMoment.TimeScale = scale;
+        StateHasChanged();
+    }
+
+    #endregion
 }

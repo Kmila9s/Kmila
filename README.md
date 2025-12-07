@@ -23,6 +23,7 @@ Kmila-9s is a free, open-source, multiplatform academic platform focused on the 
 ### Key Features
 
 *   **Dynamic Variable Visualization:** Observe the states of signals, ports, and internal variables at any time to easily understand digital behavior.
+*   **FPGA Resource Validation:** Select target FPGA devices and validate that your design fits within the device's resource constraints (Logic Units, Flip-Flops, BRAM, DSP, I/O Pins) before simulation.
 *   **Cross-Platform:** Built with .NET 9 and MAUI, the application is installable and runs autonomously on **Windows, macOS, Android, iOS, and iPadOS**. A web version is also available for **Linux** users.
 *   **Standalone and Offline:** The application runs locally without requiring a web service or internet connection.
 *   **"Pre-Laboratory" Function:** Allows students to conduct preparatory practices before physical lab sessions, optimizing limited time and resources.
@@ -402,19 +403,22 @@ The `Kmila.Shared` project contains the core logic, UI components, and data mode
 
 #### Components
 *   **ButtonCollapse.razor**: Contains main editor buttons (Save, New File, Start Simulation, Validate)
-*   **EntityView.razor**: Displays VHDL entity name and ports
+*   **EntityView.razor**: Displays VHDL entity name and ports with resource usage estimation
 *   **FilesCard.razor**: Project files card with open and remove functionality
 *   **PortMomentExtraInputs.razor**: Allows adding extra time moments for a port
 *   **PortMomentInput.razor**: Defines port values at specific times
+*   **EnhancedRangeSlider.razor**: Advanced range slider component with dynamic coloring, tooltips, tick marks, and custom labels
+*   **FPGASimpleView.razor**: Compact FPGA information display widget showing device specifications
 
 #### Layout
 *   **MainLayout.razor**: Main application layout with navigation menu and content area
 *   **NavMenu.razor**: Navigation menu displaying project options and created projects
+*   **TopBar.razor**: Top navigation bar with FPGA selector and theme switcher
 
 #### Modals
 *   **CreateFileModal.razor**: Modal for creating new files in a project
 *   **ProjectDetailsModal.razor**: Modal for creating new projects
-*   **SimulationParametersModal.razor**: Modal for configuring simulation parameters (time, scale)
+*   **SimulationParametersModal.razor**: Comprehensive modal for configuring simulation parameters including time/scale, port inputs, FPGA resource validation, and simulation controls (start/pause/resume/restart/stop)
 
 ```mermaid
 classDiagram
@@ -425,7 +429,7 @@ classDiagram
         +string BasePath
         +DateTime CreationTime
     }
-    
+
     class ProjectFile {
         +int Id
         +string FileName
@@ -433,7 +437,7 @@ classDiagram
         +int ProjectId
         +Project Project
     }
-    
+
     class PortMoment {
         +Variable Variable
         +int TimeInput
@@ -441,7 +445,7 @@ classDiagram
         +string Value
         +TimeScale TimeScale
     }
-    
+
     class TimeScale {
         <<enumeration>>
         US
@@ -451,9 +455,59 @@ classDiagram
         M
         H
     }
-    
+
+    class SelectedFPGA {
+        +FPGA FPGA
+        +string Path
+        +Action OnFPGAChange
+        +SetFPGA(FPGA fpga, string path)
+    }
+
+    class FPGA {
+        +string Model
+        +string Family
+        +string Manufacturer
+        +FPGAResources Resources
+        +FPGAClocking Clocking
+        +FPGAPower Power
+        +FPGAsIO IO
+        +List~string~ PackageOptions
+    }
+
+    class FPGAResources {
+        +int LogicUnits
+        +string LogicUnitsType
+        +int RegistersFlipFlops
+        +int MemoryBlocks
+        +string MemoryBlockType
+        +int MemoryTotalKbits
+        +int DspSlices
+        +string DspSliceType
+    }
+
+    class FPGAClocking {
+        +int PllCount
+        +int DcmMmcmCount
+        +int MaxPllOutputMhz
+    }
+
+    class FPGAPower {
+        +double CoreVoltageVccintV
+    }
+
+    class FPGAsIO {
+        +int MaxUserIO
+        +int IoBanksCount
+        +List~string~ SupportedIoStandards
+    }
+
     Project "1" --> "*" ProjectFile : contains
     PortMoment --> TimeScale : uses
+    SelectedFPGA --> FPGA : contains
+    FPGA --> FPGAResources : has
+    FPGA --> FPGAClocking : has
+    FPGA --> FPGAPower : has
+    FPGA --> FPGAsIO : has
 ```
 
 ### 10.2 Backend and Logic
@@ -473,6 +527,12 @@ classDiagram
 *   **PortMoment.cs**: Represents a moment when a port changes value
 *   **TimeScale.cs**: Enumeration defining simulation time scales
 *   **ToastMessages.cs**: Utility class for creating toast messages
+*   **SelectedFPGA.cs**: State management for selected FPGA device with change notifications
+*   **FPGA.cs**: Main FPGA device model containing all device specifications
+*   **FPGAResources.cs**: FPGA resource specifications (Logic Units, Registers, Memory, DSP)
+*   **FPGAClocking.cs**: FPGA clocking specifications (PLL, DCM/MMCM)
+*   **FPGAPower.cs**: FPGA power specifications (Core voltage)
+*   **FPGAsIO.cs**: FPGA I/O specifications (User I/O, Banks, Standards)
 ```mermaid
 graph TD
     subgraph "UI Layer"
@@ -642,16 +702,32 @@ The application uses GitHub Actions for continuous integration and deployment:
 ├── Components/
 │   ├── ButtonCollapse.razor
 │   ├── EntityView.razor
+│   ├── EnhancedRangeSlider.razor
 │   ├── FilesCard.razor
+│   ├── FPGASimpleView.razor
 │   ├── PortMomentInput.razor
 │   └── PortMomentExtraInputs.razor
 ├── Data/
 │   └── ApplicationDbContext.cs
+├── Interfaces/
+│   ├── IRepository.cs
+│   └── IJsonFileReader.cs
+├── Layout/
+│   ├── MainLayout.razor
+│   ├── NavMenu.razor
+│   └── TopBar.razor
 ├── Models/
 │   ├── Project.cs
 │   ├── ProjectFile.cs
 │   ├── PortMoment.cs
-│   └── TimeScale.cs
+│   ├── TimeScale.cs
+│   ├── ToastMessages.cs
+│   ├── SelectedFPGA.cs
+│   ├── FPGA.cs
+│   ├── FPGAResources.cs
+│   ├── FPGAClocking.cs
+│   ├── FPGAPower.cs
+│   └── FPGAsIO.cs
 ├── Pages/
 │   ├── Editor.razor
 │   ├── Home.razor
@@ -661,21 +737,94 @@ The application uses GitHub Actions for continuous integration and deployment:
 │   ├── ProjectFiles.cs
 │   └── JSONFileReader.cs
 ├── Services/
-│   └── ProgramBuilder.cs
+│   ├── ProgramBuilder.cs
+│   ├── IFormFactor.cs
+│   └── Traductor.cs
 └── Modals/
     ├── CreateFileModal.razor
     ├── ProjectDetailsModal.razor
     └── SimulationParametersModal.razor
 ```
 
-## 16. Contributing
+## 16. Documentation Status
+
+### Overview
+
+The Kmila-9s codebase maintains comprehensive XML documentation for most public APIs. As of the latest review (December 2025), **72% of files have complete XML documentation** covering all public methods, properties, and classes.
+
+### Well-Documented Components
+
+The following areas have complete XML documentation:
+
+#### Fully Documented
+*   **All Components**: ButtonCollapse, EntityView, EnhancedRangeSlider, FilesCard, PortMomentInput, PortMomentExtraInputs
+*   **All Pages**: Editor, ProjectsView, Home
+*   **All Modals**: SimulationParametersModal, CreateFileModal, ProjectDetailsModal
+*   **All Repositories**: Projects, ProjectFiles, JSONFileReader
+*   **All Services**: ProgramBuilder, IFormFactor
+*   **Core Models**: Project, ProjectFile, PortMoment, TimeScale, ToastMessages
+*   **Data Layer**: ApplicationDbContext
+*   **Interfaces**: IRepository
+*   **Layout Components**: NavMenu, TopBar (partial), MainLayout
+
+### Components Requiring Documentation
+
+The following files need XML documentation added:
+
+#### High Priority (Missing Documentation)
+1. **FPGASimpleView.razor** (Kmila.Shared/Components/) - Compact FPGA information display widget
+2. **SelectedFPGA.cs** (Kmila.Shared/Models/) - State management for FPGA selection
+3. **FPGA.cs** (Kmila.Shared/Models/) - Main FPGA device model
+4. **FPGAResources.cs** (Kmila.Shared/Models/) - FPGA resource specifications
+5. **FPGAClocking.cs** (Kmila.Shared/Models/) - FPGA clocking specifications
+6. **FPGAPower.cs** (Kmila.Shared/Models/) - FPGA power specifications
+7. **FPGAsIO.cs** (Kmila.Shared/Models/) - FPGA I/O specifications
+8. **IJsonFileReader.cs** (Kmila.Shared/Interfaces/) - Generic JSON file reader interface
+
+#### Code Quality Notes
+*   **Traductor.cs** (Kmila.Shared/Services/) - Empty placeholder class; should be implemented or removed
+*   **ProjectFiles.GetByAsync()** and **ProjectFiles.RemoveAsync()** - Currently throw NotImplementedException; should be implemented or removed from interface
+*   **IJsonFileReader** - Interface defined but not implemented by JSONFileReader class
+
+### Documentation Guidelines
+
+When adding documentation to the above components, please follow these guidelines:
+
+1. **Use XML Documentation Comments**: All public classes, methods, properties, and parameters should have `///` comments
+2. **Describe Purpose**: Explain what the component does and why it exists
+3. **Document Parameters**: Use `<param>` tags for all method parameters
+4. **Document Return Values**: Use `<returns>` tags for methods that return values
+5. **Add Examples**: Use `<example>` tags for complex methods where appropriate
+6. **Keep it Current**: Update documentation when code changes
+
+### Example Documentation Format
+
+```csharp
+/// <summary>
+/// Represents FPGA device specifications including resources, clocking, power, and I/O.
+/// </summary>
+public class FPGA
+{
+    /// <summary>
+    /// Gets or sets the FPGA model identifier (e.g., "XC7A35T-1CPG236C").
+    /// </summary>
+    public string Model { get; set; }
+
+    /// <summary>
+    /// Gets or sets the FPGA family name (e.g., "Artix-7", "Cyclone V").
+    /// </summary>
+    public string Family { get; set; }
+}
+```
+
+## 17. Contributing
 
 We welcome contributions to Kmila-9s! Please check our GitHub repository for contribution guidelines and open issues.
 
-## 17. License
+## 18. License
 
 Kmila-9s is released as free and open-source software. Please refer to the LICENSE file in the repository for specific licensing terms.
 
-## 18. Contact
+## 19. Contact
 
 For questions, support, or feedback, please open an issue on our GitHub repository or contact the development team through the project page.

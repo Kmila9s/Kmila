@@ -1,0 +1,375 @@
+<!-- Enhanced Range Slider Component -->
+<div class="enhanced-range-slider">
+    <!-- Label Section -->
+    @if (!string.IsNullOrEmpty(Label))
+    {
+        <label class="form-label d-flex justify-content-between align-items-center mb-2">
+            <span>
+                @if (IconName != null)
+                {
+                    <Icon Name="@IconName.Value" Class="me-2" />
+                }
+                <strong>@Label</strong>
+            </span>
+            @if (ShowMinMaxLabels)
+            {
+                <small class="text-muted">
+                    Range: @Min - @Max @Unit
+                </small>
+            }
+        </label>
+    }
+
+    <!-- Slider Container -->
+    <div class="d-flex flex-row align-items-center gap-3">
+        <!-- Range Input -->
+        <div class="flex-fill position-relative">
+            <RangeInput TValue="int"
+                       @bind-Value="CurrentValue"
+                       Min="@Min"
+                       Max="@Max"
+                       Step="@Step"
+                       TickMarks="@TickMarks"
+                       Disabled="@Disabled"
+                       Class="@InputClass" />
+
+            @if (ShowValueIndicator && !Disabled)
+            {
+                <div class="value-indicator" style="left: @GetIndicatorPosition()">
+                    <div class="value-indicator-tooltip">
+                        @CurrentValue @Unit
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- Value Display Badge -->
+        @if (ShowBadge)
+        {
+            <Badge Color="@GetBadgeColor()"
+                   Class="@($"flex-shrink-0 {BadgeClass}")"
+                   VisuallyHiddenText="@BadgeAriaLabel">
+                @if (BadgeIconName != null)
+                {
+                    <Icon Name="@BadgeIconName.Value" Class="me-1" />
+                }
+                @CurrentValue @Unit
+            </Badge>
+        }
+    </div>
+
+    <!-- Description or Help Text -->
+    @if (!string.IsNullOrEmpty(HelpText))
+    {
+        <div class="form-text mt-2">
+            <Icon Name="BlazorBootstrap.IconName.InfoCircle" Class="me-1" />
+            @HelpText
+        </div>
+    }
+
+    <!-- Custom Tick Mark Labels -->
+    @if (ShowCustomLabels && CustomLabels != null && CustomLabels.Any())
+    {
+        <div class="custom-labels d-flex justify-content-between mt-2">
+            @foreach (var label in CustomLabels)
+            {
+                <small class="text-muted">@label</small>
+            }
+        </div>
+    }
+</div>
+
+<style>
+    .enhanced-range-slider {
+        position: relative;
+    }
+
+    .value-indicator {
+        position: absolute;
+        top: -35px;
+        transform: translateX(-50%);
+        pointer-events: none;
+        transition: left 0.15s ease;
+        z-index: 10;
+    }
+
+    .value-indicator-tooltip {
+        background-color: var(--bs-dark);
+        color: var(--bs-white);
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.875rem;
+        white-space: nowrap;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    .value-indicator-tooltip::after {
+        content: '';
+        position: absolute;
+        bottom: -4px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 0;
+        height: 0;
+        border-left: 4px solid transparent;
+        border-right: 4px solid transparent;
+        border-top: 4px solid var(--bs-dark);
+    }
+
+    .custom-labels {
+        font-size: 0.75rem;
+    }
+</style>
+
+@code {
+    #region Parameters
+
+    /// <summary>
+    /// Gets or sets the label text displayed above the slider.
+    /// </summary>
+    [Parameter]
+    public string Label { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the icon name to display next to the label.
+    /// Uses BlazorBootstrap IconName enum values.
+    /// </summary>
+    [Parameter]
+    public IconName? IconName { get; set; }
+
+    /// <summary>
+    /// Gets or sets the current value of the slider.
+    /// This is a two-way binding parameter.
+    /// </summary>
+    [Parameter]
+    public int Value { get; set; }
+
+    /// <summary>
+    /// Event callback invoked when the value changes.
+    /// Enables two-way binding with @bind-Value syntax.
+    /// </summary>
+    [Parameter]
+    public EventCallback<int> ValueChanged { get; set; }
+
+    /// <summary>
+    /// Gets or sets the minimum value of the slider range.
+    /// Default is 0.
+    /// </summary>
+    [Parameter]
+    public int Min { get; set; } = 0;
+
+    /// <summary>
+    /// Gets or sets the maximum value of the slider range.
+    /// Default is 100.
+    /// </summary>
+    [Parameter]
+    public int Max { get; set; } = 100;
+
+    /// <summary>
+    /// Gets or sets the step increment for the slider.
+    /// Default is 1.
+    /// </summary>
+    [Parameter]
+    public int Step { get; set; } = 1;
+
+    /// <summary>
+    /// Gets or sets the unit label displayed with the value (e.g., "ms", "px", "%").
+    /// </summary>
+    [Parameter]
+    public string Unit { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets whether the slider is disabled.
+    /// Default is false.
+    /// </summary>
+    [Parameter]
+    public bool Disabled { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to show the value badge on the right side.
+    /// Default is true.
+    /// </summary>
+    [Parameter]
+    public bool ShowBadge { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show min/max labels in the header.
+    /// Default is true.
+    /// </summary>
+    [Parameter]
+    public bool ShowMinMaxLabels { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show a floating value indicator above the slider.
+    /// Default is false.
+    /// </summary>
+    [Parameter]
+    public bool ShowValueIndicator { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to show custom labels below the slider.
+    /// Default is false.
+    /// </summary>
+    [Parameter]
+    public bool ShowCustomLabels { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the tick marks for the slider.
+    /// </summary>
+    [Parameter]
+    public IEnumerable<TickMark>? TickMarks { get; set; }
+
+    /// <summary>
+    /// Gets or sets custom labels to display below the slider.
+    /// </summary>
+    [Parameter]
+    public List<string>? CustomLabels { get; set; }
+
+    /// <summary>
+    /// Gets or sets help text displayed below the slider.
+    /// </summary>
+    [Parameter]
+    public string HelpText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the badge color mode.
+    /// Options: "Static", "Dynamic", "Custom"
+    /// Default is "Dynamic".
+    /// </summary>
+    [Parameter]
+    public string BadgeColorMode { get; set; } = "Dynamic";
+
+    /// <summary>
+    /// Gets or sets the static badge color when BadgeColorMode is "Static".
+    /// </summary>
+    [Parameter]
+    public BadgeColor StaticBadgeColor { get; set; } = BadgeColor.Primary;
+
+    /// <summary>
+    /// Gets or sets custom badge color thresholds for dynamic coloring.
+    /// Dictionary with threshold values as keys and BadgeColor as values.
+    /// </summary>
+    [Parameter]
+    public Dictionary<int, BadgeColor>? CustomColorThresholds { get; set; }
+
+    /// <summary>
+    /// Gets or sets the icon to display in the badge.
+    /// </summary>
+    [Parameter]
+    public IconName? BadgeIconName { get; set; }
+
+    /// <summary>
+    /// Gets or sets additional CSS classes for the badge.
+    /// </summary>
+    [Parameter]
+    public string BadgeClass { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the ARIA label for the badge.
+    /// </summary>
+    [Parameter]
+    public string BadgeAriaLabel { get; set; } = "Current value";
+
+    /// <summary>
+    /// Gets or sets additional CSS classes for the input.
+    /// </summary>
+    [Parameter]
+    public string InputClass { get; set; } = string.Empty;
+
+    #endregion
+
+    #region Private Fields
+
+    /// <summary>
+    /// Internal value property that handles two-way binding.
+    /// </summary>
+    private int CurrentValue
+    {
+        get => Value;
+        set
+        {
+            if (Value != value)
+            {
+                Value = value;
+                ValueChanged.InvokeAsync(value);
+            }
+        }
+    }
+
+    #endregion
+
+    #region Helper Methods
+
+    /// <summary>
+    /// Calculates the position of the value indicator based on the current value.
+    /// Returns a CSS left position as a percentage.
+    /// </summary>
+    /// <returns>CSS position string (e.g., "50%").</returns>
+    private string GetIndicatorPosition()
+    {
+        if (Max == Min) return "0%";
+
+        var percentage = ((double)(CurrentValue - Min) / (Max - Min)) * 100;
+        return $"{percentage:F1}%";
+    }
+
+    /// <summary>
+    /// Determines the badge color based on the configured mode and current value.
+    /// </summary>
+    /// <returns>The appropriate BadgeColor for the current value.</returns>
+    private BadgeColor GetBadgeColor()
+    {
+        return BadgeColorMode switch
+        {
+            "Static" => StaticBadgeColor,
+            "Custom" => GetCustomBadgeColor(),
+            "Dynamic" => GetDynamicBadgeColor(),
+            _ => BadgeColor.Primary
+        };
+    }
+
+    /// <summary>
+    /// Gets the badge color based on custom thresholds.
+    /// </summary>
+    /// <returns>The badge color for the current value based on custom thresholds.</returns>
+    private BadgeColor GetCustomBadgeColor()
+    {
+        if (CustomColorThresholds == null || !CustomColorThresholds.Any())
+            return BadgeColor.Primary;
+
+        // Find the highest threshold that the current value exceeds
+        var applicableThreshold = CustomColorThresholds
+            .Where(kvp => CurrentValue >= kvp.Key)
+            .OrderByDescending(kvp => kvp.Key)
+            .FirstOrDefault();
+
+        return applicableThreshold.Key != 0 ? applicableThreshold.Value : BadgeColor.Primary;
+    }
+
+    /// <summary>
+    /// Gets the badge color using dynamic color ranges based on quartiles.
+    /// Returns different colors for different value ranges:
+    /// - Info (Blue): 0-25% of range
+    /// - Success (Green): 26-50% of range
+    /// - Warning (Yellow): 51-75% of range
+    /// - Danger (Red): 76-100% of range
+    /// </summary>
+    /// <returns>The appropriate BadgeColor based on value position in range.</returns>
+    private BadgeColor GetDynamicBadgeColor()
+    {
+        if (Max == Min) return BadgeColor.Info;
+
+        var range = Max - Min;
+        var percentage = ((double)(CurrentValue - Min) / range) * 100;
+
+        return percentage switch
+        {
+            > 75 => BadgeColor.Danger,
+            > 50 => BadgeColor.Warning,
+            > 25 => BadgeColor.Success,
+            _ => BadgeColor.Info
+        };
+    }
+
+    #endregion
+}

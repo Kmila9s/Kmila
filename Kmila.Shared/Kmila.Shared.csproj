@@ -7,8 +7,13 @@
   </PropertyGroup>
   <ItemGroup>
     <SupportedPlatform Include="browser" />
-    <MauiAsset Include="..\Shared\wwwroot\Devices\**\*.json" 
-             Link="Resources\Raw\Devices\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <!-- Copy Devices folder to output directory -->
+  <ItemGroup>
+    <Content Update="wwwroot\Devices\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Blazor.Bootstrap" Version="3.4.0" />

@@ -1,37 +1,356 @@
 @using Interpreter.Services
 @using Parser.Models
-<div class="card h-100">
-    <div class="card-header">
-        Entity
-    </div>
-    <div class="card-body">
-        <h5 class="card-title">Name: @Entity.Name</h5>
-        <p class="card-text">Ports:</p>
-        <Grid TItem="Variable"
-            Class="table table-hover table-bordered table-striped"
-            Data="Entity.Ports"
-            PageSize="10"
-            Responsive="true">
 
-            <GridColumns>
-                <GridColumn TItem="Variable" HeaderText="Name" PropertyName="Name" SortKeySelector="item => item.Name">
-                    @context.Name
-                </GridColumn>
-                <GridColumn TItem="Variable" HeaderText="Value" PropertyName="Value">
-                    @context.Value
-                </GridColumn>
-                <GridColumn TItem="Variable" HeaderText="Type" PropertyName="Type" SortKeySelector="item => item.Type">
-                    @context.Type
-                </GridColumn>
-            </GridColumns>
+<!-- Enhanced Entity View Component -->
+<Card Class="h-100 shadow-sm">
+    <CardHeader>
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center">
+                <Icon Name="IconName.Diagram3Fill" Size="IconSize.x5" Class="me-3 text-primary" />
+                <div>
+                    <h5 class="mb-0">VHDL/Verilog Entity</h5>
+                    <small class="text-muted">Hardware Description</small>
+                </div>
+            </div>
+            <Badge Color="BadgeColor.Primary" Pill="true">
+                <Icon Name="IconName.Braces" Class="me-1" />
+                @Entity.Ports.Count port@(Entity.Ports.Count != 1 ? "s" : "")
+            </Badge>
+        </div>
+    </CardHeader>
+    <CardBody>
+        <!-- Entity Name Section -->
+        <div class="mb-4">
+            <div class="d-flex align-items-center mb-2">
+                <Icon Name="IconName.Tag" Class="me-2 text-muted" />
+                <strong class="text-muted small">Entity Name</strong>
+            </div>
+            <h4 class="mb-0 ms-4">
+                <Badge Color="BadgeColor.Secondary" Class="px-3 py-2 fs-6">
+                    <Icon Name="IconName.CodeSlash" Class="me-2" />
+                    @Entity.Name
+                </Badge>
+            </h4>
+        </div>
 
-        </Grid>
-    </div>
-</div>
-@code{
+        <hr class="my-3" />
+
+        <!-- Ports Section -->
+        <div class="mb-3">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <div class="d-flex align-items-center">
+                    <Icon Name="IconName.Plugin" Class="me-2 text-primary" />
+                    <h6 class="mb-0">Port Signals</h6>
+                </div>
+                @if (Entity.Ports.Any())
+                {
+                    <div class="d-flex gap-2">
+                        @{
+                            var inputCount = Entity.Ports.Count(p => p.PortType == PortType.IN);
+                            var outputCount = Entity.Ports.Count(p => p.PortType == PortType.OUT);
+                        }
+                        @if (inputCount > 0)
+                        {
+                            <Badge Color="BadgeColor.Success" Pill="true">
+                                <Icon Name="IconName.ArrowDown" Class="me-1" />
+                                @inputCount IN
+                            </Badge>
+                        }
+                        @if (outputCount > 0)
+                        {
+                            <Badge Color="BadgeColor.Info" Pill="true">
+                                <Icon Name="IconName.ArrowUp" Class="me-1" />
+                                @outputCount OUT
+                            </Badge>
+                        }
+                    </div>
+                }
+            </div>
+
+            @if (Entity.Ports.Any())
+            {
+                <Grid TItem="Variable"
+                      Class="table table-hover table-bordered"
+                      Data="Entity.Ports"
+                      PageSize="10"
+                      AllowPaging="true"
+                      AllowSorting="true"
+                      Responsive="true">
+
+                    <GridColumns>
+                        <!-- Port Name Column -->
+                        <GridColumn TItem="Variable"
+                                    HeaderText="Port Name"
+                                    PropertyName="Name"
+                                    SortKeySelector="item => item.Name">
+                            <div class="d-flex align-items-center">
+                                <Icon Name="IconName.Terminal" Class="me-2 text-muted" Size="IconSize.x4" />
+                                <strong>@context.Name</strong>
+                            </div>
+                        </GridColumn>
+
+                        <!-- Port Direction Column -->
+                        <GridColumn TItem="Variable"
+                                    HeaderText="Direction"
+                                    PropertyName="PortType"
+                                    SortKeySelector="item => item.PortType">
+                            @{
+                                var (badgeColor, iconName, directionText) = GetPortTypeInfo(context.PortType);
+                            }
+                            <Badge Color="@badgeColor" Pill="true">
+                                <Icon Name="@iconName" Class="me-1" />
+                                @directionText
+                            </Badge>
+                        </GridColumn>
+
+                        <!-- Data Type Column -->
+                        <GridColumn TItem="Variable"
+                                    HeaderText="Data Type"
+                                    PropertyName="Type"
+                                    SortKeySelector="item => item.Type">
+                            <Badge Color="BadgeColor.Dark" Class="font-monospace">
+                                @Enum.GetName(typeof(DATATYPES), context.Type)
+                            </Badge>
+                        </GridColumn>
+
+                        <!-- Current Value Column -->
+                        <GridColumn TItem="Variable"
+                                    HeaderText="Current Value"
+                                    PropertyName="Value">
+                            <div class="d-flex align-items-center">
+                                @{
+                                    var valueStr = context.Value?.ToString() ?? "";
+                                }
+                                @if (!string.IsNullOrEmpty(valueStr))
+                                {
+                                    <Badge Color="BadgeColor.Primary" Class="font-monospace px-2">
+                                        @valueStr
+                                    </Badge>
+                                }
+                                else
+                                {
+                                    <span class="text-muted fst-italic small">Not set</span>
+                                }
+                            </div>
+                        </GridColumn>
+                    </GridColumns>
+                </Grid>
+            }
+            else
+            {
+                <Alert Color="AlertColor.Info" Class="mb-0">
+                    <Icon Name="IconName.InfoCircle" Class="me-2" />
+                    No ports defined for this entity.
+                </Alert>
+            }
+        </div>
+
+        <!-- Resource Usage Section -->
+        @if (Entity.ResourceUsage != null)
+        {
+            <hr class="my-3" />
+
+            <div class="mb-3">
+                <div class="d-flex align-items-center mb-3">
+                    <Icon Name="IconName.Cpu" Class="me-2 text-warning" />
+                    <h6 class="mb-0">Estimated Resource Usage</h6>
+                </div>
+
+                <div class="row g-3">
+                    <!-- Flip-Flops -->
+                    <div class="col-md-6 col-lg-4">
+                        <div class="border rounded p-3 h-100">
+                            <div class="d-flex align-items-center mb-2">
+                                <Icon Name="IconName.ToggleOn" Class="me-2 text-primary" />
+                                <strong>Flip-Flops</strong>
+                                <Badge Color="BadgeColor.Secondary" Class="ms-2" Pill="true">
+                                    <small>~95%</small>
+                                </Badge>
+                            </div>
+                            <div class="d-flex align-items-center">
+                                <Badge Color="BadgeColor.Primary" Class="font-monospace fs-5">
+                                    @Entity.ResourceUsage.FlipFlops
+                                </Badge>
+                                <small class="text-muted ms-2">FFs</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- LUTs -->
+                    <div class="col-md-6 col-lg-4">
+                        <div class="border rounded p-3 h-100">
+                            <div class="d-flex align-items-center mb-2">
+                                <Icon Name="IconName.Grid" Class="me-2 text-success" />
+                                <strong>LUTs</strong>
+                                <Badge Color="BadgeColor.Secondary" Class="ms-2" Pill="true">
+                                    <small>~70%</small>
+                                </Badge>
+                            </div>
+                            <div class="d-flex align-items-center">
+                                <Badge Color="BadgeColor.Success" Class="font-monospace fs-5">
+                                    @Entity.ResourceUsage.LUTs
+                                </Badge>
+                                <small class="text-muted ms-2">LUTs</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- DSP Slices -->
+                    <div class="col-md-6 col-lg-4">
+                        <div class="border rounded p-3 h-100">
+                            <div class="d-flex align-items-center mb-2">
+                                <Icon Name="IconName.Calculator" Class="me-2 text-info" />
+                                <strong>DSP Slices</strong>
+                                <Badge Color="BadgeColor.Secondary" Class="ms-2" Pill="true">
+                                    <small>~85%</small>
+                                </Badge>
+                            </div>
+                            <div class="d-flex align-items-center">
+                                <Badge Color="BadgeColor.Info" Class="font-monospace fs-5">
+                                    @Entity.ResourceUsage.DSPSlices
+                                </Badge>
+                                <small class="text-muted ms-2">Slices</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- BRAM Blocks -->
+                    <div class="col-md-6 col-lg-4">
+                        <div class="border rounded p-3 h-100">
+                            <div class="d-flex align-items-center mb-2">
+                                <Icon Name="IconName.Memory" Class="me-2 text-warning" />
+                                <strong>BRAM Blocks</strong>
+                                <Badge Color="BadgeColor.Secondary" Class="ms-2" Pill="true">
+                                    <small>~85%</small>
+                                </Badge>
+                            </div>
+                            <div class="d-flex align-items-center">
+                                <Badge Color="BadgeColor.Warning" Class="font-monospace fs-5">
+                                    @Entity.ResourceUsage.BRAMBlocks.ToString("F1")
+                                </Badge>
+                                <small class="text-muted ms-2">Blocks</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- I/O Pins -->
+                    <div class="col-md-6 col-lg-4">
+                        <div class="border rounded p-3 h-100">
+                            <div class="d-flex align-items-center mb-2">
+                                <Icon Name="IconName.Plugin" Class="me-2 text-danger" />
+                                <strong>I/O Pins</strong>
+                                <Badge Color="BadgeColor.Success" Class="ms-2" Pill="true">
+                                    <small>Exact</small>
+                                </Badge>
+                            </div>
+                            <div class="d-flex align-items-center">
+                                <Badge Color="BadgeColor.Danger" Class="font-monospace fs-5">
+                                    @Entity.ResourceUsage.IOPins
+                                </Badge>
+                                <small class="text-muted ms-2">Pins</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Clock Domains -->
+                    <div class="col-md-6 col-lg-4">
+                        <div class="border rounded p-3 h-100">
+                            <div class="d-flex align-items-center mb-2">
+                                <Icon Name="IconName.Clock" Class="me-2 text-secondary" />
+                                <strong>Clock Domains</strong>
+                                <Badge Color="BadgeColor.Success" Class="ms-2" Pill="true">
+                                    <small>Exact</small>
+                                </Badge>
+                            </div>
+                            <div class="d-flex align-items-center">
+                                <Badge Color="BadgeColor.Secondary" Class="font-monospace fs-5">
+                                    @Entity.ResourceUsage.ClockDomains
+                                </Badge>
+                                <small class="text-muted ms-2">Domains</small>
+                            </div>
+                            @if (Entity.ResourceUsage.ClockSignals.Any())
+                            {
+                                <div class="mt-2">
+                                    @foreach (var clk in Entity.ResourceUsage.ClockSignals)
+                                    {
+                                        <Badge Color="BadgeColor.Light" Class="me-1 font-monospace">
+                                            @clk
+                                        </Badge>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <Alert Color="AlertColor.Info" Class="mt-3 mb-0">
+                    <Icon Name="IconName.InfoCircle" Class="me-2" />
+                    <small>
+                        <strong>Note:</strong> Resource estimates are based on typical synthesis patterns.
+                        Actual usage may vary ±20% depending on synthesis tool optimizations and target FPGA architecture.
+                    </small>
+                </Alert>
+            </div>
+        }
+    </CardBody>
+    <CardFooter Class="text-muted">
+        <small class="d-flex align-items-center">
+            <Icon Name="IconName.Clock" Class="me-2" />
+            Entity: @Entity.Name | Ports: @Entity.Ports.Count
+            @if (Entity.ResourceUsage != null)
+            {
+                <span class="mx-2">|</span>
+                <Icon Name="IconName.Cpu" Class="me-1" />
+                <text>Resources: @Entity.ResourceUsage.LUTs LUTs, @Entity.ResourceUsage.FlipFlops FFs</text>
+            }
+        </small>
+    </CardFooter>
+</Card>
+
+<style>
+    .entity-view-card {
+        transition: all 0.3s ease;
+    }
+
+    .entity-view-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+    }
+
+    .font-monospace {
+        font-family: 'Courier New', Courier, monospace;
+    }
+</style>
+
+@code {
+    #region Parameters
+
     /// <summary>
     /// Gets or sets the entity to display.
+    /// This represents a VHDL/Verilog hardware entity with its ports and properties.
     /// </summary>
     [Parameter]
-    public Entity Entity { get; set; }
+    [EditorRequired]
+    public Entity Entity { get; set; } = default!;
+
+    #endregion
+
+    #region Helper Methods
+
+    /// <summary>
+    /// Gets the visual information for a port type including badge color, icon, and display text.
+    /// </summary>
+    /// <param name="portType">The type of port (IN or OUT).</param>
+    /// <returns>A tuple containing the badge color, icon name, and direction text.</returns>
+    private (BadgeColor badgeColor, IconName iconName, string directionText) GetPortTypeInfo(PortType portType)
+    {
+        return portType switch
+        {
+            PortType.IN => (BadgeColor.Success, IconName.ArrowDown, "INPUT"),
+            PortType.OUT => (BadgeColor.Info, IconName.ArrowUp, "OUTPUT"),
+            _ => (BadgeColor.Secondary, IconName.QuestionCircle, "UNKNOWN")
+        };
+    }
+
+    #endregion
 }

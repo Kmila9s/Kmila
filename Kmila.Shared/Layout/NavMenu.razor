@@ -35,10 +35,9 @@
             new () { Id = "3", Href = "/projects/create", IconName = IconName.Plus, Text = "Create new project", IconColor = IconColor.Info, ParentId = "1" },
             new () { Id = "4", Text = "Projects Created", IconName = IconName.Folder2Open, ParentId = "1" }
         };
-        int currentId = items.Count();
         foreach(var project in _projects){
             items.Add(new(){
-                Id = $"{currentId++}",
+                Id = Guid.NewGuid().ToString(),
                 Text = project.Name,
                 ParentId = "4",
                 Href = $"/editor/{project.Id}",

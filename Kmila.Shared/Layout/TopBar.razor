@@ -1,0 +1,53 @@
+<div class="bb-top-row px-4">
+    <div class="float-begin">
+        <Dropdown Color="DropdownColor.Info">
+            <DropdownToggleButton>Selected FPGA: @Path.GetFileNameWithoutExtension(_selectedFPGA)</DropdownToggleButton>
+            <DropdownMenu>
+                <DropdownHeader>
+                    @if(_fpga != null && !string.IsNullOrEmpty(_fpga.Model)){
+                        <FPGASimpleView @ref=_fpgaView/>
+                    }
+                    else{
+                        <span class="text-muted p-2">Select an FPGA to view details</span>
+                    }
+                </DropdownHeader>
+                @foreach(var fpga in _fpgas){
+                    <DropdownItem Type="DropdownItemType.Button" @onclick="async () => await SetFPGA(fpga)" Active=@(_selectedFPGA.Equals(fpga))>@Path.GetFileNameWithoutExtension(fpga)</DropdownItem>
+                }
+            </DropdownMenu>
+        </Dropdown>
+    </div>
+    <div class="float-end">
+        <ThemeSwitcher
+            Position="DropdownMenuPosition.End"
+            OnThemeChanged='async (string e) =>{
+                string theme = e == "dark" ? "vs-dark" : "vs";
+                await BlazorMonaco.Editor.Global.SetTheme(JS, theme);
+            }'
+        />
+    </div>
+    
+</div>
+
+@code{
+    private string _selectedFPGA = string.Empty;
+    private FPGASimpleView _fpgaView = new();
+    private FPGA? _fpga = new();
+    private List<string> _fpgas = new();
+    /// <summary>
+    /// Method invoked when the component is initialized.
+    /// </summary>
+    protected override async Task OnInitializedAsync()
+    {
+        _fpgas = await JSONFileReader.GetFPGAsAsync();
+    }
+    private async Task GetFPGASettings(){
+        _fpga = await JSONFileReader.ReadFPGAJsonFileAsync(_selectedFPGA);
+    }
+    private async Task SetFPGA(string name){
+        _selectedFPGA = name;
+        await GetFPGASettings();
+        SelectedFPGA.SetFPGA(_fpga!, name);
+        StateHasChanged();
+    }
+}

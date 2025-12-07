@@ -1,0 +1,61 @@
+@implements IDisposable
+<div class="fpga-info p-2" style="min-width: 280px;">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <strong class="fs-5">@SelectedFPGA.FPGA.Model</strong>
+        <Badge Color="BadgeColor.Primary">@SelectedFPGA.FPGA.Manufacturer</Badge>
+    </div>
+    <small class="text-muted">@SelectedFPGA.FPGA.Family</small>
+    <hr class="my-2"/>
+
+    <div class="row g-2 small">
+        @if(SelectedFPGA.FPGA.Resources != null){
+            <div class="col-6">
+                <Icon Name="IconName.Cpu" /> <strong>Logic</strong><br/>
+                <span class="text-muted">@SelectedFPGA.FPGA.Resources.LogicUnits?.ToString("N0") @SelectedFPGA.FPGA.Resources.LogicUnitsType</span>
+            </div>
+            <div class="col-6">
+                <Icon Name="IconName.Memory" /> <strong>Memory</strong><br/>
+                <span class="text-muted">@SelectedFPGA.FPGA.Resources.MemoryTotalKbits?.ToString("N0") Kbits</span>
+            </div>
+            <div class="col-6">
+                <Icon Name="IconName.ToggleOn" /> <strong>Registers</strong><br/>
+                <span class="text-muted">@SelectedFPGA.FPGA.Resources.RegistersFlipFlops?.ToString("N0") FF</span>
+            </div>
+            <div class="col-6">
+                <Icon Name="IconName.Calculator" /> <strong>DSP</strong><br/>
+                <span class="text-muted">@SelectedFPGA.FPGA.Resources.DspSlices @SelectedFPGA.FPGA.Resources.DspSliceType</span>
+            </div>
+        }
+        @if(SelectedFPGA.FPGA.Clocking != null){
+            <div class="col-6">
+                <Icon Name="IconName.Clock" /> <strong>Clock</strong><br/>
+                <span class="text-muted">@SelectedFPGA.FPGA.Clocking.MaxPllOutputMhz MHz max</span>
+            </div>
+            <div class="col-6">
+                <Icon Name="IconName.Diagram3" /> <strong>PLLs</strong><br/>
+                <span class="text-muted">@SelectedFPGA.FPGA.Clocking.PllCount PLL / @SelectedFPGA.FPGA.Clocking.DcmMmcmCount DCM</span>
+            </div>
+        }
+        @if(SelectedFPGA.FPGA.IO != null){
+            <div class="col-6">
+                <Icon Name="IconName.Plugin" /> <strong>I/O</strong><br/>
+                <span class="text-muted">@SelectedFPGA.FPGA.IO.MaxUserIO pins (@SelectedFPGA.FPGA.IO.IoBanksCount banks)</span>
+            </div>
+        }
+        @if(SelectedFPGA.FPGA.Power != null){
+            <div class="col-6">
+                <Icon Name="IconName.Lightning" /> <strong>Power</strong><br/>
+                <span class="text-muted">@SelectedFPGA.FPGA.Power.CoreVoltageVccintV V core</span>
+            </div>
+        }
+    </div>
+</div>
+@code{
+    protected override async Task OnInitializedAsync()
+    {
+        SelectedFPGA.OnFPGAChange += StateHasChanged;
+    }
+    public void Dispose(){
+        SelectedFPGA.OnFPGAChange -= StateHasChanged;
+    }
+}
