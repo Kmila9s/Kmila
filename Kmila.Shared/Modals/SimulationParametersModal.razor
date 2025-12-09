@@ -687,6 +687,7 @@
     /// </summary>
     protected override void OnInitialized()
     {
+        // Subscribe to events only once during initialization
         Builder.OnSimulationEnded += OnSimulationEnded;
         Builder.OnProgressAdvanced += OnProgressAdvance;
         SelectedFPGA.OnFPGAChange += OnFPGAChanged;
@@ -695,12 +696,12 @@
 
     /// <summary>
     /// Invoked when component parameters are set.
-    /// Ensures event handlers are properly subscribed and validates resources.
+    /// Only validates resources - event subscriptions are handled in OnInitialized to prevent duplicates.
     /// </summary>
     protected override void OnParametersSet()
     {
-        Builder.OnSimulationEnded += OnSimulationEnded;
-        Builder.OnProgressAdvanced += OnProgressAdvance;
+        // Only validate resources, do NOT re-subscribe to events here
+        // Event subscriptions are handled once in OnInitialized()
         ValidateResourceUsage();
     }
 
@@ -715,7 +716,7 @@
 
     /// <summary>
     /// Disposes the component and unsubscribes from events.
-    /// Resets the progress percentage and removes event listeners.
+    /// Resets the progress percentage and removes event listeners to prevent memory leaks.
     /// </summary>
     public void Dispose()
     {

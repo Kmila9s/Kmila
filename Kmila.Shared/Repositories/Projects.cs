@@ -170,9 +170,11 @@ public class Projects : IRepository<Project>
     }
     /// <summary>
     /// Releases the resources used by the <see cref="Projects"/> class.
+    /// Cancels any pending operations and disposes the CancellationTokenSource.
     /// </summary>
     public void Dispose()
     {
-
+        _cts?.Cancel();
+        _cts?.Dispose();
     }
 }

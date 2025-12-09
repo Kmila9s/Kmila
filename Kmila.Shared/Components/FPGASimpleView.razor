@@ -1,5 +1,29 @@
+@*
+    FPGASimpleView Component
+
+    A compact widget that displays essential FPGA device specifications in a grid layout.
+    This component automatically updates when the selected FPGA changes via the SelectedFPGA
+    singleton service.
+
+    Features:
+    - Displays model name, family, and manufacturer
+    - Shows resource specifications (Logic Units, Memory, Registers, DSP)
+    - Shows clocking specifications (Max Clock, PLLs/DCMs)
+    - Shows I/O specifications (Pins, Banks)
+    - Shows power specifications (Core Voltage)
+    - Auto-refreshes when FPGA selection changes
+
+    Usage:
+    <FPGASimpleView />
+
+    Dependencies:
+    - SelectedFPGA (injected singleton service)
+    - BlazorBootstrap Icon and Badge components
+*@
 @implements IDisposable
+
 <div class="fpga-info p-2" style="min-width: 280px;">
+    <!-- Header: Model name and Manufacturer badge -->
     <div class="d-flex justify-content-between align-items-center mb-2">
         <strong class="fs-5">@SelectedFPGA.FPGA.Model</strong>
         <Badge Color="BadgeColor.Primary">@SelectedFPGA.FPGA.Manufacturer</Badge>
@@ -7,7 +31,9 @@
     <small class="text-muted">@SelectedFPGA.FPGA.Family</small>
     <hr class="my-2"/>
 
+    <!-- Specifications Grid -->
     <div class="row g-2 small">
+        @* Resource Specifications Section *@
         @if(SelectedFPGA.FPGA.Resources != null){
             <div class="col-6">
                 <Icon Name="IconName.Cpu" /> <strong>Logic</strong><br/>
@@ -26,6 +52,7 @@
                 <span class="text-muted">@SelectedFPGA.FPGA.Resources.DspSlices @SelectedFPGA.FPGA.Resources.DspSliceType</span>
             </div>
         }
+        @* Clocking Specifications Section *@
         @if(SelectedFPGA.FPGA.Clocking != null){
             <div class="col-6">
                 <Icon Name="IconName.Clock" /> <strong>Clock</strong><br/>
@@ -36,12 +63,14 @@
                 <span class="text-muted">@SelectedFPGA.FPGA.Clocking.PllCount PLL / @SelectedFPGA.FPGA.Clocking.DcmMmcmCount DCM</span>
             </div>
         }
+        @* I/O Specifications Section *@
         @if(SelectedFPGA.FPGA.IO != null){
             <div class="col-6">
                 <Icon Name="IconName.Plugin" /> <strong>I/O</strong><br/>
                 <span class="text-muted">@SelectedFPGA.FPGA.IO.MaxUserIO pins (@SelectedFPGA.FPGA.IO.IoBanksCount banks)</span>
             </div>
         }
+        @* Power Specifications Section *@
         @if(SelectedFPGA.FPGA.Power != null){
             <div class="col-6">
                 <Icon Name="IconName.Lightning" /> <strong>Power</strong><br/>
@@ -50,11 +79,23 @@
         }
     </div>
 </div>
+
 @code{
+    /// <summary>
+    /// Initializes the component and subscribes to FPGA selection changes.
+    /// When the FPGA selection changes, the component automatically re-renders
+    /// to display the new device specifications.
+    /// </summary>
     protected override async Task OnInitializedAsync()
     {
         SelectedFPGA.OnFPGAChange += StateHasChanged;
     }
+
+    /// <summary>
+    /// Disposes the component and unsubscribes from FPGA selection changes.
+    /// This prevents memory leaks by removing the event handler when the
+    /// component is removed from the render tree.
+    /// </summary>
     public void Dispose(){
         SelectedFPGA.OnFPGAChange -= StateHasChanged;
     }

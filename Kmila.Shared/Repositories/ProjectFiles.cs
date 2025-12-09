@@ -72,7 +72,7 @@ public class ProjectFiles : IRepository<ProjectFile>
         }
         return false;
     }
-    private async Task<ProjectFile> ReadFileContentAsync(ProjectFile projectFile, Project project)
+    public async Task<ProjectFile> ReadFileContentAsync(ProjectFile projectFile, Project project)
     {
         string fileContent = string.Empty;
         try

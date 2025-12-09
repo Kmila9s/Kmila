@@ -44,8 +44,9 @@ Kmila-9s is a free, open-source, multiplatform academic platform focused on the 
 
 ### External Dependencies
 - **VHDL Parser**: Debugger.Repositories.Parser (custom implementation)
+- **VHDL Interpreter**: Interpreter module with ProgressReporter for real-time build status updates
 - **Simulation Timer**: TimeMachine.Repositories.Timer
-- **UI Components**: BlazorBootstrap Grid, Modal, Button, Icon components
+- **UI Components**: BlazorBootstrap Grid, Modal, Button, Icon, Progress, Spinner, Alert components
 
 ## 5. Project Goals
 
@@ -402,7 +403,7 @@ The `Kmila.Shared` project contains the core logic, UI components, and data mode
 *   **ProjectsView.razor**: Displays all user projects with create, edit, and delete functionality
 
 #### Components
-*   **ButtonCollapse.razor**: Contains main editor buttons (Save, New File, Start Simulation, Validate)
+*   **ButtonCollapse.razor**: Contains main editor buttons (Save, New File, Start Simulation, Validate) with real-time build progress display including progress bar, status messages, error details, and build cancellation support from the Interpreter's ProgressReporter
 *   **EntityView.razor**: Displays VHDL entity name and ports with resource usage estimation
 *   **FilesCard.razor**: Project files card with open and remove functionality
 *   **PortMomentExtraInputs.razor**: Allows adding extra time moments for a port
@@ -513,7 +514,12 @@ classDiagram
 ### 10.2 Backend and Logic
 
 #### Services
-*   **ProgramBuilder.cs**: Responsible for building and simulating VHDL code using Debugger and TimeMachine modules
+*   **ProgramBuilder.cs**: Responsible for building and simulating VHDL code using Debugger and TimeMachine modules. Integrates with the Interpreter's ProgressReporter to provide real-time build progress updates and cancellation support through events:
+    *   `OnBuildProgressChanged(float, string)` - Progress updates (0-1 value and status message)
+    *   `OnBuildError(string, string?)` - Error events with message and optional details
+    *   `OnBuildCompleted(string)` - Completion notifications
+    *   `OnBuildCancelled(string)` - Cancellation notifications when user cancels build
+    *   `CancelBuild()` - Method to request cancellation of the current build operation
 *   **IFormFactor.cs**: Interface defining methods for device form factor and platform detection
 
 #### Repositories
@@ -562,15 +568,18 @@ graph TD
     subgraph "External Dependencies"
         DebuggerParser[Debugger.Repositories.Parser]
         TimeMachine[TimeMachine.Repositories.Timer]
+        ProgressReporter[Interpreter.ProgressReporter]
     end
-    
+
     Editor --> ButtonCollapse
     Editor --> FilesCard
     ButtonCollapse --> SimParams
     Editor --> ProgramBuilder
-    
+
     ProgramBuilder --> DebuggerParser
     ProgramBuilder --> TimeMachine
+    ProgramBuilder --> ProgressReporter
+    ProgressReporter -->|Progress Events| ButtonCollapse
     
     Editor --> ProjectsRepo
     Editor --> ProjectFilesRepo
@@ -588,7 +597,9 @@ graph TD
 sequenceDiagram
     participant User
     participant Editor
+    participant ButtonCollapse
     participant ProgramBuilder
+    participant ProgressReporter
     participant Parser
     participant TimeMachine
     participant Repository
@@ -596,26 +607,49 @@ sequenceDiagram
     User->>Editor: Open Project
     Editor->>Repository: GetProjectFiles()
     Repository-->>Editor: List<ProjectFile>
-    
-    User->>Editor: Click "Validate Program"
+
+    User->>ButtonCollapse: Click "Validate Program"
+    ButtonCollapse->>Editor: OnBuildButtonClicked
     Editor->>ProgramBuilder: Build(ProjectFile)
     ProgramBuilder->>Parser: ParseFile()
-    Parser-->>ProgramBuilder: Entities
-    ProgramBuilder-->>Editor: Build Success/Failure
-    
+
+    loop Build Progress
+        ProgressReporter-->>ProgramBuilder: OnProgressChanged(float, string)
+        ProgramBuilder-->>ButtonCollapse: OnBuildProgressChanged
+        Note over ButtonCollapse: Update progress bar & status
+    end
+
+    alt Build Success
+        ProgressReporter-->>ProgramBuilder: OnCompleted(message)
+        ProgramBuilder-->>ButtonCollapse: OnBuildCompleted
+        Parser-->>ProgramBuilder: Entities
+        ProgramBuilder-->>Editor: Build Success
+    else Build Error
+        ProgressReporter-->>ProgramBuilder: OnErrorOccurred(message, detail)
+        ProgramBuilder-->>ButtonCollapse: OnBuildError
+        Note over ButtonCollapse: Display error details
+    else Build Cancelled
+        User->>ButtonCollapse: Click Cancel Button
+        ButtonCollapse->>ProgramBuilder: CancelBuild()
+        ProgramBuilder->>ProgressReporter: RequestCancellation()
+        ProgressReporter-->>ProgramBuilder: OnCancellationRequested
+        ProgramBuilder-->>ButtonCollapse: OnBuildCancelled
+        Note over ButtonCollapse: Display cancellation status
+    end
+
     User->>Editor: Configure Simulation
     Editor->>SimModal: Show Parameters
     User->>SimModal: Set Time & Scale
     SimModal-->>Editor: TimeSpan
-    
+
     Editor->>ProgramBuilder: SetSimulationTime(TimeSpan)
     ProgramBuilder->>TimeMachine: Start(TimeSpan)
-    
+
     loop Simulation Progress
         TimeMachine-->>ProgramBuilder: OnProgressAdvance(double)
         ProgramBuilder-->>Editor: Update Progress
     end
-    
+
     TimeMachine-->>ProgramBuilder: OnSimulationEnded(bool)
     ProgramBuilder-->>Editor: Simulation Complete
 ```
@@ -742,6 +776,7 @@ The application uses GitHub Actions for continuous integration and deployment:
 │   └── Traductor.cs
 └── Modals/
     ├── CreateFileModal.razor
+    ├── MarkdownModal.razor
     ├── ProjectDetailsModal.razor
     └── SimulationParametersModal.razor
 ```
@@ -750,69 +785,104 @@ The application uses GitHub Actions for continuous integration and deployment:
 
 ### Overview
 
-The Kmila-9s codebase maintains comprehensive XML documentation for most public APIs. As of the latest review (December 2025), **72% of files have complete XML documentation** covering all public methods, properties, and classes.
+The Kmila-9s codebase maintains comprehensive XML documentation for all public APIs. As of the latest review (December 2025), **100% of files have complete XML documentation** covering all public methods, properties, and classes.
 
-### Well-Documented Components
+### Fully Documented Components
 
-The following areas have complete XML documentation:
+All areas of the codebase now have complete XML documentation:
 
-#### Fully Documented
-*   **All Components**: ButtonCollapse, EntityView, EnhancedRangeSlider, FilesCard, PortMomentInput, PortMomentExtraInputs
-*   **All Pages**: Editor, ProjectsView, Home
-*   **All Modals**: SimulationParametersModal, CreateFileModal, ProjectDetailsModal
-*   **All Repositories**: Projects, ProjectFiles, JSONFileReader
-*   **All Services**: ProgramBuilder, IFormFactor
-*   **Core Models**: Project, ProjectFile, PortMoment, TimeScale, ToastMessages
-*   **Data Layer**: ApplicationDbContext
-*   **Interfaces**: IRepository
-*   **Layout Components**: NavMenu, TopBar (partial), MainLayout
+#### Components
+*   **ButtonCollapse.razor** - Main editor button controls with build progress display (implements IDisposable)
+*   **EntityView.razor** - VHDL entity visualization
+*   **EnhancedRangeSlider.razor** - Advanced range slider component
+*   **FilesCard.razor** - Project files list component
+*   **FPGASimpleView.razor** - Compact FPGA information display widget
+*   **PortMomentInput.razor** - Port input configuration
+*   **PortMomentExtraInputs.razor** - Additional time moment inputs
 
-### Components Requiring Documentation
+#### Pages
+*   **Editor.razor** - Main VHDL editor page
+*   **ProjectsView.razor** - Projects management page
+*   **Home.razor** - Home/landing page
 
-The following files need XML documentation added:
+#### Modals
+*   **SimulationParametersModal.razor** - Simulation configuration modal
+*   **CreateFileModal.razor** - File creation modal
+*   **ProjectDetailsModal.razor** - Project creation/editing modal
+*   **MarkdownModal.razor** - Markdown file viewer modal
 
-#### High Priority (Missing Documentation)
-1. **FPGASimpleView.razor** (Kmila.Shared/Components/) - Compact FPGA information display widget
-2. **SelectedFPGA.cs** (Kmila.Shared/Models/) - State management for FPGA selection
-3. **FPGA.cs** (Kmila.Shared/Models/) - Main FPGA device model
-4. **FPGAResources.cs** (Kmila.Shared/Models/) - FPGA resource specifications
-5. **FPGAClocking.cs** (Kmila.Shared/Models/) - FPGA clocking specifications
-6. **FPGAPower.cs** (Kmila.Shared/Models/) - FPGA power specifications
-7. **FPGAsIO.cs** (Kmila.Shared/Models/) - FPGA I/O specifications
-8. **IJsonFileReader.cs** (Kmila.Shared/Interfaces/) - Generic JSON file reader interface
+#### Models
+*   **Project.cs** - Project entity
+*   **ProjectFile.cs** - Project file entity
+*   **PortMoment.cs** - Simulation port timing model
+*   **TimeScale.cs** - Simulation time scale enum
+*   **ToastMessages.cs** - Toast notification utilities
+*   **SelectedFPGA.cs** - FPGA selection state management
+*   **FPGA.cs** - Main FPGA device model with comprehensive specifications
+*   **FPGAResources.cs** - FPGA resource specifications (Logic Units, Memory, DSP, Registers)
+*   **FPGAClocking.cs** - FPGA clocking specifications (PLL, DCM/MMCM)
+*   **FPGAPower.cs** - FPGA power specifications (Core voltage)
+*   **FPGAsIO.cs** - FPGA I/O specifications (User I/O, Banks, Standards)
 
-#### Code Quality Notes
-*   **Traductor.cs** (Kmila.Shared/Services/) - Empty placeholder class; should be implemented or removed
-*   **ProjectFiles.GetByAsync()** and **ProjectFiles.RemoveAsync()** - Currently throw NotImplementedException; should be implemented or removed from interface
-*   **IJsonFileReader** - Interface defined but not implemented by JSONFileReader class
+#### Services & Repositories
+*   **ProgramBuilder.cs** - Orchestrates VHDL simulation lifecycle
+*   **IFormFactor.cs** - Form factor abstraction interface
+*   **Projects.cs** - Project CRUD operations
+*   **ProjectFiles.cs** - Project file management
+*   **JSONFileReader.cs** - FPGA device JSON file reader
+
+#### Data Layer & Interfaces
+*   **ApplicationDbContext.cs** - SQLite database context
+*   **IRepository.cs** - Generic repository interface
+*   **IJsonFileReader.cs** - JSON file reader interface
+
+#### Layout Components
+*   **MainLayout.razor** - Main application layout
+*   **NavMenu.razor** - Navigation menu component
+*   **TopBar.razor** - Top navigation bar
+
+### Code Quality Notes
+
+*   **Traductor.cs** (Kmila.Shared/Services/) - Empty placeholder class; should be implemented or removed in future releases
+*   **ProjectFiles.GetByAsync()** and **ProjectFiles.RemoveAsync()** - Currently throw NotImplementedException; documented as such, to be implemented in future releases
+*   **IJsonFileReader** - Interface defined with documentation; JSONFileReader provides a more specific implementation
 
 ### Documentation Guidelines
 
-When adding documentation to the above components, please follow these guidelines:
+When adding new components or modifying existing ones, please follow these guidelines:
 
 1. **Use XML Documentation Comments**: All public classes, methods, properties, and parameters should have `///` comments
 2. **Describe Purpose**: Explain what the component does and why it exists
 3. **Document Parameters**: Use `<param>` tags for all method parameters
 4. **Document Return Values**: Use `<returns>` tags for methods that return values
-5. **Add Examples**: Use `<example>` tags for complex methods where appropriate
-6. **Keep it Current**: Update documentation when code changes
+5. **Add Remarks**: Use `<remarks>` tags to provide additional context and usage notes
+6. **Add Examples**: Use `<example>` tags for complex methods where appropriate
+7. **Keep it Current**: Update documentation when code changes
 
 ### Example Documentation Format
 
 ```csharp
 /// <summary>
-/// Represents FPGA device specifications including resources, clocking, power, and I/O.
+/// Represents a complete FPGA (Field Programmable Gate Array) device specification.
+/// This model is deserialized from JSON files containing device specifications
+/// from various manufacturers (Xilinx, Altera/Intel, Lattice, etc.).
 /// </summary>
+/// <remarks>
+/// FPGA specifications are loaded from JSON files in the wwwroot/Devices folder
+/// and used to validate design resource requirements during simulation.
+/// </remarks>
 public class FPGA
 {
     /// <summary>
-    /// Gets or sets the FPGA model identifier (e.g., "XC7A35T-1CPG236C").
+    /// Gets or sets the FPGA model identifier.
     /// </summary>
+    /// <example>XC6SLX9, EP4CE6, iCE40HX1K, LFE5U-25</example>
     public string Model { get; set; }
 
     /// <summary>
-    /// Gets or sets the FPGA family name (e.g., "Artix-7", "Cyclone V").
+    /// Gets or sets the FPGA family name.
     /// </summary>
+    /// <example>Spartan-6, Cyclone IV E, iCE40, ECP5</example>
     public string Family { get; set; }
 }
 ```

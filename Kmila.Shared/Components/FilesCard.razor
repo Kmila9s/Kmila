@@ -1,72 +1,154 @@
-<div class="card h-100">
-    <div class="card-body">
-        <h5 class="card-title">Project Files</h5>
-        <Grid TItem="ProjectFile"
-            AllowFiltering="true"
-            AllowPaging="true"
-            AllowSorting="true"
-            Class="table table-hover table-bordered table-striped"
-            Data="_projectFiles"
-            PageSize="15"
-            Responsive="true">
+<!-- Enhanced Project Files Card -->
+<Card Class="h-100">
+    <CardHeader>
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <Icon Name="IconName.Folder" Class="me-2" />
+                <strong>Project Files</strong>
+            </div>
+            @if(_projectFiles.Any())
+            {
+                <Badge Color="BadgeColor.Primary" Pill="true">
+                    @_projectFiles.Count @(_projectFiles.Count == 1 ? "file" : "files")
+                </Badge>
+            }
+        </div>
+    </CardHeader>
+    <CardBody>
+        @if(!_projectFiles.Any())
+        {
+            <!-- Empty State -->
+            <Alert Color="AlertColor.Info" Class="mb-0 text-center">
+                <Icon Name="IconName.InfoCircle" Size="IconSize.x3" Class="d-block mx-auto mb-2" />
+                <strong>No files yet</strong>
+                <p class="mb-0 small text-muted mt-1">Create your first file to get started with your project</p>
+            </Alert>
+        }
+        else
+        {
+            <!-- File Statistics Bar -->
+            <div class="row g-2 mb-3">
+                @{
+                    var vhdlCount = _projectFiles.Count(f => f.FileName.EndsWith(".vhdl") || f.FileName.EndsWith(".vhd"));
+                    var txtCount = _projectFiles.Count(f => f.FileName.EndsWith(".txt"));
+                    var mdCount = _projectFiles.Count(f => f.FileName.EndsWith(".md"));
+                    var otherCount = _projectFiles.Count - vhdlCount - txtCount - mdCount;
+                }
 
-            <GridColumns>
-                <GridColumn TItem="ProjectFile" HeaderText="File" PropertyName="FileName" SortKeySelector="item => item.FileName">
-                    @if(_selectedFile?.Id == context.Id){
-                        <Tooltip Title="Selected file">
-                            <Badge
-                                Color="BadgeColor.Success"
-                            >
-                                <Icon Name='context.FileName.EndsWith(".txt") ? 
-                                    IconName.FileTypeTxt :
-                                        context.FileName.EndsWith(".md") ?
-                                    IconName.FileTypeMd :
-                                    IconName.FileCode'/>
-                                @context.FileName.Substring(0, context.FileName.LastIndexOf("."))
-                            </Badge>
-                        </Tooltip>
-                    }else{
-                        <Tooltip Title="@context.FileName">
-                            <Icon Name='context.FileName.EndsWith(".txt") ? 
-                                IconName.FileTypeTxt :
-                                    context.FileName.EndsWith(".md") ?
-                                IconName.FileTypeMd :
-                                IconName.FileCode'/>
-                            @context.FileName.Substring(0, context.FileName.LastIndexOf("."))
-                        </Tooltip>
-                    }
-                    
-                </GridColumn>
-                <GridColumn TItem="ProjectFile" HeaderText="Options" Sortable=false Filterable=false>
-                    <div class="btn-group">
-                        <Button
-                            Outline=true
-                            Color="ButtonColor.Info"
-                            TooltipTitle="Open current file"
-                            Type="ButtonType.Button"
-                            @onclick="async () => {
-                                _selectedFile = context;
-                                await OnProjectFileClicked.InvokeAsync(context);
-                            }"
-                        >
-                            <Icon Name="IconName.Info"/>
-                        </Button>
-                        <Button
-                            Outline=true
-                            Color="ButtonColor.Danger"
-                            TooltipTitle="Remove file"
-                            Type="ButtonType.Button"
-                            @onclick="async () => await RemoveFileAsync(context)"
-                        >
-                            <Icon Name="IconName.Trash"/>
-                        </Button>
+                @if(vhdlCount > 0)
+                {
+                    <div class="col-6 col-md-3">
+                        <div class="border rounded p-2 text-center">
+                            <Icon Name="IconName.FileCode" Class="text-primary" />
+                            <div class="small text-muted">VHDL</div>
+                            <strong>@vhdlCount</strong>
+                        </div>
                     </div>
-                </GridColumn>
-            </GridColumns>
+                }
+                @if(txtCount > 0)
+                {
+                    <div class="col-6 col-md-3">
+                        <div class="border rounded p-2 text-center">
+                            <Icon Name="IconName.FileTypeTxt" Class="text-info" />
+                            <div class="small text-muted">Text</div>
+                            <strong>@txtCount</strong>
+                        </div>
+                    </div>
+                }
+                @if(mdCount > 0)
+                {
+                    <div class="col-6 col-md-3">
+                        <div class="border rounded p-2 text-center">
+                            <Icon Name="IconName.FileTypeMd" Class="text-success" />
+                            <div class="small text-muted">Markdown</div>
+                            <strong>@mdCount</strong>
+                        </div>
+                    </div>
+                }
+                @if(otherCount > 0)
+                {
+                    <div class="col-6 col-md-3">
+                        <div class="border rounded p-2 text-center">
+                            <Icon Name="IconName.FileEarmark" Class="text-secondary" />
+                            <div class="small text-muted">Other</div>
+                            <strong>@otherCount</strong>
+                        </div>
+                    </div>
+                }
+            </div>
 
-        </Grid>
-    </div>
-</div>
+            <!-- Files Grid -->
+            <Grid TItem="ProjectFile"
+                AllowFiltering="true"
+                AllowPaging="true"
+                AllowSorting="true"
+                Class="table table-hover table-bordered"
+                Data="_projectFiles"
+                PageSize="15"
+                Responsive="true">
+
+                <GridColumns>
+                    <GridColumn TItem="ProjectFile" HeaderText="File" PropertyName="FileName" SortKeySelector="item => item.FileName">
+                        <div class="d-flex align-items-center">
+                            @{
+                                var (iconName, badgeColor, fileExt) = GetFileInfo(context.FileName);
+                                var isSelected = _selectedFile?.Id == context.Id;
+                            }
+
+                            <Icon Name="@iconName" Class="me-2" Size="IconSize.x5" />
+
+                            <div class="flex-grow-1">
+                                <div class="d-flex align-items-center">
+                                    <strong class="@(isSelected ? "text-success" : "")">
+                                        @context.FileName.Substring(0, context.FileName.LastIndexOf("."))
+                                    </strong>
+                                    @if(isSelected)
+                                    {
+                                        <Badge Color="BadgeColor.Success" Class="ms-2">
+                                            <Icon Name="IconName.CheckCircleFill" Class="me-1" />
+                                            Active
+                                        </Badge>
+                                    }
+                                </div>
+                                <small class="text-muted">
+                                    <Badge Color="@badgeColor" Class="mt-1">
+                                        @fileExt.ToUpper()
+                                    </Badge>
+                                </small>
+                            </div>
+                        </div>
+                    </GridColumn>
+
+                    <GridColumn TItem="ProjectFile" HeaderText="Actions" Sortable=false Filterable=false>
+                        <div class="btn-group" role="group">
+                            <Button
+                                Size="ButtonSize.Small"
+                                Outline=true
+                                Color="ButtonColor.Primary"
+                                TooltipTitle="Open file in editor"
+                                Type="ButtonType.Button"
+                                @onclick="@(async () => await OpenFileAsync(context))"
+                            >
+                                <Icon Name="IconName.BoxArrowUpRight" Class="me-1" />
+                                Open
+                            </Button>
+                            <Button
+                                Size="ButtonSize.Small"
+                                Outline=true
+                                Color="ButtonColor.Danger"
+                                TooltipTitle="Delete this file"
+                                Type="ButtonType.Button"
+                                @onclick="@(async () => await RemoveFileAsync(context))"
+                            >
+                                <Icon Name="IconName.Trash" />
+                            </Button>
+                        </div>
+                    </GridColumn>
+                </GridColumns>
+            </Grid>
+        }
+    </CardBody>
+</Card>
 <ConfirmDialog @ref=_removeFileDialog/>
 @code{
     /// <summary>
@@ -119,6 +201,16 @@
         }
     }
     /// <summary>
+    /// Opens a file in the editor.
+    /// </summary>
+    /// <param name="file">The file to open.</param>
+    private async Task OpenFileAsync(ProjectFile file)
+    {
+        _selectedFile = file;
+        await OnProjectFileClicked.InvokeAsync(file);
+    }
+
+    /// <summary>
     /// Removes a file asynchronously.
     /// </summary>
     /// <param name="file">The file to remove.</param>
@@ -138,6 +230,39 @@
             await OnProjectFileRemoved.InvokeAsync(file);
         }else{
             ToastService.Notify(Message("Message", "File not removed", ToastType.Info));
+        }
+    }
+
+    /// <summary>
+    /// Gets file information including icon, badge color, and extension.
+    /// </summary>
+    /// <param name="fileName">The file name to analyze.</param>
+    /// <returns>A tuple containing the icon name, badge color, and file extension.</returns>
+    private (IconName iconName, BadgeColor badgeColor, string extension) GetFileInfo(string fileName)
+    {
+        if (!fileName.Contains("."))
+        {
+            return (IconName.FileEarmark, BadgeColor.Secondary, "");
+        }
+
+        var extension = fileName.Substring(fileName.LastIndexOf("."));
+        var lowerExt = extension.ToLower();
+
+        if (lowerExt == ".vhdl" || lowerExt == ".vhd")
+        {
+            return (IconName.FileCode, BadgeColor.Primary, extension);
+        }
+        else if (lowerExt == ".txt")
+        {
+            return (IconName.FileTypeTxt, BadgeColor.Info, extension);
+        }
+        else if (lowerExt == ".md")
+        {
+            return (IconName.FileTypeMd, BadgeColor.Success, extension);
+        }
+        else
+        {
+            return (IconName.FileEarmark, BadgeColor.Secondary, extension);
         }
     }
 }

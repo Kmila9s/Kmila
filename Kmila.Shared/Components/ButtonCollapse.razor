@@ -1,133 +1,466 @@
+@*
+    ButtonCollapse Component
+
+    Provides the main action buttons for the VHDL editor including:
+    - Save file
+    - New file
+    - Start simulation
+    - Build/validate program with progress display
+    - Cancel build operation
+
+    Features:
+    - Real-time build progress bar from Interpreter's ProgressReporter
+    - Status messages during build process
+    - Error display with details
+    - Completion notifications
+    - Build cancellation support with dedicated cancel button
+
+    Dependencies:
+    - ProgramBuilder (injected) for build progress events
+    - ToastService for notifications
+    - BlazorBootstrap Button, Icon, Progress, Alert components
+*@
 @namespace Kmila.Shared.Components
+@implements IDisposable
+
 <div class="card h-100">
-    <div class=card-body>
+    <div class="card-body">
         <h5 class="card-title">Options</h5>
+
+        <!-- Save File Button -->
         <div class="d-grid gap-2 my-3">
             <Button
                 Type="ButtonType.Button"
                 Color="ButtonColor.Primary"
-                Outline=true
-                Disabled=_building
+                Outline="true"
+                Disabled="_building"
                 TooltipTitle="Save current file"
                 @onclick="async () => await OnSaveFileButtonClicked.InvokeAsync()"
             >
                 Save file <Icon Name="IconName.Floppy2"/>
             </Button>
         </div>
+
+        <!-- New File Button -->
         <div class="d-grid gap-2 my-3">
             <Button
                 Type="ButtonType.Button"
                 Color="ButtonColor.Secondary"
-                Outline=true
-                Disabled=_building
+                Outline="true"
+                Disabled="_building"
                 TooltipTitle="Add new file"
                 @onclick="async () => await OnNewFileButtonClicked.InvokeAsync()"
             >
                 New File <Icon Name="IconName.FileBinary"/>
             </Button>
         </div>
+
+        <!-- Start Simulation Button -->
         <div class="d-grid gap-2 my-3">
             <Button
                 Type="ButtonType.Button"
                 Color="ButtonColor.Info"
-                Outline=true
+                Outline="true"
                 @onclick="StartSimulationAsync"
-                Disabled=@(_building || !_validProgram)
-                TooltipTitle=@(!_validProgram ? "Validate first the program" : "Start simulation")
+                Disabled="@(_building || !_validProgram)"
+                TooltipTitle="@(!_validProgram ? "Validate first the program" : "Start simulation")"
             >
                 @if(!_validProgram){
                     <span>Build first <Icon Name="IconName.X"/></span>
                 }else{
                     <span>Start simulation <Icon Name="IconName.Play"/></span>
                 }
-                
             </Button>
         </div>
-        <div class="d-grid gap-2 my-3">
+
+        <!-- Build/Validate Button with Cancel -->
+        <div class="d-flex gap-2 my-3">
             <Button
                 Type="ButtonType.Button"
                 Color="ButtonColor.Success"
-                Outline=true
-                Disabled=_building
-                Loading=_building
-                LoadingText="Building program, please wait"
+                Outline="true"
+                Disabled="_building"
                 TooltipTitle="Build and validate current program"
+                Class="flex-grow-1"
                 @onclick="BuildRequested"
             >
-                Validate program <Icon Name="IconName.Check2All"/>
+                @if(_building)
+                {
+                    <Spinner Type="SpinnerType.Border" Size="SpinnerSize.Small" Class="me-2"/>
+                    <span>Building...</span>
+                }
+                else
+                {
+                    <span>Validate program <Icon Name="IconName.Check2All"/></span>
+                }
             </Button>
+            @if(_building)
+            {
+                <Button
+                    Type="ButtonType.Button"
+                    Color="ButtonColor.Danger"
+                    Outline="true"
+                    TooltipTitle="Cancel build"
+                    @onclick="CancelBuildRequested"
+                >
+                    <Icon Name="IconName.XCircle"/>
+                </Button>
+            }
         </div>
+
+        <!-- Build Progress Section -->
+        @if(_building || _showBuildStatus)
+        {
+            <div class="build-progress-section mt-3 p-2 border rounded bg-light">
+                <!-- Progress Bar -->
+                @if(_building)
+                {
+                    <div class="mb-2">
+                        <Progress Class="mb-1">
+                            <ProgressBar Width="@((int)(_buildProgress * 100))"
+                                         Color="ProgressColor.Success"
+                                         Label="@($"{(_buildProgress * 100):F0}%")" />
+                        </Progress>
+                    </div>
+                }
+
+                <!-- Status Message -->
+                <div class="d-flex align-items-center">
+                    @if(_building)
+                    {
+                        <Icon Name="IconName.GearFill" Class="me-2 text-primary spin-animation"/>
+                    }
+                    else if(_buildCancelled)
+                    {
+                        <Icon Name="IconName.SlashCircle" Class="me-2 text-warning"/>
+                    }
+                    else if(_buildError)
+                    {
+                        <Icon Name="IconName.ExclamationTriangleFill" Class="me-2 text-danger"/>
+                    }
+                    else if(_buildSuccess)
+                    {
+                        <Icon Name="IconName.CheckCircleFill" Class="me-2 text-success"/>
+                    }
+                    <small class="@(_buildCancelled ? "text-warning" : _buildError ? "text-danger" : _buildSuccess ? "text-success" : "text-muted")">
+                        @_buildStatusMessage
+                    </small>
+                </div>
+
+                <!-- Error Details -->
+                @if(_buildError && !string.IsNullOrEmpty(_buildErrorDetail))
+                {
+                    <Alert Color="AlertColor.Danger" Class="mt-2 mb-0 py-2 px-3">
+                        <small>@_buildErrorDetail</small>
+                    </Alert>
+                }
+
+                <!-- Hide Status Button -->
+                @if(!_building && _showBuildStatus)
+                {
+                    <div class="text-end mt-2">
+                        <Button Color="ButtonColor.Light"
+                                Size="ButtonSize.ExtraSmall"
+                                @onclick="HideBuildStatus">
+                            <Icon Name="IconName.X" /> Dismiss
+                        </Button>
+                    </div>
+                }
+            </div>
+        }
     </div>
 </div>
-<Modal Size="ModalSize.Large" IsScrollable=true @ref="_simulationParametersModal"/>
+
+<style>
+    .spin-animation {
+        animation: spin 1s linear infinite;
+    }
+
+    @@keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+
+    .build-progress-section {
+        transition: all 0.3s ease;
+    }
+</style>
+
+<Modal Size="ModalSize.Large" IsScrollable="true" @ref="_simulationParametersModal"/>
+
 @code{
+    #region Parameters
+
     /// <summary>
     /// Gets or sets the event callback for when the new file button is clicked.
     /// </summary>
     [Parameter]
     public EventCallback OnNewFileButtonClicked { get; set; }
+
     /// <summary>
     /// Gets or sets the event callback for when the save file button is clicked.
     /// </summary>
     [Parameter]
     public EventCallback OnSaveFileButtonClicked { get; set; }
+
     /// <summary>
     /// Gets or sets the event callback for when the build button is clicked.
     /// </summary>
     [Parameter]
     public EventCallback OnBuildButtonClicked { get; set; }
+
     /// <summary>
     /// Gets or sets the event callback for when the simulation is started.
     /// </summary>
     [Parameter]
     public EventCallback<TimeSpan> OnSimulationStarted { get; set; }
-    private bool _building = false, _validProgram = false;
+
+    #endregion
+
+    #region Private Fields
+
+    /// <summary>
+    /// Indicates whether a build is currently in progress.
+    /// </summary>
+    private bool _building = false;
+
+    /// <summary>
+    /// Indicates whether the program has been validated successfully.
+    /// </summary>
+    private bool _validProgram = false;
+
+    /// <summary>
+    /// Indicates whether to show the build status section after completion.
+    /// </summary>
+    private bool _showBuildStatus = false;
+
+    /// <summary>
+    /// Indicates whether the last build resulted in an error.
+    /// </summary>
+    private bool _buildError = false;
+
+    /// <summary>
+    /// Indicates whether the last build was successful.
+    /// </summary>
+    private bool _buildSuccess = false;
+
+    /// <summary>
+    /// Indicates whether the last build was cancelled by the user.
+    /// </summary>
+    private bool _buildCancelled = false;
+
+    /// <summary>
+    /// Current build progress (0.0 to 1.0).
+    /// </summary>
+    private float _buildProgress = 0f;
+
+    /// <summary>
+    /// Current build status message.
+    /// </summary>
+    private string _buildStatusMessage = string.Empty;
+
+    /// <summary>
+    /// Error details from the last build failure.
+    /// </summary>
+    private string _buildErrorDetail = string.Empty;
+
+    /// <summary>
+    /// Reference to the simulation parameters modal.
+    /// </summary>
     private Modal _simulationParametersModal = new();
-    protected override async Task OnInitializedAsync()
+
+    #endregion
+
+    #region Lifecycle Methods
+
+    /// <summary>
+    /// Initializes the component and subscribes to ProgramBuilder events.
+    /// </summary>
+    protected override void OnInitialized()
     {
+        // Subscribe to build progress events from ProgramBuilder
+        Builder.OnBuildProgressChanged += OnBuildProgressChanged;
+        Builder.OnBuildError += OnBuildError;
+        Builder.OnBuildCompleted += OnBuildCompleted;
+        Builder.OnBuildCancelled += OnBuildCancelled;
     }
+
+    /// <summary>
+    /// Disposes the component and unsubscribes from events to prevent memory leaks.
+    /// </summary>
+    public void Dispose()
+    {
+        Builder.OnBuildProgressChanged -= OnBuildProgressChanged;
+        Builder.OnBuildError -= OnBuildError;
+        Builder.OnBuildCompleted -= OnBuildCompleted;
+        Builder.OnBuildCancelled -= OnBuildCancelled;
+    }
+
+    #endregion
+
+    #region Event Handlers
+
+    /// <summary>
+    /// Handles build progress updates from ProgramBuilder.
+    /// </summary>
+    /// <param name="progress">Progress value from 0.0 to 1.0.</param>
+    /// <param name="message">Status message describing current operation.</param>
+    private void OnBuildProgressChanged(float progress, string message)
+    {
+        _buildProgress = progress;
+        _buildStatusMessage = message;
+        InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Handles build error events from ProgramBuilder.
+    /// </summary>
+    /// <param name="message">Error message.</param>
+    /// <param name="detail">Optional error details.</param>
+    private void OnBuildError(string message, string? detail)
+    {
+        _buildError = true;
+        _buildSuccess = false;
+        _buildStatusMessage = message;
+        _buildErrorDetail = detail ?? string.Empty;
+        _showBuildStatus = true;
+        InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Handles build completion events from ProgramBuilder.
+    /// </summary>
+    /// <param name="message">Completion message.</param>
+    private void OnBuildCompleted(string message)
+    {
+        _buildSuccess = true;
+        _buildError = false;
+        _buildCancelled = false;
+        _buildStatusMessage = message;
+        _buildErrorDetail = string.Empty;
+        _showBuildStatus = true;
+        InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Handles build cancellation events from ProgramBuilder.
+    /// </summary>
+    /// <param name="message">Cancellation message.</param>
+    private void OnBuildCancelled(string message)
+    {
+        _building = false;
+        _buildCancelled = true;
+        _buildSuccess = false;
+        _buildError = false;
+        _buildStatusMessage = message;
+        _buildErrorDetail = string.Empty;
+        _showBuildStatus = true;
+        InvokeAsync(StateHasChanged);
+    }
+
+    #endregion
+
+    #region Build Methods
+
     /// <summary>
     /// Handles the build requested event.
+    /// Resets build state, saves the file, and initiates the build process.
     /// </summary>
-    private async Task BuildRequested(){
+    private async Task BuildRequested()
+    {
+        // Reset build state
         _building = true;
+        _buildProgress = 0f;
+        _buildStatusMessage = "Starting build...";
+        _buildError = false;
+        _buildSuccess = false;
+        _buildCancelled = false;
+        _buildErrorDetail = string.Empty;
+        _showBuildStatus = true;
         StateHasChanged();
+
+        // Save and build
         await OnSaveFileButtonClicked.InvokeAsync();
         await OnBuildButtonClicked.InvokeAsync();
     }
+
     /// <summary>
-    /// Starts the simulation asynchronously.
+    /// Requests cancellation of the current build operation.
     /// </summary>
-    private async Task StartSimulationAsync(){
-        if(!_validProgram || _building){
-            ToastService.Notify(Message("Error", "The program must be verified or not building", ToastType.Danger));
-            return;
-        }
-        Dictionary<string, object> parameters = new(){
-            {"OnSimulationStarted", EventCallback.Factory.Create<TimeSpan>(this, OnSimulationRequested )}
-        };
-        await _simulationParametersModal.ShowAsync<SimulationParametersModal>("Simulation parameters", null, parameters);
+    private void CancelBuildRequested()
+    {
+        if (!_building) return;
+
+        _buildStatusMessage = "Cancelling build...";
+        StateHasChanged();
+
+        Builder.CancelBuild();
     }
+
     /// <summary>
-    /// Handles the simulation requested event.
+    /// Releases the build lock and updates UI state.
+    /// Called by parent component after build completes.
     /// </summary>
-    /// <param name="time">The simulation time.</param>
-    private async Task OnSimulationRequested(TimeSpan time){
-        await OnSimulationStarted.InvokeAsync(time);
-    }
-    /// <summary>
-    /// Releases the build lock.
-    /// </summary>
-    public async Task ReleaseBuild(){
+    public void ReleaseBuild()
+    {
         _building = false;
         StateHasChanged();
     }
+
     /// <summary>
-    /// Sets whether the program is valid.
+    /// Sets whether the program is valid after build.
     /// </summary>
-    /// <param name="state">The state of the program.</param>
-    public void IsValidProgram(bool state){
+    /// <param name="state">True if program is valid, false otherwise.</param>
+    public void IsValidProgram(bool state)
+    {
         _validProgram = state;
+        if (!state && !_buildError)
+        {
+            _buildError = true;
+            _buildStatusMessage = "Build failed - program is not valid";
+        }
         StateHasChanged();
     }
+
+    /// <summary>
+    /// Hides the build status section.
+    /// </summary>
+    private void HideBuildStatus()
+    {
+        _showBuildStatus = false;
+        StateHasChanged();
+    }
+
+    #endregion
+
+    #region Simulation Methods
+
+    /// <summary>
+    /// Starts the simulation asynchronously.
+    /// Shows the simulation parameters modal if the program is valid.
+    /// </summary>
+    private async Task StartSimulationAsync()
+    {
+        if (!_validProgram || _building)
+        {
+            ToastService.Notify(Message("Error", "The program must be verified or not building", ToastType.Danger));
+            return;
+        }
+        Dictionary<string, object> parameters = new()
+        {
+            { "OnSimulationStarted", EventCallback.Factory.Create<TimeSpan>(this, OnSimulationRequested) }
+        };
+        await _simulationParametersModal.ShowAsync<SimulationParametersModal>("Simulation parameters", null, parameters);
+    }
+
+    /// <summary>
+    /// Handles the simulation requested event from the modal.
+    /// </summary>
+    /// <param name="time">The simulation time.</param>
+    private async Task OnSimulationRequested(TimeSpan time)
+    {
+        await OnSimulationStarted.InvokeAsync(time);
+    }
+
+    #endregion
 }

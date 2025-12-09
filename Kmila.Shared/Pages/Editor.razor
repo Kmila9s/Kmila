@@ -49,7 +49,7 @@
     </div>
     <script src="js/vhdl.js"></script>
 }
-<Modal @ref="_createFileModal" />
+<Modal @ref="_multiUseModal" />
 @code {
     /// <summary>
     /// Gets or sets the project identifier.
@@ -61,7 +61,7 @@
     private FilesCard _filesCard = new();
     private ButtonCollapse _buttonsCollapse = new();
     private StandaloneCodeEditor _editor = new();
-    private Modal _createFileModal = new();
+    private Modal _multiUseModal = new();
     private ProjectFile _openedFile = null!;
     private List<ProjectFile> _projectFiles { get; set; } = new();
     /// <summary>
@@ -100,7 +100,7 @@
             { "OnProjectFileCreated", EventCallback.Factory.Create(this, OnFileCreatedAsync)}
 
         };
-        await _createFileModal.ShowAsync<CreateFileModal>("Creating new file", parameters: parameters);
+        await _multiUseModal.ShowAsync<CreateFileModal>("Creating new file", parameters: parameters);
     }
     /// <summary>
     /// Handles the build requested event.
@@ -108,13 +108,22 @@
     private async Task OnBuildRequested(){
         try{
             if(_openedFile != null){
-                var result = Builder.Build(_openedFile);
-                ToastService.Notify(Message(
-                    result ? "Correct" : "Error",
-                    result ? "Program build succesfully" : $"Error",
-                    result ? ToastType.Success : ToastType.Danger
-                ));
-                _buttonsCollapse.IsValidProgram(result);
+                if(Path.GetExtension(_openedFile.FileName) == ".md"){
+                    Dictionary<string, object> parameters = new(){
+                        {"File", _openedFile}
+                    };
+                    await _multiUseModal.ShowAsync<MarkdownModal>("Opening Markdown preview", null, parameters);
+                    _buttonsCollapse.IsValidProgram(true);
+                }else{
+                    var result = Builder.Build(_openedFile);
+                    ToastService.Notify(Message(
+                        result ? "Correct" : "Error",
+                        result ? "Program build succesfully" : $"Error",
+                        result ? ToastType.Success : ToastType.Danger
+                    ));
+                    _buttonsCollapse.IsValidProgram(result);
+                }
+                
             }else{
                 ToastService.Notify(Message("Entry point not found", "To build you must open first the entry point file", ToastType.Warning));
             }
@@ -186,7 +195,7 @@
     /// </summary>
     private async Task OnFileCreatedAsync(){
         await _filesCard.ReloadFiles();
-        await _createFileModal.HideAsync();
+        await _multiUseModal.HideAsync();
     }
     /// <summary>
     /// Configures the options for the standalone code editor.
