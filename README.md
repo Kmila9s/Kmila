@@ -5,8 +5,8 @@
 **Author:** Ulrich Tamayo Daniel
 **Email:** dulricht1700@alumno.ipn.mx
 **Email 2:** danielulrichtamayo@gmail.com
-**Version:** 0.13.2
-**Last Updated:** December 13, 2025
+**Version:** 0.14.0
+**Last Updated:** December 14, 2025
 
 ## 1. Overview
 
@@ -31,6 +31,7 @@ Kmila-9s is a free, open-source, multiplatform academic platform focused on the 
 *   **Dynamic Variable Visualization:** Observe the states of signals, ports, and internal variables at any time to easily understand digital behavior.
 *   **FPGA Resource Validation:** Select target FPGA devices and validate that your design fits within the device's resource constraints (Logic Units, Flip-Flops, BRAM, DSP, I/O Pins) before simulation.
 *   **Cross-Platform:** Built with .NET 9 and MAUI, the application is installable and runs autonomously on **Windows, macOS, Android, iOS, and iPadOS**. A web version is also available for **Linux** users.
+*   **Multilingual Support:** Full internationalization (i18n) with 7 languages: English, Spanish, French, German, Chinese, Japanese, and Arabic (with RTL support). Language preferences persist across sessions via SQLite storage.
 *   **Standalone and Offline:** The application runs locally without requiring a web service or internet connection.
 *   **"Pre-Laboratory" Function:** Allows students to conduct preparatory practices before physical lab sessions, optimizing limited time and resources.
 *   **Accessibility:** Practice and study from any computer or mobile device, no longer depending on a physical laboratory.
@@ -388,6 +389,13 @@ erDiagram
         int ProjectId FK
     }
 
+    APP_SETTINGS {
+        int Id PK "AutoIncrement"
+        string Key "Unique"
+        string Value
+        datetime LastModified
+    }
+
     PROJECTS ||--o{ PROJECT_FILES : contains
 ```
 **Note:** The following entities from the original documentation are NOT currently implemented:
@@ -418,9 +426,12 @@ The `Kmila.Shared` project contains the core logic, UI components, and data mode
 *   **FPGASimpleView.razor**: Compact FPGA information display widget showing device specifications
 
 #### Layout
-*   **MainLayout.razor**: Main application layout with navigation menu and content area
-*   **NavMenu.razor**: Navigation menu displaying project options and created projects
-*   **TopBar.razor**: Top navigation bar with FPGA selector and theme switcher
+*   **MainLayout.razor**: Main application layout with navigation menu, content area, and RTL support for Arabic language
+*   **NavMenu.razor**: Navigation menu displaying project options and created projects with i18n support
+*   **TopBar.razor**: Top navigation bar with FPGA selector, language switcher, and theme switcher
+
+#### Components (Additional)
+*   **LanguageChanger.razor**: Dropdown component for selecting application language with flag indicators. Supports 7 languages and persists preferences to SQLite
 
 #### Modals
 *   **CreateFileModal.razor**: Modal for creating new files in a project
@@ -545,6 +556,7 @@ classDiagram
 *   **FPGAClocking.cs**: FPGA clocking specifications (PLL, DCM/MMCM)
 *   **FPGAPower.cs**: FPGA power specifications (Core voltage)
 *   **FPGAsIO.cs**: FPGA I/O specifications (User I/O, Banks, Standards)
+*   **AppSettings.cs**: Key-value pairs for application settings stored in SQLite (language preferences, theme, etc.)
 ```mermaid
 graph TD
     subgraph "UI Layer"
@@ -745,6 +757,7 @@ The application uses GitHub Actions for continuous integration and deployment:
 │   ├── EnhancedRangeSlider.razor
 │   ├── FilesCard.razor
 │   ├── FPGASimpleView.razor
+│   ├── LanguageChanger.razor
 │   ├── PortMomentInput.razor
 │   └── PortMomentExtraInputs.razor
 ├── Data/
@@ -757,6 +770,7 @@ The application uses GitHub Actions for continuous integration and deployment:
 │   ├── NavMenu.razor
 │   └── TopBar.razor
 ├── Models/
+│   ├── AppSettings.cs
 │   ├── Project.cs
 │   ├── ProjectFile.cs
 │   ├── PortMoment.cs
@@ -780,11 +794,20 @@ The application uses GitHub Actions for continuous integration and deployment:
 │   ├── ProgramBuilder.cs
 │   ├── IFormFactor.cs
 │   └── Traductor.cs
-└── Modals/
-    ├── CreateFileModal.razor
-    ├── MarkdownModal.razor
-    ├── ProjectDetailsModal.razor
-    └── SimulationParametersModal.razor
+├── Modals/
+│   ├── CreateFileModal.razor
+│   ├── MarkdownModal.razor
+│   ├── ProjectDetailsModal.razor
+│   └── SimulationParametersModal.razor
+└── wwwroot/
+    └── Dictionaries/
+        ├── en.json (English)
+        ├── es.json (Spanish)
+        ├── fr.json (French)
+        ├── de.json (German)
+        ├── ch.json (Chinese)
+        ├── jp.json (Japanese)
+        └── ar.json (Arabic)
 ```
 
 ## 16. Documentation Status
@@ -849,7 +872,7 @@ All areas of the codebase now have complete XML documentation:
 
 ### Code Quality Notes
 
-*   **Traductor.cs** (Kmila.Shared/Services/) - Empty placeholder class; should be implemented or removed in future releases
+*   **Traductor.cs** (Kmila.Shared/Services/) - Fully implemented internationalization service supporting 7 languages with event-driven UI updates and RTL support
 *   **ProjectFiles.GetByAsync()** and **ProjectFiles.RemoveAsync()** - Currently throw NotImplementedException; documented as such, to be implemented in future releases
 *   **IJsonFileReader** - Interface defined with documentation; JSONFileReader provides a more specific implementation
 
@@ -902,6 +925,61 @@ We welcome contributions to Kmila-9s! Please check our GitHub repository for con
 Kmila-9s is released as free and open-source software. Please refer to the LICENSE file in the repository for specific licensing terms.
 
 ## 19. Changelog
+
+### Version 0.14.0 (2025-12-14)
+
+#### Internationalization (i18n) System
+
+*   **Traductor.cs**: Full implementation of the translation service:
+    *   Support for 7 languages: English, Spanish, French, German, Chinese, Japanese, Arabic
+    *   Event-driven language switching with `OnLangChanged` event
+    *   RTL (Right-to-Left) support for Arabic
+    *   JSON-based translation dictionaries
+    *   Platform-agnostic file loading via dependency injection
+
+*   **LanguageChanger.razor**: New component for language selection:
+    *   Dropdown with flag indicators for each language
+    *   Active language highlighting
+    *   Persists language preference to SQLite database
+    *   Proper IDisposable implementation for event cleanup
+
+*   **AppSettings.cs**: New SQLite model for application settings:
+    *   Key-value pair storage for settings
+    *   Used for language preference persistence
+    *   Helper methods in ApplicationDbContext: `GetSettingAsync()`, `SetSettingAsync()`
+
+*   **Translation Dictionaries**: 7 JSON files in `wwwroot/Dictionaries/`:
+    *   `en.json` - English (default)
+    *   `es.json` - Spanish
+    *   `fr.json` - French
+    *   `de.json` - German
+    *   `ch.json` - Chinese (Simplified)
+    *   `jp.json` - Japanese
+    *   `ar.json` - Arabic (RTL)
+
+#### UI Components Updated with i18n
+
+*   **MainLayout.razor**: RTL support via `dir` attribute, loads saved language on startup
+*   **TopBar.razor**: Added LanguageChanger component next to theme switcher
+*   **NavMenu.razor**: Navigation items now use translation keys
+*   **Home.razor**: All text content translated
+*   **ProjectsView.razor**: Grid headers, buttons, and dialogs translated
+*   **ButtonCollapse.razor**: Editor action buttons translated
+*   **FilesCard.razor**: File management UI translated
+*   **ProjectDetailsModal.razor**: Project creation form translated
+*   **CreateFileModal.razor**: File creation form translated
+
+#### Database Schema Updates
+
+*   Added `APP_SETTINGS` table for storing application settings
+*   `ApplicationDbContext.InitDBAsync()` now creates the AppSettings table
+
+#### Bug Fixes
+
+*   **Editor.razor**: Fixed BlazorMonaco ambiguous reference error (`Global` now fully qualified as `BlazorMonaco.Editor.Global`)
+*   **Editor.razor**: Fixed `OnDidChangeModelContent` event handler (changed from method call to component parameter)
+
+---
 
 ### Version 0.13.2 (2025-12-13)
 
@@ -999,4 +1077,4 @@ The following items remain documented as placeholders or incomplete implementati
 For questions, support, or feedback, please open an issue on our GitHub repository or contact the development team through the project page.
 
 ---
-*Last Updated: December 13, 2025*
+*Last Updated: December 14, 2025*
