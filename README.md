@@ -2,6 +2,12 @@
 
 **Official Title:** Aplicación Multiplataforma para el Aprendizaje y Depuración de Código VHDL sin Requerimiento de Hardware Físico (Multiplatform Application for Learning and Debugging VHDL Code without Requiring Physical Hardware)
 
+**Author:** Ulrich Tamayo Daniel
+**Email:** dulricht1700@alumno.ipn.mx
+**Email 2:** danielulrichtamayo@gmail.com
+**Version:** 0.13.0
+**Last Updated:** December 13, 2025
+
 ## 1. Overview
 
 Kmila-9s is a multiplatform desktop application, running in a local environment, aimed at debugging VHDL (VHSIC Hardware Description Language) code. Its objective is to facilitate the analysis of programs through simulation and interactive visualization of digital signals, clock cycles, and port states. 
@@ -895,6 +901,36 @@ We welcome contributions to Kmila-9s! Please check our GitHub repository for con
 
 Kmila-9s is released as free and open-source software. Please refer to the LICENSE file in the repository for specific licensing terms.
 
-## 19. Contact
+## 19. Changelog
+
+### Version 0.13.0 (2025-12-13)
+
+#### Documentation Improvements
+
+*   **Traductor.cs**: Added comprehensive XML documentation explaining:
+    *   The service's role as a placeholder for future internationalization (i18n) support
+    *   Planned features including multi-language support, language detection, and RTL support
+    *   Implementation notes for future development
+    *   Usage examples for the planned API
+
+*   **README.md**: Added version information, author details, last updated date, and this changelog section
+
+#### Code Quality Notes
+
+The following items remain documented as placeholders or incomplete implementations for future work:
+
+| Item | Status | Notes |
+|------|--------|-------|
+| `Traductor.cs` | Placeholder | Reserved for internationalization |
+| `ProjectFiles.GetByAsync()` | Not Implemented | Throws `NotImplementedException` |
+| `ProjectFiles.RemoveAsync()` | Not Implemented | Throws `NotImplementedException` |
+| `IFileSystem` interface | Referenced but not found | Mentioned in docs but implementation details not in shared code |
+
+---
+
+## 20. Contact
 
 For questions, support, or feedback, please open an issue on our GitHub repository or contact the development team through the project page.
+
+---
+*Last Updated: December 13, 2025*
