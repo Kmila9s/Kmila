@@ -2,6 +2,7 @@
 using Kmila.Shared.Services;
 using Kmila.Shared.Data;
 using Kmila.Shared.Repositories;
+using Kmila.Shared.Models;
 using Kmila.Services;
 
 namespace Kmila;
@@ -17,6 +18,9 @@ public static class MauiProgram
             {
                 fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
             });
+
+        // Add device-specific services used by the Kmila.Shared project
+        builder.Services.AddSingleton<IFormFactor, FormFactor>();
 
         builder.Services.AddSingleton<ApplicationDbContext>(provider =>
         {
@@ -38,6 +42,12 @@ public static class MauiProgram
         });
         builder.Services.AddSingleton<Projects>();
         builder.Services.AddSingleton<ProjectFiles>();
+
+        builder.Services.AddSingleton<JSONFileReader>();
+
+        builder.Services.AddSingleton<ProgramBuilder>();
+
+        builder.Services.AddSingleton<SelectedFPGA>();
 
         builder.Services.AddMauiBlazorWebView();
 
