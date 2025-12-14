@@ -5,7 +5,7 @@
 **Author:** Ulrich Tamayo Daniel
 **Email:** dulricht1700@alumno.ipn.mx
 **Email 2:** danielulrichtamayo@gmail.com
-**Version:** 0.13.1
+**Version:** 0.13.2
 **Last Updated:** December 13, 2025
 
 ## 1. Overview
@@ -902,6 +902,44 @@ We welcome contributions to Kmila-9s! Please check our GitHub repository for con
 Kmila-9s is released as free and open-source software. Please refer to the LICENSE file in the repository for specific licensing terms.
 
 ## 19. Changelog
+
+### Version 0.13.2 (2025-12-13)
+
+#### UI Branding & Theming
+
+*   **app.css**: Added Kmila color palette CSS variables:
+    *   `--kmila-primary`: #475569 (dark slate blue from logo)
+    *   `--kmila-primary-light`: #64748b
+    *   `--kmila-primary-dark`: #334155
+    *   `--kmila-accent`: #3C82F6
+
+*   **Sidebar2 Customization**: Override Blazor Bootstrap default colors:
+    *   `.bb-sidebar2-top-row` - Brand header area
+    *   `.bb-sidebar2` - Navigation area background
+    *   Nav item hover/active states
+    *   Badge styling
+
+#### Android App Icon & Splash Screen
+
+*   **appicon.svg**: Updated background color from .NET purple (#512BD4) to Kmila brand blue (#475569)
+*   **appiconfg.png**: Added Kmila logo (wolf + waveform) as icon foreground
+*   **Splash screen**: Updated to use brand colors
+
+#### MAUI Resource Loading
+
+*   **JSONFileReader.cs**: Rewrote for proper MAUI support:
+    *   Added `Func<string, Task<Stream>>` constructor parameter
+    *   Uses `FileSystem.OpenAppPackageFileAsync` for bundled FPGA device files
+    *   Includes static list of 37 known FPGA devices
+    *   Maintains backward compatibility with file system fallback
+
+*   **MauiProgram.cs**: Updated JSONFileReader registration:
+    ```csharp
+    builder.Services.AddSingleton<JSONFileReader>(provider =>
+        new JSONFileReader(path => FileSystem.OpenAppPackageFileAsync(path)));
+    ```
+
+---
 
 ### Version 0.13.1 (2025-12-13)
 
