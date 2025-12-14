@@ -5,7 +5,7 @@
 **Author:** Ulrich Tamayo Daniel
 **Email:** dulricht1700@alumno.ipn.mx
 **Email 2:** danielulrichtamayo@gmail.com
-**Version:** 0.13.0
+**Version:** 0.13.1
 **Last Updated:** December 13, 2025
 
 ## 1. Overview
@@ -902,6 +902,34 @@ We welcome contributions to Kmila-9s! Please check our GitHub repository for con
 Kmila-9s is released as free and open-source software. Please refer to the LICENSE file in the repository for specific licensing terms.
 
 ## 19. Changelog
+
+### Version 0.13.1 (2025-12-13)
+
+#### Android Deployment Fixes
+
+*   **Editor.razor**: Fixed build error `CS4008: Cannot await 'void'` where `ReleaseBuild()` method was incorrectly awaited. This was blocking Android target builds.
+
+*   **MauiProgram.cs**: Added missing service injections for MAUI/Android platform to achieve feature parity with Web deployment:
+    *   `IFormFactor` - Device form factor detection (Phone/Tablet/Desktop)
+    *   `JSONFileReader` - Reads JSON configuration files for FPGA definitions
+    *   `ProgramBuilder` - VHDL program compilation and building service
+    *   `SelectedFPGA` - Tracks the currently selected FPGA device state
+
+#### Platform Parity
+
+The following services are now consistently registered across both Web and MAUI platforms:
+
+| Service | Web | MAUI/Android |
+|---------|-----|--------------|
+| `IFormFactor` | Singleton | Singleton |
+| `ApplicationDbContext` | Scoped | Singleton |
+| `Projects` | Scoped | Singleton |
+| `ProjectFiles` | Scoped | Singleton |
+| `JSONFileReader` | Singleton | Singleton |
+| `ProgramBuilder` | Singleton | Singleton |
+| `SelectedFPGA` | Singleton | Singleton |
+
+---
 
 ### Version 0.13.0 (2025-12-13)
 
