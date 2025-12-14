@@ -43,7 +43,9 @@ public static class MauiProgram
         builder.Services.AddSingleton<Projects>();
         builder.Services.AddSingleton<ProjectFiles>();
 
-        builder.Services.AddSingleton<JSONFileReader>();
+        // JSONFileReader with MAUI's FileSystem for reading bundled FPGA device files
+        builder.Services.AddSingleton<JSONFileReader>(provider =>
+            new JSONFileReader(path => FileSystem.OpenAppPackageFileAsync(path)));
 
         builder.Services.AddSingleton<ProgramBuilder>();
 
