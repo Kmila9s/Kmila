@@ -1,9 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFrameworks>net9.0;net9.0-android</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Required for Android target -->
+    <UseMaui Condition="'$(TargetFramework)' == 'net9.0-android'">true</UseMaui>
+    <SupportedOSPlatformVersion Condition="'$(TargetFramework)' == 'net9.0-android'">24.0</SupportedOSPlatformVersion>
   </PropertyGroup>
   <ItemGroup>
     <SupportedPlatform Include="browser" />
@@ -15,13 +18,25 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
+
+  <!-- Common packages for all targets -->
   <ItemGroup>
     <PackageReference Include="Blazor.Bootstrap" Version="3.4.0" />
     <PackageReference Include="BlazorMonaco" Version="3.3.0" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="9.0.5" />
     <PackageReference Include="sqlite-net-pcl" Version="1.9.172" />
     <ProjectReference Include="../../../Debugger/Debugger.csproj" />
     <ProjectReference Include="../../../Interpreter/Interpreter.csproj" />
+  </ItemGroup>
+
+  <!-- Web-specific packages (net9.0 only) -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="9.0.5" />
+  </ItemGroup>
+
+  <!-- MAUI-specific packages (net9.0-android) -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net9.0-android'">
+    <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
   </ItemGroup>
 
 </Project>
