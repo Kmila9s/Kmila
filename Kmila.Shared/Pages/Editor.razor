@@ -156,6 +156,7 @@
                     ConstructionOptions="EditorConstructionOptions"
                     OnDidInit="OnEditorInitAsync"
                     OnDidChangeCursorPosition="OnCursorPositionChanged"
+                    OnDidChangeModelContent="OnModelContentChanged"
                     OnKeyDown="OnEditorKeyDown"
                 />
             </div>
@@ -346,7 +347,7 @@
             var model = await _editor.GetModel();
             if (model != null)
             {
-                await Global.SetModelLanguage(JS, model, _currentLanguage);
+                await BlazorMonaco.Editor.Global.SetModelLanguage(JS, model, _currentLanguage);
             }
 
             StateHasChanged();
@@ -412,17 +413,21 @@ end architecture behavioral;",
 
     /// <summary>
     /// Called when the Monaco editor has finished initializing.
-    /// Sets up content change tracking for unsaved changes indicator.
     /// </summary>
-    private async Task OnEditorInitAsync()
+    private Task OnEditorInitAsync()
     {
-        // Set up content change listener for unsaved changes tracking
-        await _editor.OnDidChangeModelContent(async (e) =>
-        {
-            var currentContent = await _editor.GetValue();
-            _hasUnsavedChanges = currentContent != _originalContent;
-            await InvokeAsync(StateHasChanged);
-        });
+        // Editor initialization complete
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Handles content changes in the editor for unsaved changes tracking.
+    /// </summary>
+    private async Task OnModelContentChanged(ModelContentChangedEvent e)
+    {
+        var currentContent = await _editor.GetValue();
+        _hasUnsavedChanges = currentContent != _originalContent;
+        await InvokeAsync(StateHasChanged);
     }
 
     /// <summary>
