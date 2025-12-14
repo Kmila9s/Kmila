@@ -1,6 +1,7 @@
 ﻿@inherits LayoutComponentBase
+@implements IDisposable
 
-<div class="page bb-page">
+<div class="page bb-page" dir="@(Traductor.IsRtl ? "rtl" : "ltr")">
     <NavMenu />
 
     <main>
@@ -17,3 +18,31 @@
     <a href="." class="reload">Reload</a>
     <span class="dismiss">🗙</span>
 </div>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        // Initialize database tables
+        await DbContext.InitDBAsync();
+
+        // Subscribe to language changes to refresh the layout
+        Traductor.OnLangChanged += OnLanguageChanged;
+
+        // Load saved language preference from SQLite and initialize
+        var savedLanguage = await DbContext.GetSettingAsync(AppSettings.KEY_LANGUAGE);
+        await Traductor.InitializeAsync(savedLanguage);
+    }
+
+    /// <summary>
+    /// Handles language change events.
+    /// </summary>
+    private void OnLanguageChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Traductor.OnLangChanged -= OnLanguageChanged;
+    }
+}

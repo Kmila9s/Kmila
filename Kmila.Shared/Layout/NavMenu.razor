@@ -1,4 +1,5 @@
-﻿<Sidebar2 @ref="_sidebar"
+﻿@implements IDisposable
+<Sidebar2 @ref="_sidebar"
     ImageSrc="img/Logo.png"
     Href="/"
     IconName="IconName.BootstrapFill"
@@ -9,6 +10,23 @@
     private Sidebar2 _sidebar = new();
     private IEnumerable<NavItem>? _navItems;
     private List<Project> _projects = new();
+
+    protected override void OnInitialized()
+    {
+        Traductor.OnLangChanged += OnLanguageChanged;
+    }
+
+    private void OnLanguageChanged()
+    {
+        _navItems = GetNavItems();
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Traductor.OnLangChanged -= OnLanguageChanged;
+    }
+
     /// <summary>
     /// Provides data to the sidebar.
     /// </summary>
@@ -30,10 +48,10 @@
     {
         var items = new List<NavItem>
         {
-            new () { Id = "1", Text = "Project Options"},
-            new () { Id = "2", Href = "/projects", IconName = IconName.FolderPlus, Text = "Projects", IconColor = IconColor.Success, ParentId = "1" },
-            new () { Id = "3", Href = "/projects/create", IconName = IconName.Plus, Text = "Create new project", IconColor = IconColor.Info, ParentId = "1" },
-            new () { Id = "4", Text = "Projects Created", IconName = IconName.Folder2Open, ParentId = "1" }
+            new () { Id = "1", Text = Traductor.T("NAV_PROJECT_OPTIONS")},
+            new () { Id = "2", Href = "/projects", IconName = IconName.FolderPlus, Text = Traductor.T("NAV_PROJECTS"), IconColor = IconColor.Success, ParentId = "1" },
+            new () { Id = "3", Href = "/projects/create", IconName = IconName.Plus, Text = Traductor.T("NAV_CREATE_PROJECT"), IconColor = IconColor.Info, ParentId = "1" },
+            new () { Id = "4", Text = Traductor.T("NAV_PROJECTS_CREATED"), IconName = IconName.Folder2Open, ParentId = "1" }
         };
         foreach(var project in _projects){
             items.Add(new(){

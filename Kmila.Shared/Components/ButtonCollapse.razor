@@ -25,7 +25,7 @@
 
 <div class="card h-100">
     <div class="card-body">
-        <h5 class="card-title">Options</h5>
+        <h5 class="card-title">@Traductor.T("EDITOR_OPTIONS")</h5>
 
         <!-- Save File Button -->
         <div class="d-grid gap-2 my-3">
@@ -34,10 +34,10 @@
                 Color="ButtonColor.Primary"
                 Outline="true"
                 Disabled="_building"
-                TooltipTitle="Save current file"
+                TooltipTitle="@Traductor.T("EDITOR_SAVE_FILE")"
                 @onclick="async () => await OnSaveFileButtonClicked.InvokeAsync()"
             >
-                Save file <Icon Name="IconName.Floppy2"/>
+                @Traductor.T("EDITOR_SAVE_FILE") <Icon Name="IconName.Floppy2"/>
             </Button>
         </div>
 
@@ -48,10 +48,10 @@
                 Color="ButtonColor.Secondary"
                 Outline="true"
                 Disabled="_building"
-                TooltipTitle="Add new file"
+                TooltipTitle="@Traductor.T("EDITOR_NEW_FILE")"
                 @onclick="async () => await OnNewFileButtonClicked.InvokeAsync()"
             >
-                New File <Icon Name="IconName.FileBinary"/>
+                @Traductor.T("EDITOR_NEW_FILE") <Icon Name="IconName.FileBinary"/>
             </Button>
         </div>
 
@@ -63,12 +63,12 @@
                 Outline="true"
                 @onclick="StartSimulationAsync"
                 Disabled="@(_building || !_validProgram)"
-                TooltipTitle="@(!_validProgram ? "Validate first the program" : "Start simulation")"
+                TooltipTitle="@(!_validProgram ? Traductor.T("EDITOR_VALIDATE_FIRST") : Traductor.T("EDITOR_START_SIMULATION"))"
             >
                 @if(!_validProgram){
-                    <span>Build first <Icon Name="IconName.X"/></span>
+                    <span>@Traductor.T("EDITOR_BUILD_FIRST") <Icon Name="IconName.X"/></span>
                 }else{
-                    <span>Start simulation <Icon Name="IconName.Play"/></span>
+                    <span>@Traductor.T("EDITOR_START_SIMULATION") <Icon Name="IconName.Play"/></span>
                 }
             </Button>
         </div>
@@ -80,18 +80,18 @@
                 Color="ButtonColor.Success"
                 Outline="true"
                 Disabled="_building"
-                TooltipTitle="Build and validate current program"
+                TooltipTitle="@Traductor.T("EDITOR_VALIDATE_PROGRAM")"
                 Class="flex-grow-1"
                 @onclick="BuildRequested"
             >
                 @if(_building)
                 {
                     <Spinner Type="SpinnerType.Border" Size="SpinnerSize.Small" Class="me-2"/>
-                    <span>Building...</span>
+                    <span>@Traductor.T("EDITOR_BUILDING")</span>
                 }
                 else
                 {
-                    <span>Validate program <Icon Name="IconName.Check2All"/></span>
+                    <span>@Traductor.T("EDITOR_VALIDATE_PROGRAM") <Icon Name="IconName.Check2All"/></span>
                 }
             </Button>
             @if(_building)
@@ -100,7 +100,7 @@
                     Type="ButtonType.Button"
                     Color="ButtonColor.Danger"
                     Outline="true"
-                    TooltipTitle="Cancel build"
+                    TooltipTitle="@Traductor.T("EDITOR_CANCEL_BUILD")"
                     @onclick="CancelBuildRequested"
                 >
                     <Icon Name="IconName.XCircle"/>
@@ -162,7 +162,7 @@
                         <Button Color="ButtonColor.Light"
                                 Size="ButtonSize.ExtraSmall"
                                 @onclick="HideBuildStatus">
-                            <Icon Name="IconName.X" /> Dismiss
+                            <Icon Name="IconName.X" /> @Traductor.T("COMMON_DISMISS")
                         </Button>
                     </div>
                 }
@@ -283,6 +283,12 @@
         Builder.OnBuildError += OnBuildError;
         Builder.OnBuildCompleted += OnBuildCompleted;
         Builder.OnBuildCancelled += OnBuildCancelled;
+        Traductor.OnLangChanged += OnLanguageChanged;
+    }
+
+    private void OnLanguageChanged()
+    {
+        InvokeAsync(StateHasChanged);
     }
 
     /// <summary>
@@ -294,6 +300,7 @@
         Builder.OnBuildError -= OnBuildError;
         Builder.OnBuildCompleted -= OnBuildCompleted;
         Builder.OnBuildCancelled -= OnBuildCancelled;
+        Traductor.OnLangChanged -= OnLanguageChanged;
     }
 
     #endregion
@@ -450,7 +457,7 @@
         {
             { "OnSimulationStarted", EventCallback.Factory.Create<TimeSpan>(this, OnSimulationRequested) }
         };
-        await _simulationParametersModal.ShowAsync<SimulationParametersModal>("Simulation parameters", null, parameters);
+        await _simulationParametersModal.ShowAsync<SimulationParametersModal>(Traductor.T("SIMULATION_PARAMETERS"), null, parameters);
     }
 
     /// <summary>

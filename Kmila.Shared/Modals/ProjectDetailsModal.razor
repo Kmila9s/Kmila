@@ -1,28 +1,28 @@
-<PageTitle>Project details</PageTitle>
+<PageTitle>@Traductor.T("PROJECT_DETAILS_TITLE")</PageTitle>
 <EditForm class="row" EditContext="_context" OnValidSubmit="CreateProjectAsync">
     <DataAnnotationsValidator />
     <div class="col-sm-12 col-md-6 my-3">
         <div class="form-floating mb-3">
-            <input type="text" class="form-control" id="InputProjectName" placeholder="Project name" @bind=_project.Name>
-            <label for="InputProjectName">Project Name</label>
+            <input type="text" class="form-control" id="InputProjectName" placeholder="@Traductor.T("PROJECT_NAME_PLACEHOLDER")" @bind=_project.Name>
+            <label for="InputProjectName">@Traductor.T("PROJECT_NAME_LABEL")</label>
             <ValidationMessage For="@(() => _project.Name)" />
         </div>
     </div>
     <div class="col-sm-12 col-md-6 my-3">
         <div class="form-floating mb-3">
-            <input type="text" class="form-control" id="InputProjectDescription" placeholder="Project Description" @bind="_project.Description">
-            <label for="InputProjectDescription">Project Description</label>
+            <input type="text" class="form-control" id="InputProjectDescription" placeholder="@Traductor.T("PROJECT_DESCRIPTION_PLACEHOLDER")" @bind="_project.Description">
+            <label for="InputProjectDescription">@Traductor.T("PROJECT_DESCRIPTION_LABEL")</label>
         </div>
     </div>
     <Button
         Outline=true
-        TooltipTitle="This project will be stored on the base program path, you can download it later"
+        TooltipTitle="@Traductor.T("PROJECT_CREATE_TOOLTIP")"
         Color="ButtonColor.Success"
         Type="ButtonType.Submit"
         Disabled="_creatingProject"
         Loading="_creatingProject"
     >
-        Create Project
+        @Traductor.T("PROJECT_CREATE_BUTTON")
     </Button>
 </EditForm>
 
@@ -66,17 +66,17 @@
                 _project.BasePath = fullPath;
                 var result = await Projects.CreateAsync(_project);
                 ToastService.Notify(Message(
-                    result ? "Project created" : "Error",
-                    result ? $"Project created at: {_project.BasePath}" : $"Something fail while creating the project: {Projects.LastError}",
+                    result ? Traductor.T("PROJECT_CREATED_SUCCESS") : Traductor.T("COMMON_ERROR"),
+                    result ? $"{Traductor.T("PROJECT_CREATED_SUCCESS_MSG").Replace("{0}", _project.BasePath)}" : $"{Traductor.T("PROJECT_CREATED_ERROR_MSG").Replace("{0}", Projects.LastError)}",
                     result ? ToastType.Success : ToastType.Danger
                 ));
                 if(result) await OnProjectCreated.InvokeAsync();
                 _project = new();
             }else{
-                ToastService.Notify(Message("Error", "Some fields are missing or are incorrect", ToastType.Danger));
+                ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), Traductor.T("PROJECT_VALIDATION_ERROR"), ToastType.Danger));
             }
         }catch(Exception ex){
-            ToastService.Notify(Message("Error", ex.Message, ToastType.Danger));
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
         }finally{
             _creatingProject = false;
             StateHasChanged();

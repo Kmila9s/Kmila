@@ -1,39 +1,39 @@
-<PageTitle>Create file</PageTitle>
+<PageTitle>@Traductor.T("CREATE_FILE_TITLE")</PageTitle>
 @if(Project != null){
     <EditForm class="row" EditContext="_context" OnValidSubmit="CreateFileAsync">
         <DataAnnotationsValidator />
         <div class="col-sm-12 col-md-6 my-3">
             <div class="form-floating mb-3">
-                <input type="text" class="form-control" id="InputProjectFileName" placeholder="File name" @bind=_projectFile.FileName>
-                <label for="InputProjectFileName">File Name</label>
+                <input type="text" class="form-control" id="InputProjectFileName" placeholder="@Traductor.T("CREATE_FILE_NAME_PLACEHOLDER")" @bind=_projectFile.FileName>
+                <label for="InputProjectFileName">@Traductor.T("CREATE_FILE_NAME_LABEL")</label>
                 <ValidationMessage For="@(() => _projectFile.FileName)" />
             </div>
         </div>
         <div class="col-sm-12 col-md-6 my-3">
             <div class="form-floating">
-                <select class="form-control" id="extentionType" aria-label="Select a valid extention file" required @bind=_extention>
-                    <option selected disabled>Choose one...</option>
+                <select class="form-control" id="extentionType" aria-label="@Traductor.T("CREATE_FILE_TYPE_LABEL")" required @bind=_extention>
+                    <option selected disabled>@Traductor.T("COMMON_CHOOSE_ONE")</option>
                     <option value="vhdl">VHDL</option>
                     <option value="txt">TXT</option>
                     <option value="md">MD</option>
                 </select>
-                <label for="extentionType">Select an extention</label>
+                <label for="extentionType">@Traductor.T("CREATE_FILE_TYPE_LABEL")</label>
             </div>
         </div>
 
         <Button
             Outline=true
-            TooltipTitle="This project will be stored on the base program path, you can download it later"
+            TooltipTitle="@Traductor.T("CREATE_FILE_TOOLTIP")"
             Color="ButtonColor.Success"
             Type="ButtonType.Submit"
             Disabled="_creatingFile"
             Loading="_creatingFile"
         >
-            Create file
+            @Traductor.T("CREATE_FILE_BUTTON")
         </Button>
     </EditForm>
 }else{
-    <p>Project not found :(</p>
+    <p>@Traductor.T("COMMON_PROJECT_NOT_FOUND")</p>
 }
 
 @code{
@@ -75,17 +75,17 @@
                 _projectFile.FileName = $"{_projectFile.FileName}.{_extention}";
                 var result = await ProjectFiles.CreateAsync(_projectFile);
                 ToastService.Notify(Message(
-                    result ? "File created" : "Error",
-                    result ? $"File {_projectFile.FileName} created" : $"Something fail while creating the file: {ProjectFiles.LastError}",
+                    result ? Traductor.T("CREATE_FILE_SUCCESS") : Traductor.T("COMMON_ERROR"),
+                    result ? $"{Traductor.T("CREATE_FILE_SUCCESS_MSG")} {_projectFile.FileName}" : $"{Traductor.T("CREATE_FILE_ERROR_MSG").Replace("{0}", ProjectFiles.LastError)}",
                     result ? ToastType.Success : ToastType.Danger
                 ));
                 if(result) await OnProjectFileCreated.InvokeAsync();
                 _projectFile = new();
             }else{
-                ToastService.Notify(Message("Error", "Some fields are missing or are incorrect", ToastType.Danger));
+                ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), Traductor.T("CREATE_FILE_VALIDATION_ERROR"), ToastType.Danger));
             }
         }catch(Exception ex){
-            ToastService.Notify(Message("Error", ex.Message, ToastType.Danger));
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
         }finally{
             _creatingFile = false;
             StateHasChanged();

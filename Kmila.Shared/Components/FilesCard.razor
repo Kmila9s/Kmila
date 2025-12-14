@@ -1,15 +1,16 @@
 <!-- Enhanced Project Files Card -->
+@implements IDisposable
 <Card Class="h-100">
     <CardHeader>
         <div class="d-flex justify-content-between align-items-center">
             <div>
                 <Icon Name="IconName.Folder" Class="me-2" />
-                <strong>Project Files</strong>
+                <strong>@Traductor.T("FILES_PROJECT_FILES")</strong>
             </div>
             @if(_projectFiles.Any())
             {
                 <Badge Color="BadgeColor.Primary" Pill="true">
-                    @_projectFiles.Count @(_projectFiles.Count == 1 ? "file" : "files")
+                    @_projectFiles.Count @(_projectFiles.Count == 1 ? Traductor.T("FILES_FILE") : Traductor.T("FILES_FILES"))
                 </Badge>
             }
         </div>
@@ -20,8 +21,8 @@
             <!-- Empty State -->
             <Alert Color="AlertColor.Info" Class="mb-0 text-center">
                 <Icon Name="IconName.InfoCircle" Size="IconSize.x3" Class="d-block mx-auto mb-2" />
-                <strong>No files yet</strong>
-                <p class="mb-0 small text-muted mt-1">Create your first file to get started with your project</p>
+                <strong>@Traductor.T("FILES_NO_FILES")</strong>
+                <p class="mb-0 small text-muted mt-1">@Traductor.T("FILES_CREATE_FIRST")</p>
             </Alert>
         }
         else
@@ -50,7 +51,7 @@
                     <div class="col-6 col-md-3">
                         <div class="border rounded p-2 text-center">
                             <Icon Name="IconName.FileTypeTxt" Class="text-info" />
-                            <div class="small text-muted">Text</div>
+                            <div class="small text-muted">@Traductor.T("FILES_TEXT")</div>
                             <strong>@txtCount</strong>
                         </div>
                     </div>
@@ -70,7 +71,7 @@
                     <div class="col-6 col-md-3">
                         <div class="border rounded p-2 text-center">
                             <Icon Name="IconName.FileEarmark" Class="text-secondary" />
-                            <div class="small text-muted">Other</div>
+                            <div class="small text-muted">@Traductor.T("FILES_OTHER")</div>
                             <strong>@otherCount</strong>
                         </div>
                     </div>
@@ -88,7 +89,7 @@
                 Responsive="true">
 
                 <GridColumns>
-                    <GridColumn TItem="ProjectFile" HeaderText="File" PropertyName="FileName" SortKeySelector="item => item.FileName">
+                    <GridColumn TItem="ProjectFile" HeaderText="@Traductor.T("FILES_FILE")" PropertyName="FileName" SortKeySelector="item => item.FileName">
                         <div class="d-flex align-items-center">
                             @{
                                 var (iconName, badgeColor, fileExt) = GetFileInfo(context.FileName);
@@ -106,7 +107,7 @@
                                     {
                                         <Badge Color="BadgeColor.Success" Class="ms-2">
                                             <Icon Name="IconName.CheckCircleFill" Class="me-1" />
-                                            Active
+                                            @Traductor.T("FILES_ACTIVE")
                                         </Badge>
                                     }
                                 </div>
@@ -119,24 +120,24 @@
                         </div>
                     </GridColumn>
 
-                    <GridColumn TItem="ProjectFile" HeaderText="Actions" Sortable=false Filterable=false>
+                    <GridColumn TItem="ProjectFile" HeaderText="@Traductor.T("FILES_ACTIONS")" Sortable=false Filterable=false>
                         <div class="btn-group" role="group">
                             <Button
                                 Size="ButtonSize.Small"
                                 Outline=true
                                 Color="ButtonColor.Primary"
-                                TooltipTitle="Open file in editor"
+                                TooltipTitle="@Traductor.T("FILES_OPEN")"
                                 Type="ButtonType.Button"
                                 @onclick="@(async () => await OpenFileAsync(context))"
                             >
                                 <Icon Name="IconName.BoxArrowUpRight" Class="me-1" />
-                                Open
+                                @Traductor.T("FILES_OPEN")
                             </Button>
                             <Button
                                 Size="ButtonSize.Small"
                                 Outline=true
                                 Color="ButtonColor.Danger"
-                                TooltipTitle="Delete this file"
+                                TooltipTitle="@Traductor.T("FILES_DELETE")"
                                 Type="ButtonType.Button"
                                 @onclick="@(async () => await RemoveFileAsync(context))"
                             >
@@ -169,6 +170,22 @@
     private List<ProjectFile> _projectFiles { get; set; } = new();
     private ConfirmDialog _removeFileDialog = new();
     private ProjectFile? _selectedFile = null;
+
+    protected override void OnInitialized()
+    {
+        Traductor.OnLangChanged += OnLanguageChanged;
+    }
+
+    private void OnLanguageChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Traductor.OnLangChanged -= OnLanguageChanged;
+    }
+
     /// <summary>
     /// Method invoked when the component is initialized.
     /// </summary>
@@ -218,18 +235,20 @@
         ConfirmDialogOptions options = new(){
             YesButtonColor = ButtonColor.Danger,
             NoButtonColor = ButtonColor.Success,
-            AutoFocusYesButton = false
+            AutoFocusYesButton = false,
+            YesButtonText = Traductor.T("FILES_DELETE"),
+            NoButtonText = Traductor.T("COMMON_GO_BACK")
         };
         var confirmation = await _removeFileDialog.ShowAsync(
-            "You are going to remove this file",
-            "This changes can not be undone after removal",
-            "Are you sure that you want to continue?",
+            Traductor.T("FILES_REMOVE_TITLE"),
+            Traductor.T("FILES_REMOVE_MSG1"),
+            Traductor.T("FILES_REMOVE_MSG2"),
             options
         );
         if(confirmation){
             await OnProjectFileRemoved.InvokeAsync(file);
         }else{
-            ToastService.Notify(Message("Message", "File not removed", ToastType.Info));
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), Traductor.T("FILES_NOT_REMOVED"), ToastType.Info));
         }
     }
 
