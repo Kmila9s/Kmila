@@ -51,6 +51,10 @@ public static class MauiProgram
 
         builder.Services.AddSingleton<SelectedFPGA>();
 
+        // Translation service with MAUI's FileSystem for reading bundled dictionary files
+        builder.Services.AddSingleton<Traductor>(provider =>
+            new Traductor(path => FileSystem.OpenAppPackageFileAsync(path)));
+
         builder.Services.AddMauiBlazorWebView();
 
         builder.Services.AddBlazorBootstrap();

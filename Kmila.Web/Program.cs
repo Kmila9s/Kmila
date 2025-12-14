@@ -42,6 +42,21 @@ public class Program
 
         builder.Services.AddSingleton<SelectedFPGA>();
 
+        // Translation service for Web - reads from wwwroot/Dictionaries
+        builder.Services.AddSingleton<Traductor>(provider =>
+        {
+            return new Traductor(async path =>
+            {
+                // For web, the path comes as "wwwroot/Dictionaries/{lang}.json"
+                // We need to look in _content/Kmila.Shared/ for RCL assets
+                var relativePath = path.StartsWith("wwwroot/") ? path.Substring(8) : path;
+                var fullPath = Path.Combine("wwwroot", "_content", "Kmila.Shared", relativePath);
+                if (File.Exists(fullPath))
+                    return File.OpenRead(fullPath);
+                throw new FileNotFoundException($"Dictionary file not found: {fullPath}");
+            });
+        });
+
         builder.Services.AddBlazorBootstrap();
         
         var app = builder.Build();

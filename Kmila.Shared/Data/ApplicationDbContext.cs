@@ -4,7 +4,7 @@ using SQLite;
 namespace Kmila.Shared.Data;
 /// <summary>
 /// Represents the application's database context for interacting with the SQLite database.
-/// It provides access to the tables for projects and project files.
+/// It provides access to the tables for projects, project files, and application settings.
 /// </summary>
 public class ApplicationDbContext : SQLiteAsyncConnection
 {
@@ -23,7 +23,6 @@ public class ApplicationDbContext : SQLiteAsyncConnection
         try
         {
             var result = await CreateTableAsync<Project>();
-
         }
         catch (Exception ex)
         {
@@ -32,7 +31,16 @@ public class ApplicationDbContext : SQLiteAsyncConnection
         try
         {
             var result = await CreateTableAsync<ProjectFile>();
-        }catch (Exception ex)
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+        }
+        try
+        {
+            var result = await CreateTableAsync<AppSettings>();
+        }
+        catch (Exception ex)
         {
             Console.WriteLine(ex.Message);
         }
@@ -45,4 +53,63 @@ public class ApplicationDbContext : SQLiteAsyncConnection
     /// Gets the queryable collection of project files.
     /// </summary>
     public AsyncTableQuery<ProjectFile> ProjectFiles => Table<ProjectFile>();
+    /// <summary>
+    /// Gets the queryable collection of application settings.
+    /// </summary>
+    public AsyncTableQuery<AppSettings> Settings => Table<AppSettings>();
+
+    #region Settings Helper Methods
+
+    /// <summary>
+    /// Gets a setting value by key.
+    /// </summary>
+    /// <param name="key">The setting key.</param>
+    /// <returns>The setting value or null if not found.</returns>
+    public async Task<string?> GetSettingAsync(string key)
+    {
+        try
+        {
+            var setting = await Settings.Where(s => s.Key == key).FirstOrDefaultAsync();
+            return setting?.Value;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[DB] Error getting setting {key}: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Sets a setting value by key.
+    /// </summary>
+    /// <param name="key">The setting key.</param>
+    /// <param name="value">The setting value.</param>
+    public async Task SetSettingAsync(string key, string value)
+    {
+        try
+        {
+            var existing = await Settings.Where(s => s.Key == key).FirstOrDefaultAsync();
+            if (existing != null)
+            {
+                existing.Value = value;
+                existing.LastModified = DateTime.UtcNow;
+                await UpdateAsync(existing);
+            }
+            else
+            {
+                await InsertAsync(new AppSettings
+                {
+                    Key = key,
+                    Value = value,
+                    LastModified = DateTime.UtcNow
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[DB] Error setting {key}: {ex.Message}");
+        }
+    }
+
+    #endregion
 }

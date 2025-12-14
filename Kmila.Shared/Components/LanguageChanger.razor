@@ -1,0 +1,108 @@
+@*
+    LanguageChanger Component
+
+    A dropdown component that allows users to select their preferred language.
+    The selected language is persisted to SQLite database and the UI updates dynamically.
+
+    Features:
+    - Displays current language with flag/name
+    - Dropdown with all available languages
+    - Persists selection to SQLite database
+    - Triggers UI refresh on language change
+
+    Usage:
+    <LanguageChanger />
+
+    Dependencies:
+    - Traductor (injected translation service)
+    - ApplicationDbContext (injected database context)
+*@
+@implements IDisposable
+
+<Dropdown>
+    <DropdownToggleButton Color="ButtonColor.Light" Size="ButtonSize.Small">
+        <span class="me-2">@GetLanguageFlag(Traductor.Lang)</span>
+        @Traductor.GetLanguageDisplayName(Traductor.Lang)
+    </DropdownToggleButton>
+    <DropdownMenu>
+        @foreach (var language in Traductor.AvailableLanguages)
+        {
+            <DropdownItem
+                Type="DropdownItemType.Button"
+                Active="@(Traductor.Lang == language.Value)"
+                @onclick="@(() => SetLanguageAsync(language.Value))">
+                <span class="me-2">@GetLanguageFlag(language.Value)</span>
+                @language.Key
+                @if (Traductor.Lang == language.Value)
+                {
+                    <Icon Name="IconName.CheckLg" Class="ms-2 text-success" />
+                }
+            </DropdownItem>
+        }
+    </DropdownMenu>
+</Dropdown>
+
+@code {
+    /// <summary>
+    /// Event callback invoked when the language changes.
+    /// Parent components can use this to perform additional actions.
+    /// </summary>
+    [Parameter]
+    public EventCallback<string> OnLanguageChanged { get; set; }
+
+    protected override void OnInitialized()
+    {
+        Traductor.OnLangChanged += OnLanguageChangedHandler;
+    }
+
+    private void OnLanguageChangedHandler()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Traductor.OnLangChanged -= OnLanguageChangedHandler;
+    }
+
+    /// <summary>
+    /// Sets a new language and persists it.
+    /// </summary>
+    /// <param name="languageCode">The language code to set.</param>
+    private async Task SetLanguageAsync(string languageCode)
+    {
+        if (Traductor.Lang == languageCode)
+            return;
+
+        var success = await Traductor.SetLanguageAsync(languageCode);
+
+        if (success)
+        {
+            // Persist the language preference to SQLite
+            await DbContext.SetSettingAsync(AppSettings.KEY_LANGUAGE, languageCode);
+
+            // Notify parent if callback is set
+            await OnLanguageChanged.InvokeAsync(languageCode);
+        }
+    }
+
+    /// <summary>
+    /// Gets a flag emoji for a language code.
+    /// </summary>
+    /// <param name="languageCode">The language code.</param>
+    /// <returns>A flag emoji representing the language.</returns>
+    private static string GetLanguageFlag(string languageCode)
+    {
+        return languageCode switch
+        {
+            "en" => "\U0001F1FA\U0001F1F8", // US flag
+            "es" => "\U0001F1EA\U0001F1F8", // Spain flag
+            "fr" => "\U0001F1EB\U0001F1F7", // France flag
+            "de" => "\U0001F1E9\U0001F1EA", // Germany flag
+            "ch" => "\U0001F1E8\U0001F1F3", // China flag
+            "jp" => "\U0001F1EF\U0001F1F5", // Japan flag
+            "ar" => "\U0001F1F8\U0001F1E6", // Saudi Arabia flag
+            _ => "\U0001F310" // Globe
+        };
+    }
+}
