@@ -265,8 +265,8 @@ public class Traductor : IDisposable
     {
         try
         {
-            // For MAUI, files are in wwwroot/Dictionaries/ from the Shared project
-            var filePath = $"wwwroot/Dictionaries/{languageCode}.json";
+            // For MAUI, files are in Resources/Raw/Dictionaries/ - accessed without the Resources/Raw prefix
+            var filePath = $"Dictionaries/{languageCode}.json";
 
             using var stream = await _fileReader(filePath);
             if (stream == null)
