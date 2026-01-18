@@ -28,9 +28,14 @@
     <ProjectReference Include="../../../Interpreter/Interpreter.csproj" />
   </ItemGroup>
 
-  <!-- Web-specific packages (net9.0 only) -->
+  <!-- Web-specific settings (net9.0 only) -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net9.0'">
+    <DefineConstants>$(DefineConstants);ASPNETCORE</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
     <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="9.0.5" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
   <!-- MAUI-specific packages (net9.0-android) -->
