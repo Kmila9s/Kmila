@@ -5,8 +5,8 @@
 **Author:** Ulrich Tamayo Daniel
 **Email:** dulricht1700@alumno.ipn.mx
 **Email 2:** danielulrichtamayo@gmail.com
-**Version:** 0.14.0
-**Last Updated:** December 14, 2025
+**Version:** 0.14.2
+**Last Updated:** January 17, 2026
 
 ## 1. Overview
 
@@ -426,17 +426,17 @@ The `Kmila.Shared` project contains the core logic, UI components, and data mode
 *   **FPGASimpleView.razor**: Compact FPGA information display widget showing device specifications
 
 #### Layout
-*   **MainLayout.razor**: Main application layout with navigation menu, content area, and RTL support for Arabic language
+*   **MainLayout.razor**: Main application layout with navigation menu, content area, RTL support for Arabic language, and loading state that ensures translations are initialized before rendering child components
 *   **NavMenu.razor**: Navigation menu displaying project options and created projects with i18n support
-*   **TopBar.razor**: Top navigation bar with FPGA selector, language switcher, and theme switcher
+*   **TopBar.razor**: Responsive top navigation bar with FPGA selector, language switcher, and theme switcher. Features mobile-optimized layout with text truncation, responsive breakpoints (< 576px, < 400px), and proper flexbox alignment for small screens
 
 #### Components (Additional)
-*   **LanguageChanger.razor**: Dropdown component for selecting application language with flag indicators. Supports 7 languages and persists preferences to SQLite
+*   **LanguageChanger.razor**: Dropdown component for selecting application language with translate icon. Uses reactive architecture where saving to DB triggers automatic translation reload via event chain (DbContext -> Traductor -> MainLayout). Supports 7 languages
 
 #### Modals
 *   **CreateFileModal.razor**: Modal for creating new files in a project
 *   **ProjectDetailsModal.razor**: Modal for creating new projects
-*   **SimulationParametersModal.razor**: Comprehensive modal for configuring simulation parameters including time/scale, port inputs, FPGA resource validation, and simulation controls (start/pause/resume/restart/stop)
+*   **SimulationParametersModal.razor**: Comprehensive modal for configuring simulation parameters organized in mobile-friendly tabs (FPGA, Config, Run). Features FPGA resource validation, time/scale configuration, port inputs, and simulation controls (start/pause/resume/restart/stop)
 
 ```mermaid
 classDiagram
@@ -926,6 +926,77 @@ Kmila-9s is released as free and open-source software. Please refer to the LICEN
 
 ## 19. Changelog
 
+### Version 0.14.2 (2026-01-17)
+
+#### Reactive Language Switching Architecture
+
+*   **ApplicationDbContext.cs**: Added reactive settings event system:
+    *   New `StaticOnValueChanged` event fires after `SetSettingAsync` completes
+    *   Enables decoupled, event-driven architecture for settings changes
+    *   Components can subscribe to react to configuration changes without tight coupling
+
+*   **Traductor.cs**: Implemented reactive language switching:
+    *   Subscribes to `ApplicationDbContext.StaticOnValueChanged` in constructor
+    *   Automatically reloads translations when language setting changes via storage event
+    *   Added `_settingsReader` callback for reading settings from storage during reload
+    *   Added `CancellationTokenSource` for proper async operation cancellation
+    *   `InitializeAsync` now accepts optional `settingsReader` parameter for reactive updates
+    *   Unsubscribes from events and cancels operations in `Dispose()`
+
+*   **LanguageChanger.razor**: Simplified to use reactive architecture:
+    *   Removed direct Traductor service calls - now only saves to DB
+    *   Removed `IDisposable` implementation and event subscriptions (no longer needed)
+    *   UI uses simple Blazor Bootstrap Dropdown with translate icon
+    *   Language change flow: Save to DB -> Event fires -> Traductor reloads -> UI refreshes
+
+*   **MainLayout.razor**: Updated to pass settings reader to Traductor:
+    *   `Traductor.InitializeAsync` now receives `DbContext.GetSettingAsync` callback
+    *   Enables Traductor to read new language value when storage event fires
+
+#### UI Improvements
+
+*   **SimulationParametersModal.razor**: Reorganized into mobile-friendly tab layout:
+    *   **FPGA Tab**: FPGA details and resource utilization
+    *   **Config Tab**: Time configuration and input port variables
+    *   **Run Tab**: Simulation controls and progress display
+    *   Uses Blazor Bootstrap `Tabs` with `NavStyle.Pills` for touch-friendly mobile UI
+    *   Responsive padding and grid adjustments for all screen sizes
+    *   Button labels show icons only on mobile, full text on larger screens
+
+#### Code Quality
+
+*   Added comprehensive XML documentation to all new reactive architecture components
+*   Added Razor component documentation comments to LanguageChanger.razor explaining the reactive flow
+
+---
+
+### Version 0.14.1 (2025-12-15)
+
+#### Bug Fixes
+
+*   **MainLayout.razor**: Fixed translation initialization race condition:
+    *   Added `_isLoading` state to prevent child components from rendering before translations are loaded
+    *   Shows loading spinner while `Traductor.InitializeAsync()` completes
+    *   Ensures `Traductor.T()` calls always return actual translations instead of raw keys like `HOME_FEATURE_PROTOTYPING`
+    *   Resolves issue where components would display translation keys during initial render
+
+*   **TopBar.razor**: Improved mobile responsiveness:
+    *   Replaced invalid `float-begin` class with proper flexbox layout using `d-flex justify-content-between`
+    *   Added responsive CSS with breakpoints for small screens (< 576px) and very small screens (< 400px)
+    *   FPGA selector button text truncates with ellipsis to prevent overflow on mobile
+    *   "Select FPGA:" label hides on very small screens (< 576px), showing only the device name
+    *   Dropdown menu constrained to 90vw max-width for mobile viewports
+    *   Reduced padding and font sizes on small devices for better fit
+    *   Added `GetFPGADisplayName()` helper method with "---" fallback for empty selection
+    *   Added translation support using `Traductor.T("TOPBAR_SELECT_FPGA")`
+
+#### Code Quality
+
+*   Added inline `<style>` block in TopBar.razor with scoped CSS for mobile responsiveness
+*   Improved code organization with clearer separation of FPGA selector and settings controls
+
+---
+
 ### Version 0.14.0 (2025-12-14)
 
 #### Internationalization (i18n) System
@@ -1077,4 +1148,4 @@ The following items remain documented as placeholders or incomplete implementati
 For questions, support, or feedback, please open an issue on our GitHub repository or contact the development team through the project page.
 
 ---
-*Last Updated: December 14, 2025*
+*Last Updated: January 17, 2026*

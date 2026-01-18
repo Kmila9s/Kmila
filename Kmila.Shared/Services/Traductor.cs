@@ -1,5 +1,6 @@
 using System.Text.Json;
-using Microsoft.JSInterop;
+using Kmila.Shared.Data;
+using Kmila.Shared.Models;
 
 namespace Kmila.Shared.Services;
 
@@ -11,6 +12,17 @@ namespace Kmila.Shared.Services;
 /// <para>
 /// The Traductor (Spanish for "Translator") service manages translations for the Kmila-9s application,
 /// enabling the UI to be displayed in multiple languages for accessibility to students worldwide.
+/// </para>
+/// <para>
+/// <b>Reactive Architecture:</b>
+/// The service uses a reactive pattern for instant language switching:
+/// <list type="number">
+/// <item><description>LanguageChanger saves language to DB via <c>ApplicationDbContext.SetSettingAsync</c></description></item>
+/// <item><description>ApplicationDbContext fires <c>StaticOnValueChanged</c> event</description></item>
+/// <item><description>Traductor catches the event, reads new language from storage, reloads translations</description></item>
+/// <item><description>Traductor fires <c>StaticOnLangChanged</c> event</description></item>
+/// <item><description>MainLayout catches event and calls <c>StateHasChanged()</c> to refresh UI</description></item>
+/// </list>
 /// </para>
 /// <para>
 /// <b>Supported Languages:</b>
@@ -68,10 +80,26 @@ public class Traductor : IDisposable
     #region Events
 
     /// <summary>
-    /// Event raised when the language changes. Components should subscribe to this
-    /// and call StateHasChanged() when notified.
+    /// Static event raised when the language changes. Components should subscribe to this
+    /// and call StateHasChanged() when notified. Using static ensures global propagation.
+    /// </summary>
+    public static event Action? StaticOnLangChanged;
+
+    /// <summary>
+    /// Instance event raised when the language changes (kept for backwards compatibility).
+    /// Prefer using StaticOnLangChanged for reliable global notifications.
     /// </summary>
     public event Action? OnLangChanged;
+
+    /// <summary>
+    /// Invokes both static and instance language change events.
+    /// </summary>
+    private void NotifyLanguageChanged()
+    {
+        Console.WriteLine("[Traductor] Notifying language change to all subscribers...");
+        StaticOnLangChanged?.Invoke();
+        OnLangChanged?.Invoke();
+    }
 
     #endregion
 
@@ -81,6 +109,8 @@ public class Traductor : IDisposable
     private string _lang = DEFAULT_LANGUAGE;
     private bool _isInitialized = false;
     private readonly Func<string, Task<Stream>> _fileReader;
+    private readonly CancellationTokenSource _cts = new();
+    private Func<string, Task<string?>>? _settingsReader;
 
     /// <summary>
     /// Available languages with their display names.
@@ -107,6 +137,7 @@ public class Traductor : IDisposable
     public Traductor(Func<string, Task<Stream>> fileReader)
     {
         _fileReader = fileReader;
+        ApplicationDbContext.StaticOnValueChanged += OnValueChanged;
     }
 
     /// <summary>
@@ -116,6 +147,53 @@ public class Traductor : IDisposable
     public Traductor()
     {
         _fileReader = DefaultFileReader;
+        ApplicationDbContext.StaticOnValueChanged += OnValueChanged;
+    }
+
+    #endregion
+
+    #region Event Handlers
+
+    /// <summary>
+    /// Handles configuration value changes from the database.
+    /// Triggers a language reload if the language setting changes.
+    /// </summary>
+    /// <param name="key">The configuration key that changed.</param>
+    private void OnValueChanged(string key)
+    {
+        if (key == AppSettings.KEY_LANGUAGE)
+        {
+            Console.WriteLine($"[Traductor] Language configuration changed via storage event");
+            Task.Run(async () => await ReloadLanguageFromStorageAsync(), _cts.Token);
+        }
+    }
+
+    /// <summary>
+    /// Reloads the language from storage when notified of a change.
+    /// This is called reactively when ApplicationDbContext fires StaticOnValueChanged.
+    /// </summary>
+    private async Task ReloadLanguageFromStorageAsync()
+    {
+        try
+        {
+            // Read the new language value from storage
+            if (_settingsReader != null)
+            {
+                var newLang = await _settingsReader(AppSettings.KEY_LANGUAGE);
+                if (!string.IsNullOrEmpty(newLang) && AvailableLanguages.ContainsValue(newLang))
+                {
+                    _lang = newLang;
+                }
+            }
+
+            _languageKeys = await LoadTranslationsAsync(_lang);
+            Console.WriteLine($"[Traductor] Language reloaded: {_lang}");
+            NotifyLanguageChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Traductor] Error reloading language: {ex.Message}");
+        }
     }
 
     #endregion
@@ -182,29 +260,58 @@ public class Traductor : IDisposable
     /// Should be called during application startup.
     /// </summary>
     /// <param name="savedLanguage">Optional saved language code from storage.</param>
-    public async Task InitializeAsync(string? savedLanguage = null)
+    /// <param name="settingsReader">Optional callback to read settings from storage (for reactive updates).</param>
+    public async Task InitializeAsync(string? savedLanguage = null, Func<string, Task<string?>>? settingsReader = null)
     {
+        Console.WriteLine($"[Traductor] Initializing with savedLanguage: {savedLanguage ?? "(null)"}");
+
+        _settingsReader = settingsReader;
+        _lang = !string.IsNullOrEmpty(savedLanguage) ? savedLanguage : DEFAULT_LANGUAGE;
+
+        // Validate the language code
+        if (!AvailableLanguages.ContainsValue(_lang))
+        {
+            Console.WriteLine($"[Traductor] Invalid language '{_lang}', falling back to {DEFAULT_LANGUAGE}");
+            _lang = DEFAULT_LANGUAGE;
+        }
+
         try
         {
-            _lang = !string.IsNullOrEmpty(savedLanguage) ? savedLanguage : DEFAULT_LANGUAGE;
-
-            // Validate the language code
-            if (!AvailableLanguages.ContainsValue(_lang))
-            {
-                _lang = DEFAULT_LANGUAGE;
-            }
-
             _languageKeys = await LoadTranslationsAsync(_lang);
             _isInitialized = true;
-            OnLangChanged?.Invoke();
+            Console.WriteLine($"[Traductor] Successfully initialized with {_languageKeys.Count} keys for language: {_lang}");
+            NotifyLanguageChanged();
         }
         catch (Exception ex)
         {
+            Console.WriteLine($"[Traductor] Failed to load '{_lang}': {ex.Message}");
+
+            // If not already trying default language, try it as fallback
+            if (_lang != DEFAULT_LANGUAGE)
+            {
+                Console.WriteLine($"[Traductor] Trying fallback language: {DEFAULT_LANGUAGE}");
+                try
+                {
+                    _languageKeys = await LoadTranslationsAsync(DEFAULT_LANGUAGE);
+                    _lang = DEFAULT_LANGUAGE;
+                    _isInitialized = true;
+                    Console.WriteLine($"[Traductor] Fallback successful with {_languageKeys.Count} keys");
+                    NotifyLanguageChanged();
+                    return;
+                }
+                catch (Exception fallbackEx)
+                {
+                    Console.WriteLine($"[Traductor] Fallback also failed: {fallbackEx.Message}");
+                }
+            }
+
+            // Complete failure - initialize with empty dictionary
             LastError = ex.Message;
-            Console.WriteLine($"[Traductor] Initialization error: {ex.Message}");
             _lang = DEFAULT_LANGUAGE;
             _languageKeys = new Dictionary<string, string>();
             _isInitialized = true;
+            Console.WriteLine($"[Traductor] Initialization failed completely. Running without translations.");
+            NotifyLanguageChanged();
         }
     }
 
@@ -229,9 +336,11 @@ public class Traductor : IDisposable
 
         try
         {
+            Console.WriteLine($"[Traductor] Setting language to: {languageCode}");
             _languageKeys = await LoadTranslationsAsync(languageCode);
             _lang = languageCode;
-            OnLangChanged?.Invoke();
+            Console.WriteLine($"[Traductor] Language set successfully, notifying subscribers...");
+            NotifyLanguageChanged();
             return true;
         }
         catch (Exception ex)
@@ -263,36 +372,45 @@ public class Traductor : IDisposable
     /// <returns>Dictionary of translation keys and values.</returns>
     private async Task<Dictionary<string, string>> LoadTranslationsAsync(string languageCode)
     {
+        // For MAUI, files are in Resources/Raw/Dictionaries/ - accessed without the Resources/Raw prefix
+        // For Web, the file reader handles path resolution
+        var filePath = $"Dictionaries/{languageCode}.json";
+        Console.WriteLine($"[Traductor] Attempting to load: {filePath}");
+
         try
         {
-            // For MAUI, files are in Resources/Raw/Dictionaries/ - accessed without the Resources/Raw prefix
-            var filePath = $"Dictionaries/{languageCode}.json";
-
             using var stream = await _fileReader(filePath);
             if (stream == null)
             {
-                Console.WriteLine($"[Traductor] Dictionary file not found: {filePath}");
-                return new Dictionary<string, string>();
+                Console.WriteLine($"[Traductor] File reader returned null for: {filePath}");
+                throw new FileNotFoundException($"Dictionary file returned null: {filePath}");
             }
 
             var dictionary = await JsonSerializer.DeserializeAsync<Dictionary<string, string>>(stream);
-            Console.WriteLine($"[Traductor] Loaded {dictionary?.Count ?? 0} translations for language: {languageCode}");
-            return dictionary ?? new Dictionary<string, string>();
+
+            if (dictionary == null || dictionary.Count == 0)
+            {
+                Console.WriteLine($"[Traductor] Dictionary was empty or null for language: {languageCode}");
+                throw new InvalidOperationException($"Dictionary was empty for language: {languageCode}");
+            }
+
+            Console.WriteLine($"[Traductor] Successfully loaded {dictionary.Count} translations for language: {languageCode}");
+            return dictionary;
         }
-        catch (FileNotFoundException)
+        catch (FileNotFoundException ex)
         {
-            Console.WriteLine($"[Traductor] Dictionary file not found for language: {languageCode}");
-            return new Dictionary<string, string>();
+            Console.WriteLine($"[Traductor] File not found for language {languageCode}: {ex.Message}");
+            throw; // Re-throw to propagate to InitializeAsync for proper error handling
         }
         catch (JsonException ex)
         {
             Console.WriteLine($"[Traductor] JSON parsing error for language {languageCode}: {ex.Message}");
-            return new Dictionary<string, string>();
+            throw;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[Traductor] Error loading translations for {languageCode}: {ex.Message}");
-            return new Dictionary<string, string>();
+            Console.WriteLine($"[Traductor] Error loading translations for {languageCode}: {ex.GetType().Name} - {ex.Message}");
+            throw;
         }
     }
 
@@ -314,10 +432,13 @@ public class Traductor : IDisposable
     #region IDisposable
 
     /// <summary>
-    /// Disposes the translation service.
+    /// Disposes the translation service and unsubscribes from events.
     /// </summary>
     public void Dispose()
     {
+        ApplicationDbContext.StaticOnValueChanged -= OnValueChanged;
+        _cts?.Cancel();
+        _cts?.Dispose();
         OnLangChanged = null;
     }
 

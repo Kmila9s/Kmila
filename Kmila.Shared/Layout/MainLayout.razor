@@ -1,17 +1,49 @@
-﻿@inherits LayoutComponentBase
+@*
+    MainLayout Component
+
+    The main application layout that wraps all pages with consistent navigation and styling.
+
+    Features:
+    - Loading state to prevent rendering until translations are initialized
+    - RTL (Right-to-Left) support for Arabic language via dir attribute
+    - Responsive sidebar navigation (NavMenu)
+    - Top navigation bar (TopBar) with FPGA selector and settings
+    - Toast notifications positioned at top center
+    - Error UI for unhandled exceptions
+
+    Implementation Notes:
+    - Uses _isLoading flag to defer child rendering until Traductor.InitializeAsync() completes
+    - This prevents the race condition where components display translation keys instead of values
+    - Subscribes to OnLangChanged event for dynamic language switching
+    - Implements IDisposable to clean up event subscriptions
+
+    Dependencies:
+    - Traductor (injected translation service)
+    - ApplicationDbContext (injected database context for settings)
+*@
+@inherits LayoutComponentBase
 @implements IDisposable
 
-<div class="page bb-page" dir="@(Traductor.IsRtl ? "rtl" : "ltr")">
-    <NavMenu />
+@if (!_isLoading)
+{
+    <div class="page bb-page" dir="@(Traductor.IsRtl ? "rtl" : "ltr")">
+        <NavMenu />
 
-    <main>
-        <TopBar />
+        <main>
+            <TopBar />
 
-        <article class="content px-4">
-            @Body
-        </article>
-    </main>
-</div>
+            <article class="content px-4">
+                @Body
+            </article>
+        </main>
+    </div>
+}
+else
+{
+    <div class="d-flex justify-content-center align-items-center vh-100">
+        <Spinner Type="SpinnerType.Border" Color="SpinnerColor.Primary" />
+    </div>
+}
 <Toasts class="p-3" AutoHide="true" Delay="5000" Placement="ToastsPlacement.TopCenter" />
 <div id="blazor-error-ui" data-nosnippet>
     An unhandled error has occurred.
@@ -20,29 +52,53 @@
 </div>
 
 @code {
+    /// <summary>
+    /// Indicates whether the layout is in loading state.
+    /// When true, shows a spinner instead of the main content.
+    /// This prevents child components from rendering before translations are initialized.
+    /// </summary>
+    private bool _isLoading = true;
+
+    /// <summary>
+    /// Initializes the layout component asynchronously.
+    /// Sets up the database, loads language preferences, and initializes the translation service.
+    /// </summary>
+    /// <remarks>
+    /// The loading state (_isLoading) is set to false only AFTER Traductor.InitializeAsync() completes.
+    /// This ensures that all child components render with proper translations instead of raw keys.
+    /// </remarks>
     protected override async Task OnInitializedAsync()
     {
-        // Initialize database tables
+        // Initialize database tables (creates tables if they don't exist)
         await DbContext.InitDBAsync();
 
-        // Subscribe to language changes to refresh the layout
-        Traductor.OnLangChanged += OnLanguageChanged;
+        // Subscribe to language changes to refresh the layout when user switches language
+        Traductor.StaticOnLangChanged += OnLanguageChanged;
 
-        // Load saved language preference from SQLite and initialize
+        // Load saved language preference from SQLite and initialize the translation service
+        // Pass the settings reader callback for reactive language changes
         var savedLanguage = await DbContext.GetSettingAsync(AppSettings.KEY_LANGUAGE);
-        await Traductor.InitializeAsync(savedLanguage);
+        await Traductor.InitializeAsync(savedLanguage, DbContext.GetSettingAsync);
+
+        // Mark loading complete - this ensures children render after translations are ready
+        // Without this, components would display keys like "HOME_FEATURE_PROTOTYPING" instead of translated text
+        _isLoading = false;
     }
 
     /// <summary>
-    /// Handles language change events.
+    /// Handles language change events from the Traductor service.
+    /// Triggers a re-render of the layout to update RTL direction and refresh child components.
     /// </summary>
     private void OnLanguageChanged()
     {
         InvokeAsync(StateHasChanged);
     }
 
+    /// <summary>
+    /// Cleans up event subscriptions when the component is disposed.
+    /// </summary>
     public void Dispose()
     {
-        Traductor.OnLangChanged -= OnLanguageChanged;
+        Traductor.StaticOnLangChanged -= OnLanguageChanged;
     }
 }

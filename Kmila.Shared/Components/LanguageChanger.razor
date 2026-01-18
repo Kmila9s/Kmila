@@ -1,108 +1,72 @@
 @*
     LanguageChanger Component
 
-    A dropdown component that allows users to select their preferred language.
-    The selected language is persisted to SQLite database and the UI updates dynamically.
+    A dropdown component for selecting the application's display language.
+    Uses Blazor Bootstrap Dropdown with a translate icon for a clean, mobile-friendly UI.
 
-    Features:
-    - Displays current language with flag/name
-    - Dropdown with all available languages
-    - Persists selection to SQLite database
-    - Triggers UI refresh on language change
+    Reactive Architecture:
+    - When the user selects a language, only DbContext.SetSettingAsync is called
+    - ApplicationDbContext fires StaticOnValueChanged event after saving
+    - Traductor service catches the event and reloads translations automatically
+    - MainLayout catches Traductor.StaticOnLangChanged and refreshes the UI
 
-    Usage:
-    <LanguageChanger />
+    This reactive pattern ensures instant, smooth language switching without
+    the component needing to directly interact with the Traductor service.
+
+    Supported Languages:
+    - English (en) - Default
+    - Spanish (es)
+    - French (fr)
+    - German (de)
+    - Chinese (ch)
+    - Japanese (jp)
+    - Arabic (ar) - RTL support
 
     Dependencies:
-    - Traductor (injected translation service)
-    - ApplicationDbContext (injected database context)
+    - ApplicationDbContext (injected via _Imports.razor as DbContext)
+    - AppSettings.KEY_LANGUAGE - The storage key for language setting
 *@
-@implements IDisposable
+<div class="mx-3">
+    <Dropdown Color="DropdownColor.Info">
+        <DropdownToggleButton>
+            <Icon Name="IconName.Translate" />
+            @_selectedLanguage
+        </DropdownToggleButton>
+        <DropdownMenu>
+            @foreach(var key in _languages.Keys){
+                <DropdownItem @onclick="async () => await SetNewLanguage(key)" Type="DropdownItemType.Button">@key</DropdownItem>
+            }
+        </DropdownMenu>
+    </Dropdown>
+</div>
 
-<Dropdown>
-    <DropdownToggleButton Color="ButtonColor.Light" Size="ButtonSize.Small">
-        <span class="me-2">@GetLanguageFlag(Traductor.Lang)</span>
-        @Traductor.GetLanguageDisplayName(Traductor.Lang)
-    </DropdownToggleButton>
-    <DropdownMenu>
-        @foreach (var language in Traductor.AvailableLanguages)
-        {
-            <DropdownItem
-                Type="DropdownItemType.Button"
-                Active="@(Traductor.Lang == language.Value)"
-                @onclick="@(() => SetLanguageAsync(language.Value))">
-                <span class="me-2">@GetLanguageFlag(language.Value)</span>
-                @language.Key
-                @if (Traductor.Lang == language.Value)
-                {
-                    <Icon Name="IconName.CheckLg" Class="ms-2 text-success" />
-                }
-            </DropdownItem>
-        }
-    </DropdownMenu>
-</Dropdown>
-
-@code {
+@code{
     /// <summary>
-    /// Event callback invoked when the language changes.
-    /// Parent components can use this to perform additional actions.
+    /// Available languages with their display names as keys and language codes as values.
     /// </summary>
-    [Parameter]
-    public EventCallback<string> OnLanguageChanged { get; set; }
-
-    protected override void OnInitialized()
-    {
-        Traductor.OnLangChanged += OnLanguageChangedHandler;
-    }
-
-    private void OnLanguageChangedHandler()
-    {
-        InvokeAsync(StateHasChanged);
-    }
-
-    public void Dispose()
-    {
-        Traductor.OnLangChanged -= OnLanguageChangedHandler;
-    }
+    private static Dictionary<string, string> _languages = new(){
+        { "English", "en"},
+        { "Español", "es"},
+        { "Français", "fr"},
+        { "Deutsch", "de"},
+        { "中文", "ch"},
+        { "日本語", "jp"},
+        { "عربي", "ar"}
+    };
 
     /// <summary>
-    /// Sets a new language and persists it.
+    /// The currently selected language display name shown in the dropdown button.
     /// </summary>
-    /// <param name="languageCode">The language code to set.</param>
-    private async Task SetLanguageAsync(string languageCode)
-    {
-        if (Traductor.Lang == languageCode)
-            return;
-
-        var success = await Traductor.SetLanguageAsync(languageCode);
-
-        if (success)
-        {
-            // Persist the language preference to SQLite
-            await DbContext.SetSettingAsync(AppSettings.KEY_LANGUAGE, languageCode);
-
-            // Notify parent if callback is set
-            await OnLanguageChanged.InvokeAsync(languageCode);
-        }
-    }
+    private string _selectedLanguage = "English";
 
     /// <summary>
-    /// Gets a flag emoji for a language code.
+    /// Sets a new language by saving it to the database.
+    /// The reactive event chain handles the rest:
+    /// DbContext.SetSettingAsync -> StaticOnValueChanged -> Traductor reloads -> UI refreshes
     /// </summary>
-    /// <param name="languageCode">The language code.</param>
-    /// <returns>A flag emoji representing the language.</returns>
-    private static string GetLanguageFlag(string languageCode)
-    {
-        return languageCode switch
-        {
-            "en" => "\U0001F1FA\U0001F1F8", // US flag
-            "es" => "\U0001F1EA\U0001F1F8", // Spain flag
-            "fr" => "\U0001F1EB\U0001F1F7", // France flag
-            "de" => "\U0001F1E9\U0001F1EA", // Germany flag
-            "ch" => "\U0001F1E8\U0001F1F3", // China flag
-            "jp" => "\U0001F1EF\U0001F1F5", // Japan flag
-            "ar" => "\U0001F1F8\U0001F1E6", // Saudi Arabia flag
-            _ => "\U0001F310" // Globe
-        };
+    /// <param name="key">The display name of the language (e.g., "English", "Español").</param>
+    private async Task SetNewLanguage(string key){
+        _selectedLanguage = key;
+        await DbContext.SetSettingAsync(AppSettings.KEY_LANGUAGE, _languages[key]);
     }
 }

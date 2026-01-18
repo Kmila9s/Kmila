@@ -9,6 +9,12 @@ namespace Kmila.Shared.Data;
 public class ApplicationDbContext : SQLiteAsyncConnection
 {
     /// <summary>
+    /// Static event raised when a setting value changes.
+    /// Components can subscribe to react to configuration changes.
+    /// </summary>
+    public static event Action<string>? StaticOnValueChanged;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ApplicationDbContext"/> class.
     /// </summary>
     /// <param name="path">The database file path.</param>
@@ -81,6 +87,7 @@ public class ApplicationDbContext : SQLiteAsyncConnection
 
     /// <summary>
     /// Sets a setting value by key.
+    /// Fires StaticOnValueChanged event after successful save.
     /// </summary>
     /// <param name="key">The setting key.</param>
     /// <param name="value">The setting value.</param>
@@ -104,6 +111,8 @@ public class ApplicationDbContext : SQLiteAsyncConnection
                     LastModified = DateTime.UtcNow
                 });
             }
+            // Notify subscribers that a setting has changed
+            StaticOnValueChanged?.Invoke(key);
         }
         catch (Exception ex)
         {

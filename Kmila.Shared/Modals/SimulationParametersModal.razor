@@ -1,564 +1,650 @@
 @implements IDisposable
 <PageTitle>Simulation Parameters</PageTitle>
 
-<!-- FPGA Information Section -->
-<Card Class="mb-3">
-    <CardHeader>
-        <Icon Name="IconName.Cpu" Class="me-2" />
-        <strong>FPGA Details</strong>
-    </CardHeader>
-    <CardBody>
-        @if(SelectedFPGA?.FPGA != null)
-        {
-            <div class="row g-3">
-                <!-- FPGA Basic Info -->
-                <div class="col-12">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h5 class="mb-0">@SelectedFPGA.FPGA.Model</h5>
-                            <small class="text-muted">@SelectedFPGA.FPGA.Family</small>
-                        </div>
-                        <Badge Color="BadgeColor.Primary">@SelectedFPGA.FPGA.Manufacturer</Badge>
-                    </div>
-                </div>
-
-                <!-- FPGA Resources Grid -->
-                @if(SelectedFPGA.FPGA.Resources != null)
-                {
-                    <div class="col-md-6 col-lg-3">
-                        <div class="border rounded p-2 h-100">
-                            <div class="d-flex align-items-center mb-1">
-                                <Icon Name="IconName.Cpu" Class="me-2" />
-                                <strong>Logic Units</strong>
-                            </div>
-                            <div class="text-muted small">
-                                @SelectedFPGA.FPGA.Resources.LogicUnits?.ToString("N0") @SelectedFPGA.FPGA.Resources.LogicUnitsType
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-6 col-lg-3">
-                        <div class="border rounded p-2 h-100">
-                            <div class="d-flex align-items-center mb-1">
-                                <Icon Name="IconName.Memory" Class="me-2" />
-                                <strong>Memory</strong>
-                            </div>
-                            <div class="text-muted small">
-                                @SelectedFPGA.FPGA.Resources.MemoryTotalKbits?.ToString("N0") Kbits
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-6 col-lg-3">
-                        <div class="border rounded p-2 h-100">
-                            <div class="d-flex align-items-center mb-1">
-                                <Icon Name="IconName.ToggleOn" Class="me-2" />
-                                <strong>Flip-Flops</strong>
-                            </div>
-                            <div class="text-muted small">
-                                @SelectedFPGA.FPGA.Resources.RegistersFlipFlops?.ToString("N0") FF
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-6 col-lg-3">
-                        <div class="border rounded p-2 h-100">
-                            <div class="d-flex align-items-center mb-1">
-                                <Icon Name="IconName.Calculator" Class="me-2" />
-                                <strong>DSP Slices</strong>
-                            </div>
-                            <div class="text-muted small">
-                                @SelectedFPGA.FPGA.Resources.DspSlices @SelectedFPGA.FPGA.Resources.DspSliceType
-                            </div>
-                        </div>
-                    </div>
-                }
-
-                <!-- Clocking Info -->
-                @if(SelectedFPGA.FPGA.Clocking != null)
-                {
-                    <div class="col-md-4">
-                        <div class="border rounded p-2 h-100">
-                            <div class="d-flex align-items-center mb-1">
-                                <Icon Name="IconName.Clock" Class="me-2" />
-                                <strong>Max Clock</strong>
-                            </div>
-                            <div class="text-muted small">
-                                @SelectedFPGA.FPGA.Clocking.MaxPllOutputMhz MHz
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="border rounded p-2 h-100">
-                            <div class="d-flex align-items-center mb-1">
-                                <Icon Name="IconName.Diagram3" Class="me-2" />
-                                <strong>Clock Resources</strong>
-                            </div>
-                            <div class="text-muted small">
-                                @SelectedFPGA.FPGA.Clocking.PllCount PLL / @SelectedFPGA.FPGA.Clocking.DcmMmcmCount DCM
-                            </div>
-                        </div>
-                    </div>
-                }
-
-                <!-- I/O Info -->
-                @if(SelectedFPGA.FPGA.IO != null)
-                {
-                    <div class="col-md-4">
-                        <div class="border rounded p-2 h-100">
-                            <div class="d-flex align-items-center mb-1">
-                                <Icon Name="IconName.Plugin" Class="me-2" />
-                                <strong>I/O Pins</strong>
-                            </div>
-                            <div class="text-muted small">
-                                @SelectedFPGA.FPGA.IO.MaxUserIO pins (@SelectedFPGA.FPGA.IO.IoBanksCount banks)
-                            </div>
-                        </div>
-                    </div>
-                }
-
-                <!-- Power Info -->
-                @if(SelectedFPGA.FPGA.Power != null)
-                {
-                    <div class="col-12">
-                        <div class="border rounded p-2">
-                            <div class="d-flex align-items-center mb-1">
-                                <Icon Name="IconName.Lightning" Class="me-2" />
-                                <strong>Core Voltage</strong>
-                            </div>
-                            <div class="text-muted small">
-                                @SelectedFPGA.FPGA.Power.CoreVoltageVccintV V (VCCINT)
-                            </div>
-                        </div>
-                    </div>
-                }
-            </div>
-        }
-        else
-        {
-            <Alert Color="AlertColor.Warning">
-                <Icon Name="IconName.ExclamationTriangle" Class="me-2" />
-                No FPGA selected. Please select an FPGA to view its specifications.
-            </Alert>
-        }
-    </CardBody>
-</Card>
-
-<!-- Resource Usage Analysis -->
-@if(SelectedFPGA?.FPGA != null && Builder.Parser.Entities.Any())
-{
-    <Card Class="mb-3">
-        <CardHeader>
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <Icon Name="IconName.Speedometer" Class="me-2" />
-                    <strong>Resource Utilization</strong>
-                </div>
-                @if(_resourcesExceeded)
-                {
-                    <Badge Color="BadgeColor.Danger" Pill="true">
-                        <Icon Name="IconName.ExclamationTriangleFill" Class="me-1" />
-                        Resources Exceeded
-                    </Badge>
-                }
-                else if(_resourcesNearLimit)
-                {
-                    <Badge Color="BadgeColor.Warning" Pill="true">
-                        <Icon Name="IconName.ExclamationTriangle" Class="me-1" />
-                        Near Limit
-                    </Badge>
-                }
-                else
-                {
-                    <Badge Color="BadgeColor.Success" Pill="true">
-                        <Icon Name="IconName.CheckCircle" Class="me-1" />
-                        Resources OK
-                    </Badge>
-                }
-            </div>
-        </CardHeader>
-        <CardBody>
-            @if(_resourcesExceeded)
-            {
-                <Alert Color="AlertColor.Danger" Class="mb-3">
-                    <Icon Name="IconName.ExclamationTriangleFill" Class="me-2" />
-                    <strong>Cannot start simulation!</strong> The design exceeds the selected FPGA's available resources.
-                    Please select a larger FPGA or optimize your design.
-                </Alert>
-            }
-            else if(_resourcesNearLimit)
-            {
-                <Alert Color="AlertColor.Warning" Class="mb-3">
-                    <Icon Name="IconName.ExclamationTriangle" Class="me-2" />
-                    <strong>Warning:</strong> Resource usage is near the FPGA limits. The design may not fit after synthesis optimizations.
-                </Alert>
-            }
-
-            <div class="row g-3">
-                <!-- Flip-Flops Progress -->
-                @if(SelectedFPGA.FPGA.Resources?.RegistersFlipFlops != null && SelectedFPGA.FPGA.Resources.RegistersFlipFlops > 0)
-                {
-                    <div class="col-12">
-                        @{
-                            var ffUsed = CalculateTotalFlipFlops();
-                            var ffAvailable = SelectedFPGA.FPGA.Resources.RegistersFlipFlops.Value;
-                            var ffPercent = GetResourcePercentage(ffUsed, ffAvailable);
-                            var ffColor = GetProgressColor(ffPercent);
-                        }
-                        <div class="mb-2">
-                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                <strong>
-                                    <Icon Name="IconName.ToggleOn" Class="me-2" />
-                                    Flip-Flops
-                                </strong>
-                                <span class="font-monospace">
-                                    <Badge Color="@GetBadgeColorFromProgress(ffColor)">
-                                        @ffUsed.ToString("N0")
-                                    </Badge>
-                                    <span class="text-muted mx-1">/</span>
-                                    <Badge Color="BadgeColor.Secondary">
-                                        @ffAvailable.ToString("N0")
-                                    </Badge>
-                                    <span class="text-muted ms-2">(@ffPercent.ToString("F1")%)</span>
-                                </span>
-                            </div>
-                            <Progress>
-                                <ProgressBar Color="@ffColor" Width="@ffPercent" Type="@(ffPercent >= 80 ? ProgressType.Striped : ProgressType.Default)" />
-                            </Progress>
-                        </div>
-                    </div>
-                }
-
-                <!-- LUTs Progress -->
-                @if(SelectedFPGA.FPGA.Resources?.LogicUnits != null && SelectedFPGA.FPGA.Resources.LogicUnits > 0)
-                {
-                    <div class="col-12">
-                        @{
-                            var lutUsed = CalculateTotalLUTs();
-                            var lutAvailable = SelectedFPGA.FPGA.Resources.LogicUnits.Value;
-                            var lutPercent = GetResourcePercentage(lutUsed, lutAvailable);
-                            var lutColor = GetProgressColor(lutPercent);
-                        }
-                        <div class="mb-2">
-                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                <strong>
-                                    <Icon Name="IconName.Grid" Class="me-2" />
-                                    @SelectedFPGA.FPGA.Resources.LogicUnitsType
-                                </strong>
-                                <span class="font-monospace">
-                                    <Badge Color="@GetBadgeColorFromProgress(lutColor)">
-                                        @lutUsed.ToString("N0")
-                                    </Badge>
-                                    <span class="text-muted mx-1">/</span>
-                                    <Badge Color="BadgeColor.Secondary">
-                                        @lutAvailable.ToString("N0")
-                                    </Badge>
-                                    <span class="text-muted ms-2">(@lutPercent.ToString("F1")%)</span>
-                                </span>
-                            </div>
-                            <Progress>
-                                <ProgressBar Color="@lutColor" Width="@lutPercent" Type="@(lutPercent >= 80 ? ProgressType.Striped : ProgressType.Default)" />
-                            </Progress>
-                        </div>
-                    </div>
-                }
-
-                <!-- DSP Slices Progress -->
-                @if(SelectedFPGA.FPGA.Resources?.DspSlices != null && SelectedFPGA.FPGA.Resources.DspSlices > 0)
-                {
-                    <div class="col-12">
-                        @{
-                            var dspUsed = CalculateTotalDSPSlices();
-                            var dspAvailable = SelectedFPGA.FPGA.Resources.DspSlices.Value;
-                            var dspPercent = GetResourcePercentage(dspUsed, dspAvailable);
-                            var dspColor = GetProgressColor(dspPercent);
-                        }
-                        <div class="mb-2">
-                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                <strong>
-                                    <Icon Name="IconName.Calculator" Class="me-2" />
-                                    DSP Slices
-                                </strong>
-                                <span class="font-monospace">
-                                    <Badge Color="@GetBadgeColorFromProgress(dspColor)">
-                                        @dspUsed.ToString("N0")
-                                    </Badge>
-                                    <span class="text-muted mx-1">/</span>
-                                    <Badge Color="BadgeColor.Secondary">
-                                        @dspAvailable.ToString("N0")
-                                    </Badge>
-                                    <span class="text-muted ms-2">(@dspPercent.ToString("F1")%)</span>
-                                </span>
-                            </div>
-                            <Progress>
-                                <ProgressBar Color="@dspColor" Width="@dspPercent" Type="@(dspPercent >= 80 ? ProgressType.Striped : ProgressType.Default)" />
-                            </Progress>
-                        </div>
-                    </div>
-                }
-
-                <!-- BRAM Blocks Progress -->
-                @if(SelectedFPGA.FPGA.Resources?.MemoryBlocks != null && SelectedFPGA.FPGA.Resources.MemoryBlocks > 0)
-                {
-                    <div class="col-12">
-                        @{
-                            var bramUsed = CalculateTotalBRAMBlocks();
-                            var bramAvailable = SelectedFPGA.FPGA.Resources.MemoryBlocks.Value;
-                            var bramPercent = GetResourcePercentage(bramUsed, bramAvailable);
-                            var bramColor = GetProgressColor(bramPercent);
-                        }
-                        <div class="mb-2">
-                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                <strong>
-                                    <Icon Name="IconName.Memory" Class="me-2" />
-                                    BRAM Blocks
-                                </strong>
-                                <span class="font-monospace">
-                                    <Badge Color="@GetBadgeColorFromProgress(bramColor)">
-                                        @bramUsed.ToString("F1")
-                                    </Badge>
-                                    <span class="text-muted mx-1">/</span>
-                                    <Badge Color="BadgeColor.Secondary">
-                                        @bramAvailable.ToString("N0")
-                                    </Badge>
-                                    <span class="text-muted ms-2">(@bramPercent.ToString("F1")%)</span>
-                                </span>
-                            </div>
-                            <Progress>
-                                <ProgressBar Color="@bramColor" Width="@bramPercent" Type="@(bramPercent >= 80 ? ProgressType.Striped : ProgressType.Default)" />
-                            </Progress>
-                        </div>
-                    </div>
-                }
-
-                <!-- I/O Pins Progress -->
-                @if(SelectedFPGA.FPGA.IO?.MaxUserIO != null && SelectedFPGA.FPGA.IO.MaxUserIO > 0)
-                {
-                    <div class="col-12">
-                        @{
-                            var ioUsed = CalculateTotalIOPins();
-                            var ioAvailable = SelectedFPGA.FPGA.IO.MaxUserIO.Value;
-                            var ioPercent = GetResourcePercentage(ioUsed, ioAvailable);
-                            var ioColor = GetProgressColor(ioPercent);
-                        }
-                        <div class="mb-2">
-                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                <strong>
-                                    <Icon Name="IconName.Plugin" Class="me-2" />
-                                    I/O Pins
-                                </strong>
-                                <span class="font-monospace">
-                                    <Badge Color="@GetBadgeColorFromProgress(ioColor)">
-                                        @ioUsed.ToString("N0")
-                                    </Badge>
-                                    <span class="text-muted mx-1">/</span>
-                                    <Badge Color="BadgeColor.Secondary">
-                                        @ioAvailable.ToString("N0")
-                                    </Badge>
-                                    <span class="text-muted ms-2">(@ioPercent.ToString("F1")%)</span>
-                                </span>
-                            </div>
-                            <Progress>
-                                <ProgressBar Color="@ioColor" Width="@ioPercent" Type="@(ioPercent >= 80 ? ProgressType.Striped : ProgressType.Default)" />
-                            </Progress>
-                        </div>
-                    </div>
-                }
-            </div>
-        </CardBody>
-    </Card>
-}
-
-<!-- Simulation Time Configuration -->
-<Card Class="mb-3">
-    <CardHeader>
-        <Icon Name="IconName.Clock" Class="me-2" />
-        <strong>Time Configuration</strong>
-    </CardHeader>
-    <CardBody>
-        <form @onsubmit="OnFormSubmited">
-            <!-- Time Input with Dropdown -->
-            <div class="input-group mb-3">
-                <span class="input-group-text">
-                    <Icon Name="IconName.HourglassSplit" />
-                </span>
-                <input type="number"
-                       class="form-control"
-                       aria-label="Simulation time value"
-                       @bind="_time"
-                       min=0
-                       max=1000
-                       disabled=@(_running)
-                       placeholder="Enter simulation time"/>
-                <button class="btn btn-outline-secondary dropdown-toggle"
-                        type="button"
-                        data-bs-toggle="dropdown"
-                        aria-expanded="false"
-                        disabled=@_running>
-                    Time scale: @_zone
-                </button>
-                <ul class="dropdown-menu">
-                    @foreach(var zone in Enum.GetValues(typeof(TimeScale)))
-                    {
-                        <li><a class="dropdown-item" @onclick="() => SetZone((TimeScale)zone)">@Enum.GetName(typeof(TimeScale), zone)</a></li>
-                    }
-                </ul>
-            </div>
-
-            <!-- Enhanced Range Slider -->
-            <EnhancedRangeSlider
-                Label="Simulation Duration"
-                IconName="IconName.HourglassSplit"
-                @bind-Value="_time"
-                Min="0"
-                Max="1000"
-                Step="1"
-                Unit="@_zone.ToString()"
-                Disabled="_running"
-                ShowBadge="true"
-                ShowMinMaxLabels="true"
-                ShowValueIndicator="true"
-                ShowCustomLabels="true"
-                TickMarks="_timeTickMarks"
-                CustomLabels="_customLabels"
-                HelpText="Adjust the simulation time duration using the slider or input field above"
-                BadgeColorMode="Custom"
-                BadgeIconName="IconName.Speedometer2"
-                BadgeAriaLabel="Current simulation time"
-                CustomColorThresholds="_colorThresholds"
-            />
-            <!-- Port Variables Input Section -->
-            @if(!_running && Builder.Parser.Entities.Any())
-            {
-                <hr class="my-3" />
-                <h6 class="mb-3">
-                    <Icon Name="IconName.Plugin" Class="me-2" />
-                    Input Port Variables
-                </h6>
-                <div class="row g-3">
-                    @foreach(var entity in Builder.Parser.Entities)
-                    {
-                        @foreach(var variable in entity.Ports.Where(p => p.PortType == PortType.IN))
+<!-- Mobile-friendly Tab Navigation -->
+<Tabs EnableFadeEffect="true" NavStyle="NavStyle.Pills" Class="simulation-tabs mb-3">
+    <!-- Tab 1: FPGA & Resources -->
+    <Tab Title="FPGA" Name="fpga-tab" IsActive="true">
+        <Content>
+            <div class="tab-content-wrapper p-2 p-md-3">
+                <!-- FPGA Information Section -->
+                <Card Class="mb-3">
+                    <CardHeader Class="py-2 py-md-3">
+                        <Icon Name="IconName.Cpu" Class="me-2" />
+                        <strong>FPGA Details</strong>
+                    </CardHeader>
+                    <CardBody Class="p-2 p-md-3">
+                        @if(SelectedFPGA?.FPGA != null)
                         {
-                            <div class="col-12">
-                                <PortMomentInput
-                                    Variable=variable
-                                    LimitTime=_time
-                                    TimeScale=_zone
-                                    IsRunning=_running
-                                />
-                            </div>
-                        }
-                    }
-                </div>
-            }
+                            <div class="row g-2 g-md-3">
+                                <!-- FPGA Basic Info -->
+                                <div class="col-12">
+                                    <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2">
+                                        <div>
+                                            <h5 class="mb-0 fs-6 fs-md-5">@SelectedFPGA.FPGA.Model</h5>
+                                            <small class="text-muted">@SelectedFPGA.FPGA.Family</small>
+                                        </div>
+                                        <Badge Color="BadgeColor.Primary">@SelectedFPGA.FPGA.Manufacturer</Badge>
+                                    </div>
+                                </div>
 
-            <!-- Control Buttons -->
-            <div class="d-grid gap-2 my-3">
-                <div class="btn-group" role="group" aria-label="Simulation controls">
-                    <Button
-                        Type="ButtonType.Submit"
-                        Color="@(_resourcesExceeded ? ButtonColor.Danger : ButtonColor.Success)"
-                        Outline=true
-                        Disabled="@(_running || _resourcesExceeded)"
-                        Loading=_running
-                        LoadingText="Running simulation, please wait..."
-                        TooltipTitle="@(_resourcesExceeded ? "Cannot start - resources exceeded" : "Start simulation with the current parameters")"
-                    >
-                        @if(_resourcesExceeded)
-                        {
-                            <Icon Name="IconName.ExclamationTriangleFill" Class="me-1" />
-                            <text>Resources Exceeded</text>
+                                <!-- FPGA Resources Grid - 2 columns on mobile, 4 on desktop -->
+                                @if(SelectedFPGA.FPGA.Resources != null)
+                                {
+                                    <div class="col-6 col-md-6 col-lg-3">
+                                        <div class="border rounded p-2 h-100">
+                                            <div class="d-flex align-items-center mb-1">
+                                                <Icon Name="IconName.Cpu" Class="me-1 me-md-2" />
+                                                <strong class="small">Logic Units</strong>
+                                            </div>
+                                            <div class="text-muted small text-truncate">
+                                                @SelectedFPGA.FPGA.Resources.LogicUnits?.ToString("N0") @SelectedFPGA.FPGA.Resources.LogicUnitsType
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-6 col-lg-3">
+                                        <div class="border rounded p-2 h-100">
+                                            <div class="d-flex align-items-center mb-1">
+                                                <Icon Name="IconName.Memory" Class="me-1 me-md-2" />
+                                                <strong class="small">Memory</strong>
+                                            </div>
+                                            <div class="text-muted small text-truncate">
+                                                @SelectedFPGA.FPGA.Resources.MemoryTotalKbits?.ToString("N0") Kbits
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-6 col-lg-3">
+                                        <div class="border rounded p-2 h-100">
+                                            <div class="d-flex align-items-center mb-1">
+                                                <Icon Name="IconName.ToggleOn" Class="me-1 me-md-2" />
+                                                <strong class="small">Flip-Flops</strong>
+                                            </div>
+                                            <div class="text-muted small text-truncate">
+                                                @SelectedFPGA.FPGA.Resources.RegistersFlipFlops?.ToString("N0") FF
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-6 col-lg-3">
+                                        <div class="border rounded p-2 h-100">
+                                            <div class="d-flex align-items-center mb-1">
+                                                <Icon Name="IconName.Calculator" Class="me-1 me-md-2" />
+                                                <strong class="small">DSP Slices</strong>
+                                            </div>
+                                            <div class="text-muted small text-truncate">
+                                                @SelectedFPGA.FPGA.Resources.DspSlices @SelectedFPGA.FPGA.Resources.DspSliceType
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+
+                                <!-- Clocking Info -->
+                                @if(SelectedFPGA.FPGA.Clocking != null)
+                                {
+                                    <div class="col-6 col-md-4">
+                                        <div class="border rounded p-2 h-100">
+                                            <div class="d-flex align-items-center mb-1">
+                                                <Icon Name="IconName.Clock" Class="me-1 me-md-2" />
+                                                <strong class="small">Max Clock</strong>
+                                            </div>
+                                            <div class="text-muted small">
+                                                @SelectedFPGA.FPGA.Clocking.MaxPllOutputMhz MHz
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-4">
+                                        <div class="border rounded p-2 h-100">
+                                            <div class="d-flex align-items-center mb-1">
+                                                <Icon Name="IconName.Diagram3" Class="me-1 me-md-2" />
+                                                <strong class="small">Clock Res.</strong>
+                                            </div>
+                                            <div class="text-muted small">
+                                                @SelectedFPGA.FPGA.Clocking.PllCount PLL / @SelectedFPGA.FPGA.Clocking.DcmMmcmCount DCM
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+
+                                <!-- I/O Info -->
+                                @if(SelectedFPGA.FPGA.IO != null)
+                                {
+                                    <div class="col-6 col-md-4">
+                                        <div class="border rounded p-2 h-100">
+                                            <div class="d-flex align-items-center mb-1">
+                                                <Icon Name="IconName.Plugin" Class="me-1 me-md-2" />
+                                                <strong class="small">I/O Pins</strong>
+                                            </div>
+                                            <div class="text-muted small">
+                                                @SelectedFPGA.FPGA.IO.MaxUserIO (@SelectedFPGA.FPGA.IO.IoBanksCount banks)
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+
+                                <!-- Power Info -->
+                                @if(SelectedFPGA.FPGA.Power != null)
+                                {
+                                    <div class="col-6 col-md-12">
+                                        <div class="border rounded p-2">
+                                            <div class="d-flex align-items-center mb-1">
+                                                <Icon Name="IconName.Lightning" Class="me-1 me-md-2" />
+                                                <strong class="small">Core Voltage</strong>
+                                            </div>
+                                            <div class="text-muted small">
+                                                @SelectedFPGA.FPGA.Power.CoreVoltageVccintV V (VCCINT)
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
                         }
                         else
                         {
-                            <Icon Name="IconName.HourglassSplit" Class="me-1" />
-                            <text>Start</text>
+                            <Alert Color="AlertColor.Warning">
+                                <Icon Name="IconName.ExclamationTriangle" Class="me-2" />
+                                No FPGA selected. Please select an FPGA to view its specifications.
+                            </Alert>
                         }
-                    </Button>
-                    @if(_running)
-                    {
-                        @if(!_paused)
-                        {
-                            <Button
-                                Type="ButtonType.Button"
-                                Color="ButtonColor.Info"
-                                Outline=true
-                                TooltipTitle="Pause simulation at current tick"
-                                @onclick='OnPauseSimulation'
-                            >
-                                <Icon Name=IconName.Pause Class="me-1" /> Pause
-                            </Button>
-                        }
-                        else
-                        {
-                            <Button
-                                Type="ButtonType.Button"
-                                Color="ButtonColor.Success"
-                                Outline=true
-                                Disabled=@(!_paused)
-                                TooltipTitle="Continue simulation from current tick"
-                                @onclick='OnContinueSimulation'
-                            >
-                                <Icon Name=IconName.Play Class="me-1" /> Continue
-                            </Button>
-                        }
-                        <Button
-                            Type="ButtonType.Button"
-                            Color="ButtonColor.Warning"
-                            Outline=true
-                            TooltipTitle="Restart simulation from beginning"
-                            @onclick='RestartSimulationAsync'
-                        >
-                            <Icon Name=IconName.ArrowClockwise Class="me-1" /> Restart
-                        </Button>
-                        <Button
-                            Type="ButtonType.Button"
-                            Color="ButtonColor.Danger"
-                            Outline=true
-                            TooltipTitle="Stop simulation and show current state"
-                            @onclick='StopSimulationAsync'
-                        >
-                            <Icon Name=IconName.StopFill Class="me-1" /> Stop
-                        </Button>
-                    }
-                </div>
-            </div>
-        </form>
-    </CardBody>
-</Card>
+                    </CardBody>
+                </Card>
 
-<!-- Simulation Progress Section -->
-@if(_running)
-{
-    <Card Class="mb-3">
-        <CardHeader>
-            <Icon Name="IconName.Activity" Class="me-2" />
-            <strong>Simulation Progress</strong>
-        </CardHeader>
-        <CardBody>
-            <div class="mb-2">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <span class="fw-bold">@(_paused ? "Paused" : "Running")...</span>
-                    <Badge Color="@(_paused ? BadgeColor.Warning : BadgeColor.Success)">
-                        @_percent.ToString("F1")%
-                    </Badge>
-                </div>
-                <Progress>
-                    <ProgressBar Type="@(_paused ? ProgressType.Default : ProgressType.Striped)"
-                        Color="@(_paused ? ProgressColor.Warning : ProgressColor.Success)"
-                        Width=_percent
-                        Label=@_label
-                        @ref=_progressBar/>
-                </Progress>
+                <!-- Resource Usage Analysis -->
+                @if(SelectedFPGA?.FPGA != null && Builder.Parser.Entities.Any())
+                {
+                    <Card Class="mb-3">
+                        <CardHeader Class="py-2 py-md-3">
+                            <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2">
+                                <div>
+                                    <Icon Name="IconName.Speedometer" Class="me-2" />
+                                    <strong>Resource Utilization</strong>
+                                </div>
+                                @if(_resourcesExceeded)
+                                {
+                                    <Badge Color="BadgeColor.Danger" Pill="true">
+                                        <Icon Name="IconName.ExclamationTriangleFill" Class="me-1" />
+                                        Exceeded
+                                    </Badge>
+                                }
+                                else if(_resourcesNearLimit)
+                                {
+                                    <Badge Color="BadgeColor.Warning" Pill="true">
+                                        <Icon Name="IconName.ExclamationTriangle" Class="me-1" />
+                                        Near Limit
+                                    </Badge>
+                                }
+                                else
+                                {
+                                    <Badge Color="BadgeColor.Success" Pill="true">
+                                        <Icon Name="IconName.CheckCircle" Class="me-1" />
+                                        OK
+                                    </Badge>
+                                }
+                            </div>
+                        </CardHeader>
+                        <CardBody Class="p-2 p-md-3">
+                            @if(_resourcesExceeded)
+                            {
+                                <Alert Color="AlertColor.Danger" Class="mb-3 small">
+                                    <Icon Name="IconName.ExclamationTriangleFill" Class="me-2" />
+                                    <strong>Cannot start!</strong> Design exceeds FPGA resources.
+                                </Alert>
+                            }
+                            else if(_resourcesNearLimit)
+                            {
+                                <Alert Color="AlertColor.Warning" Class="mb-3 small">
+                                    <Icon Name="IconName.ExclamationTriangle" Class="me-2" />
+                                    <strong>Warning:</strong> Near FPGA limits.
+                                </Alert>
+                            }
+
+                            <div class="row g-2">
+                                <!-- Flip-Flops Progress -->
+                                @if(SelectedFPGA.FPGA.Resources?.RegistersFlipFlops != null && SelectedFPGA.FPGA.Resources.RegistersFlipFlops > 0)
+                                {
+                                    <div class="col-12">
+                                        @{
+                                            var ffUsed = CalculateTotalFlipFlops();
+                                            var ffAvailable = SelectedFPGA.FPGA.Resources.RegistersFlipFlops.Value;
+                                            var ffPercent = GetResourcePercentage(ffUsed, ffAvailable);
+                                            var ffColor = GetProgressColor(ffPercent);
+                                        }
+                                        <div class="mb-2">
+                                            <div class="d-flex flex-wrap justify-content-between align-items-center mb-1 gap-1">
+                                                <strong class="small">
+                                                    <Icon Name="IconName.ToggleOn" Class="me-1" />
+                                                    Flip-Flops
+                                                </strong>
+                                                <span class="font-monospace small">
+                                                    <Badge Color="@GetBadgeColorFromProgress(ffColor)" Class="py-0 px-1">
+                                                        @ffUsed.ToString("N0")
+                                                    </Badge>
+                                                    <span class="text-muted">/</span>
+                                                    <Badge Color="BadgeColor.Secondary" Class="py-0 px-1">
+                                                        @ffAvailable.ToString("N0")
+                                                    </Badge>
+                                                    <span class="text-muted ms-1 d-none d-sm-inline">(@ffPercent.ToString("F1")%)</span>
+                                                </span>
+                                            </div>
+                                            <Progress>
+                                                <ProgressBar Color="@ffColor" Width="@ffPercent" Type="@(ffPercent >= 80 ? ProgressType.Striped : ProgressType.Default)" />
+                                            </Progress>
+                                        </div>
+                                    </div>
+                                }
+
+                                <!-- LUTs Progress -->
+                                @if(SelectedFPGA.FPGA.Resources?.LogicUnits != null && SelectedFPGA.FPGA.Resources.LogicUnits > 0)
+                                {
+                                    <div class="col-12">
+                                        @{
+                                            var lutUsed = CalculateTotalLUTs();
+                                            var lutAvailable = SelectedFPGA.FPGA.Resources.LogicUnits.Value;
+                                            var lutPercent = GetResourcePercentage(lutUsed, lutAvailable);
+                                            var lutColor = GetProgressColor(lutPercent);
+                                        }
+                                        <div class="mb-2">
+                                            <div class="d-flex flex-wrap justify-content-between align-items-center mb-1 gap-1">
+                                                <strong class="small">
+                                                    <Icon Name="IconName.Grid" Class="me-1" />
+                                                    @SelectedFPGA.FPGA.Resources.LogicUnitsType
+                                                </strong>
+                                                <span class="font-monospace small">
+                                                    <Badge Color="@GetBadgeColorFromProgress(lutColor)" Class="py-0 px-1">
+                                                        @lutUsed.ToString("N0")
+                                                    </Badge>
+                                                    <span class="text-muted">/</span>
+                                                    <Badge Color="BadgeColor.Secondary" Class="py-0 px-1">
+                                                        @lutAvailable.ToString("N0")
+                                                    </Badge>
+                                                    <span class="text-muted ms-1 d-none d-sm-inline">(@lutPercent.ToString("F1")%)</span>
+                                                </span>
+                                            </div>
+                                            <Progress>
+                                                <ProgressBar Color="@lutColor" Width="@lutPercent" Type="@(lutPercent >= 80 ? ProgressType.Striped : ProgressType.Default)" />
+                                            </Progress>
+                                        </div>
+                                    </div>
+                                }
+
+                                <!-- DSP Slices Progress -->
+                                @if(SelectedFPGA.FPGA.Resources?.DspSlices != null && SelectedFPGA.FPGA.Resources.DspSlices > 0)
+                                {
+                                    <div class="col-12">
+                                        @{
+                                            var dspUsed = CalculateTotalDSPSlices();
+                                            var dspAvailable = SelectedFPGA.FPGA.Resources.DspSlices.Value;
+                                            var dspPercent = GetResourcePercentage(dspUsed, dspAvailable);
+                                            var dspColor = GetProgressColor(dspPercent);
+                                        }
+                                        <div class="mb-2">
+                                            <div class="d-flex flex-wrap justify-content-between align-items-center mb-1 gap-1">
+                                                <strong class="small">
+                                                    <Icon Name="IconName.Calculator" Class="me-1" />
+                                                    DSP Slices
+                                                </strong>
+                                                <span class="font-monospace small">
+                                                    <Badge Color="@GetBadgeColorFromProgress(dspColor)" Class="py-0 px-1">
+                                                        @dspUsed.ToString("N0")
+                                                    </Badge>
+                                                    <span class="text-muted">/</span>
+                                                    <Badge Color="BadgeColor.Secondary" Class="py-0 px-1">
+                                                        @dspAvailable.ToString("N0")
+                                                    </Badge>
+                                                    <span class="text-muted ms-1 d-none d-sm-inline">(@dspPercent.ToString("F1")%)</span>
+                                                </span>
+                                            </div>
+                                            <Progress>
+                                                <ProgressBar Color="@dspColor" Width="@dspPercent" Type="@(dspPercent >= 80 ? ProgressType.Striped : ProgressType.Default)" />
+                                            </Progress>
+                                        </div>
+                                    </div>
+                                }
+
+                                <!-- BRAM Blocks Progress -->
+                                @if(SelectedFPGA.FPGA.Resources?.MemoryBlocks != null && SelectedFPGA.FPGA.Resources.MemoryBlocks > 0)
+                                {
+                                    <div class="col-12">
+                                        @{
+                                            var bramUsed = CalculateTotalBRAMBlocks();
+                                            var bramAvailable = SelectedFPGA.FPGA.Resources.MemoryBlocks.Value;
+                                            var bramPercent = GetResourcePercentage(bramUsed, bramAvailable);
+                                            var bramColor = GetProgressColor(bramPercent);
+                                        }
+                                        <div class="mb-2">
+                                            <div class="d-flex flex-wrap justify-content-between align-items-center mb-1 gap-1">
+                                                <strong class="small">
+                                                    <Icon Name="IconName.Memory" Class="me-1" />
+                                                    BRAM
+                                                </strong>
+                                                <span class="font-monospace small">
+                                                    <Badge Color="@GetBadgeColorFromProgress(bramColor)" Class="py-0 px-1">
+                                                        @bramUsed.ToString("F1")
+                                                    </Badge>
+                                                    <span class="text-muted">/</span>
+                                                    <Badge Color="BadgeColor.Secondary" Class="py-0 px-1">
+                                                        @bramAvailable.ToString("N0")
+                                                    </Badge>
+                                                    <span class="text-muted ms-1 d-none d-sm-inline">(@bramPercent.ToString("F1")%)</span>
+                                                </span>
+                                            </div>
+                                            <Progress>
+                                                <ProgressBar Color="@bramColor" Width="@bramPercent" Type="@(bramPercent >= 80 ? ProgressType.Striped : ProgressType.Default)" />
+                                            </Progress>
+                                        </div>
+                                    </div>
+                                }
+
+                                <!-- I/O Pins Progress -->
+                                @if(SelectedFPGA.FPGA.IO?.MaxUserIO != null && SelectedFPGA.FPGA.IO.MaxUserIO > 0)
+                                {
+                                    <div class="col-12">
+                                        @{
+                                            var ioUsed = CalculateTotalIOPins();
+                                            var ioAvailable = SelectedFPGA.FPGA.IO.MaxUserIO.Value;
+                                            var ioPercent = GetResourcePercentage(ioUsed, ioAvailable);
+                                            var ioColor = GetProgressColor(ioPercent);
+                                        }
+                                        <div class="mb-2">
+                                            <div class="d-flex flex-wrap justify-content-between align-items-center mb-1 gap-1">
+                                                <strong class="small">
+                                                    <Icon Name="IconName.Plugin" Class="me-1" />
+                                                    I/O Pins
+                                                </strong>
+                                                <span class="font-monospace small">
+                                                    <Badge Color="@GetBadgeColorFromProgress(ioColor)" Class="py-0 px-1">
+                                                        @ioUsed.ToString("N0")
+                                                    </Badge>
+                                                    <span class="text-muted">/</span>
+                                                    <Badge Color="BadgeColor.Secondary" Class="py-0 px-1">
+                                                        @ioAvailable.ToString("N0")
+                                                    </Badge>
+                                                    <span class="text-muted ms-1 d-none d-sm-inline">(@ioPercent.ToString("F1")%)</span>
+                                                </span>
+                                            </div>
+                                            <Progress>
+                                                <ProgressBar Color="@ioColor" Width="@ioPercent" Type="@(ioPercent >= 80 ? ProgressType.Striped : ProgressType.Default)" />
+                                            </Progress>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </CardBody>
+                    </Card>
+                }
             </div>
-            @if(_paused)
-            {
-                <Alert Color="AlertColor.Info" Class="mb-0">
-                    <Icon Name="IconName.InfoCircle" Class="me-2" />
-                    Simulation paused. Click Continue to resume or Stop to end the simulation.
-                </Alert>
-            }
-        </CardBody>
-    </Card>
-}
+        </Content>
+    </Tab>
+
+    <!-- Tab 2: Configuration -->
+    <Tab Title="Config" Name="config-tab">
+        <Content>
+            <div class="tab-content-wrapper p-2 p-md-3">
+                <!-- Simulation Time Configuration -->
+                <Card Class="mb-3">
+                    <CardHeader Class="py-2 py-md-3">
+                        <Icon Name="IconName.Clock" Class="me-2" />
+                        <strong>Time Configuration</strong>
+                    </CardHeader>
+                    <CardBody Class="p-2 p-md-3">
+                        <!-- Time Input with Dropdown -->
+                        <div class="input-group input-group-sm input-group-md-lg mb-3">
+                            <span class="input-group-text">
+                                <Icon Name="IconName.HourglassSplit" />
+                            </span>
+                            <input type="number"
+                                   class="form-control"
+                                   aria-label="Simulation time value"
+                                   @bind="_time"
+                                   min=0
+                                   max=1000
+                                   disabled=@(_running)
+                                   placeholder="Enter time"/>
+                            <button class="btn btn-outline-secondary dropdown-toggle"
+                                    type="button"
+                                    data-bs-toggle="dropdown"
+                                    aria-expanded="false"
+                                    disabled=@_running>
+                                <span class="d-none d-sm-inline">Time scale: </span>@_zone
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                @foreach(var zone in Enum.GetValues(typeof(TimeScale)))
+                                {
+                                    <li><a class="dropdown-item" @onclick="() => SetZone((TimeScale)zone)">@Enum.GetName(typeof(TimeScale), zone)</a></li>
+                                }
+                            </ul>
+                        </div>
+
+                        <!-- Enhanced Range Slider -->
+                        <EnhancedRangeSlider
+                            Label="Simulation Duration"
+                            IconName="IconName.HourglassSplit"
+                            @bind-Value="_time"
+                            Min="0"
+                            Max="1000"
+                            Step="1"
+                            Unit="@_zone.ToString()"
+                            Disabled="_running"
+                            ShowBadge="true"
+                            ShowMinMaxLabels="true"
+                            ShowValueIndicator="true"
+                            ShowCustomLabels="true"
+                            TickMarks="_timeTickMarks"
+                            CustomLabels="_customLabels"
+                            HelpText="Adjust the simulation time duration"
+                            BadgeColorMode="Custom"
+                            BadgeIconName="IconName.Speedometer2"
+                            BadgeAriaLabel="Current simulation time"
+                            CustomColorThresholds="_colorThresholds"
+                        />
+                    </CardBody>
+                </Card>
+
+                <!-- Port Variables Input Section -->
+                @if(!_running && Builder.Parser.Entities.Any())
+                {
+                    <Card Class="mb-3">
+                        <CardHeader Class="py-2 py-md-3">
+                            <Icon Name="IconName.Plugin" Class="me-2" />
+                            <strong>Input Port Variables</strong>
+                        </CardHeader>
+                        <CardBody Class="p-2 p-md-3">
+                            <div class="row g-2 g-md-3">
+                                @foreach(var entity in Builder.Parser.Entities)
+                                {
+                                    @foreach(var variable in entity.Ports.Where(p => p.PortType == PortType.IN))
+                                    {
+                                        <div class="col-12">
+                                            <PortMomentInput
+                                                Variable=variable
+                                                LimitTime=_time
+                                                TimeScale=_zone
+                                                IsRunning=_running
+                                            />
+                                        </div>
+                                    }
+                                }
+                            </div>
+                        </CardBody>
+                    </Card>
+                }
+            </div>
+        </Content>
+    </Tab>
+
+    <!-- Tab 3: Run Simulation -->
+    <Tab Title="Run" Name="run-tab">
+        <Content>
+            <div class="tab-content-wrapper p-2 p-md-3">
+                <form @onsubmit="OnFormSubmited">
+                    <!-- Control Buttons Card -->
+                    <Card Class="mb-3">
+                        <CardHeader Class="py-2 py-md-3">
+                            <Icon Name="IconName.PlayCircle" Class="me-2" />
+                            <strong>Simulation Controls</strong>
+                        </CardHeader>
+                        <CardBody Class="p-2 p-md-3">
+                            <!-- Quick Status Summary -->
+                            <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2 small">
+                                <span>
+                                    <Icon Name="IconName.Clock" Class="me-1" />
+                                    <strong>Duration:</strong> @_time @_zone
+                                </span>
+                                @if(_resourcesExceeded)
+                                {
+                                    <Badge Color="BadgeColor.Danger">
+                                        <Icon Name="IconName.ExclamationTriangleFill" Class="me-1" />
+                                        Resources Exceeded
+                                    </Badge>
+                                }
+                                else if(_resourcesNearLimit)
+                                {
+                                    <Badge Color="BadgeColor.Warning">
+                                        <Icon Name="IconName.ExclamationTriangle" Class="me-1" />
+                                        Near Limit
+                                    </Badge>
+                                }
+                                else
+                                {
+                                    <Badge Color="BadgeColor.Success">
+                                        <Icon Name="IconName.CheckCircle" Class="me-1" />
+                                        Ready
+                                    </Badge>
+                                }
+                            </div>
+
+                            <!-- Mobile-friendly button layout -->
+                            <div class="d-grid gap-2">
+                                <!-- Primary Start Button -->
+                                <Button
+                                    Type="ButtonType.Submit"
+                                    Color="@(_resourcesExceeded ? ButtonColor.Danger : ButtonColor.Success)"
+                                    Outline="false"
+                                    Size="ButtonSize.Large"
+                                    Disabled="@(_running || _resourcesExceeded)"
+                                    Loading=_running
+                                    LoadingText="Running..."
+                                    TooltipTitle="@(_resourcesExceeded ? "Cannot start - resources exceeded" : "Start simulation")"
+                                    Class="py-3"
+                                >
+                                    @if(_resourcesExceeded)
+                                    {
+                                        <Icon Name="IconName.ExclamationTriangleFill" Class="me-2" />
+                                        <text>Resources Exceeded</text>
+                                    }
+                                    else
+                                    {
+                                        <Icon Name="IconName.PlayFill" Class="me-2" />
+                                        <text>Start Simulation</text>
+                                    }
+                                </Button>
+
+                                <!-- Control buttons shown when running -->
+                                @if(_running)
+                                {
+                                    <div class="btn-group w-100" role="group" aria-label="Simulation controls">
+                                        @if(!_paused)
+                                        {
+                                            <Button
+                                                Type="ButtonType.Button"
+                                                Color="ButtonColor.Info"
+                                                Outline=true
+                                                TooltipTitle="Pause simulation"
+                                                @onclick='OnPauseSimulation'
+                                                Class="flex-fill"
+                                            >
+                                                <Icon Name=IconName.Pause Class="me-1" />
+                                                <span class="d-none d-sm-inline">Pause</span>
+                                            </Button>
+                                        }
+                                        else
+                                        {
+                                            <Button
+                                                Type="ButtonType.Button"
+                                                Color="ButtonColor.Success"
+                                                Outline=true
+                                                TooltipTitle="Continue simulation"
+                                                @onclick='OnContinueSimulation'
+                                                Class="flex-fill"
+                                            >
+                                                <Icon Name=IconName.Play Class="me-1" />
+                                                <span class="d-none d-sm-inline">Continue</span>
+                                            </Button>
+                                        }
+                                        <Button
+                                            Type="ButtonType.Button"
+                                            Color="ButtonColor.Warning"
+                                            Outline=true
+                                            TooltipTitle="Restart simulation"
+                                            @onclick='RestartSimulationAsync'
+                                            Class="flex-fill"
+                                        >
+                                            <Icon Name=IconName.ArrowClockwise Class="me-1" />
+                                            <span class="d-none d-sm-inline">Restart</span>
+                                        </Button>
+                                        <Button
+                                            Type="ButtonType.Button"
+                                            Color="ButtonColor.Danger"
+                                            Outline=true
+                                            TooltipTitle="Stop simulation"
+                                            @onclick='StopSimulationAsync'
+                                            Class="flex-fill"
+                                        >
+                                            <Icon Name=IconName.StopFill Class="me-1" />
+                                            <span class="d-none d-sm-inline">Stop</span>
+                                        </Button>
+                                    </div>
+                                }
+                            </div>
+                        </CardBody>
+                    </Card>
+                </form>
+
+                <!-- Simulation Progress Section -->
+                @if(_running)
+                {
+                    <Card Class="mb-3 border-primary">
+                        <CardHeader Class="py-2 py-md-3 bg-primary bg-opacity-10">
+                            <Icon Name="IconName.Activity" Class="me-2" />
+                            <strong>Simulation Progress</strong>
+                        </CardHeader>
+                        <CardBody Class="p-2 p-md-3">
+                            <div class="mb-2">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="fw-bold">@(_paused ? "Paused" : "Running")...</span>
+                                    <Badge Color="@(_paused ? BadgeColor.Warning : BadgeColor.Success)" Class="fs-6">
+                                        @_percent.ToString("F1")%
+                                    </Badge>
+                                </div>
+                                <Progress Class="progress-lg" Style="height: 24px;">
+                                    <ProgressBar Type="@(_paused ? ProgressType.Default : ProgressType.Striped)"
+                                        Color="@(_paused ? ProgressColor.Warning : ProgressColor.Success)"
+                                        Width=_percent
+                                        Label=@_label
+                                        @ref=_progressBar/>
+                                </Progress>
+                            </div>
+                            @if(_paused)
+                            {
+                                <Alert Color="AlertColor.Info" Class="mb-0 mt-3 small">
+                                    <Icon Name="IconName.InfoCircle" Class="me-2" />
+                                    Paused. Tap Continue to resume or Stop to end.
+                                </Alert>
+                            }
+                        </CardBody>
+                    </Card>
+                }
+
+                <!-- Help text for mobile users -->
+                @if(!_running)
+                {
+                    <Alert Color="AlertColor.Light" Class="small">
+                        <Icon Name="IconName.InfoCircle" Class="me-2" />
+                        Configure time and inputs in the <strong>Config</strong> tab, then return here to start.
+                    </Alert>
+                }
+            </div>
+        </Content>
+    </Tab>
+</Tabs>
 
 <ConfirmDialog @ref="_confirmDialog" />
 
