@@ -578,6 +578,32 @@
     <Tab Title="Run" Name="run-tab">
         <Content>
             <div class="tab-content-wrapper p-2 p-md-3">
+                <!-- Current Configuration Info -->
+                @if(!string.IsNullOrEmpty(_loadedConfigName))
+                {
+                    <Alert Color="AlertColor.Info" Class="mb-3 py-2">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div>
+                                <Icon Name="IconName.GearFill" Class="me-2" />
+                                <span class="fw-semibold">Configuration:</span>
+                                <span class="ms-1">@_loadedConfigName</span>
+                                @if(_hasUnsavedConfigChanges)
+                                {
+                                    <Badge Color="BadgeColor.Warning" Class="ms-2">Unsaved</Badge>
+                                }
+                            </div>
+                            <Button Color="ButtonColor.Info"
+                                    Size="ButtonSize.ExtraSmall"
+                                    Outline="true"
+                                    @onclick="SaveCurrentConfigurationAsync"
+                                    Disabled="@(!_hasUnsavedConfigChanges)">
+                                <Icon Name="IconName.Save" Class="me-1" />
+                                Save
+                            </Button>
+                        </div>
+                    </Alert>
+                }
+
                 <form @onsubmit="OnFormSubmited">
                     <!-- Control Buttons Card -->
                     <Card Class="mb-3">

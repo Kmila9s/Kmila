@@ -27,7 +27,17 @@ public class JSONFileReader
     public JSONFileReader(IWebHostEnvironment env)
     {
         _env = env;
-        _devicesPath = Path.Combine(_env.WebRootPath, "Devices");
+        // First try the RCL static files path
+        _devicesPath = Path.Combine(_env.WebRootPath ?? "", "_content", "Kmila.Shared", "Devices");
+        if (!Directory.Exists(_devicesPath))
+        {
+            // Fall back to direct wwwroot path (development)
+            _devicesPath = Path.Combine(_env.ContentRootPath, "..", "Kmila.Shared", "wwwroot", "Devices");
+        }
+        Console.WriteLine($"[JSONFileReader] WebRootPath: {_env.WebRootPath}");
+        Console.WriteLine($"[JSONFileReader] ContentRootPath: {_env.ContentRootPath}");
+        Console.WriteLine($"[JSONFileReader] DevicesPath: {_devicesPath}");
+        Console.WriteLine($"[JSONFileReader] DevicesPath exists: {Directory.Exists(_devicesPath)}");
     }
 
     /// <summary>
@@ -56,18 +66,23 @@ public class JSONFileReader
     {
         try
         {
+            Console.WriteLine($"[JSONFileReader] GetFPGAsAsync - Checking path: {_devicesPath}");
             if (!Directory.Exists(_devicesPath))
+            {
+                Console.WriteLine($"[JSONFileReader] GetFPGAsAsync - Directory does not exist!");
                 return new List<string>();
+            }
 
             var fpgaFiles = Directory.GetFiles(_devicesPath, "*.json", SearchOption.AllDirectories)
                 .OrderBy(f => Path.GetFileNameWithoutExtension(f))
                 .ToList();
 
+            Console.WriteLine($"[JSONFileReader] GetFPGAsAsync - Found {fpgaFiles.Count} files");
             return await Task.FromResult(fpgaFiles);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error reading FPGA files: {ex.Message}");
+            Console.WriteLine($"[JSONFileReader] Error reading FPGA files: {ex.Message}");
             return new List<string>();
         }
     }

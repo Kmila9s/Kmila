@@ -149,6 +149,11 @@
     {
         Traductor.StaticOnLangChanged += OnLanguageChanged;
         _fpgas = await JSONFileReader.GetFPGAsAsync();
+        Console.WriteLine($"[TopBar] Loaded {_fpgas.Count} FPGAs");
+        foreach (var fpga in _fpgas.Take(3))
+        {
+            Console.WriteLine($"[TopBar] FPGA: {fpga}");
+        }
     }
 
     /// <summary>
@@ -201,11 +206,14 @@
     /// </remarks>
     private async Task SetFPGAAsync(string name)
     {
+        Console.WriteLine($"[TopBar] SetFPGAAsync called with: {name}");
         _selectedFPGA = name;
         await GetFPGASettings();
+        Console.WriteLine($"[TopBar] FPGA loaded: {_fpga?.Model ?? "NULL"}");
         if (_fpga != null)
         {
             SelectedFPGA.SetFPGA(_fpga, name);
+            Console.WriteLine($"[TopBar] SelectedFPGA updated to: {_fpga.Model}");
         }
         StateHasChanged();
     }
