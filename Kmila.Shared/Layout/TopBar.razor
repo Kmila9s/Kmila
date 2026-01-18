@@ -33,29 +33,21 @@
 <div class="bb-top-row px-2 px-md-4">
     <div class="d-flex flex-wrap justify-content-between align-items-center w-100 gap-2">
         @* FPGA Selector - Left side *@
-        <div class="topbar-fpga-selector">
-            <Dropdown Color="DropdownColor.Info">
-                <DropdownToggleButton Size="ButtonSize.Small" Class="text-truncate topbar-fpga-btn">
-                    <span class="d-none d-sm-inline">@Traductor.T("TOPBAR_SELECT_FPGA"): </span>
-                    <span class="fw-semibold">@GetFPGADisplayName()</span>
-                </DropdownToggleButton>
-                <DropdownMenu Class="topbar-fpga-menu">
-                    <DropdownHeader>
-                        @if(_fpga != null && !string.IsNullOrEmpty(_fpga.Model)){
-                            <FPGASimpleView @ref=_fpgaView/>
-                        }
-                        else{
-                            <span class="text-muted p-2">@Traductor.T("TOPBAR_SELECT_FPGA")</span>
-                        }
-                    </DropdownHeader>
-                    @foreach(var fpga in _fpgas){
-                        var fpgaItem = fpga;
-                        <DropdownItem Type="DropdownItemType.Button" @onclick="() => SetFPGAAsync(fpgaItem)" Active="@(_selectedFPGA == fpgaItem)">
-                            @System.IO.Path.GetFileNameWithoutExtension(fpgaItem)
-                        </DropdownItem>
-                    }
-                </DropdownMenu>
-            </Dropdown>
+        <div class="topbar-fpga-selector d-flex align-items-center gap-2">
+            <span class="d-none d-sm-inline text-light small">@Traductor.T("TOPBAR_SELECT_FPGA"):</span>
+            <select class="form-select form-select-sm topbar-fpga-select"
+                    @onchange="OnFPGASelectionChanged"
+                    value="@_selectedFPGA">
+                <option value="">-- @Traductor.T("TOPBAR_SELECT_FPGA") --</option>
+                @foreach(var fpga in _fpgas)
+                {
+                    <option value="@fpga">@System.IO.Path.GetFileNameWithoutExtension(fpga)</option>
+                }
+            </select>
+            @if(_fpga != null && !string.IsNullOrEmpty(_fpga.Model))
+            {
+                <Badge Color="BadgeColor.Info" Class="d-none d-md-inline">@_fpga.Family</Badge>
+            }
         </div>
 
         @* Settings Controls - Right side *@
@@ -79,16 +71,22 @@
         max-width: 100%;
     }
 
-    .topbar-fpga-btn {
-        max-width: 100%;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+    .topbar-fpga-select {
+        max-width: 200px;
+        background-color: rgba(255, 255, 255, 0.1);
+        border-color: rgba(255, 255, 255, 0.3);
+        color: inherit;
     }
 
-    .topbar-fpga-menu {
-        max-width: 90vw;
-        overflow-x: auto;
+    .topbar-fpga-select:focus {
+        background-color: rgba(255, 255, 255, 0.15);
+        border-color: var(--bs-info);
+        box-shadow: 0 0 0 0.2rem rgba(var(--bs-info-rgb), 0.25);
+    }
+
+    .topbar-fpga-select option {
+        background-color: var(--bs-body-bg);
+        color: var(--bs-body-color);
     }
 
     .topbar-controls {
@@ -96,10 +94,9 @@
     }
 
     @@media (max-width: 575.98px) {
-        .topbar-fpga-btn {
-            max-width: 180px;
+        .topbar-fpga-select {
+            max-width: 150px;
             font-size: 0.8rem;
-            padding: 0.35rem 0.5rem;
         }
 
         .topbar-controls {
@@ -113,8 +110,8 @@
             padding-right: 0.5rem !important;
         }
 
-        .topbar-fpga-btn {
-            max-width: 140px;
+        .topbar-fpga-select {
+            max-width: 120px;
         }
     }
 </style>
@@ -126,10 +123,6 @@
     /// </summary>
     private string _selectedFPGA = string.Empty;
 
-    /// <summary>
-    /// Reference to the FPGASimpleView component for displaying device preview in dropdown header.
-    /// </summary>
-    private FPGASimpleView _fpgaView = new();
 
     /// <summary>
     /// The currently loaded FPGA device specifications.
@@ -191,6 +184,26 @@
     private async Task GetFPGASettings()
     {
         _fpga = await JSONFileReader.ReadFPGAJsonFileAsync(_selectedFPGA);
+    }
+
+    /// <summary>
+    /// Handles FPGA selection change from the dropdown select element.
+    /// </summary>
+    private async Task OnFPGASelectionChanged(ChangeEventArgs e)
+    {
+        var selectedPath = e.Value?.ToString() ?? string.Empty;
+        Console.WriteLine($"[TopBar] OnFPGASelectionChanged: {selectedPath}");
+
+        if (string.IsNullOrEmpty(selectedPath))
+        {
+            _selectedFPGA = string.Empty;
+            _fpga = null;
+            SelectedFPGA.SetFPGA(null!, string.Empty);
+            StateHasChanged();
+            return;
+        }
+
+        await SetFPGAAsync(selectedPath);
     }
 
     /// <summary>
