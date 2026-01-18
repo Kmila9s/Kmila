@@ -5,7 +5,7 @@
 **Author:** Ulrich Tamayo Daniel
 **Email:** dulricht1700@alumno.ipn.mx
 **Email 2:** danielulrichtamayo@gmail.com
-**Version:** 0.14.2
+**Version:** 0.15.0
 **Last Updated:** January 17, 2026
 
 ## 1. Overview
@@ -434,9 +434,10 @@ The `Kmila.Shared` project contains the core logic, UI components, and data mode
 *   **LanguageChanger.razor**: Dropdown component for selecting application language with translate icon. Uses reactive architecture where saving to DB triggers automatic translation reload via event chain (DbContext -> Traductor -> MainLayout). Supports 7 languages
 
 #### Modals
+*   **ConfigurationModal.razor**: Modal for managing simulation configurations (.k-config files). Features save current configuration, load saved configurations, export to file, and import from file
 *   **CreateFileModal.razor**: Modal for creating new files in a project
 *   **ProjectDetailsModal.razor**: Modal for creating new projects
-*   **SimulationParametersModal.razor**: Comprehensive modal for configuring simulation parameters organized in mobile-friendly tabs (FPGA, Config, Run). Features FPGA resource validation, time/scale configuration, port inputs, and simulation controls (start/pause/resume/restart/stop)
+*   **SimulationParametersModal.razor**: Comprehensive modal for configuring simulation parameters organized in mobile-friendly tabs (FPGA, Config, Run). Features FPGA resource validation with fallback selector, time/scale configuration, port inputs, configuration save/load integration, and simulation controls (start/pause/resume/restart/stop)
 
 ```mermaid
 classDiagram
@@ -538,6 +539,7 @@ classDiagram
     *   `OnBuildCancelled(string)` - Cancellation notifications when user cancels build
     *   `CancelBuild()` - Method to request cancellation of the current build operation
 *   **IFormFactor.cs**: Interface defining methods for device form factor and platform detection
+*   **ConfigurationService.cs**: Service for managing simulation configurations (.k-config files). Supports save/load to SQLite, export/import to files, and configuration history tracking
 
 #### Repositories
 *   **Projects.cs**: Manages projects in the database (CRUD operations)
@@ -557,6 +559,7 @@ classDiagram
 *   **FPGAPower.cs**: FPGA power specifications (Core voltage)
 *   **FPGAsIO.cs**: FPGA I/O specifications (User I/O, Banks, Standards)
 *   **AppSettings.cs**: Key-value pairs for application settings stored in SQLite (language preferences, theme, etc.)
+*   **KmilaConfiguration.cs**: Simulation configuration model for .k-config files (FPGA settings, time configuration, port moments)
 ```mermaid
 graph TD
     subgraph "UI Layer"
@@ -781,7 +784,8 @@ The application uses GitHub Actions for continuous integration and deployment:
 │   ├── FPGAResources.cs
 │   ├── FPGAClocking.cs
 │   ├── FPGAPower.cs
-│   └── FPGAsIO.cs
+│   ├── FPGAsIO.cs
+│   └── KmilaConfiguration.cs
 ├── Pages/
 │   ├── Editor.razor
 │   ├── Home.razor
@@ -793,8 +797,10 @@ The application uses GitHub Actions for continuous integration and deployment:
 ├── Services/
 │   ├── ProgramBuilder.cs
 │   ├── IFormFactor.cs
-│   └── Traductor.cs
+│   ├── Traductor.cs
+│   └── ConfigurationService.cs
 ├── Modals/
+│   ├── ConfigurationModal.razor
 │   ├── CreateFileModal.razor
 │   ├── MarkdownModal.razor
 │   ├── ProjectDetailsModal.razor
@@ -835,7 +841,8 @@ All areas of the codebase now have complete XML documentation:
 *   **Home.razor** - Home/landing page
 
 #### Modals
-*   **SimulationParametersModal.razor** - Simulation configuration modal
+*   **SimulationParametersModal.razor** - Simulation configuration modal with FPGA fallback selector
+*   **ConfigurationModal.razor** - Configuration save/load/export/import modal
 *   **CreateFileModal.razor** - File creation modal
 *   **ProjectDetailsModal.razor** - Project creation/editing modal
 *   **MarkdownModal.razor** - Markdown file viewer modal
@@ -852,10 +859,12 @@ All areas of the codebase now have complete XML documentation:
 *   **FPGAClocking.cs** - FPGA clocking specifications (PLL, DCM/MMCM)
 *   **FPGAPower.cs** - FPGA power specifications (Core voltage)
 *   **FPGAsIO.cs** - FPGA I/O specifications (User I/O, Banks, Standards)
+*   **KmilaConfiguration.cs** - Simulation configuration model with FPGAConfiguration, TimeConfiguration, PortMomentConfiguration
 
 #### Services & Repositories
 *   **ProgramBuilder.cs** - Orchestrates VHDL simulation lifecycle
 *   **IFormFactor.cs** - Form factor abstraction interface
+*   **ConfigurationService.cs** - Configuration save/load/export/import service
 *   **Projects.cs** - Project CRUD operations
 *   **ProjectFiles.cs** - Project file management
 *   **JSONFileReader.cs** - FPGA device JSON file reader
@@ -925,6 +934,74 @@ We welcome contributions to Kmila-9s! Please check our GitHub repository for con
 Kmila-9s is released as free and open-source software. Please refer to the LICENSE file in the repository for specific licensing terms.
 
 ## 19. Changelog
+
+### Version 0.15.0 (2026-01-17)
+
+#### Configuration Save/Load System (.k-config)
+
+*   **KmilaConfiguration.cs**: New model for simulation configurations:
+    *   `KmilaConfiguration` - Main configuration class with version, name, description, timestamps
+    *   `FPGAConfiguration` - FPGA settings (model, family, manufacturer, path)
+    *   `TimeConfiguration` - Simulation time settings (value, scale)
+    *   `PortMomentConfiguration` / `PortMomentValue` - Port input time-value pairs
+    *   JSON serialization/deserialization with `ToJson()` and `FromJson()` methods
+
+*   **ConfigurationService.cs**: New service for configuration management:
+    *   `SaveConfigurationAsync()` - Save configuration to SQLite database
+    *   `LoadConfigurationAsync()` - Load configuration by name
+    *   `GetConfigurationNamesAsync()` - List all saved configurations
+    *   `DeleteConfigurationAsync()` - Remove configuration from storage
+    *   `ExportConfiguration()` - Export to .k-config file (JSON format)
+    *   `ImportConfiguration()` - Import from .k-config file content
+    *   `GetLastConfigurationAsync()` - Retrieve most recently used configuration
+
+*   **ConfigurationModal.razor**: New UI component for configuration management:
+    *   Save current simulation state with name and description
+    *   Load previously saved configurations
+    *   Export configurations to .k-config files for sharing
+    *   Import configurations from .k-config files
+
+#### FPGA Selector Enhancements
+
+*   **SimulationParametersModal.razor**: Added FPGA fallback selector:
+    *   Warning card with dropdown when no FPGA is selected in TopBar
+    *   Quick "Change" dropdown in FPGA Details card header for easy switching
+    *   Integration with ConfigurationModal in the Config tab (collapsible panel)
+    *   Methods: `OnFPGASelected()`, `ApplySelectedFPGAAsync()`, `QuickChangeFPGAAsync()`
+    *   `OnConfigurationLoadedAsync()` - Applies loaded configuration settings
+
+#### Bug Fixes
+
+*   **TopBar.razor**: Fixed FPGA dropdown not working:
+    *   Used local variable capture (`var fpgaItem = fpga;`) for correct closure binding
+    *   Used explicit `System.IO.Path.GetFileNameWithoutExtension()` to avoid ambiguity
+
+*   **Editor.razor**: Fixed dark mode issues:
+    *   Editor card header: Changed hardcoded gradient to `var(--bs-tertiary-bg)`
+    *   Added `FindMainFile()` method to auto-load main.vhd or first .vhd file when project opens
+
+*   **EntityView.razor**: Fixed dark mode for resources tag:
+    *   Added `.resource-box` class with CSS variables for proper dark mode support
+
+*   **MarkdownModal.razor**: Fixed dark mode text color:
+    *   Changed `bg-light` to `bg-body-tertiary`
+    *   Changed heading colors to `var(--bs-heading-color, var(--bs-body-color))`
+
+#### Editor Enhancements
+
+*   **Editor.razor**: Added markdown split view:
+    *   `IsMarkdownFile` property detects .md/.markdown files
+    *   Split view with Monaco editor on left, live preview on right
+    *   Uses `split-editor-container` CSS for 50/50 layout
+    *   Real-time markdown rendering as content changes
+
+#### Service Registration
+
+*   **Program.cs (Web)**: Added `ConfigurationService` with scoped lifetime
+*   **MauiProgram.cs (MAUI)**: Added `ConfigurationService` with singleton lifetime
+*   **_Imports.razor**: Added `@inject ConfigurationService ConfigService`
+
+---
 
 ### Version 0.14.2 (2026-01-17)
 
