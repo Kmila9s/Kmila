@@ -348,6 +348,8 @@
     private int _cursorLine = 1;
     private int _cursorColumn = 1;
     private bool _hasUnsavedChanges = false;
+    private bool _editorInitialized = false;
+    private bool _pendingFileLoad = false;
     private string _currentLanguage = "vhdl";
     private string _originalContent = string.Empty;
     private string _markdownPreview = string.Empty;
@@ -389,9 +391,37 @@
                     _markdownPreview = _openedFile.Content ?? string.Empty;
                 }
 
-                await _editor.SetValue(_openedFile.Content);
+                // Mark that we need to load a file once editor is ready
+                _pendingFileLoad = true;
+
+                // If editor is already initialized, load the file now
+                if (_editorInitialized)
+                {
+                    await LoadPendingFileAsync();
+                }
+
                 _filesCard.SetDefaultFile(_openedFile);
                 StateHasChanged();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Loads the pending file content into the editor.
+    /// Called when the editor is initialized and a file is waiting to be loaded.
+    /// </summary>
+    private async Task LoadPendingFileAsync()
+    {
+        if (_pendingFileLoad && _openedFile != null)
+        {
+            _pendingFileLoad = false;
+            try
+            {
+                await _editor.SetValue(_openedFile.Content ?? string.Empty);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Editor] Error loading file into editor: {ex.Message}");
             }
         }
     }
@@ -604,10 +634,16 @@ end architecture behavioral;",
     /// <summary>
     /// Called when the Monaco editor has finished initializing.
     /// </summary>
-    private Task OnEditorInitAsync()
+    private async Task OnEditorInitAsync()
     {
-        // Editor initialization complete
-        return Task.CompletedTask;
+        // Mark editor as initialized
+        _editorInitialized = true;
+
+        // If there's a pending file load, do it now
+        if (_pendingFileLoad)
+        {
+            await LoadPendingFileAsync();
+        }
     }
 
     /// <summary>
