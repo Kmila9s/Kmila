@@ -2,7 +2,7 @@
 <PageTitle>Simulation Parameters</PageTitle>
 
 <!-- Mobile-friendly Tab Navigation -->
-<Tabs EnableFadeEffect="true" NavStyle="NavStyle.Pills" Class="simulation-tabs mb-3">
+<Tabs @ref="_tabs" EnableFadeEffect="true" NavStyle="NavStyle.Pills" Class="simulation-tabs mb-3" OnShowing="OnTabChangingAsync">
     <!-- Tab 1: FPGA & Resources -->
     <Tab Title="FPGA" Name="fpga-tab" IsActive="true">
         <Content>
@@ -534,9 +534,19 @@
                 <Card Class="mb-3">
                     <CardHeader Class="py-2 py-md-3">
                         <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <Icon Name="IconName.GearFill" Class="me-2" />
+                            <div class="d-flex align-items-center gap-2">
+                                <Icon Name="IconName.GearFill" Class="me-1" />
                                 <strong>Configurations</strong>
+                                @if(!string.IsNullOrEmpty(_loadedConfigName))
+                                {
+                                    <Badge Color="BadgeColor.Info" Class="ms-1">
+                                        @_loadedConfigName
+                                        @if(_hasUnsavedConfigChanges)
+                                        {
+                                            <span class="text-warning">*</span>
+                                        }
+                                    </Badge>
+                                }
                             </div>
                             <Button Color="ButtonColor.Secondary"
                                     Size="ButtonSize.ExtraSmall"
@@ -762,6 +772,11 @@
     private ConfirmDialog _confirmDialog = new();
 
     /// <summary>
+    /// Reference to the Tabs component for programmatic control.
+    /// </summary>
+    private Tabs _tabs = new();
+
+    /// <summary>
     /// The simulation time value (0-1000 units).
     /// </summary>
     private int _time = 0;
@@ -790,6 +805,16 @@
     /// Current port moment configurations for saving.
     /// </summary>
     private List<PortMomentConfiguration>? _currentPortMoments = null;
+
+    /// <summary>
+    /// Name of the currently loaded configuration.
+    /// </summary>
+    private string _loadedConfigName = string.Empty;
+
+    /// <summary>
+    /// Tracks whether there are unsaved changes to the current configuration.
+    /// </summary>
+    private bool _hasUnsavedConfigChanges = false;
 
     /// <summary>
     /// Indicates whether the simulation is currently running.
@@ -1134,7 +1159,97 @@
     private void SetZone(TimeScale zone)
     {
         _zone = zone;
+        MarkConfigChanged();
         StateHasChanged();
+    }
+
+    /// <summary>
+    /// Handles time value changes from the slider/input.
+    /// </summary>
+    private void OnTimeChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var value))
+        {
+            _time = value;
+            MarkConfigChanged();
+        }
+    }
+
+    /// <summary>
+    /// Marks the current configuration as having unsaved changes.
+    /// </summary>
+    private void MarkConfigChanged()
+    {
+        if (!string.IsNullOrEmpty(_loadedConfigName))
+        {
+            _hasUnsavedConfigChanges = true;
+        }
+    }
+
+    /// <summary>
+    /// Handles tab change events to prompt for saving unsaved configuration changes.
+    /// </summary>
+    private async Task OnTabChangingAsync(TabsEventArgs args)
+    {
+        // Only prompt if there are unsaved changes and moving away from Config tab
+        if (_hasUnsavedConfigChanges && args.ActiveTabName == "config-tab")
+        {
+            var options = new ConfirmDialogOptions
+            {
+                YesButtonText = "Save Configuration",
+                YesButtonColor = ButtonColor.Success,
+                NoButtonText = "Discard Changes",
+                NoButtonColor = ButtonColor.Secondary
+            };
+
+            var confirmation = await _confirmDialog.ShowAsync(
+                title: "Unsaved Configuration Changes",
+                message1: $"You have unsaved changes to the configuration '{_loadedConfigName}'.",
+                message2: "Would you like to save this configuration before switching tabs?",
+                confirmDialogOptions: options
+            );
+
+            if (confirmation)
+            {
+                // Save the configuration
+                await SaveCurrentConfigurationAsync();
+            }
+            else
+            {
+                // Discard changes
+                _hasUnsavedConfigChanges = false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Saves the current configuration settings with the loaded name.
+    /// </summary>
+    private async Task SaveCurrentConfigurationAsync()
+    {
+        if (string.IsNullOrEmpty(_loadedConfigName))
+            return;
+
+        var config = ConfigService.CreateConfiguration(
+            _loadedConfigName,
+            string.Empty,
+            SelectedFPGA?.FPGA,
+            _selectedFPGAPath,
+            _time,
+            _zone.ToString(),
+            _currentPortMoments
+        );
+
+        var result = await ConfigService.SaveConfigurationAsync(config);
+        if (result)
+        {
+            _hasUnsavedConfigChanges = false;
+            ToastService.Notify(new ToastMessage(ToastType.Success, $"Configuration '{_loadedConfigName}' saved"));
+        }
+        else
+        {
+            ToastService.Notify(new ToastMessage(ToastType.Danger, $"Failed to save: {ConfigService.LastError}"));
+        }
     }
 
     #endregion
@@ -1155,13 +1270,29 @@
     private async Task ApplySelectedFPGAAsync()
     {
         if (string.IsNullOrEmpty(_selectedFPGAPath))
-            return;
-
-        var fpga = await JSONFileReader.ReadFPGAJsonFileAsync(_selectedFPGAPath);
-        if (fpga != null)
         {
-            SelectedFPGA.SetFPGA(fpga, _selectedFPGAPath);
-            ToastService.Notify(new ToastMessage(ToastType.Success, $"FPGA '{fpga.Model}' selected"));
+            ToastService.Notify(new ToastMessage(ToastType.Warning, "Please select an FPGA device first"));
+            return;
+        }
+
+        try
+        {
+            var fpga = await JSONFileReader.ReadFPGAJsonFileAsync(_selectedFPGAPath);
+            if (fpga != null)
+            {
+                SelectedFPGA.SetFPGA(fpga, _selectedFPGAPath);
+                MarkConfigChanged();
+                ToastService.Notify(new ToastMessage(ToastType.Success, $"FPGA '{fpga.Model}' selected"));
+                StateHasChanged();
+            }
+            else
+            {
+                ToastService.Notify(new ToastMessage(ToastType.Danger, $"Failed to load FPGA: {_selectedFPGAPath}"));
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(new ToastMessage(ToastType.Danger, $"Error applying FPGA: {ex.Message}"));
         }
     }
 
@@ -1184,35 +1315,65 @@
     /// </summary>
     private async Task OnConfigurationLoadedAsync(KmilaConfiguration config)
     {
-        // Apply time settings
-        _time = config.Time?.Value ?? 0;
-        if (Enum.TryParse<TimeScale>(config.Time?.Scale, out var scale))
+        try
         {
-            _zone = scale;
-        }
+            // Track loaded config name
+            _loadedConfigName = config.Name;
+            _hasUnsavedConfigChanges = false;
 
-        // Apply FPGA if specified and available
-        if (!string.IsNullOrEmpty(config.FPGA?.Path))
-        {
-            var fpgaPath = config.FPGA.Path;
-            if (_availableFPGAs.Contains(fpgaPath) || _availableFPGAs.Any(f => System.IO.Path.GetFileName(f) == System.IO.Path.GetFileName(fpgaPath)))
+            // Apply time settings
+            _time = config.Time?.Value ?? 0;
+            if (Enum.TryParse<TimeScale>(config.Time?.Scale, out var scale))
             {
-                // Find matching path (in case stored path differs from current available paths)
-                var matchingPath = _availableFPGAs.FirstOrDefault(f =>
-                    f == fpgaPath || System.IO.Path.GetFileName(f) == System.IO.Path.GetFileName(fpgaPath));
+                _zone = scale;
+            }
+
+            // Apply FPGA if specified
+            if (config.FPGA != null && !string.IsNullOrEmpty(config.FPGA.Model))
+            {
+                // Try to find matching FPGA by model name or path
+                var fpgaModel = config.FPGA.Model;
+                var fpgaPath = config.FPGA.Path ?? string.Empty;
+
+                // First try exact path match
+                var matchingPath = _availableFPGAs.FirstOrDefault(f => f == fpgaPath);
+
+                // Then try filename match
+                if (string.IsNullOrEmpty(matchingPath))
+                {
+                    var fileName = System.IO.Path.GetFileNameWithoutExtension(fpgaPath);
+                    matchingPath = _availableFPGAs.FirstOrDefault(f =>
+                        System.IO.Path.GetFileNameWithoutExtension(f).Equals(fileName, StringComparison.OrdinalIgnoreCase));
+                }
+
+                // Then try model name match
+                if (string.IsNullOrEmpty(matchingPath))
+                {
+                    matchingPath = _availableFPGAs.FirstOrDefault(f =>
+                        System.IO.Path.GetFileNameWithoutExtension(f).Equals(fpgaModel, StringComparison.OrdinalIgnoreCase));
+                }
 
                 if (!string.IsNullOrEmpty(matchingPath))
                 {
                     _selectedFPGAPath = matchingPath;
                     await ApplySelectedFPGAAsync();
                 }
+                else
+                {
+                    ToastService.Notify(new ToastMessage(ToastType.Warning, $"FPGA '{fpgaModel}' not found in available devices"));
+                }
             }
+
+            // Apply port moments if present (future implementation)
+            _currentPortMoments = config.PortMoments;
+
+            ToastService.Notify(new ToastMessage(ToastType.Success, $"Configuration '{config.Name}' loaded successfully"));
+            StateHasChanged();
         }
-
-        // Apply port moments if present (future implementation)
-        _currentPortMoments = config.PortMoments;
-
-        StateHasChanged();
+        catch (Exception ex)
+        {
+            ToastService.Notify(new ToastMessage(ToastType.Danger, $"Error loading configuration: {ex.Message}"));
+        }
     }
 
     #endregion

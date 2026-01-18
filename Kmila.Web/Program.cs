@@ -36,7 +36,9 @@ public class Program
 
         builder.Services.AddScoped<ProjectFiles>();
 
-        builder.Services.AddSingleton<JSONFileReader>();
+        // JSONFileReader needs IWebHostEnvironment to find the Devices folder
+        builder.Services.AddSingleton<JSONFileReader>(provider =>
+            new JSONFileReader(provider.GetRequiredService<IWebHostEnvironment>()));
 
         builder.Services.AddSingleton<ProgramBuilder>();
 
