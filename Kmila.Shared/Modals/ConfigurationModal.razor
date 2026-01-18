@@ -118,11 +118,28 @@
             </h6>
             <div class="mb-2">
                 <InputFile OnChange="OnFileSelectedAsync"
-                           accept=".k-config"
+                           accept=".k-config,.json,application/json"
                            class="form-control form-control-sm" />
             </div>
+            @if(_importedConfig != null)
+            {
+                <Alert Color="AlertColor.Success" Class="mt-2 py-2">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <span>
+                            <Icon Name="IconName.CheckCircle" Class="me-2" />
+                            Ready to load: <strong>@_importedConfig.Name</strong>
+                        </span>
+                        <Button Color="ButtonColor.Success"
+                                Size="ButtonSize.ExtraSmall"
+                                @onclick="LoadImportedConfigAsync">
+                            <Icon Name="IconName.BoxArrowInDown" Class="me-1" />
+                            Load Now
+                        </Button>
+                    </div>
+                </Alert>
+            }
             <small class="text-muted">
-                Select a .k-config file to import
+                Select a .k-config or .json file to import
             </small>
         </div>
     </CardBody>
@@ -198,6 +215,7 @@
     private bool _showExportDownload = false;
     private string _exportFileName = string.Empty;
     private string _exportContent = string.Empty;
+    private KmilaConfiguration? _importedConfig = null;
 
     #endregion
 
@@ -309,34 +327,61 @@
         {
             var file = e.File;
             if (file == null)
+            {
+                Console.WriteLine("[ConfigurationModal] No file selected");
                 return;
+            }
+
+            Console.WriteLine($"[ConfigurationModal] File selected: {file.Name}, Size: {file.Size}");
 
             using var stream = file.OpenReadStream();
             using var reader = new StreamReader(stream);
             var content = await reader.ReadToEndAsync();
 
+            Console.WriteLine($"[ConfigurationModal] File content length: {content.Length}");
+            Console.WriteLine($"[ConfigurationModal] File content preview: {content.Substring(0, Math.Min(200, content.Length))}...");
+
             var config = ConfigService.ImportConfiguration(content);
             if (config != null)
             {
-                // Save imported configuration
+                // Set the name from filename if empty
                 if (string.IsNullOrEmpty(config.Name))
                 {
                     config.Name = System.IO.Path.GetFileNameWithoutExtension(file.Name);
                 }
 
+                // Store the imported config for user to load
+                _importedConfig = config;
+
+                // Also save to database for later use
                 await ConfigService.SaveConfigurationAsync(config);
                 await LoadConfigurationListAsync();
 
-                ToastService.Notify(new ToastMessage(ToastType.Success, $"Configuration '{config.Name}' imported"));
+                Console.WriteLine($"[ConfigurationModal] Config imported: {config.Name}");
+                ToastService.Notify(new ToastMessage(ToastType.Success, $"Configuration '{config.Name}' imported and saved"));
+                StateHasChanged();
             }
             else
             {
+                Console.WriteLine($"[ConfigurationModal] Import failed: {ConfigService.LastError}");
                 ToastService.Notify(new ToastMessage(ToastType.Danger, $"Invalid configuration file: {ConfigService.LastError}"));
             }
         }
         catch (Exception ex)
         {
+            Console.WriteLine($"[ConfigurationModal] Import exception: {ex.Message}");
             ToastService.Notify(new ToastMessage(ToastType.Danger, $"Import failed: {ex.Message}"));
+        }
+    }
+
+    private async Task LoadImportedConfigAsync()
+    {
+        if (_importedConfig != null)
+        {
+            await OnConfigurationLoaded.InvokeAsync(_importedConfig);
+            ToastService.Notify(new ToastMessage(ToastType.Success, $"Configuration '{_importedConfig.Name}' loaded"));
+            _importedConfig = null;
+            StateHasChanged();
         }
     }
 
