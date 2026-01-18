@@ -1,3 +1,5 @@
+@implements IDisposable
+
 <PageTitle>@Traductor.T("CREATE_FILE_TITLE")</PageTitle>
 @if(Project != null){
     <EditForm class="row" EditContext="_context" OnValidSubmit="CreateFileAsync">
@@ -56,6 +58,22 @@
     private EditContext _context = default!;
     private string _extention = "txt";
     private bool _creatingFile = false;
+
+    protected override void OnInitialized()
+    {
+        Traductor.StaticOnLangChanged += OnLanguageChanged;
+    }
+
+    private void OnLanguageChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Traductor.StaticOnLangChanged -= OnLanguageChanged;
+    }
+
     /// <summary>
     /// Method invoked when the component parameters are set.
     /// </summary>

@@ -7,11 +7,74 @@
     <Tab Title="FPGA" Name="fpga-tab" IsActive="true">
         <Content>
             <div class="tab-content-wrapper p-2 p-md-3">
+                <!-- FPGA Selector Fallback (when no FPGA is selected in TopBar) -->
+                @if(SelectedFPGA?.FPGA == null)
+                {
+                    <Card Class="mb-3 border-warning">
+                        <CardHeader Class="py-2 py-md-3 bg-warning bg-opacity-10">
+                            <Icon Name="IconName.ExclamationTriangle" Class="me-2 text-warning" />
+                            <strong>Select FPGA Device</strong>
+                        </CardHeader>
+                        <CardBody Class="p-2 p-md-3">
+                            <p class="text-muted small mb-3">
+                                No FPGA device is currently selected. Choose a device to view specifications and run simulations.
+                            </p>
+                            <div class="row g-2">
+                                <div class="col-12 col-md-8">
+                                    <select class="form-select form-select-sm" @onchange="OnFPGASelected" value="@_selectedFPGAPath">
+                                        <option value="">-- Select FPGA Device --</option>
+                                        @foreach(var fpga in _availableFPGAs)
+                                        {
+                                            <option value="@fpga">@System.IO.Path.GetFileNameWithoutExtension(fpga)</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-12 col-md-4">
+                                    <Button Color="ButtonColor.Primary"
+                                            Size="ButtonSize.Small"
+                                            Outline="true"
+                                            Disabled="@(string.IsNullOrEmpty(_selectedFPGAPath))"
+                                            @onclick="ApplySelectedFPGAAsync"
+                                            Class="w-100">
+                                        <Icon Name="IconName.CheckCircle" Class="me-1" />
+                                        Apply
+                                    </Button>
+                                </div>
+                            </div>
+                        </CardBody>
+                    </Card>
+                }
+
                 <!-- FPGA Information Section -->
                 <Card Class="mb-3">
                     <CardHeader Class="py-2 py-md-3">
-                        <Icon Name="IconName.Cpu" Class="me-2" />
-                        <strong>FPGA Details</strong>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <Icon Name="IconName.Cpu" Class="me-2" />
+                                <strong>FPGA Details</strong>
+                            </div>
+                            @if(SelectedFPGA?.FPGA != null)
+                            {
+                                <!-- Quick FPGA Change Dropdown -->
+                                <Dropdown Color="DropdownColor.Secondary" Size="DropdownSize.Small">
+                                    <DropdownToggleButton>
+                                        <Icon Name="IconName.ArrowRepeat" Class="me-1" />
+                                        Change
+                                    </DropdownToggleButton>
+                                    <DropdownMenu>
+                                        @foreach(var fpga in _availableFPGAs)
+                                        {
+                                            var fpgaItem = fpga;
+                                            <DropdownItem Type="DropdownItemType.Button"
+                                                          @onclick="() => QuickChangeFPGAAsync(fpgaItem)"
+                                                          Active="@(_selectedFPGAPath == fpgaItem)">
+                                                @System.IO.Path.GetFileNameWithoutExtension(fpgaItem)
+                                            </DropdownItem>
+                                        }
+                                    </DropdownMenu>
+                                </Dropdown>
+                            }
+                        </div>
                     </CardHeader>
                     <CardBody Class="p-2 p-md-3">
                         @if(SelectedFPGA?.FPGA != null)
@@ -466,6 +529,37 @@
                         </CardBody>
                     </Card>
                 }
+
+                <!-- Configuration Save/Load Section -->
+                <Card Class="mb-3">
+                    <CardHeader Class="py-2 py-md-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <Icon Name="IconName.GearFill" Class="me-2" />
+                                <strong>Configurations</strong>
+                            </div>
+                            <Button Color="ButtonColor.Secondary"
+                                    Size="ButtonSize.ExtraSmall"
+                                    Outline="true"
+                                    @onclick="() => _showConfigPanel = !_showConfigPanel">
+                                <Icon Name="@(_showConfigPanel ? IconName.ChevronUp : IconName.ChevronDown)" />
+                            </Button>
+                        </div>
+                    </CardHeader>
+                    @if(_showConfigPanel)
+                    {
+                        <CardBody Class="p-2 p-md-3">
+                            <ConfigurationModal
+                                OnConfigurationLoaded="OnConfigurationLoadedAsync"
+                                CurrentFPGA="SelectedFPGA?.FPGA"
+                                CurrentFPGAPath="@_selectedFPGAPath"
+                                CurrentTimeValue="_time"
+                                CurrentTimeScale="@_zone.ToString()"
+                                CurrentPortMoments="_currentPortMoments"
+                            />
+                        </CardBody>
+                    }
+                </Card>
             </div>
         </Content>
     </Tab>
@@ -678,6 +772,26 @@
     private TimeScale _zone = TimeScale.US;
 
     /// <summary>
+    /// List of available FPGA device file paths.
+    /// </summary>
+    private List<string> _availableFPGAs = new();
+
+    /// <summary>
+    /// Currently selected FPGA file path (for fallback selector).
+    /// </summary>
+    private string _selectedFPGAPath = string.Empty;
+
+    /// <summary>
+    /// Controls visibility of the configuration panel.
+    /// </summary>
+    private bool _showConfigPanel = false;
+
+    /// <summary>
+    /// Current port moment configurations for saving.
+    /// </summary>
+    private List<PortMomentConfiguration>? _currentPortMoments = null;
+
+    /// <summary>
     /// Indicates whether the simulation is currently running.
     /// </summary>
     private bool _running = false;
@@ -769,10 +883,19 @@
 
     /// <summary>
     /// Invoked when the component is initialized.
-    /// Subscribes to simulation events from the ProgramBuilder and validates resource usage.
+    /// Loads available FPGAs, subscribes to simulation events and validates resource usage.
     /// </summary>
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
+        // Load available FPGA devices
+        _availableFPGAs = await JSONFileReader.GetFPGAsAsync();
+
+        // Set current FPGA path if one is already selected
+        if (SelectedFPGA?.Path != null)
+        {
+            _selectedFPGAPath = SelectedFPGA.Path;
+        }
+
         // Subscribe to events only once during initialization
         Builder.OnSimulationEnded += OnSimulationEnded;
         Builder.OnProgressAdvanced += OnProgressAdvance;
@@ -796,6 +919,11 @@
     /// </summary>
     private void OnFPGAChanged()
     {
+        // Update local path reference
+        if (SelectedFPGA?.Path != null)
+        {
+            _selectedFPGAPath = SelectedFPGA.Path;
+        }
         ValidateResourceUsage();
         InvokeAsync(StateHasChanged);
     }
@@ -1006,6 +1134,84 @@
     private void SetZone(TimeScale zone)
     {
         _zone = zone;
+        StateHasChanged();
+    }
+
+    #endregion
+
+    #region FPGA Selection Methods
+
+    /// <summary>
+    /// Handles FPGA selection change from the dropdown.
+    /// </summary>
+    private void OnFPGASelected(ChangeEventArgs e)
+    {
+        _selectedFPGAPath = e.Value?.ToString() ?? string.Empty;
+    }
+
+    /// <summary>
+    /// Applies the selected FPGA from the fallback selector.
+    /// </summary>
+    private async Task ApplySelectedFPGAAsync()
+    {
+        if (string.IsNullOrEmpty(_selectedFPGAPath))
+            return;
+
+        var fpga = await JSONFileReader.ReadFPGAJsonFileAsync(_selectedFPGAPath);
+        if (fpga != null)
+        {
+            SelectedFPGA.SetFPGA(fpga, _selectedFPGAPath);
+            ToastService.Notify(new ToastMessage(ToastType.Success, $"FPGA '{fpga.Model}' selected"));
+        }
+    }
+
+    /// <summary>
+    /// Quick change FPGA from the inline dropdown.
+    /// </summary>
+    private async Task QuickChangeFPGAAsync(string fpgaPath)
+    {
+        _selectedFPGAPath = fpgaPath;
+        await ApplySelectedFPGAAsync();
+    }
+
+    #endregion
+
+    #region Configuration Methods
+
+    /// <summary>
+    /// Handles configuration loaded event from ConfigurationModal.
+    /// Applies the loaded configuration settings.
+    /// </summary>
+    private async Task OnConfigurationLoadedAsync(KmilaConfiguration config)
+    {
+        // Apply time settings
+        _time = config.Time?.Value ?? 0;
+        if (Enum.TryParse<TimeScale>(config.Time?.Scale, out var scale))
+        {
+            _zone = scale;
+        }
+
+        // Apply FPGA if specified and available
+        if (!string.IsNullOrEmpty(config.FPGA?.Path))
+        {
+            var fpgaPath = config.FPGA.Path;
+            if (_availableFPGAs.Contains(fpgaPath) || _availableFPGAs.Any(f => System.IO.Path.GetFileName(f) == System.IO.Path.GetFileName(fpgaPath)))
+            {
+                // Find matching path (in case stored path differs from current available paths)
+                var matchingPath = _availableFPGAs.FirstOrDefault(f =>
+                    f == fpgaPath || System.IO.Path.GetFileName(f) == System.IO.Path.GetFileName(fpgaPath));
+
+                if (!string.IsNullOrEmpty(matchingPath))
+                {
+                    _selectedFPGAPath = matchingPath;
+                    await ApplySelectedFPGAAsync();
+                }
+            }
+        }
+
+        // Apply port moments if present (future implementation)
+        _currentPortMoments = config.PortMoments;
+
         StateHasChanged();
     }
 

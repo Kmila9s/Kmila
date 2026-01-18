@@ -42,18 +42,59 @@ public class Program
 
         builder.Services.AddSingleton<SelectedFPGA>();
 
+        // Configuration service for saving/loading simulation configurations
+        builder.Services.AddScoped<ConfigurationService>();
+
         // Translation service for Web - reads from wwwroot/Dictionaries
+        // Tries multiple paths to support both development and production environments
         builder.Services.AddSingleton<Traductor>(provider =>
         {
+            var env = provider.GetRequiredService<IWebHostEnvironment>();
             return new Traductor(async path =>
             {
-                // For web, the path comes as "wwwroot/Dictionaries/{lang}.json"
-                // We need to look in _content/Kmila.Shared/ for RCL assets
-                var relativePath = path.StartsWith("wwwroot/") ? path.Substring(8) : path;
-                var fullPath = Path.Combine("wwwroot", "_content", "Kmila.Shared", relativePath);
-                if (File.Exists(fullPath))
-                    return File.OpenRead(fullPath);
-                throw new FileNotFoundException($"Dictionary file not found: {fullPath}");
+                // path comes as "Dictionaries/{lang}.json"
+                var pathsToTry = new List<string>();
+
+                // Development: Direct path to Kmila.Shared project (most reliable during development)
+                pathsToTry.Add(Path.Combine(env.ContentRootPath, "..", "Kmila.Shared", "wwwroot", path));
+
+                // Alternative: Relative to current directory
+                pathsToTry.Add(Path.Combine(Directory.GetCurrentDirectory(), "..", "Kmila.Shared", "wwwroot", path));
+
+                // Production: RCL static files at _content/Kmila.Shared/ (only if wwwroot exists)
+                if (!string.IsNullOrEmpty(env.WebRootPath) && Directory.Exists(env.WebRootPath))
+                {
+                    pathsToTry.Add(Path.Combine(env.WebRootPath, "_content", "Kmila.Shared", path));
+                    pathsToTry.Add(Path.Combine(env.WebRootPath, path));
+                }
+
+                Console.WriteLine($"[Traductor-Web] Looking for: {path}");
+                Console.WriteLine($"[Traductor-Web] ContentRootPath: {env.ContentRootPath}");
+                Console.WriteLine($"[Traductor-Web] WebRootPath: {env.WebRootPath ?? "(null)"}");
+
+                foreach (var fullPath in pathsToTry)
+                {
+                    try
+                    {
+                        var normalizedPath = Path.GetFullPath(fullPath);
+                        Console.WriteLine($"[Traductor-Web] Checking: {normalizedPath}");
+                        if (File.Exists(normalizedPath))
+                        {
+                            Console.WriteLine($"[Traductor-Web] Found dictionary at: {normalizedPath}");
+                            return File.OpenRead(normalizedPath);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[Traductor-Web] Error checking path {fullPath}: {ex.Message}");
+                    }
+                }
+
+                var triedPaths = string.Join("\n  - ", pathsToTry.Select(p => {
+                    try { return Path.GetFullPath(p); }
+                    catch { return p; }
+                }));
+                throw new FileNotFoundException($"Dictionary file not found. Tried:\n  - {triedPaths}");
             });
         });
 

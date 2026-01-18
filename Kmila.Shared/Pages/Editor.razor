@@ -19,7 +19,7 @@
             justify-content: space-between;
             align-items: center;
             padding: 0.5rem 1rem;
-            background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
+            background: var(--bs-tertiary-bg);
             border-bottom: 1px solid var(--bs-border-color);
             min-height: 42px;
             flex-wrap: wrap;
@@ -126,6 +126,112 @@
                 display: none;
             }
         }
+
+        /* Split view for Markdown editing */
+        .split-editor-container {
+            display: flex;
+            flex-direction: row;
+            height: 100%;
+        }
+
+        .split-editor-pane {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .split-editor-pane:first-child {
+            border-right: 1px solid var(--bs-border-color);
+        }
+
+        .split-pane-header {
+            padding: 0.25rem 0.5rem;
+            background: var(--bs-tertiary-bg);
+            border-bottom: 1px solid var(--bs-border-color);
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--bs-secondary);
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .markdown-preview-pane {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+            background: var(--bs-body-bg);
+        }
+
+        /* Mobile: Stack vertically */
+        @@media (max-width: 991px) {
+            .split-editor-container {
+                flex-direction: column;
+            }
+
+            .split-editor-pane:first-child {
+                border-right: none;
+                border-bottom: 1px solid var(--bs-border-color);
+                max-height: 50%;
+            }
+
+            .split-editor-pane:last-child {
+                max-height: 50%;
+            }
+        }
+
+        /* Markdown preview styling */
+        .markdown-preview-pane h1,
+        .markdown-preview-pane h2,
+        .markdown-preview-pane h3,
+        .markdown-preview-pane h4,
+        .markdown-preview-pane h5,
+        .markdown-preview-pane h6 {
+            color: var(--bs-heading-color, var(--bs-body-color));
+        }
+
+        .markdown-preview-pane code {
+            background-color: var(--bs-tertiary-bg);
+            padding: 0.2em 0.4em;
+            border-radius: 0.25rem;
+            font-size: 0.875em;
+        }
+
+        .markdown-preview-pane pre {
+            background-color: var(--bs-tertiary-bg);
+            padding: 1rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+        }
+
+        .markdown-preview-pane pre code {
+            background-color: transparent;
+            padding: 0;
+        }
+
+        .markdown-preview-pane blockquote {
+            border-left: 4px solid var(--bs-primary);
+            padding-left: 1rem;
+            margin: 1rem 0;
+            color: var(--bs-secondary-color);
+        }
+
+        .markdown-preview-pane table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .markdown-preview-pane th,
+        .markdown-preview-pane td {
+            border: 1px solid var(--bs-border-color);
+            padding: 0.5rem;
+        }
+
+        .markdown-preview-pane th {
+            background-color: var(--bs-tertiary-bg);
+        }
     </style>
     <h2>@_project.Name</h2>
     <div class="row my-3">
@@ -150,15 +256,49 @@
                         <span class="editor-language">@_currentLanguage</span>
                     </div>
                 </div>
-                <!-- Monaco Editor -->
-                <StandaloneCodeEditor @ref="_editor"
-                    CssClass="editor"
-                    ConstructionOptions="EditorConstructionOptions"
-                    OnDidInit="OnEditorInitAsync"
-                    OnDidChangeCursorPosition="OnCursorPositionChanged"
-                    OnDidChangeModelContent="OnModelContentChanged"
-                    OnKeyDown="OnEditorKeyDown"
-                />
+                @if(IsMarkdownFile)
+                {
+                    <!-- Split view for Markdown: Preview on left, Editor on right (desktop) / Top-Bottom (mobile) -->
+                    <div class="split-editor-container">
+                        <!-- Preview Pane -->
+                        <div class="split-editor-pane">
+                            <div class="split-pane-header">
+                                <Icon Name="IconName.Eye" />
+                                Preview
+                            </div>
+                            <div class="markdown-preview-pane">
+                                <Markdown>@_markdownPreview</Markdown>
+                            </div>
+                        </div>
+                        <!-- Editor Pane -->
+                        <div class="split-editor-pane">
+                            <div class="split-pane-header">
+                                <Icon Name="IconName.Code" />
+                                Source
+                            </div>
+                            <StandaloneCodeEditor @ref="_editor"
+                                CssClass="editor"
+                                ConstructionOptions="EditorConstructionOptions"
+                                OnDidInit="OnEditorInitAsync"
+                                OnDidChangeCursorPosition="OnCursorPositionChanged"
+                                OnDidChangeModelContent="OnModelContentChanged"
+                                OnKeyDown="OnEditorKeyDown"
+                            />
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <!-- Standard Monaco Editor for non-markdown files -->
+                    <StandaloneCodeEditor @ref="_editor"
+                        CssClass="editor"
+                        ConstructionOptions="EditorConstructionOptions"
+                        OnDidInit="OnEditorInitAsync"
+                        OnDidChangeCursorPosition="OnCursorPositionChanged"
+                        OnDidChangeModelContent="OnModelContentChanged"
+                        OnKeyDown="OnEditorKeyDown"
+                    />
+                }
             </div>
         </div>
         <!-- Toolbar: Full width on mobile/tablet (stacked below), 2/12 on desktop (side) -->
@@ -210,6 +350,14 @@
     private bool _hasUnsavedChanges = false;
     private string _currentLanguage = "vhdl";
     private string _originalContent = string.Empty;
+    private string _markdownPreview = string.Empty;
+
+    /// <summary>
+    /// Gets whether the currently opened file is a Markdown file.
+    /// </summary>
+    private bool IsMarkdownFile => _openedFile != null &&
+        (_openedFile.FileName.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ||
+         _openedFile.FileName.EndsWith(".markdown", StringComparison.OrdinalIgnoreCase));
     /// <summary>
     /// Method invoked when the component is initialized.
     /// </summary>
@@ -225,19 +373,54 @@
     }
     /// <summary>
     /// Method invoked after the component has rendered.
+    /// Automatically opens the main file (prioritizes main.vhd, then any .vhd file, then first file).
     /// </summary>
     /// <param name="first">A boolean value indicating if it is the first render.</param>
     protected override async void OnAfterRender(bool first){
         if(first){
             if(_projectFiles.Count > 0){
-                _openedFile = _projectFiles.First();
+                _openedFile = FindMainFile(_projectFiles);
                 _originalContent = _openedFile.Content ?? string.Empty;
                 _currentLanguage = GetLanguageFromExtension(_openedFile.FileName);
+
+                // Set markdown preview if it's a markdown file
+                if (IsMarkdownFile)
+                {
+                    _markdownPreview = _openedFile.Content ?? string.Empty;
+                }
+
                 await _editor.SetValue(_openedFile.Content);
                 _filesCard.SetDefaultFile(_openedFile);
                 StateHasChanged();
             }
         }
+    }
+
+    /// <summary>
+    /// Finds the main file to open from a list of project files.
+    /// Priority: main.vhd/vhdl > first .vhd/.vhdl file > first file
+    /// </summary>
+    /// <param name="files">The list of project files.</param>
+    /// <returns>The main file to open.</returns>
+    private ProjectFile FindMainFile(List<ProjectFile> files)
+    {
+        // First, look for a file explicitly named "main"
+        var mainFile = files.FirstOrDefault(f =>
+            System.IO.Path.GetFileNameWithoutExtension(f.FileName).Equals("main", StringComparison.OrdinalIgnoreCase) &&
+            (f.FileName.EndsWith(".vhd", StringComparison.OrdinalIgnoreCase) ||
+             f.FileName.EndsWith(".vhdl", StringComparison.OrdinalIgnoreCase)));
+
+        if (mainFile != null) return mainFile;
+
+        // Then, look for any VHDL file (they are the entry points)
+        var vhdlFile = files.FirstOrDefault(f =>
+            f.FileName.EndsWith(".vhd", StringComparison.OrdinalIgnoreCase) ||
+            f.FileName.EndsWith(".vhdl", StringComparison.OrdinalIgnoreCase));
+
+        if (vhdlFile != null) return vhdlFile;
+
+        // Finally, return the first file
+        return files.First();
     }
     /// <summary>
     /// Shows the create file modal asynchronously.
@@ -341,6 +524,13 @@
             _originalContent = file.Content ?? string.Empty;
             _hasUnsavedChanges = false;
             _currentLanguage = GetLanguageFromExtension(file.FileName);
+
+            // Set markdown preview if it's a markdown file
+            if (IsMarkdownFile)
+            {
+                _markdownPreview = file.Content ?? string.Empty;
+            }
+
             await _editor.SetValue(file.Content);
 
             // Update editor language model
@@ -422,11 +612,19 @@ end architecture behavioral;",
 
     /// <summary>
     /// Handles content changes in the editor for unsaved changes tracking.
+    /// Also updates the markdown preview if editing a markdown file.
     /// </summary>
     private async Task OnModelContentChanged(ModelContentChangedEvent e)
     {
         var currentContent = await _editor.GetValue();
         _hasUnsavedChanges = currentContent != _originalContent;
+
+        // Update markdown preview in real-time
+        if (IsMarkdownFile)
+        {
+            _markdownPreview = currentContent;
+        }
+
         await InvokeAsync(StateHasChanged);
     }
 

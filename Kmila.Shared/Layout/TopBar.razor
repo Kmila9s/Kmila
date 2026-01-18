@@ -1,54 +1,212 @@
-<div class="bb-top-row px-4">
-    <div class="float-begin">
-        <Dropdown Color="DropdownColor.Info">
-            <DropdownToggleButton>Selected FPGA: @Path.GetFileNameWithoutExtension(_selectedFPGA)</DropdownToggleButton>
-            <DropdownMenu>
-                <DropdownHeader>
-                    @if(_fpga != null && !string.IsNullOrEmpty(_fpga.Model)){
-                        <FPGASimpleView @ref=_fpgaView/>
+@*
+    TopBar Component
+
+    A responsive top navigation bar containing the FPGA device selector, language switcher, and theme toggle.
+
+    Features:
+    - FPGA device selector dropdown with preview of device specifications
+    - Language selector (LanguageChanger component)
+    - Theme switcher (light/dark) that also updates Monaco Editor theme
+    - Fully responsive design optimized for mobile devices
+
+    Mobile Responsiveness:
+    - Uses flexbox layout with proper wrapping for small screens
+    - Text truncation with ellipsis prevents overflow on mobile
+    - "Select FPGA:" label hidden on screens < 576px (shows only device name)
+    - Reduced padding and font sizes on very small screens (< 400px)
+    - Dropdown menu constrained to 90vw max-width for mobile viewports
+    - Controls use tighter spacing on mobile devices
+
+    Breakpoints:
+    - Default: Full layout with all labels visible
+    - < 576px (sm): Hidden label, smaller font, max-width 180px for button
+    - < 400px: Further reduced padding and max-width 140px for button
+
+    Dependencies:
+    - Traductor (injected translation service for i18n)
+    - JSONFileReader (injected service for loading FPGA device list)
+    - SelectedFPGA (injected state service for sharing selected device)
+    - IJSRuntime (for Monaco Editor theme switching)
+*@
+@implements IDisposable
+
+<div class="bb-top-row px-2 px-md-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center w-100 gap-2">
+        @* FPGA Selector - Left side *@
+        <div class="topbar-fpga-selector">
+            <Dropdown Color="DropdownColor.Info">
+                <DropdownToggleButton Size="ButtonSize.Small" Class="text-truncate topbar-fpga-btn">
+                    <span class="d-none d-sm-inline">@Traductor.T("TOPBAR_SELECT_FPGA"): </span>
+                    <span class="fw-semibold">@GetFPGADisplayName()</span>
+                </DropdownToggleButton>
+                <DropdownMenu Class="topbar-fpga-menu">
+                    <DropdownHeader>
+                        @if(_fpga != null && !string.IsNullOrEmpty(_fpga.Model)){
+                            <FPGASimpleView @ref=_fpgaView/>
+                        }
+                        else{
+                            <span class="text-muted p-2">@Traductor.T("TOPBAR_SELECT_FPGA")</span>
+                        }
+                    </DropdownHeader>
+                    @foreach(var fpga in _fpgas){
+                        var fpgaItem = fpga;
+                        <DropdownItem Type="DropdownItemType.Button" @onclick="() => SetFPGAAsync(fpgaItem)" Active="@(_selectedFPGA == fpgaItem)">
+                            @System.IO.Path.GetFileNameWithoutExtension(fpgaItem)
+                        </DropdownItem>
                     }
-                    else{
-                        <span class="text-muted p-2">Select an FPGA to view details</span>
-                    }
-                </DropdownHeader>
-                @foreach(var fpga in _fpgas){
-                    <DropdownItem Type="DropdownItemType.Button" @onclick="async () => await SetFPGA(fpga)" Active=@(_selectedFPGA.Equals(fpga))>@Path.GetFileNameWithoutExtension(fpga)</DropdownItem>
-                }
-            </DropdownMenu>
-        </Dropdown>
+                </DropdownMenu>
+            </Dropdown>
+        </div>
+
+        @* Settings Controls - Right side *@
+        <div class="d-flex gap-1 gap-sm-2 align-items-center topbar-controls">
+            <LanguageChanger />
+            <ThemeSwitcher
+                Position="DropdownMenuPosition.End"
+                OnThemeChanged='async (string e) =>{
+                    string theme = e == "dark" ? "vs-dark" : "vs";
+                    await BlazorMonaco.Editor.Global.SetTheme(JS, theme);
+                }'
+            />
+        </div>
     </div>
-    <div class="float-end d-flex gap-2 align-items-center">
-        <LanguageChanger />
-        <ThemeSwitcher
-            Position="DropdownMenuPosition.End"
-            OnThemeChanged='async (string e) =>{
-                string theme = e == "dark" ? "vs-dark" : "vs";
-                await BlazorMonaco.Editor.Global.SetTheme(JS, theme);
-            }'
-        />
-    </div>
-    
 </div>
 
+<style>
+    .topbar-fpga-selector {
+        flex: 1 1 auto;
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    .topbar-fpga-btn {
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .topbar-fpga-menu {
+        max-width: 90vw;
+        overflow-x: auto;
+    }
+
+    .topbar-controls {
+        flex-shrink: 0;
+    }
+
+    @@media (max-width: 575.98px) {
+        .topbar-fpga-btn {
+            max-width: 180px;
+            font-size: 0.8rem;
+            padding: 0.35rem 0.5rem;
+        }
+
+        .topbar-controls {
+            gap: 0.25rem !important;
+        }
+    }
+
+    @@media (max-width: 400px) {
+        .bb-top-row {
+            padding-left: 0.5rem !important;
+            padding-right: 0.5rem !important;
+        }
+
+        .topbar-fpga-btn {
+            max-width: 140px;
+        }
+    }
+</style>
+
 @code{
-    private string _selectedFPGA = string.Empty;
-    private FPGASimpleView _fpgaView = new();
-    private FPGA? _fpga = new();
-    private List<string> _fpgas = new();
     /// <summary>
-    /// Method invoked when the component is initialized.
+    /// The currently selected FPGA device file path.
+    /// Empty string indicates no device is selected.
+    /// </summary>
+    private string _selectedFPGA = string.Empty;
+
+    /// <summary>
+    /// Reference to the FPGASimpleView component for displaying device preview in dropdown header.
+    /// </summary>
+    private FPGASimpleView _fpgaView = new();
+
+    /// <summary>
+    /// The currently loaded FPGA device specifications.
+    /// Null when no device is selected or loaded.
+    /// </summary>
+    private FPGA? _fpga = new();
+
+    /// <summary>
+    /// List of available FPGA device file paths loaded from JSON files.
+    /// </summary>
+    private List<string> _fpgas = new();
+
+    /// <summary>
+    /// Initializes the component by loading the list of available FPGA devices and subscribing to language changes.
     /// </summary>
     protected override async Task OnInitializedAsync()
     {
+        Traductor.StaticOnLangChanged += OnLanguageChanged;
         _fpgas = await JSONFileReader.GetFPGAsAsync();
     }
-    private async Task GetFPGASettings(){
+
+    /// <summary>
+    /// Handles language change events to refresh translated UI elements.
+    /// </summary>
+    private void OnLanguageChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Cleans up event subscriptions when the component is disposed.
+    /// </summary>
+    public void Dispose()
+    {
+        Traductor.StaticOnLangChanged -= OnLanguageChanged;
+    }
+
+    /// <summary>
+    /// Gets a user-friendly display name for the currently selected FPGA.
+    /// </summary>
+    /// <returns>
+    /// The FPGA model name (file name without extension), or "---" if no device is selected.
+    /// </returns>
+    private string GetFPGADisplayName()
+    {
+        if (string.IsNullOrEmpty(_selectedFPGA))
+            return "---";
+        return System.IO.Path.GetFileNameWithoutExtension(_selectedFPGA);
+    }
+
+    /// <summary>
+    /// Loads the full FPGA specifications from the JSON file for the selected device.
+    /// </summary>
+    private async Task GetFPGASettings()
+    {
         _fpga = await JSONFileReader.ReadFPGAJsonFileAsync(_selectedFPGA);
     }
-    private async Task SetFPGA(string name){
+
+    /// <summary>
+    /// Sets the selected FPGA device, loads its specifications, and updates the global state.
+    /// </summary>
+    /// <param name="name">The file path of the FPGA device to select.</param>
+    /// <remarks>
+    /// This method:
+    /// 1. Updates the local selection state
+    /// 2. Loads the full device specifications from JSON
+    /// 3. Updates the global SelectedFPGA service to notify other components
+    /// 4. Triggers a re-render to update the UI
+    /// </remarks>
+    private async Task SetFPGAAsync(string name)
+    {
         _selectedFPGA = name;
         await GetFPGASettings();
-        SelectedFPGA.SetFPGA(_fpga!, name);
+        if (_fpga != null)
+        {
+            SelectedFPGA.SetFPGA(_fpga, name);
+        }
         StateHasChanged();
     }
 }

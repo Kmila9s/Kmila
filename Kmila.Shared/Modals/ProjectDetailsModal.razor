@@ -1,3 +1,5 @@
+@implements IDisposable
+
 <PageTitle>@Traductor.T("PROJECT_DETAILS_TITLE")</PageTitle>
 <EditForm class="row" EditContext="_context" OnValidSubmit="CreateProjectAsync">
     <DataAnnotationsValidator />
@@ -35,11 +37,24 @@
     private Project _project = new();
     private EditContext _context = default!;
     private bool _creatingProject = false;
+
     /// <summary>
     /// Method invoked when the component is initialized.
     /// </summary>
-    protected override async Task OnInitializedAsync(){
+    protected override async Task OnInitializedAsync()
+    {
+        Traductor.StaticOnLangChanged += OnLanguageChanged;
         _context = new(_project);
+    }
+
+    private void OnLanguageChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Traductor.StaticOnLangChanged -= OnLanguageChanged;
     }
     /// <summary>
     /// Method invoked when the component parameters are set.

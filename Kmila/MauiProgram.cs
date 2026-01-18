@@ -51,9 +51,38 @@ public static class MauiProgram
 
         builder.Services.AddSingleton<SelectedFPGA>();
 
+        // Configuration service for saving/loading simulation configurations
+        builder.Services.AddSingleton<ConfigurationService>();
+
         // Translation service with MAUI's FileSystem for reading bundled dictionary files
+        // The path should be "Dictionaries/{lang}.json" which maps to Resources/Raw/Dictionaries/
         builder.Services.AddSingleton<Traductor>(provider =>
-            new Traductor(path => FileSystem.OpenAppPackageFileAsync(path)));
+            new Traductor(async path =>
+            {
+                try
+                {
+                    // Primary path: Resources/Raw/Dictionaries/{lang}.json (accessed as Dictionaries/{lang}.json)
+                    var stream = await FileSystem.OpenAppPackageFileAsync(path);
+                    Console.WriteLine($"[Traductor] Successfully loaded dictionary from: {path}");
+                    return stream;
+                }
+                catch (FileNotFoundException)
+                {
+                    // Try alternative path without Dictionaries prefix (in case files are at root of Raw)
+                    var fileName = Path.GetFileName(path);
+                    try
+                    {
+                        var stream = await FileSystem.OpenAppPackageFileAsync(fileName);
+                        Console.WriteLine($"[Traductor] Loaded dictionary from fallback path: {fileName}");
+                        return stream;
+                    }
+                    catch
+                    {
+                        Console.WriteLine($"[Traductor] Dictionary file not found at: {path} or {fileName}");
+                        throw new FileNotFoundException($"Dictionary not found: {path}");
+                    }
+                }
+            }));
 
         builder.Services.AddMauiBlazorWebView();
 

@@ -1,0 +1,344 @@
+@*
+    ConfigurationModal Component
+
+    A modal for managing Kmila simulation configurations (.k-config files).
+    Allows users to save, load, delete, and export/import configurations.
+
+    Features:
+    - Save current simulation state as a named configuration
+    - Load previously saved configurations
+    - Delete saved configurations
+    - Export configuration to .k-config file
+    - Import configuration from .k-config file
+
+    Dependencies:
+    - ConfigurationService (injected)
+    - ToastService for notifications
+    - BlazorBootstrap components
+*@
+
+<Card>
+    <CardHeader Class="bg-body-tertiary">
+        <div class="d-flex align-items-center gap-2">
+            <Icon Name="IconName.GearFill" Class="text-primary" />
+            <strong>Simulation Configurations</strong>
+        </div>
+    </CardHeader>
+    <CardBody>
+        <!-- Save Configuration Section -->
+        <div class="mb-4">
+            <h6 class="d-flex align-items-center gap-2 mb-3">
+                <Icon Name="IconName.Save" Class="text-success" />
+                Save Configuration
+            </h6>
+            <div class="row g-2">
+                <div class="col-12 col-md-6">
+                    <input type="text"
+                           class="form-control form-control-sm"
+                           placeholder="Configuration name"
+                           @bind="_newConfigName" />
+                </div>
+                <div class="col-12 col-md-6">
+                    <input type="text"
+                           class="form-control form-control-sm"
+                           placeholder="Description (optional)"
+                           @bind="_newConfigDescription" />
+                </div>
+                <div class="col-12">
+                    <Button Color="ButtonColor.Success"
+                            Size="ButtonSize.Small"
+                            Outline="true"
+                            Disabled="@(string.IsNullOrWhiteSpace(_newConfigName))"
+                            @onclick="SaveConfigurationAsync">
+                        <Icon Name="IconName.Save" Class="me-1" />
+                        Save Current Configuration
+                    </Button>
+                </div>
+            </div>
+        </div>
+
+        <hr />
+
+        <!-- Load Configuration Section -->
+        <div class="mb-4">
+            <h6 class="d-flex align-items-center gap-2 mb-3">
+                <Icon Name="IconName.Folder2Open" Class="text-primary" />
+                Load Configuration
+            </h6>
+            @if(_savedConfigs.Any())
+            {
+                <div class="list-group list-group-flush">
+                    @foreach(var configName in _savedConfigs)
+                    {
+                        <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center p-2">
+                            <span class="text-truncate">@configName</span>
+                            <div class="btn-group btn-group-sm">
+                                <Button Color="ButtonColor.Primary"
+                                        Size="ButtonSize.ExtraSmall"
+                                        Outline="true"
+                                        TooltipTitle="Load this configuration"
+                                        @onclick="() => LoadConfigurationAsync(configName)">
+                                    <Icon Name="IconName.BoxArrowInDown" />
+                                </Button>
+                                <Button Color="ButtonColor.Info"
+                                        Size="ButtonSize.ExtraSmall"
+                                        Outline="true"
+                                        TooltipTitle="Export to file"
+                                        @onclick="() => ExportConfigurationAsync(configName)">
+                                    <Icon Name="IconName.Download" />
+                                </Button>
+                                <Button Color="ButtonColor.Danger"
+                                        Size="ButtonSize.ExtraSmall"
+                                        Outline="true"
+                                        TooltipTitle="Delete this configuration"
+                                        @onclick="() => DeleteConfigurationAsync(configName)">
+                                    <Icon Name="IconName.Trash" />
+                                </Button>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <Alert Color="AlertColor.Light" Class="mb-0">
+                    <Icon Name="IconName.InfoCircle" Class="me-2" />
+                    No saved configurations yet. Save your current settings above.
+                </Alert>
+            }
+        </div>
+
+        <hr />
+
+        <!-- Import Configuration Section -->
+        <div>
+            <h6 class="d-flex align-items-center gap-2 mb-3">
+                <Icon Name="IconName.Upload" Class="text-warning" />
+                Import Configuration
+            </h6>
+            <div class="mb-2">
+                <InputFile OnChange="OnFileSelectedAsync"
+                           accept=".k-config"
+                           class="form-control form-control-sm" />
+            </div>
+            <small class="text-muted">
+                Select a .k-config file to import
+            </small>
+        </div>
+    </CardBody>
+</Card>
+
+<!-- Export Download Helper (hidden) -->
+@if(_showExportDownload)
+{
+    <div class="mt-3">
+        <Alert Color="AlertColor.Success">
+            <div class="d-flex align-items-center justify-content-between">
+                <span>
+                    <Icon Name="IconName.CheckCircle" Class="me-2" />
+                    Configuration exported: <strong>@_exportFileName</strong>
+                </span>
+                <Button Color="ButtonColor.Success"
+                        Size="ButtonSize.Small"
+                        @onclick="DownloadExportAsync">
+                    <Icon Name="IconName.Download" Class="me-1" />
+                    Download
+                </Button>
+            </div>
+        </Alert>
+    </div>
+}
+
+@code{
+    #region Parameters
+
+    /// <summary>
+    /// Event callback when a configuration is loaded.
+    /// </summary>
+    [Parameter]
+    public EventCallback<KmilaConfiguration> OnConfigurationLoaded { get; set; }
+
+    /// <summary>
+    /// The current FPGA selection to include in saved configurations.
+    /// </summary>
+    [Parameter]
+    public FPGA? CurrentFPGA { get; set; }
+
+    /// <summary>
+    /// The current FPGA path to include in saved configurations.
+    /// </summary>
+    [Parameter]
+    public string CurrentFPGAPath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The current simulation time value.
+    /// </summary>
+    [Parameter]
+    public int CurrentTimeValue { get; set; }
+
+    /// <summary>
+    /// The current time scale.
+    /// </summary>
+    [Parameter]
+    public string CurrentTimeScale { get; set; } = "NS";
+
+    /// <summary>
+    /// The current port moment configurations.
+    /// </summary>
+    [Parameter]
+    public List<PortMomentConfiguration>? CurrentPortMoments { get; set; }
+
+    #endregion
+
+    #region Private Fields
+
+    private List<string> _savedConfigs = new();
+    private string _newConfigName = string.Empty;
+    private string _newConfigDescription = string.Empty;
+    private bool _showExportDownload = false;
+    private string _exportFileName = string.Empty;
+    private string _exportContent = string.Empty;
+
+    #endregion
+
+    #region Lifecycle
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConfigurationListAsync();
+    }
+
+    #endregion
+
+    #region Private Methods
+
+    private async Task LoadConfigurationListAsync()
+    {
+        _savedConfigs = await ConfigService.GetConfigurationNamesAsync();
+        StateHasChanged();
+    }
+
+    private async Task SaveConfigurationAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newConfigName))
+            return;
+
+        var config = ConfigService.CreateConfiguration(
+            _newConfigName,
+            _newConfigDescription,
+            CurrentFPGA,
+            CurrentFPGAPath,
+            CurrentTimeValue,
+            CurrentTimeScale,
+            CurrentPortMoments
+        );
+
+        var result = await ConfigService.SaveConfigurationAsync(config);
+
+        if (result)
+        {
+            ToastService.Notify(new ToastMessage(ToastType.Success, "Configuration saved successfully"));
+            _newConfigName = string.Empty;
+            _newConfigDescription = string.Empty;
+            await LoadConfigurationListAsync();
+        }
+        else
+        {
+            ToastService.Notify(new ToastMessage(ToastType.Danger, $"Failed to save: {ConfigService.LastError}"));
+        }
+    }
+
+    private async Task LoadConfigurationAsync(string name)
+    {
+        var config = await ConfigService.LoadConfigurationAsync(name);
+        if (config != null)
+        {
+            await OnConfigurationLoaded.InvokeAsync(config);
+            ToastService.Notify(new ToastMessage(ToastType.Success, $"Configuration '{name}' loaded"));
+        }
+        else
+        {
+            ToastService.Notify(new ToastMessage(ToastType.Danger, $"Failed to load: {ConfigService.LastError}"));
+        }
+    }
+
+    private async Task DeleteConfigurationAsync(string name)
+    {
+        var result = await ConfigService.DeleteConfigurationAsync(name);
+        if (result)
+        {
+            ToastService.Notify(new ToastMessage(ToastType.Success, $"Configuration '{name}' deleted"));
+            await LoadConfigurationListAsync();
+        }
+        else
+        {
+            ToastService.Notify(new ToastMessage(ToastType.Danger, $"Failed to delete: {ConfigService.LastError}"));
+        }
+    }
+
+    private async Task ExportConfigurationAsync(string name)
+    {
+        var config = await ConfigService.LoadConfigurationAsync(name);
+        if (config != null)
+        {
+            _exportContent = ConfigService.ExportConfiguration(config);
+            _exportFileName = $"{name.Replace(" ", "_")}.k-config";
+            _showExportDownload = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task DownloadExportAsync()
+    {
+        try
+        {
+            // Use JS interop to trigger download
+            await JS.InvokeVoidAsync("downloadFile", _exportFileName, _exportContent);
+            _showExportDownload = false;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(new ToastMessage(ToastType.Warning, $"Download may need manual save: {ex.Message}"));
+        }
+    }
+
+    private async Task OnFileSelectedAsync(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            var file = e.File;
+            if (file == null)
+                return;
+
+            using var stream = file.OpenReadStream();
+            using var reader = new StreamReader(stream);
+            var content = await reader.ReadToEndAsync();
+
+            var config = ConfigService.ImportConfiguration(content);
+            if (config != null)
+            {
+                // Save imported configuration
+                if (string.IsNullOrEmpty(config.Name))
+                {
+                    config.Name = System.IO.Path.GetFileNameWithoutExtension(file.Name);
+                }
+
+                await ConfigService.SaveConfigurationAsync(config);
+                await LoadConfigurationListAsync();
+
+                ToastService.Notify(new ToastMessage(ToastType.Success, $"Configuration '{config.Name}' imported"));
+            }
+            else
+            {
+                ToastService.Notify(new ToastMessage(ToastType.Danger, $"Invalid configuration file: {ConfigService.LastError}"));
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(new ToastMessage(ToastType.Danger, $"Import failed: {ex.Message}"));
+        }
+    }
+
+    #endregion
+}
