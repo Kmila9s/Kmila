@@ -97,6 +97,7 @@
                                     class="form-control"
                                     id="value-input-@index"
                                     @bind="moment.Value"
+                                    @bind:after="NotifyMomentsChanged"
                                     placeholder="Enter port value"
                                     disabled="@moment.IsClock"
                                     aria-label="Port value for moment @(index + 1)"/>
@@ -114,6 +115,7 @@
                                         class="form-control"
                                         id="time-input-@index"
                                         @bind="moment.TimeInput"
+                                        @bind:after="NotifyMomentsChanged"
                                         min="1"
                                         max="@LimitTime"
                                         placeholder="Time"
@@ -197,6 +199,18 @@ else
     [Parameter]
     public int LimitTime { get; set; }
 
+    /// <summary>
+    /// Gets or sets the initial list of extra moments to restore (e.g. from a loaded config).
+    /// </summary>
+    [Parameter]
+    public List<PortMoment>? InitialExtraMoments { get; set; }
+
+    /// <summary>
+    /// Callback fired whenever the extra moments list changes (add/remove/edit).
+    /// </summary>
+    [Parameter]
+    public EventCallback<List<PortMoment>> OnExtraMomentsChanged { get; set; }
+
     #endregion
 
     #region Private Fields
@@ -214,13 +228,25 @@ else
 
     #endregion
 
+    #region Lifecycle Methods
+
+    protected override void OnInitialized()
+    {
+        if (InitialExtraMoments != null && InitialExtraMoments.Count > 0)
+        {
+            _portMoments = new List<PortMoment>(InitialExtraMoments);
+        }
+    }
+
+    #endregion
+
     #region Event Handlers
 
     /// <summary>
     /// Adds a new port moment to the collection.
     /// Creates a new moment with default values that the user can configure.
     /// </summary>
-    private void OnAddMoment()
+    private async Task OnAddMoment()
     {
         _portMoments.Add(new PortMoment
         {
@@ -230,6 +256,7 @@ else
             Value = string.Empty,
             IsClock = false
         });
+        await NotifyMomentsChanged();
         StateHasChanged();
     }
 
@@ -237,11 +264,12 @@ else
     /// Removes the last port moment from the collection.
     /// Only removes if there are moments available to remove.
     /// </summary>
-    private void OnRemoveMoment()
+    private async Task OnRemoveMoment()
     {
         if (_portMoments.Count > 0)
         {
             _portMoments.RemoveAt(_portMoments.Count - 1);
+            await NotifyMomentsChanged();
             StateHasChanged();
         }
     }
@@ -251,11 +279,12 @@ else
     /// Allows users to remove individual moments instead of just the last one.
     /// </summary>
     /// <param name="index">The zero-based index of the moment to remove.</param>
-    private void OnRemoveSpecificMoment(int index)
+    private async Task OnRemoveSpecificMoment(int index)
     {
         if (index >= 0 && index < _portMoments.Count)
         {
             _portMoments.RemoveAt(index);
+            await NotifyMomentsChanged();
             StateHasChanged();
         }
     }
@@ -266,10 +295,19 @@ else
     /// </summary>
     /// <param name="scale">The time scale to apply (NS, US, MS, S, M, or H).</param>
     /// <param name="portMoment">The port moment to update.</param>
-    private void SetZone(TimeScale scale, PortMoment portMoment)
+    private async Task SetZone(TimeScale scale, PortMoment portMoment)
     {
         portMoment.TimeScale = scale;
+        await NotifyMomentsChanged();
         StateHasChanged();
+    }
+
+    /// <summary>
+    /// Notifies the parent that the extra moments list has changed.
+    /// </summary>
+    private async Task NotifyMomentsChanged()
+    {
+        await OnExtraMomentsChanged.InvokeAsync(_portMoments);
     }
 
     #endregion

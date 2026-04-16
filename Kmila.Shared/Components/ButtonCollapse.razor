@@ -109,82 +109,18 @@
         </div>
 
         <!-- Build Progress Section -->
-        @if(_building || _showBuildStatus)
-        {
-            <div class="build-progress-section mt-3 p-2 border rounded bg-light">
-                <!-- Progress Bar -->
-                @if(_building)
-                {
-                    <div class="mb-2">
-                        <Progress Class="mb-1">
-                            <ProgressBar Width="@((int)(_buildProgress * 100))"
-                                         Color="ProgressColor.Success"
-                                         Label="@($"{(_buildProgress * 100):F0}%")" />
-                        </Progress>
-                    </div>
-                }
-
-                <!-- Status Message -->
-                <div class="d-flex align-items-center">
-                    @if(_building)
-                    {
-                        <Icon Name="IconName.GearFill" Class="me-2 text-primary spin-animation"/>
-                    }
-                    else if(_buildCancelled)
-                    {
-                        <Icon Name="IconName.SlashCircle" Class="me-2 text-warning"/>
-                    }
-                    else if(_buildError)
-                    {
-                        <Icon Name="IconName.ExclamationTriangleFill" Class="me-2 text-danger"/>
-                    }
-                    else if(_buildSuccess)
-                    {
-                        <Icon Name="IconName.CheckCircleFill" Class="me-2 text-success"/>
-                    }
-                    <small class="@(_buildCancelled ? "text-warning" : _buildError ? "text-danger" : _buildSuccess ? "text-success" : "text-muted")">
-                        @_buildStatusMessage
-                    </small>
-                </div>
-
-                <!-- Error Details -->
-                @if(_buildError && !string.IsNullOrEmpty(_buildErrorDetail))
-                {
-                    <Alert Color="AlertColor.Danger" Class="mt-2 mb-0 py-2 px-3">
-                        <small>@_buildErrorDetail</small>
-                    </Alert>
-                }
-
-                <!-- Hide Status Button -->
-                @if(!_building && _showBuildStatus)
-                {
-                    <div class="text-end mt-2">
-                        <Button Color="ButtonColor.Light"
-                                Size="ButtonSize.ExtraSmall"
-                                @onclick="HideBuildStatus">
-                            <Icon Name="IconName.X" /> @Traductor.T("COMMON_DISMISS")
-                        </Button>
-                    </div>
-                }
-            </div>
-        }
+        <BuildProgressDisplay
+            Building="_building"
+            ShowBuildStatus="_showBuildStatus"
+            BuildProgress="_buildProgress"
+            BuildCancelled="_buildCancelled"
+            BuildError="_buildError"
+            BuildSuccess="_buildSuccess"
+            BuildStatusMessage="@_buildStatusMessage"
+            BuildErrorDetail="@_buildErrorDetail"
+            OnHideBuildStatus="HideBuildStatus" />
     </div>
 </div>
-
-<style>
-    .spin-animation {
-        animation: spin 1s linear infinite;
-    }
-
-    @@keyframes spin {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
-    }
-
-    .build-progress-section {
-        transition: all 0.3s ease;
-    }
-</style>
 
 <Modal Size="ModalSize.Large" IsScrollable="true" @ref="_simulationParametersModal"/>
 
@@ -211,9 +147,10 @@
 
     /// <summary>
     /// Gets or sets the event callback for when the simulation is started.
+    /// Provides the total simulation time and port moment configurations.
     /// </summary>
     [Parameter]
-    public EventCallback<TimeSpan> OnSimulationStarted { get; set; }
+    public EventCallback<(TimeSpan Duration, List<Models.PortMomentConfiguration>? PortMoments)> OnSimulationStarted { get; set; }
 
     #endregion
 
@@ -455,7 +392,7 @@
         }
         Dictionary<string, object> parameters = new()
         {
-            { "OnSimulationStarted", EventCallback.Factory.Create<TimeSpan>(this, OnSimulationRequested) }
+            { "OnSimulationStarted", EventCallback.Factory.Create<(TimeSpan, List<Models.PortMomentConfiguration>?)>(this, OnSimulationRequested) }
         };
         await _simulationParametersModal.ShowAsync<SimulationParametersModal>(Traductor.T("SIMULATION_PARAMETERS"), null, parameters);
     }
@@ -463,10 +400,9 @@
     /// <summary>
     /// Handles the simulation requested event from the modal.
     /// </summary>
-    /// <param name="time">The simulation time.</param>
-    private async Task OnSimulationRequested(TimeSpan time)
+    private async Task OnSimulationRequested((TimeSpan Duration, List<Models.PortMomentConfiguration>? PortMoments) args)
     {
-        await OnSimulationStarted.InvokeAsync(time);
+        await OnSimulationStarted.InvokeAsync(args);
     }
 
     #endregion

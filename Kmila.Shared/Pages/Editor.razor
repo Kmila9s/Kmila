@@ -2,237 +2,6 @@
 @using Kmila.Shared.Services
 <PageTitle>Project: @_project?.Name</PageTitle>
 @if(_projectId != -1 && _project != null){
-    <style>
-        /* Editor container styling */
-        .editor-container {
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-            border: 1px solid var(--bs-border-color);
-            border-radius: 0.5rem;
-            overflow: hidden;
-            background: var(--bs-body-bg);
-        }
-
-        .editor-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0.5rem 1rem;
-            background: var(--bs-tertiary-bg);
-            border-bottom: 1px solid var(--bs-border-color);
-            min-height: 42px;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-        }
-
-        .editor-file-info {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            min-width: 0;
-            flex: 1;
-        }
-
-        .editor-file-name {
-            font-weight: 500;
-            font-size: 0.9rem;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .editor-unsaved-indicator {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background-color: #ffc107;
-            flex-shrink: 0;
-        }
-
-        .editor-status {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            font-size: 0.8rem;
-            color: var(--bs-secondary);
-        }
-
-        .editor-position {
-            font-family: monospace;
-            white-space: nowrap;
-        }
-
-        .editor-language {
-            padding: 0.125rem 0.5rem;
-            background: var(--bs-primary);
-            color: white;
-            border-radius: 0.25rem;
-            font-size: 0.75rem;
-            text-transform: uppercase;
-        }
-
-        .editor {
-            flex: 1;
-            min-height: 300px;
-        }
-
-        /* Mobile: Use viewport height for better scaling */
-        @@media (max-width: 768px) {
-            .editor-container {
-                height: 55dvh;
-                min-height: 320px;
-            }
-            .editor-header {
-                padding: 0.375rem 0.75rem;
-            }
-            .editor-status {
-                gap: 0.5rem;
-            }
-        }
-
-        /* Landscape mobile: Reduce height */
-        @@media (max-width: 768px) and (orientation: landscape) {
-            .editor-container {
-                height: 45dvh;
-                min-height: 220px;
-            }
-        }
-
-        /* Tablet */
-        @@media (min-width: 769px) and (max-width: 991px) {
-            .editor-container {
-                height: 58dvh;
-            }
-        }
-
-        /* Desktop */
-        @@media (min-width: 992px) {
-            .editor-container {
-                height: 60dvh;
-                min-height: 400px;
-            }
-        }
-
-        /* Keyboard shortcut hint */
-        .shortcut-hint {
-            font-size: 0.7rem;
-            color: var(--bs-secondary);
-            opacity: 0.8;
-        }
-
-        @@media (max-width: 576px) {
-            .shortcut-hint {
-                display: none;
-            }
-        }
-
-        /* Split view for Markdown editing */
-        .split-editor-container {
-            display: flex;
-            flex-direction: row;
-            height: 100%;
-        }
-
-        .split-editor-pane {
-            flex: 1;
-            min-width: 0;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
-        .split-editor-pane:first-child {
-            border-right: 1px solid var(--bs-border-color);
-        }
-
-        .split-pane-header {
-            padding: 0.25rem 0.5rem;
-            background: var(--bs-tertiary-bg);
-            border-bottom: 1px solid var(--bs-border-color);
-            font-size: 0.75rem;
-            font-weight: 600;
-            color: var(--bs-secondary);
-            display: flex;
-            align-items: center;
-            gap: 0.25rem;
-        }
-
-        .markdown-preview-pane {
-            flex: 1;
-            overflow-y: auto;
-            padding: 1rem;
-            background: var(--bs-body-bg);
-        }
-
-        /* Mobile: Stack vertically */
-        @@media (max-width: 991px) {
-            .split-editor-container {
-                flex-direction: column;
-            }
-
-            .split-editor-pane:first-child {
-                border-right: none;
-                border-bottom: 1px solid var(--bs-border-color);
-                max-height: 50%;
-            }
-
-            .split-editor-pane:last-child {
-                max-height: 50%;
-            }
-        }
-
-        /* Markdown preview styling */
-        .markdown-preview-pane h1,
-        .markdown-preview-pane h2,
-        .markdown-preview-pane h3,
-        .markdown-preview-pane h4,
-        .markdown-preview-pane h5,
-        .markdown-preview-pane h6 {
-            color: var(--bs-heading-color, var(--bs-body-color));
-        }
-
-        .markdown-preview-pane code {
-            background-color: var(--bs-tertiary-bg);
-            padding: 0.2em 0.4em;
-            border-radius: 0.25rem;
-            font-size: 0.875em;
-        }
-
-        .markdown-preview-pane pre {
-            background-color: var(--bs-tertiary-bg);
-            padding: 1rem;
-            border-radius: 0.5rem;
-            overflow-x: auto;
-        }
-
-        .markdown-preview-pane pre code {
-            background-color: transparent;
-            padding: 0;
-        }
-
-        .markdown-preview-pane blockquote {
-            border-left: 4px solid var(--bs-primary);
-            padding-left: 1rem;
-            margin: 1rem 0;
-            color: var(--bs-secondary-color);
-        }
-
-        .markdown-preview-pane table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        .markdown-preview-pane th,
-        .markdown-preview-pane td {
-            border: 1px solid var(--bs-border-color);
-            padding: 0.5rem;
-        }
-
-        .markdown-preview-pane th {
-            background-color: var(--bs-tertiary-bg);
-        }
-    </style>
     <h2>@_project.Name</h2>
     <div class="row my-3">
         <!-- Editor: Full width on mobile and tablet, 10/12 on desktop -->
@@ -312,6 +81,14 @@
             />
         </div>
     </div>
+    @if(_waveformData != null)
+    {
+        <div class="row my-3">
+            <div class="col-12">
+                <WaveformViewer Data="_waveformData" OnExportVcd="HandleVcdExport" />
+            </div>
+        </div>
+    }
     <div class="row my-3">
         @if(Builder.Parser != null){
             <div class="col-lg-6 col-sm-12">
@@ -354,6 +131,9 @@
     private string _originalContent = string.Empty;
     private string _markdownPreview = string.Empty;
 
+    // Waveform data from simulation
+    private WaveformData? _waveformData;
+
     /// <summary>
     /// Gets whether the currently opened file is a Markdown file.
     /// </summary>
@@ -371,7 +151,7 @@
             _project = await Projects.GetByAsync(_projectId);
             _projectFiles = await ProjectFiles.GetProjectFilesAsync(_project);
         }
-        
+        Builder.OnSimulationCompleted += OnSimulationDataReady;
     }
     /// <summary>
     /// Method invoked after the component has rendered.
@@ -498,11 +278,25 @@
     }
     /// <summary>
     /// Handles the simulation started event.
+    /// Launches the simulation on a background thread so the UI remains responsive.
     /// </summary>
-    /// <param name="timeSpan">The time span of the simulation.</param>
-    private async Task OnSimulationStarted(TimeSpan timeSpan){
-        Builder.SetSimulationTime(timeSpan);
-
+    private Task OnSimulationStarted((TimeSpan Duration, List<Models.PortMomentConfiguration>? PortMoments) args){
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Builder.RunSimulationAsync(args.PortMoments, args.Duration);
+            }
+            catch(Exception ex)
+            {
+                await InvokeAsync(() =>
+                {
+                    ToastService.Notify(Message("Simulation Error", ex.Message, ToastType.Danger));
+                    StateHasChanged();
+                });
+            }
+        });
+        return Task.CompletedTask;
     }
     /// <summary>
     /// Handles the save file event.
@@ -684,6 +478,29 @@ end architecture behavioral;",
         {
             await OnSaveFile();
         }
+    }
+
+    #endregion
+
+    #region Simulation Waveform
+
+    /// <summary>
+    /// Handles simulation completion and creates waveform data for display.
+    /// </summary>
+    private void OnSimulationDataReady(Interpreter.Services.SignalHistory history)
+    {
+        _waveformData = WaveformData.FromSignalHistory(history, TimeMachine.Models.TimeClock.NS_PER_TICK);
+        InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Handles VCD export from the WaveformViewer.
+    /// </summary>
+    private async Task HandleVcdExport(string vcdContent)
+    {
+        // For now, log to console - in the future, trigger file download via JS interop
+        Console.WriteLine($"[Editor] VCD export: {vcdContent.Length} characters");
+        ToastService.Notify(Message("VCD Export", $"VCD data generated ({vcdContent.Length} chars). Use browser download to save.", ToastType.Info));
     }
 
     #endregion

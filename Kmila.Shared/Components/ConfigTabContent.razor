@@ -1,0 +1,141 @@
+@*
+    ConfigTabContent Component
+
+    Presentation-only sub-component for the Config tab in SimulationParametersModal.
+    Displays time configuration, port variables, and configuration save/load sections.
+    All state and event handlers remain in the parent component.
+*@
+
+<div class="tab-content-wrapper p-2 p-md-3">
+    <!-- Simulation Time Configuration -->
+    <Card Class="mb-3">
+        <CardHeader Class="py-2 py-md-3">
+            <Icon Name="IconName.Clock" Class="me-2" />
+            <strong>Time Configuration</strong>
+        </CardHeader>
+        <CardBody Class="p-2 p-md-3">
+            <!-- Time Input with Dropdown -->
+            <div class="input-group input-group-sm input-group-md-lg mb-3">
+                <span class="input-group-text">
+                    <Icon Name="IconName.HourglassSplit" />
+                </span>
+                <input type="number"
+                       class="form-control"
+                       aria-label="Simulation time value"
+                       value="@Time"
+                       @onchange="OnTimeChanged"
+                       min=0
+                       max=1000
+                       disabled=@(Running)
+                       placeholder="Enter time"/>
+                <button class="btn btn-outline-secondary dropdown-toggle"
+                        type="button"
+                        data-bs-toggle="dropdown"
+                        aria-expanded="false"
+                        disabled=@Running>
+                    <span class="d-none d-sm-inline">Time scale: </span>@Zone
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    @foreach(var zone in Enum.GetValues(typeof(TimeScale)))
+                    {
+                        <li><a class="dropdown-item" @onclick="() => OnZoneChanged.InvokeAsync((TimeScale)zone)">@Enum.GetName(typeof(TimeScale), zone)</a></li>
+                    }
+                </ul>
+            </div>
+
+            <!-- Enhanced Range Slider -->
+            <EnhancedRangeSlider
+                Label="Simulation Duration"
+                IconName="IconName.HourglassSplit"
+                Value="Time"
+                ValueChanged="OnTimeValueChanged"
+                Min="0"
+                Max="1000"
+                Step="1"
+                Unit="@Zone.ToString()"
+                Disabled="Running"
+                ShowBadge="true"
+                ShowMinMaxLabels="true"
+                ShowValueIndicator="true"
+                ShowCustomLabels="true"
+                TickMarks="TimeTickMarks"
+                CustomLabels="CustomLabels"
+                HelpText="Adjust the simulation time duration"
+                BadgeColorMode="Custom"
+                BadgeIconName="IconName.Speedometer2"
+                BadgeAriaLabel="Current simulation time"
+                CustomColorThresholds="ColorThresholds"
+            />
+        </CardBody>
+    </Card>
+
+    <!-- Port Variables Input Section -->
+    @PortVariablesContent
+
+    <!-- Configuration Save/Load Section -->
+    <Card Class="mb-3">
+        <CardHeader Class="py-2 py-md-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center gap-2">
+                    <Icon Name="IconName.GearFill" Class="me-1" />
+                    <strong>Configurations</strong>
+                    @if(!string.IsNullOrEmpty(LoadedConfigName))
+                    {
+                        <Badge Color="BadgeColor.Info" Class="ms-1">
+                            @LoadedConfigName
+                            @if(HasUnsavedChanges)
+                            {
+                                <span class="text-warning">*</span>
+                            }
+                        </Badge>
+                    }
+                </div>
+                <Button Color="ButtonColor.Secondary"
+                        Size="ButtonSize.ExtraSmall"
+                        Outline="true"
+                        @onclick="OnToggleConfigPanel">
+                    <Icon Name="@(ShowConfigPanel ? IconName.ChevronUp : IconName.ChevronDown)" />
+                </Button>
+            </div>
+        </CardHeader>
+        @if(ShowConfigPanel)
+        {
+            <CardBody Class="p-2 p-md-3">
+                @ConfigurationContent
+            </CardBody>
+        }
+    </Card>
+</div>
+
+@code {
+    [Parameter] public int Time { get; set; }
+    [Parameter] public EventCallback<int> TimeChanged { get; set; }
+    [Parameter] public TimeScale Zone { get; set; }
+    [Parameter] public bool Running { get; set; }
+    [Parameter] public string LoadedConfigName { get; set; } = string.Empty;
+    [Parameter] public bool HasUnsavedChanges { get; set; }
+    [Parameter] public bool ShowConfigPanel { get; set; }
+    [Parameter] public RenderFragment? PortVariablesContent { get; set; }
+    [Parameter] public RenderFragment? ConfigurationContent { get; set; }
+    [Parameter] public EventCallback<TimeScale> OnZoneChanged { get; set; }
+    [Parameter] public EventCallback OnConfigChanged { get; set; }
+    [Parameter] public EventCallback OnToggleConfigPanel { get; set; }
+    [Parameter] public IEnumerable<TickMark> TimeTickMarks { get; set; } = Enumerable.Empty<TickMark>();
+    [Parameter] public List<string> CustomLabels { get; set; } = new();
+    [Parameter] public Dictionary<int, BadgeColor> ColorThresholds { get; set; } = new();
+
+    private async Task OnTimeChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var value))
+        {
+            await TimeChanged.InvokeAsync(value);
+            await OnConfigChanged.InvokeAsync();
+        }
+    }
+
+    private async Task OnTimeValueChanged(int value)
+    {
+        await TimeChanged.InvokeAsync(value);
+        await OnConfigChanged.InvokeAsync();
+    }
+}

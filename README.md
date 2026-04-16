@@ -5,8 +5,8 @@
 **Author:** Ulrich Tamayo Daniel
 **Email:** dulricht1700@alumno.ipn.mx
 **Email 2:** danielulrichtamayo@gmail.com
-**Version:** 0.15.0
-**Last Updated:** January 17, 2026
+**Version:** 0.15.1
+**Last Updated:** February 21, 2026
 
 ## 1. Overview
 
@@ -417,27 +417,32 @@ The `Kmila.Shared` project contains the core logic, UI components, and data mode
 *   **ProjectsView.razor**: Displays all user projects with create, edit, and delete functionality
 
 #### Components
+*   **BuildProgressDisplay.razor**: Reusable component for displaying build progress information including progress bar, status messages (building/cancelled/error/success), error detail alerts, and a dismiss button. Implements IDisposable for language change event cleanup
 *   **ButtonCollapse.razor**: Contains main editor buttons (Save, New File, Start Simulation, Validate) with real-time build progress display including progress bar, status messages, error details, and build cancellation support from the Interpreter's ProgressReporter
+*   **ConfigTabContent.razor**: Presentation-only sub-component for the Config tab in SimulationParametersModal. Displays time configuration with EnhancedRangeSlider, port variables, and collapsible configuration save/load section
+*   **EntityResourceUsage.razor**: Displays the estimated FPGA resource usage for an entity (Flip-Flops, LUTs, DSP Slices, BRAM Blocks, I/O Pins, Clock Domains) using ResourceMetricBox components in a responsive grid layout
 *   **EntityView.razor**: Displays VHDL entity name and ports with resource usage estimation
+*   **EnhancedRangeSlider.razor**: Advanced range slider component with dynamic coloring, tooltips, tick marks, and custom labels
 *   **FilesCard.razor**: Project files card with open and remove functionality
+*   **FPGASimpleView.razor**: Compact FPGA information display widget showing device specifications
+*   **FPGATabContent.razor**: Presentation-only sub-component for the FPGA tab in SimulationParametersModal. Shows FPGA device selector fallback, device details grid (resources, clocking, I/O, power), and resource utilization analysis with color-coded ResourceProgressBar components
+*   **LanguageChanger.razor**: Dropdown component for selecting application language with translate icon. Uses reactive architecture where saving to DB triggers automatic translation reload via event chain (DbContext -> Traductor -> MainLayout). Supports 7 languages
 *   **PortMomentExtraInputs.razor**: Allows adding extra time moments for a port
 *   **PortMomentInput.razor**: Defines port values at specific times
-*   **EnhancedRangeSlider.razor**: Advanced range slider component with dynamic coloring, tooltips, tick marks, and custom labels
-*   **FPGASimpleView.razor**: Compact FPGA information display widget showing device specifications
+*   **ResourceMetricBox.razor**: Reusable metric box for displaying a single FPGA resource metric with title, icon, value badge, accuracy label, and optional child content
+*   **ResourceProgressBar.razor**: Reusable progress bar for displaying FPGA resource utilization with color-coded thresholds (green/info/warning/danger) and used/available count badges
+*   **RunTabContent.razor**: Presentation-only sub-component for the Run tab in SimulationParametersModal. Shows configuration summary, simulation controls (start/pause/continue/restart/stop), and simulation progress with animated progress bar
 
 #### Layout
 *   **MainLayout.razor**: Main application layout with navigation menu, content area, RTL support for Arabic language, and loading state that ensures translations are initialized before rendering child components
 *   **NavMenu.razor**: Navigation menu displaying project options and created projects with i18n support
 *   **TopBar.razor**: Responsive top navigation bar with FPGA selector, language switcher, and theme switcher. Features mobile-optimized layout with text truncation, responsive breakpoints (< 576px, < 400px), and proper flexbox alignment for small screens
 
-#### Components (Additional)
-*   **LanguageChanger.razor**: Dropdown component for selecting application language with translate icon. Uses reactive architecture where saving to DB triggers automatic translation reload via event chain (DbContext -> Traductor -> MainLayout). Supports 7 languages
-
 #### Modals
 *   **ConfigurationModal.razor**: Modal for managing simulation configurations (.k-config files). Features save current configuration, load saved configurations, export to file, and import from file
 *   **CreateFileModal.razor**: Modal for creating new files in a project
 *   **ProjectDetailsModal.razor**: Modal for creating new projects
-*   **SimulationParametersModal.razor**: Comprehensive modal for configuring simulation parameters organized in mobile-friendly tabs (FPGA, Config, Run). Features FPGA resource validation with fallback selector, time/scale configuration, port inputs, configuration save/load integration, and simulation controls (start/pause/resume/restart/stop)
+*   **SimulationParametersModal.razor**: Comprehensive modal for configuring simulation parameters organized in mobile-friendly tabs (FPGA, Config, Run). Delegates tab content to sub-components: FPGATabContent, ConfigTabContent, and RunTabContent. Features FPGA resource validation with fallback selector, time/scale configuration, port inputs, configuration save/load integration, and simulation controls (start/pause/resume/restart/stop)
 
 ```mermaid
 classDiagram
@@ -572,6 +577,8 @@ graph TD
     
     subgraph "Service Layer"
         ProgramBuilder[ProgramBuilder Service]
+        ConfigService[ConfigurationService]
+        Traductor[Traductor i18n Service]
     end
     
     subgraph "Repository Layer"
@@ -609,6 +616,8 @@ graph TD
     
     ProjectsRepo --> AppDbContext
     ProjectFilesRepo --> AppDbContext
+    ConfigService --> AppDbContext
+    Traductor --> JSONFiles
     AppDbContext --> SQLite
     JSONFileReader --> JSONFiles
 ```
@@ -750,19 +759,26 @@ The application uses GitHub Actions for continuous integration and deployment:
     *   Web Hosting (Linux/Browser)
     *   GitHub Releases (Direct downloads)
 
-## 16. Project Structure
+## 15. Project Structure
 ```markdown
 
 ### Kmila.Shared
 ├── Components/
+│   ├── BuildProgressDisplay.razor
 │   ├── ButtonCollapse.razor
+│   ├── ConfigTabContent.razor
+│   ├── EntityResourceUsage.razor
 │   ├── EntityView.razor
 │   ├── EnhancedRangeSlider.razor
 │   ├── FilesCard.razor
 │   ├── FPGASimpleView.razor
+│   ├── FPGATabContent.razor
 │   ├── LanguageChanger.razor
 │   ├── PortMomentInput.razor
-│   └── PortMomentExtraInputs.razor
+│   ├── PortMomentExtraInputs.razor
+│   ├── ResourceMetricBox.razor
+│   ├── ResourceProgressBar.razor
+│   └── RunTabContent.razor
 ├── Data/
 │   └── ApplicationDbContext.cs
 ├── Interfaces/
@@ -827,13 +843,21 @@ The Kmila-9s codebase maintains comprehensive XML documentation for all public A
 All areas of the codebase now have complete XML documentation:
 
 #### Components
+*   **BuildProgressDisplay.razor** - Build progress display with status icons, progress bar, error alerts, and dismiss button (implements IDisposable)
 *   **ButtonCollapse.razor** - Main editor button controls with build progress display (implements IDisposable)
+*   **ConfigTabContent.razor** - Config tab sub-component for SimulationParametersModal (time configuration, port variables, configuration save/load)
+*   **EntityResourceUsage.razor** - FPGA resource usage grid display using ResourceMetricBox components
 *   **EntityView.razor** - VHDL entity visualization
 *   **EnhancedRangeSlider.razor** - Advanced range slider component
 *   **FilesCard.razor** - Project files list component
 *   **FPGASimpleView.razor** - Compact FPGA information display widget
+*   **FPGATabContent.razor** - FPGA tab sub-component for SimulationParametersModal (device details, resource utilization)
+*   **LanguageChanger.razor** - Language selection dropdown with reactive architecture
 *   **PortMomentInput.razor** - Port input configuration
 *   **PortMomentExtraInputs.razor** - Additional time moment inputs
+*   **ResourceMetricBox.razor** - Reusable single FPGA resource metric display box with icon, badge, and accuracy label
+*   **ResourceProgressBar.razor** - Reusable FPGA resource utilization progress bar with color-coded thresholds
+*   **RunTabContent.razor** - Run tab sub-component for SimulationParametersModal (simulation controls, progress display)
 
 #### Pages
 *   **Editor.razor** - Main VHDL editor page
@@ -881,7 +905,7 @@ All areas of the codebase now have complete XML documentation:
 
 ### Code Quality Notes
 
-*   **Traductor.cs** (Kmila.Shared/Services/) - Fully implemented internationalization service supporting 7 languages with event-driven UI updates and RTL support
+*   **Traductor.cs** (Kmila.Shared/Services/) - Fully implemented internationalization service supporting 7 languages with reactive event-driven architecture (subscribes to ApplicationDbContext.StaticOnValueChanged), automatic translation reload, and RTL support for Arabic
 *   **ProjectFiles.GetByAsync()** and **ProjectFiles.RemoveAsync()** - Currently throw NotImplementedException; documented as such, to be implemented in future releases
 *   **IJsonFileReader** - Interface defined with documentation; JSONFileReader provides a more specific implementation
 
@@ -934,6 +958,20 @@ We welcome contributions to Kmila-9s! Please check our GitHub repository for con
 Kmila-9s is released as free and open-source software. Please refer to the LICENSE file in the repository for specific licensing terms.
 
 ## 19. Changelog
+
+### Version 0.15.1 (2026-02-21)
+
+#### Comprehensive Code Documentation
+
+*   **Kmila.Shared Models**: Added XML documentation to all 16 model files (PortMoment, Project, ProjectFile, TimeScale, ToastMessages, FPGA, FPGAResources, FPGAClocking, FPGAPower, FPGAsIO, SelectedFPGA, AppSettings, KmilaConfiguration, WaveformData)
+*   **Kmila.Shared Interfaces**: Added XML documentation to IRepository, IJsonFileReader, IFormFactor
+*   **Kmila.Shared Services**: Added XML documentation to Traductor, ConfigurationService, StimulusBuilder, ProgramBuilder
+*   **Kmila.Shared Repositories**: Added XML documentation to ProjectFiles, Projects, JSONFileReader
+*   **Kmila.Shared Data**: Added XML documentation to ApplicationDbContext
+*   **Kmila MAUI**: Added XML documentation to App.xaml.cs, MainPage.xaml.cs, MauiProgram.cs, FormFactor.cs, and all platform-specific files
+*   **Kmila.Web**: Added XML documentation to Program.cs, FormFactor.cs
+
+---
 
 ### Version 0.15.0 (2026-01-17)
 
@@ -1213,7 +1251,7 @@ The following items remain documented as placeholders or incomplete implementati
 
 | Item | Status | Notes |
 |------|--------|-------|
-| `Traductor.cs` | Placeholder | Reserved for internationalization |
+| `Traductor.cs` | Fully Implemented | Internationalization with 7 languages (see v0.14.0) |
 | `ProjectFiles.GetByAsync()` | Not Implemented | Throws `NotImplementedException` |
 | `ProjectFiles.RemoveAsync()` | Not Implemented | Throws `NotImplementedException` |
 | `IFileSystem` interface | Referenced but not found | Mentioned in docs but implementation details not in shared code |
@@ -1225,4 +1263,4 @@ The following items remain documented as placeholders or incomplete implementati
 For questions, support, or feedback, please open an issue on our GitHub repository or contact the development team through the project page.
 
 ---
-*Last Updated: January 17, 2026*
+*Last Updated: February 21, 2026*

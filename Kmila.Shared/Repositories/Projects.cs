@@ -9,8 +9,11 @@ namespace Kmila.Shared.Repositories;
 /// </summary>
 public class Projects : IRepository<Project>
 {
+    // Logger for recording errors and diagnostic information
     private readonly ILogger<Projects> _logger;
+    // Database context for accessing project records
     private readonly ApplicationDbContext _applicationDbContext;
+    // Cancellation token source for cooperative cancellation of async operations
     private readonly CancellationTokenSource _cts = new();
     /// <summary>
     /// Gets the last error message that occurred.
@@ -37,6 +40,7 @@ public class Projects : IRepository<Project>
         LastError = string.Empty;
         try
         {
+            // Check for duplicate project (same name and path, case-insensitive)
             var oldProject = await _applicationDbContext.Projects.FirstOrDefaultAsync(p =>
                 p.Name.ToLower().Equals(project.Name.ToLower()) && p.BasePath.ToLower().Equals(project.BasePath.ToLower())
             );
@@ -45,6 +49,7 @@ public class Projects : IRepository<Project>
                 LastError = "Project and path already registered";
                 return false;
             }
+            // Create the project directory on disk and register in the database
             Directory.CreateDirectory(project.BasePath);
             await _applicationDbContext.InsertAsync(project);
             return true;
@@ -65,17 +70,20 @@ public class Projects : IRepository<Project>
         LastError = string.Empty;
         try
         {
+            // Verify the project exists in the database
             var oldProject = await _applicationDbContext.Projects.FirstOrDefaultAsync(p => p.Id == project.Id);
             if (oldProject == null)
             {
                 LastError = "Project not registered";
                 return false;
             }
+            // Ensure no other project is using the same base path (case-insensitive)
             if ((await _applicationDbContext.Projects.ToListAsync()).Any(p => p.BasePath.ToLower() == project.BasePath.ToLower() && p.Id != project.Id))
             {
                 LastError = "Path already in use";
                 return false;
             }
+            // If the base path changed, move the project directory on disk
             if (oldProject.BasePath.ToLower() != project.BasePath.ToLower())
             {
                 if (!Directory.Exists(oldProject.BasePath))
@@ -85,6 +93,7 @@ public class Projects : IRepository<Project>
                 }
                 Directory.Move(oldProject.BasePath, project.BasePath);
             }
+            // Update the project metadata in the database
             oldProject.Name = project.Name;
             oldProject.Description = project.Description;
             oldProject.BasePath = project.BasePath;
@@ -107,14 +116,17 @@ public class Projects : IRepository<Project>
         LastError = string.Empty;
         try
         {
+            // Verify the project exists in the database
             var oldProject = await _applicationDbContext.Projects.FirstOrDefaultAsync(p => p.Id == project.Id);
             if (oldProject == null)
             {
                 LastError = "Project not found";
                 return false;
             }
+            // Delete the project directory and all its contents from disk if it exists
             if(Directory.Exists(oldProject.BasePath))
                 Directory.Delete(oldProject.BasePath, true);
+            // Remove the project record from the database
             await _applicationDbContext.DeleteAsync(project);
             return true;
         }
@@ -152,6 +164,7 @@ public class Projects : IRepository<Project>
         try
         {
             Project project = null!;
+            // Supports lookup by integer ID or string name (case-insensitive)
             if (id is int intId)
                 project = await _applicationDbContext.Projects.FirstOrDefaultAsync(p => p.Id == intId);
             else if(id is string strId)
@@ -160,6 +173,7 @@ public class Projects : IRepository<Project>
             {
                 LastError = "Project not found";
             }
+            // Return the found project or an empty default if not found
             return project ?? new();
         }
         catch (Exception ex)

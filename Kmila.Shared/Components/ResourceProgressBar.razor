@@ -1,0 +1,63 @@
+@*
+    ResourceProgressBar Component
+
+    Reusable progress bar for displaying FPGA resource utilization.
+    Shows a title with icon, used/available counts with badges, and a color-coded progress bar.
+
+    Usage:
+    <ResourceProgressBar Title="Flip-Flops" Icon="IconName.ToggleOn" Used="120" Available="1000" />
+*@
+
+@if (Available > 0)
+{
+    <div class="col-12">
+        <div class="mb-2">
+            <div class="d-flex flex-wrap justify-content-between align-items-center mb-1 gap-1">
+                <strong class="small">
+                    <Icon Name="@Icon" Class="me-1" />
+                    @Title
+                </strong>
+                <span class="font-monospace small">
+                    <Badge Color="@CurrentBadgeColor" Class="py-0 px-1">
+                        @Used.ToString(FormatString)
+                    </Badge>
+                    <span class="text-muted">/</span>
+                    <Badge Color="BadgeColor.Secondary" Class="py-0 px-1">
+                        @Available.ToString("N0")
+                    </Badge>
+                    <span class="text-muted ms-1 d-none d-sm-inline">(@Percent.ToString("F1")%)</span>
+                </span>
+            </div>
+            <Progress>
+                <ProgressBar Color="@CurrentProgressColor" Width="@Percent" Type="@(Percent >= 80 ? ProgressType.Striped : ProgressType.Default)" />
+            </Progress>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string Title { get; set; } = string.Empty;
+    [Parameter] public IconName Icon { get; set; }
+    [Parameter] public double Used { get; set; }
+    [Parameter] public double Available { get; set; }
+    [Parameter] public string FormatString { get; set; } = "N0";
+
+    private double Percent => Available > 0 ? Math.Min((Used / Available) * 100, 100) : 0;
+
+    private ProgressColor CurrentProgressColor => Percent switch
+    {
+        >= 100 => ProgressColor.Danger,
+        >= 80 => ProgressColor.Warning,
+        >= 60 => ProgressColor.Info,
+        _ => ProgressColor.Success
+    };
+
+    private BadgeColor CurrentBadgeColor => CurrentProgressColor switch
+    {
+        ProgressColor.Danger => BadgeColor.Danger,
+        ProgressColor.Warning => BadgeColor.Warning,
+        ProgressColor.Info => BadgeColor.Info,
+        ProgressColor.Success => BadgeColor.Success,
+        _ => BadgeColor.Primary
+    };
+}

@@ -8,8 +8,18 @@ using Kmila.Shared.Models;
 
 namespace Kmila;
 
+/// <summary>
+/// Entry point class for the Kmila Blazor Web application.
+/// Configures services, middleware, and the HTTP request pipeline.
+/// </summary>
 public class Program
 {
+    /// <summary>
+    /// Main entry point for the Blazor Web application.
+    /// Configures all required services (database, translations, FPGA tools)
+    /// and sets up the ASP.NET Core middleware pipeline.
+    /// </summary>
+    /// <param name="args">Command-line arguments passed to the application.</param>
     public static void Main(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
@@ -26,22 +36,26 @@ public class Program
             string dbPath = Path.Combine(Directory.GetCurrentDirectory(), "kmila.db");
             options.UseSqlite($"Data Source={dbPath}");
         });*/
+        // Register the SQLite database context using a scoped lifetime.
+        // The database file is stored in the application's current working directory.
         builder.Services.AddScoped<ApplicationDbContext>(sp =>
         {
             string dbPath = Path.Combine(Directory.GetCurrentDirectory(), "kmila.db");
             return new(dbPath);
         });
 
+        // Repository services for managing user projects and their associated files
         builder.Services.AddScoped<Projects>();
-
         builder.Services.AddScoped<ProjectFiles>();
 
         // JSONFileReader needs IWebHostEnvironment to find the Devices folder
         builder.Services.AddSingleton<JSONFileReader>(provider =>
             new JSONFileReader(provider.GetRequiredService<IWebHostEnvironment>()));
 
+        // ProgramBuilder handles compiling/building FPGA programs from user projects
         builder.Services.AddSingleton<ProgramBuilder>();
 
+        // Tracks the currently selected FPGA device across the application
         builder.Services.AddSingleton<SelectedFPGA>();
 
         // Configuration service for saving/loading simulation configurations
@@ -100,8 +114,9 @@ public class Program
             });
         });
 
+        // BlazorBootstrap provides Bootstrap-based Blazor UI components
         builder.Services.AddBlazorBootstrap();
-        
+
         var app = builder.Build();
 
         // Configure the HTTP request pipeline.
@@ -116,6 +131,9 @@ public class Program
 
         app.UseStaticFiles();
         app.UseAntiforgery();
+
+        // Map Razor components with interactive server-side rendering
+        // and include the shared component library (Kmila.Shared)
         app.MapRazorComponents<App>()
             .AddInteractiveServerRenderMode()
             .AddAdditionalAssemblies(typeof(Kmila.Shared._Imports).Assembly);

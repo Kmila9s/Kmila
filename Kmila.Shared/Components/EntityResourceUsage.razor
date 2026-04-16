@@ -1,0 +1,103 @@
+@*
+    EntityResourceUsage Component
+
+    Displays the resource usage section for an entity, using ResourceMetricBox
+    to show individual resource metrics in a grid layout.
+
+    Usage:
+    <EntityResourceUsage ResourceUsage="Entity.ResourceUsage" />
+*@
+@using Interpreter.Services
+
+@if (ResourceUsage != null)
+{
+    <hr class="my-3" />
+
+    <div class="mb-3">
+        <div class="d-flex align-items-center mb-3">
+            <Icon Name="IconName.Cpu" Class="me-2 text-warning" />
+            <h6 class="mb-0">Estimated Resource Usage</h6>
+        </div>
+
+        <div class="row g-3">
+            <!-- Flip-Flops -->
+            <ResourceMetricBox Title="Flip-Flops"
+                               Icon="IconName.ToggleOn"
+                               IconColor="text-primary"
+                               Value="@ResourceUsage.FlipFlops.ToString()"
+                               Unit="FFs"
+                               BadgeColor="BadgeColor.Primary"
+                               AccuracyLabel="~95%" />
+
+            <!-- LUTs -->
+            <ResourceMetricBox Title="LUTs"
+                               Icon="IconName.Grid"
+                               IconColor="text-success"
+                               Value="@ResourceUsage.LUTs.ToString()"
+                               Unit="LUTs"
+                               BadgeColor="BadgeColor.Success"
+                               AccuracyLabel="~70%" />
+
+            <!-- DSP Slices -->
+            <ResourceMetricBox Title="DSP Slices"
+                               Icon="IconName.Calculator"
+                               IconColor="text-info"
+                               Value="@ResourceUsage.DSPSlices.ToString()"
+                               Unit="Slices"
+                               BadgeColor="BadgeColor.Info"
+                               AccuracyLabel="~85%" />
+
+            <!-- BRAM Blocks -->
+            <ResourceMetricBox Title="BRAM Blocks"
+                               Icon="IconName.Memory"
+                               IconColor="text-warning"
+                               Value="@ResourceUsage.BRAMBlocks.ToString("F1")"
+                               Unit="Blocks"
+                               BadgeColor="BadgeColor.Warning"
+                               AccuracyLabel="~85%" />
+
+            <!-- I/O Pins -->
+            <ResourceMetricBox Title="I/O Pins"
+                               Icon="IconName.Plugin"
+                               IconColor="text-danger"
+                               Value="@ResourceUsage.IOPins.ToString()"
+                               Unit="Pins"
+                               BadgeColor="BadgeColor.Danger"
+                               AccuracyLabel="Exact" />
+
+            <!-- Clock Domains -->
+            <ResourceMetricBox Title="Clock Domains"
+                               Icon="IconName.Clock"
+                               IconColor="text-secondary"
+                               Value="@ResourceUsage.ClockDomains.ToString()"
+                               Unit="Domains"
+                               BadgeColor="BadgeColor.Secondary"
+                               AccuracyLabel="Exact">
+                @if (ResourceUsage.ClockSignals.Any())
+                {
+                    <div class="mt-2">
+                        @foreach (var clk in ResourceUsage.ClockSignals)
+                        {
+                            <Badge Color="BadgeColor.Light" Class="me-1 font-monospace">
+                                @clk
+                            </Badge>
+                        }
+                    </div>
+                }
+            </ResourceMetricBox>
+        </div>
+
+        <Alert Color="AlertColor.Info" Class="mt-3 mb-0">
+            <Icon Name="IconName.InfoCircle" Class="me-2" />
+            <small>
+                <strong>Note:</strong> Resource estimates are based on typical synthesis patterns.
+                Actual usage may vary ±20% depending on synthesis tool optimizations and target FPGA architecture.
+            </small>
+        </Alert>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public Resources? ResourceUsage { get; set; }
+}

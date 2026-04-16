@@ -34,6 +34,7 @@
                     role="switch"
                     id="clock-switch-@Variable?.Name"
                     @bind="_portMoment.IsClock"
+                    @bind:after="NotifyPortMomentsChanged"
                     disabled="@IsRunning"
                     aria-label="Toggle system clock mode">
                 <label class="form-check-label" for="clock-switch-@Variable?.Name">
@@ -63,6 +64,7 @@
                     class="form-control"
                     id="value-input-@Variable?.Name"
                     @bind="_portMoment.Value"
+                    @bind:after="NotifyPortMomentsChanged"
                     placeholder="Enter port value (e.g., '1', '0', 'Z')"
                     disabled="@(_portMoment.IsClock || IsRunning)"
                     readonly="@_portMoment.IsClock"
@@ -81,6 +83,7 @@
                         class="form-control"
                         id="time-input-@Variable?.Name"
                         @bind="_portMoment.TimeInput"
+                        @bind:after="NotifyPortMomentsChanged"
                         min="1"
                         max="@LimitTime"
                         placeholder="Time value"
@@ -152,6 +155,20 @@
     [Parameter]
     public bool IsRunning { get; set; } = false;
 
+    /// <summary>
+    /// Callback fired whenever port moment data changes (base value, clock toggle, or extra moments).
+    /// Provides a PortMomentConfiguration representing all current moments for this port.
+    /// </summary>
+    [Parameter]
+    public EventCallback<PortMomentConfiguration> OnPortMomentsChanged { get; set; }
+
+    /// <summary>
+    /// Initial configuration to restore when loading a saved config.
+    /// When set, the component restores base moment and extra moments from this data.
+    /// </summary>
+    [Parameter]
+    public PortMomentConfiguration? InitialConfiguration { get; set; }
+
     #endregion
 
     #region Private Fields
@@ -185,6 +202,79 @@
 
     #endregion
 
+    /// <summary>
+    /// Tracks the last InitialConfiguration applied, to avoid re-applying on every render.
+    /// </summary>
+    private PortMomentConfiguration? _appliedInitialConfig;
+
+    #region Lifecycle Methods
+
+    protected override void OnParametersSet()
+    {
+        // Restore from InitialConfiguration when it changes (e.g. config load)
+        if (InitialConfiguration != null && InitialConfiguration != _appliedInitialConfig)
+        {
+            _appliedInitialConfig = InitialConfiguration;
+            RestoreFromConfiguration(InitialConfiguration);
+        }
+    }
+
+    /// <summary>
+    /// Restores the base moment and extra moments from a saved PortMomentConfiguration.
+    /// </summary>
+    private void RestoreFromConfiguration(PortMomentConfiguration config)
+    {
+        _portMoments.Clear();
+        _portMoment.IsClock = false;
+        _portMoment.Value = string.Empty;
+        _portMoment.TimeInput = 0;
+
+        if (config.Values == null || config.Values.Count == 0)
+            return;
+
+        bool baseSet = false;
+        foreach (var val in config.Values)
+        {
+            // Clock marker
+            if (val.TimeScale == "CLK" && val.Value == "CLOCK")
+            {
+                _portMoment.IsClock = true;
+                baseSet = true;
+                continue;
+            }
+
+            if (!baseSet)
+            {
+                // First non-clock value goes to the base moment
+                _portMoment.Value = val.Value ?? string.Empty;
+                _portMoment.TimeInput = val.Time;
+                if (Enum.TryParse<TimeScale>(val.TimeScale, out var scale))
+                {
+                    _portMoment.TimeScale = scale;
+                }
+                baseSet = true;
+            }
+            else
+            {
+                // Subsequent values go to extra moments
+                var extraMoment = new PortMoment
+                {
+                    Variable = Variable,
+                    Value = val.Value ?? string.Empty,
+                    TimeInput = val.Time,
+                    IsClock = false
+                };
+                if (Enum.TryParse<TimeScale>(val.TimeScale, out var extraScale))
+                {
+                    extraMoment.TimeScale = extraScale;
+                }
+                _portMoments.Add(extraMoment);
+            }
+        }
+    }
+
+    #endregion
+
     #region Event Handlers
 
     /// <summary>
@@ -192,15 +282,16 @@
     /// Updates the UI to reflect the selected time scale.
     /// </summary>
     /// <param name="scale">The time scale to apply (NS, US, MS, S, M, or H).</param>
-    private void SetZone(TimeScale scale)
+    private async Task SetZone(TimeScale scale)
     {
         _portMoment.TimeScale = scale;
+        await NotifyPortMomentsChanged();
         StateHasChanged();
     }
 
     /// <summary>
     /// Opens the offcanvas panel to add multiple input parameters for this port.
-    /// Allows users to define multiple value changes at different time points.
+    /// Passes current extra moments and registers a callback to sync changes back.
     /// </summary>
     private async Task AddInputParams()
     {
@@ -209,12 +300,81 @@
             { "PortMoment", _portMoment },
             { "Variable", Variable! },
             { "LimitTime", LimitTime },
-            { "TimeScale", TimeScale }
+            { "TimeScale", TimeScale },
+            { "InitialExtraMoments", _portMoments },
+            { "OnExtraMomentsChanged", EventCallback.Factory.Create<List<PortMoment>>(this, OnExtraMomentsUpdated) }
         };
 
         await _inputsOffCanvas.ShowAsync<PortMomentExtraInputs>(
             title: $"Additional Moments for {Variable?.Name}",
             parameters: parameters);
+    }
+
+    /// <summary>
+    /// Called when the offcanvas PortMomentExtraInputs sends back updated moments.
+    /// </summary>
+    private async Task OnExtraMomentsUpdated(List<PortMoment> updatedMoments)
+    {
+        _portMoments = updatedMoments;
+        await NotifyPortMomentsChanged();
+    }
+
+    /// <summary>
+    /// Builds the current PortMomentConfiguration and fires the OnPortMomentsChanged callback.
+    /// </summary>
+    private async Task NotifyPortMomentsChanged()
+    {
+        var config = GetCurrentConfiguration();
+        await OnPortMomentsChanged.InvokeAsync(config);
+    }
+
+    /// <summary>
+    /// Collects all moments (base + extras) into a PortMomentConfiguration.
+    /// </summary>
+    private PortMomentConfiguration GetCurrentConfiguration()
+    {
+        var config = new PortMomentConfiguration
+        {
+            PortName = Variable?.Name ?? string.Empty,
+            Values = new List<PortMomentValue>()
+        };
+
+        // If clock, add a clock marker
+        if (_portMoment.IsClock)
+        {
+            config.Values.Add(new PortMomentValue
+            {
+                Time = 0,
+                TimeScale = "CLK",
+                Value = "CLOCK"
+            });
+        }
+        else if (!string.IsNullOrEmpty(_portMoment.Value))
+        {
+            // Add base moment (only if it has meaningful data)
+            config.Values.Add(new PortMomentValue
+            {
+                Time = _portMoment.TimeInput,
+                TimeScale = _portMoment.TimeScale.ToString(),
+                Value = _portMoment.Value
+            });
+        }
+
+        // Add extra moments
+        foreach (var moment in _portMoments)
+        {
+            if (!string.IsNullOrEmpty(moment.Value))
+            {
+                config.Values.Add(new PortMomentValue
+                {
+                    Time = moment.TimeInput,
+                    TimeScale = moment.TimeScale.ToString(),
+                    Value = moment.Value
+                });
+            }
+        }
+
+        return config;
     }
 
     #endregion

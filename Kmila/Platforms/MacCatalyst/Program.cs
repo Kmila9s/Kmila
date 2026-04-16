@@ -3,13 +3,20 @@ using UIKit;
 
 namespace Kmila;
 
+/// <summary>
+/// Contains the main entry point for the Kmila Mac Catalyst application.
+/// </summary>
 public class Program
 {
-    // This is the main entry point of the application.
+    /// <summary>
+    /// Main entry point of the Mac Catalyst application.
+    /// Bootstraps the UIKit application with the <see cref="AppDelegate"/> class.
+    /// </summary>
+    /// <param name="args">Command-line arguments passed to the application at launch.</param>
     static void Main(string[] args)
     {
-        // if you want to use a different Application Delegate class from "AppDelegate"
-        // you can specify it here.
+        // To use a different Application Delegate class from "AppDelegate",
+        // replace typeof(AppDelegate) with the desired delegate type.
         UIApplication.Main(args, null, typeof(AppDelegate));
     }
 }

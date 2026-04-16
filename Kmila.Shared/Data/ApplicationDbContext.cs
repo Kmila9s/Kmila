@@ -26,8 +26,10 @@ public class ApplicationDbContext : SQLiteAsyncConnection
     /// </summary>
     public async Task InitDBAsync()
     {
+        // Create each table independently so a failure in one does not prevent others from being created
         try
         {
+            // Create the Projects table for storing project metadata
             var result = await CreateTableAsync<Project>();
         }
         catch (Exception ex)
@@ -36,6 +38,7 @@ public class ApplicationDbContext : SQLiteAsyncConnection
         }
         try
         {
+            // Create the ProjectFiles table for storing file records per project
             var result = await CreateTableAsync<ProjectFile>();
         }
         catch (Exception ex)
@@ -44,6 +47,7 @@ public class ApplicationDbContext : SQLiteAsyncConnection
         }
         try
         {
+            // Create the AppSettings table for key-value application settings
             var result = await CreateTableAsync<AppSettings>();
         }
         catch (Exception ex)
@@ -95,15 +99,18 @@ public class ApplicationDbContext : SQLiteAsyncConnection
     {
         try
         {
+            // Upsert: update existing setting or insert a new one
             var existing = await Settings.Where(s => s.Key == key).FirstOrDefaultAsync();
             if (existing != null)
             {
+                // Update the existing record with new value and timestamp
                 existing.Value = value;
                 existing.LastModified = DateTime.UtcNow;
                 await UpdateAsync(existing);
             }
             else
             {
+                // Insert a new setting record
                 await InsertAsync(new AppSettings
                 {
                     Key = key,
@@ -111,7 +118,7 @@ public class ApplicationDbContext : SQLiteAsyncConnection
                     LastModified = DateTime.UtcNow
                 });
             }
-            // Notify subscribers that a setting has changed
+            // Notify subscribers that a setting has changed (triggers reactive updates like language switching)
             StaticOnValueChanged?.Invoke(key);
         }
         catch (Exception ex)

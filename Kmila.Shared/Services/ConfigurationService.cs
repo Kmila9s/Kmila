@@ -9,8 +9,11 @@ namespace Kmila.Shared.Services;
 /// </summary>
 public class ConfigurationService
 {
+    // Database context for persisting configurations as key-value settings
     private readonly ApplicationDbContext _dbContext;
+    // File extension used for exported configuration files
     private const string CONFIG_EXTENSION = ".k-config";
+    // Storage key for tracking the most recently used configuration
     private const string LAST_CONFIG_KEY = "KMILA_LAST_CONFIG";
 
     /// <summary>

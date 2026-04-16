@@ -1,4 +1,5 @@
 using Debugger;
+using Interpreter.Models;
 using Interpreter.Services;
 using Kmila.Shared.Models;
 namespace Kmila.Shared.Services;
@@ -33,6 +34,10 @@ public class ProgramBuilder : IDisposable
     /// </summary>
     public event Action<string>? OnBuildCancelled;
     /// <summary>
+    /// Occurs when the simulation completes with waveform data.
+    /// </summary>
+    public event Action<SignalHistory>? OnSimulationCompleted;
+    /// <summary>
     /// Gets the parser used to parse the VHDL file.
     /// </summary>
     public Debugger.Repositories.Parser Parser { get; private set; } = default!;
@@ -40,7 +45,15 @@ public class ProgramBuilder : IDisposable
     /// Gets whether a build is currently in progress.
     /// </summary>
     public bool IsBuilding { get; private set; } = false;
+    /// <summary>
+    /// Gets the signal history from the last simulation run.
+    /// </summary>
+    public SignalHistory? SimulationHistory => _simulationRunner?.Engine?.History;
+    // Legacy timer for step-by-step simulation (TimeMachine path)
     private TimeMachine.Repositories.Timer _timeMachine = new();
+    // SimulationRunner for fast full-simulation execution
+    private SimulationRunner? _simulationRunner;
+    // Cancellation token source for cooperative cancellation of async operations
     private readonly CancellationTokenSource _cts = new();
     /// <summary>
     /// Initializes a new instance of the <see cref="ProgramBuilder"/> class.
@@ -150,32 +163,93 @@ public class ProgramBuilder : IDisposable
         }
     }
     /// <summary>
+    /// Runs a full simulation using SimulationRunner (bypasses TimeMachine for speed).
+    /// </summary>
+    /// <param name="portMoments">Port moment configurations from the UI.</param>
+    /// <param name="duration">Total simulation duration.</param>
+    public async Task RunSimulationAsync(List<PortMomentConfiguration>? portMoments, TimeSpan duration)
+    {
+        // Get first entity with architecture
+        var entity = Parser.Entities.FirstOrDefault(e => e.Architecture != null);
+        if (entity == null)
+            throw new InvalidOperationException("No entity with architecture found.");
+
+        // Build simulation config from UI parameters
+        var config = StimulusBuilder.BuildConfig(entity, portMoments, duration);
+
+        // Dispose previous runner if any
+        _simulationRunner?.Dispose();
+        _simulationRunner = new SimulationRunner();
+
+        // Subscribe to runner events and forward them
+        _simulationRunner.OnProgressChanged += progress => OnProgressAdvanced?.Invoke(progress);
+        _simulationRunner.OnSimulationEnded += completed =>
+        {
+            OnSimulationEnded?.Invoke(completed);
+            if (completed && _simulationRunner.Engine?.History != null)
+            {
+                OnSimulationCompleted?.Invoke(_simulationRunner.Engine.History);
+            }
+        };
+        _simulationRunner.OnError += msg => OnBuildError?.Invoke("Simulation error", msg);
+
+        // Run on current async context (caller should be on background/UI thread)
+        await _simulationRunner.RunAsync(config);
+    }
+
+    /// <summary>
     /// Restarts the simulation timer with the specified wait time.
     /// </summary>
     /// <param name="WaitTime">The wait time for the simulation.</param>
     public void RestartTimer(TimeSpan WaitTime) => _timeMachine.Restart(WaitTime);
     /// <summary>
-    /// Pauses the simulation timer.
+    /// Pauses the simulation (SimulationRunner or TimeMachine).
     /// </summary>
-    public void PauseTimer() => _timeMachine.Pause();
+    public void PauseTimer()
+    {
+        if (_simulationRunner?.IsRunning == true)
+            _simulationRunner.Pause();
+        else
+            _timeMachine.Pause();
+    }
     /// <summary>
-    /// Continues the simulation timer.
+    /// Resumes the simulation (SimulationRunner or TimeMachine).
     /// </summary>
-    public void ContinueTimer() => _timeMachine.Continue();
+    public void ContinueTimer()
+    {
+        if (_simulationRunner?.IsPaused == true)
+            _simulationRunner.Resume();
+        else
+            _timeMachine.Continue();
+    }
     /// <summary>
-    /// Stops the simulation timer.
+    /// Stops the simulation (SimulationRunner or TimeMachine).
     /// </summary>
-    public void StopTimer() => _timeMachine.Stop();
+    public void StopTimer()
+    {
+        if (_simulationRunner?.IsRunning == true)
+            _simulationRunner.Stop();
+        else
+            _timeMachine.Stop();
+    }
+    /// <summary>
+    /// Forwards simulation progress from the TimeMachine to subscribers.
+    /// </summary>
+    /// <param name="progress">The simulation progress value (0.0 to 1.0).</param>
     private void OnProgressAdvance(double progress)
     {
         OnProgressAdvanced?.Invoke(progress);
     }
+    /// <summary>
+    /// Forwards simulation end event from the TimeMachine to subscribers.
+    /// </summary>
+    /// <param name="ended">True if the simulation completed, false if it was interrupted.</param>
     private void OnSimulationEnd(bool ended)
     {
         OnSimulationEnded?.Invoke(ended);
     }
     /// <summary>
-    /// Sets the simulation time.
+    /// Sets the simulation time (legacy TimeMachine path).
     /// </summary>
     /// <param name="WaitTime">The wait time for the simulation.</param>
     public void SetSimulationTime(TimeSpan WaitTime)
@@ -198,6 +272,7 @@ public class ProgramBuilder : IDisposable
         ProgressReporter.Instance.Completed -= OnInterpreterCompleted;
         ProgressReporter.Instance.CancellationRequested -= OnInterpreterCancellationRequested;
 
+        _simulationRunner?.Dispose();
         _cts.Cancel();
         _cts?.Dispose();
     }
