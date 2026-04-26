@@ -5,8 +5,8 @@
 **Author:** Ulrich Tamayo Daniel
 **Email:** dulricht1700@alumno.ipn.mx
 **Email 2:** danielulrichtamayo@gmail.com
-**Version:** 0.15.1
-**Last Updated:** February 21, 2026
+**Version:** 1.14.0
+**Last Updated:** April 20, 2026
 
 ## 1. Overview
 
@@ -28,14 +28,19 @@ Kmila-9s is a free, open-source, multiplatform academic platform focused on the 
 
 ### Key Features
 
-*   **Dynamic Variable Visualization:** Observe the states of signals, ports, and internal variables at any time to easily understand digital behavior.
-*   **FPGA Resource Validation:** Select target FPGA devices and validate that your design fits within the device's resource constraints (Logic Units, Flip-Flops, BRAM, DSP, I/O Pins) before simulation.
-*   **Cross-Platform:** Built with .NET 9 and MAUI, the application is installable and runs autonomously on **Windows, macOS, Android, iOS, and iPadOS**. A web version is also available for **Linux** users.
-*   **Multilingual Support:** Full internationalization (i18n) with 7 languages: English, Spanish, French, German, Chinese, Japanese, and Arabic (with RTL support). Language preferences persist across sessions via SQLite storage.
+*   **Dynamic Variable Visualization:** Observe the states of signals, ports, and internal variables at any time via the Waveforms dock tab.
+*   **VHDL IDE with Monaco intelligence:** Hover for rich documentation on keywords/types/IEEE functions, Ctrl+click to jump to signal / port / entity declarations in the current file, Shift+F12 for references, auto-complete covering the full VHDL keyword set + user declarations + ten ready-to-insert snippets (entity, clocked process, counter, shift register…). Minimap with smart auto-hide on narrow viewports. All keyword docs translate with the UI language.
+*   **Single-surface workbench:** The Editor page is a workbench — Monaco at the top, a **Run bar** for build/run/pause/stop with full state machine, a **bottom dock** with five tabs (Entities · Ports · Waveforms · Files · Output), and a **status bar** showing file info + resource % + sim state. No simulation modal; everything is one scroll.
+*   **FPGA Resource Validation:** Pick a target device in the TopBar chip (searchable across 36 devices). Resource chip in the status bar stays green → amber → red as the design grows relative to the selected device. Clickable to jump to the Entities tab.
+*   **Configurations on the fly:** Save / load named simulation setups (FPGA + time + port moments) from a TopBar pill — round-trip through SQLite, no file management needed.
+*   **Sample project template:** One click creates a ready-to-build 4-bit counter project *and* a companion simulation config — three clicks to a running waveform on first use.
+*   **In-app Logs viewer:** Every `ILogger<T>` write in the app lands in the `/logs` page with filtering, auto-scroll, pause, and level gating. Useful on mobile / MAUI where there's no console to watch.
+*   **Cross-Platform:** Built with .NET 9 and MAUI. Installs on **Windows, macOS, Android, iOS, and iPadOS**. A Blazor Server web version covers **Linux**.
+*   **Multilingual Support:** Full i18n across 7 languages — English, Spanish, French, German, Chinese, Japanese, Arabic (with RTL flipping of layouts, borders and chevrons). VHDL keyword docs translate too (EN + ES currently full; FR / DE / CH / JP / AR fall back to English until translated). Preferences persist via SQLite + `localStorage`.
 *   **Standalone and Offline:** The application runs locally without requiring a web service or internet connection.
-*   **"Pre-Laboratory" Function:** Allows students to conduct preparatory practices before physical lab sessions, optimizing limited time and resources.
-*   **Accessibility:** Practice and study from any computer or mobile device, no longer depending on a physical laboratory.
-*   **Rapid Prototyping:** A design that might take weeks to validate in a traditional environment can be verified in a matter of days within the application.
+*   **"Pre-Laboratory" Function:** Students can do preparatory work ahead of physical lab sessions.
+*   **Accessibility:** Practice and study from any computer or mobile device. Per-datatype validation on port inputs (`std_logic_vector(7 downto 0)` enforces exactly 8 bits from the 9-value IEEE set) stops invalid stimulus from reaching the simulation.
+*   **Rapid Prototyping:** Validate ideas in minutes that would take a traditional flow hours.
 
 ## 4. Technology Stack
 
@@ -314,7 +319,6 @@ graph TD
             editor_page["Editor Page<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Pages/Editor.razor"]
             projects_view_page["Projects View Page<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Pages/ProjectsView.razor"]
             home_page["Home Page<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Pages/Home.razor"]
-            simulation_params_modal["Simulation Parameters Modal<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Modals/SimulationParametersModal.razor"]
             create_file_modal["Create File Modal<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Modals/CreateFileModal.razor"]
             project_details_modal["Project Details Modal<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Modals/ProjectDetailsModal.razor"]
             nav_menu["NavMenu<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Layout/NavMenu.razor"]
@@ -323,7 +327,6 @@ graph TD
             editor_page["Editor Page<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Pages/Editor.razor"] -->|"Uses"| program_builder_service["ProgramBuilder Service<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
             editor_page["Editor Page<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Pages/Editor.razor"] -->|"Uses"| projects_repo["Projects Repository<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Repositories/Projects.cs"]
             editor_page["Editor Page<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Pages/Editor.razor"] -->|"Uses"| project_files_repo["ProjectFiles Repository<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Repositories/ProjectFiles.cs"]
-            editor_page["Editor Page<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Pages/Editor.razor"] -->|"Opens"| simulation_params_modal["Simulation Parameters Modal<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Modals/SimulationParametersModal.razor"]
             editor_page["Editor Page<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Pages/Editor.razor"] -->|"Opens"| create_file_modal["Create File Modal<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Modals/CreateFileModal.razor"]
             projects_view_page["Projects View Page<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Pages/ProjectsView.razor"] -->|"Uses"| projects_repo["Projects Repository<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Repositories/Projects.cs"]
             projects_view_page["Projects View Page<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Pages/ProjectsView.razor"] -->|"Opens"| project_details_modal["Project Details Modal<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Modals/ProjectDetailsModal.razor"]
@@ -411,38 +414,44 @@ The `Kmila.Shared` project contains the core logic, UI components, and data mode
 
 ### 10.1 Views and UI Components
 
+> **Note — April 2026 redesign.** The UI went through a design-system rewrite: token-driven CSS (`wwwroot/css/tokens.css` + `pages.css`), first-class dark mode, custom sidebar & topbar replacing Blazor Bootstrap's `Sidebar2`, a bento-grid Projects page, a workbench-style Editor with run-bar + dock + status-bar, and a full set of new Settings / Logs pages. The former `SimulationParametersModal`, `ButtonCollapse`, `FPGATabContent`, `ConfigTabContent`, `RunTabContent`, `BuildProgressDisplay`, `PortMomentExtraInputs`, and `EnhancedRangeSlider` were removed — their responsibilities live in the new components below.
+
 #### Pages
-*   **Editor.razor**: Main page for the VHDL editor, hosts Monaco editor, file explorer, and simulation controls
-*   **Home.razor**: Landing page of the application
-*   **ProjectsView.razor**: Displays all user projects with create, edit, and delete functionality
+*   **Home.razor** — Landing page: hero band with logo lockup + primary CTA, overview copy, features bento grid (six cards with size variation), closing CTA panel.
+*   **ProjectsView.razor** — Project list as responsive card grid (auto-fill at 280px track). Header with live search, count pill, primary **Create new** CTA and ghost **Try a sample** CTA. Empty / no-match states. Per-project hover reveal of Open + Delete kebab (Rename inline). `/projects/create` route auto-opens the create modal.
+*   **Editor.razor** — Workbench: Monaco at top, **RunBar** (build / run state machine + time + scale + FPGA chip), **EditorDock** (5 tabs), **StatusBar**. Handles per-project reload via `OnParametersSetAsync`, marshals `ProgramBuilder` events into `SimulationParameters` + `BuildLog`, auto-switches the active dock tab on build/run transitions.
+*   **Settings.razor** — Skeleton preference surface with four token-styled cards (Appearance, Editor, Simulation, Diagnostics). Diagnostics card links to the Logs viewer.
+*   **Logs.razor** — Live viewer over `AppLogStore`. Search (message + category), level filter (All / Info+ / Warning+ / Error+), auto-scroll, pause, clear. Renders up to 500 recent entries out of a 2000-entry ring buffer.
 
 #### Components
-*   **BuildProgressDisplay.razor**: Reusable component for displaying build progress information including progress bar, status messages (building/cancelled/error/success), error detail alerts, and a dismiss button. Implements IDisposable for language change event cleanup
-*   **ButtonCollapse.razor**: Contains main editor buttons (Save, New File, Start Simulation, Validate) with real-time build progress display including progress bar, status messages, error details, and build cancellation support from the Interpreter's ProgressReporter
-*   **ConfigTabContent.razor**: Presentation-only sub-component for the Config tab in SimulationParametersModal. Displays time configuration with EnhancedRangeSlider, port variables, and collapsible configuration save/load section
-*   **EntityResourceUsage.razor**: Displays the estimated FPGA resource usage for an entity (Flip-Flops, LUTs, DSP Slices, BRAM Blocks, I/O Pins, Clock Domains) using ResourceMetricBox components in a responsive grid layout
-*   **EntityView.razor**: Displays VHDL entity name and ports with resource usage estimation
-*   **EnhancedRangeSlider.razor**: Advanced range slider component with dynamic coloring, tooltips, tick marks, and custom labels
-*   **FilesCard.razor**: Project files card with open and remove functionality
-*   **FPGASimpleView.razor**: Compact FPGA information display widget showing device specifications
-*   **FPGATabContent.razor**: Presentation-only sub-component for the FPGA tab in SimulationParametersModal. Shows FPGA device selector fallback, device details grid (resources, clocking, I/O, power), and resource utilization analysis with color-coded ResourceProgressBar components
-*   **LanguageChanger.razor**: Dropdown component for selecting application language with translate icon. Uses reactive architecture where saving to DB triggers automatic translation reload via event chain (DbContext -> Traductor -> MainLayout). Supports 7 languages
-*   **PortMomentExtraInputs.razor**: Allows adding extra time moments for a port
-*   **PortMomentInput.razor**: Defines port values at specific times
-*   **ResourceMetricBox.razor**: Reusable metric box for displaying a single FPGA resource metric with title, icon, value badge, accuracy label, and optional child content
-*   **ResourceProgressBar.razor**: Reusable progress bar for displaying FPGA resource utilization with color-coded thresholds (green/info/warning/danger) and used/available count badges
-*   **RunTabContent.razor**: Presentation-only sub-component for the Run tab in SimulationParametersModal. Shows configuration summary, simulation controls (start/pause/continue/restart/stop), and simulation progress with animated progress bar
+*   **Breadcrumbs.razor** — Live breadcrumb trail rendered inside the TopBar. Walks `NavigationManager.Uri` for `/`, `/projects`, `/projects/create`, `/editor/{id}`; for editor routes, looks up the project name. Re-renders on `LocationChanged` + `StaticOnLangChanged`. Truncates to last 2 crumbs under 641 px.
+*   **ConfigurationsPill.razor** — TopBar dropdown for named simulation configs. Pill trigger shows current name with a warning-dot when `SimulationParameters.IsDirty`. Popover lists saved configs with checkmark on the active one and a hover-reveal delete; actions include Save changes, inline Save as, and deleting by name. All round-trips through `ConfigurationService`.
+*   **EditorDock.razor** — Bottom dock on the Editor page. Tab strip with five slots (Entities · Ports · Waveforms · Files · Output) rendered via named `RenderFragment` parameters. Collapse toggle at the far end, per-tab count pills (Entities, Files) or ready dots (Waveforms, Output). Active tab + collapsed state persisted via `EditorDockState` service + `localStorage`.
+*   **EntityResourceUsage.razor** — FPGA resource estimate for an entity. Bento grid of `ResourceMetricBox` cards (FF / LUT / DSP / BRAM / I/O / Clock Domains) with a tokenized info note about estimation accuracy.
+*   **EntityView.razor** — Parsed-entity panel. VHDL-syntax-flavored title (`entity <name> is`), port-count chips, compact signal list replacing the former BB Grid. `Current Value` column appears only once the simulation has run.
+*   **FilesCard.razor** — Project files list (no BB Grid). Row-per-file: tinted icon tile → mono filename → type chip → inline ghost **Open** → kebab menu with **Rename** (inline edit) + **Delete** (with confirm dialog). Active row gets a left-edge accent bar.
+*   **FPGASimpleView.razor** — Compact FPGA-info widget (unchanged).
+*   **KmilaThemeSwitcher.razor** — Custom theme dropdown (`<details>` popover). Light / Dark / Auto, with `auto` resolving via `matchMedia`. Persists to `localStorage['kmila-theme']` so the inline `<head>` boot script avoids flash-of-wrong-theme on reload. Mirrors choice into SQLite for future native surfaces.
+*   **LanguageChanger.razor** — Rebuilt `<details>` popover matching the FPGA/theme picker pattern. Flags via mono code badges. Pushes the new code into `localStorage` and `window.kmilaCurrentDocsLang` so the Monaco VHDL hover / completion providers translate instantly.
+*   **OutputPanel.razor** — Output dock-tab content. Reads from `BuildLog`. Colored rows (info/success/warning/danger) with timestamp, icon, mono message. ARIA live-region so screen readers announce new errors.
+*   **PortMomentInput.razor** — Per-IN-port timeline editor. Rebuilt with no off-canvas drawer and no base/extras split: a single flat moments list with a read-only SVG timeline strip above and inline editable rows (time · scale · value · ×) below. Per-datatype value validation with char-whitelisting, maxlength, and a "N/M" counter for vectors. Clock mode replaces the list with a dashed-border info strip.
+*   **PortsPanel.razor** — Content for the **Ports** dock tab. Groups `PortMomentInput` instances by entity, sources time / scale / running from `SimulationParameters`, writes port moments back into the service. Dual empty states ("Build first" or "No input ports").
+*   **ResourceMetricBox.razor** — Tokenized metric card. Icon chip + mono number + unit + accuracy pill. Variant driven by a semantic (`primary` / `success` / `warning` / `danger` / `info` / `neutral`) that maps to token colors for both light and dark themes.
+*   **ResourceProgressBar.razor** — Slim pill-shaped progress bar with four color tiers (success 0–59 %, info 60–79, warning 80–99, danger 100+). Danger tier uses a pulsing diagonal-stripe fill for visual urgency without being obnoxious.
+*   **RunBar.razor** — Horizontal strip between Monaco and the dock. FPGA reference chip · time number input + scale select · secondary **Build** · primary **Run** with state machine (Idle → Building… → Pause/Stop → Resume → Run again) · overflow menu (Save · New file). Progress line animates under the bar while running.
+*   **StatusBar.razor** — Thin bottom bar. File info (unsaved dot · mono filename · Ln/Col · language chip) on the left; build status chip + resource % of selected FPGA + sim status chip on the right. Build/resource chips are clickable and jump to the matching dock tab.
+*   **WaveformViewer.razor** — Digital-waveform chart per signal via Chart.js (largely unchanged content; chrome tokenized).
 
 #### Layout
-*   **MainLayout.razor**: Main application layout with navigation menu, content area, RTL support for Arabic language, and loading state that ensures translations are initialized before rendering child components
-*   **NavMenu.razor**: Navigation menu displaying project options and created projects with i18n support
-*   **TopBar.razor**: Responsive top navigation bar with FPGA selector, language switcher, and theme switcher. Features mobile-optimized layout with text truncation, responsive breakpoints (< 576px, < 400px), and proper flexbox alignment for small screens
+*   **MainLayout.razor** — Shell: mounts `NavMenu` + `TopBar` + content article. Applies `.content--wide` when the current route is `/editor/…` so the workbench fills the full viewport (ordinary pages keep the 1440 px reading cap). Subscribes to `NavigationManager.LocationChanged` so the class flips immediately on navigation.
+*   **NavMenu.razor** — Custom-built sidebar (no BB `Sidebar2`). Logo lockup + version chip, three sections: **Workspace** (Projects / New), **Your projects** (live list with counts, auto-refreshes on `Projects.OnListChanged`), and **System** (Settings · Logs). Collapsible to an icons-only rail on desktop; off-canvas drawer on mobile via `SidebarState` service.
+*   **TopBar.razor** — Hamburger (mobile) · breadcrumbs · Configurations pill · FPGA picker · language · theme. All `<details>` popovers auto-close on outside-click / Escape via a global handler in the inline `<head>` script.
 
 #### Modals
-*   **ConfigurationModal.razor**: Modal for managing simulation configurations (.k-config files). Features save current configuration, load saved configurations, export to file, and import from file
-*   **CreateFileModal.razor**: Modal for creating new files in a project
-*   **ProjectDetailsModal.razor**: Modal for creating new projects
-*   **SimulationParametersModal.razor**: Comprehensive modal for configuring simulation parameters organized in mobile-friendly tabs (FPGA, Config, Run). Delegates tab content to sub-components: FPGATabContent, ConfigTabContent, and RunTabContent. Features FPGA resource validation with fallback selector, time/scale configuration, port inputs, configuration save/load integration, and simulation controls (start/pause/resume/restart/stop)
+*   **ConfigurationModal.razor** — Kept as the "Manage configs" power surface — reachable from future "Manage…" entry on the Configurations pill. Handles save / load / delete / export / import of `.k-config` files.
+*   **CreateFileModal.razor** — Create-file form.
+*   **MarkdownModal.razor** — Markdown preview triggered when **Build** runs against a `.md` file.
+*   **ProjectDetailsModal.razor** — Create-project form. Cleaner labeled inputs with a live sanitised-folder-name preview (the disk path that will hold the project).
 
 ```mermaid
 classDiagram
@@ -537,19 +546,23 @@ classDiagram
 ### 10.2 Backend and Logic
 
 #### Services
-*   **ProgramBuilder.cs**: Responsible for building and simulating VHDL code using Debugger and TimeMachine modules. Integrates with the Interpreter's ProgressReporter to provide real-time build progress updates and cancellation support through events:
-    *   `OnBuildProgressChanged(float, string)` - Progress updates (0-1 value and status message)
-    *   `OnBuildError(string, string?)` - Error events with message and optional details
-    *   `OnBuildCompleted(string)` - Completion notifications
-    *   `OnBuildCancelled(string)` - Cancellation notifications when user cancels build
-    *   `CancelBuild()` - Method to request cancellation of the current build operation
-*   **IFormFactor.cs**: Interface defining methods for device form factor and platform detection
-*   **ConfigurationService.cs**: Service for managing simulation configurations (.k-config files). Supports save/load to SQLite, export/import to files, and configuration history tracking
+*   **ProgramBuilder.cs** — Builds + simulates VHDL using Debugger / TimeMachine / Interpreter. Accepts both `.vhd` and `.vhdl`. Exposes `OnSimulationCompleted`, `OnSimulationEnded`, `OnProgressAdvanced`, `OnBuildError` events that the Editor page marshals to UI state.
+*   **ConfigurationService.cs** — Save / load / delete of named simulation configs (.k-config semantics, stored in SQLite). Fires `OnConfigurationsChanged` so the `ConfigurationsPill` auto-refreshes its list.
+*   **Traductor.cs** — i18n service with 7 languages. Reactive reload on `AppSettings.KEY_LANGUAGE` change via `ApplicationDbContext.StaticOnValueChanged`. Supports optional `ILogger<Traductor>` injection.
+*   **IFormFactor.cs** — Interface for device form factor / platform detection.
+
+**UI state services (shared across components — avoid component → component wiring):**
+*   **SidebarState.cs** — Drives the custom sidebar: `IsCollapsed` (desktop rail mode) + `IsMobileOpen` (off-canvas drawer). TopBar hamburger toggles the drawer, sidebar subscribes for re-render.
+*   **EditorDockState.cs** — Active tab (`EditorTab` enum) + collapsed flag. Persisted to `localStorage` by `EditorDock`. Other components (Editor, RunBar) call `SetActive` to auto-focus the right tab on build/run transitions.
+*   **SimulationParameters.cs** — The Run-bar state machine in service form. Fields: `Time`, `Scale`, `State` (`SimState` enum: Idle / Building / BuiltOk / BuildError / Running / Paused / Complete), `Progress`, `PortMoments`, `LoadedName`, `IsDirty`. Any mutation of time / scale / port moments flips `IsDirty` so the Configurations pill shows its yellow marker. `GetPortMomentsForRun()` returns port moments minus empty-value rows (kept in-buffer for the UI but dropped before being handed to `ProgramBuilder`).
+*   **BuildLog.cs** — Bounded in-memory log for the **Output** dock tab. Entries carry a `BuildLogLevel` (Info / Success / Warn / Error) — named distinctly from `Microsoft.Extensions.Logging.LogLevel` to avoid clashing with the broader in-app logger below.
+*   **AppLogStore.cs** — Thread-safe ring buffer of `AppLogEntry` (timestamp + `LogLevel` + category + message + exception). Backs the `/logs` page. Max 2000 entries, trims oldest when full.
+*   **InMemoryLoggerProvider.cs** — Registers as an `ILoggerProvider` in both Web and MAUI startup. Every `ILogger<T>` write anywhere in the app fans out to Console + `AppLogStore` so diagnostics show up in the in-app Logs viewer without requiring a terminal (critical for mobile builds).
 
 #### Repositories
-*   **Projects.cs**: Manages projects in the database (CRUD operations)
-*   **ProjectFiles.cs**: Manages project files in the database (CRUD operations)
-*   **JSONFileReader.cs**: Reads FPGA device specifications from JSON files.
+*   **Projects.cs** — CRUD on projects. Fires `OnListChanged` after every successful Create / Remove / Update so the sidebar & Projects page stay in sync without polling.
+*   **ProjectFiles.cs** — CRUD on files. Implements real `RemoveAsync` (deletes DB row + disk file) and `RenameAsync` (disk rename + DB update, duplicate-name refused).
+*   **JSONFileReader.cs** — Reads FPGA device specs from JSON. Two constructors — one for ASP.NET Core (IWebHostEnvironment), one for MAUI (package-open delegate). Optional `ILogger<JSONFileReader>` injection.
 
 #### Models
 *   **Project.cs**: Represents a project in the application
@@ -568,120 +581,158 @@ classDiagram
 ```mermaid
 graph TD
     subgraph "UI Layer"
-        Editor[Editor.razor]
+        Home[Home.razor]
         ProjectsView[ProjectsView.razor]
-        ButtonCollapse[ButtonCollapse.razor]
-        SimParams[SimulationParametersModal.razor]
-        FilesCard[FilesCard.razor]
-    end
-    
-    subgraph "Service Layer"
-        ProgramBuilder[ProgramBuilder Service]
-        ConfigService[ConfigurationService]
-        Traductor[Traductor i18n Service]
-    end
-    
-    subgraph "Repository Layer"
-        ProjectsRepo[Projects Repository]
-        ProjectFilesRepo[ProjectFiles Repository]
-        JSONFileReader[JSON File Reader]
-    end
-    
-    subgraph "Data Layer"
-        AppDbContext[ApplicationDbContext]
-        SQLite[(SQLite Database)]
-        JSONFiles[(JSON Files)]
-    end
-    
-    subgraph "External Dependencies"
-        DebuggerParser[Debugger.Repositories.Parser]
-        TimeMachine[TimeMachine.Repositories.Timer]
-        ProgressReporter[Interpreter.ProgressReporter]
+        Editor[Editor.razor]
+        Settings[Settings.razor]
+        Logs[Logs.razor]
+        RunBar[RunBar.razor]
+        EditorDock[EditorDock.razor]
+        StatusBar[StatusBar.razor]
+        TopBar[TopBar.razor]
+        NavMenu[NavMenu.razor]
     end
 
-    Editor --> ButtonCollapse
-    Editor --> FilesCard
-    ButtonCollapse --> SimParams
+    subgraph "UI State Services"
+        SimState[SimulationParameters]
+        DockState[EditorDockState]
+        SidebarState[SidebarState]
+        BuildLog[BuildLog]
+        AppLog[AppLogStore]
+    end
+
+    subgraph "Business Services"
+        ProgramBuilder[ProgramBuilder]
+        ConfigService[ConfigurationService]
+        Traductor[Traductor i18n]
+    end
+
+    subgraph "Repository Layer"
+        ProjectsRepo[Projects]
+        ProjectFilesRepo[ProjectFiles]
+        JSONFileReader[JSONFileReader]
+    end
+
+    subgraph "Data Layer"
+        AppDbContext[ApplicationDbContext]
+        SQLite[(SQLite)]
+        JSONFiles[(JSON device specs)]
+    end
+
+    subgraph "External"
+        DebuggerParser[Debugger.Parser]
+        TimeMachine[TimeMachine]
+        Interpreter[Interpreter]
+        InMemLog[InMemoryLoggerProvider]
+    end
+
+    NavMenu --> SidebarState
+    TopBar  --> SidebarState
+    TopBar  --> ConfigService
+
+    Editor --> RunBar
+    Editor --> EditorDock
+    Editor --> StatusBar
     Editor --> ProgramBuilder
+    Editor --> SimState
+    Editor --> BuildLog
+    Editor --> DockState
+
+    RunBar     --> SimState
+    StatusBar  --> SimState
+    StatusBar  --> DockState
+    EditorDock --> DockState
 
     ProgramBuilder --> DebuggerParser
     ProgramBuilder --> TimeMachine
-    ProgramBuilder --> ProgressReporter
-    ProgressReporter -->|Progress Events| ButtonCollapse
-    
-    Editor --> ProjectsRepo
-    Editor --> ProjectFilesRepo
-    ProjectsView --> ProjectsRepo
-    FilesCard --> ProjectFilesRepo
-    
-    ProjectsRepo --> AppDbContext
+    ProgramBuilder --> Interpreter
+
+    ProjectsView  --> ProjectsRepo
+    ProjectsRepo  --> AppDbContext
     ProjectFilesRepo --> AppDbContext
     ConfigService --> AppDbContext
-    Traductor --> JSONFiles
-    AppDbContext --> SQLite
+    Traductor     --> JSONFiles
     JSONFileReader --> JSONFiles
+    AppDbContext  --> SQLite
+
+    InMemLog -.->|captures ILogger writes| AppLog
+    Logs     --> AppLog
 ```
 ### 10.3 Component Interactions
+
+The core Build → Run loop after the April 2026 redesign. `RunBar` owns the user-facing button state; `Editor` is the orchestrator; `SimulationParameters` and `EditorDockState` are the shared state that makes it all reactive without prop-drilling.
 
 ```mermaid
 sequenceDiagram
     participant User
+    participant RunBar
     participant Editor
-    participant ButtonCollapse
-    participant ProgramBuilder
-    participant ProgressReporter
+    participant Sim as SimulationParameters
+    participant Dock as EditorDockState
+    participant BL as BuildLog
+    participant PB as ProgramBuilder
     participant Parser
     participant TimeMachine
-    participant Repository
 
-    User->>Editor: Open Project
-    Editor->>Repository: GetProjectFiles()
-    Repository-->>Editor: List<ProjectFile>
+    User->>RunBar: Click ▶ Run (state is Idle)
+    RunBar->>Editor: OnRunClicked
+    Editor->>Editor: RunBuildAsync (auto-build since not BuiltOk)
+    Editor->>Sim: SetState(Building)
+    Editor->>BL: Info("Building ...")
+    Editor->>PB: Build(file)
+    PB->>Parser: ParseFile
+    alt Parse OK
+        Parser-->>PB: Entities
+        Editor->>Sim: SetState(BuiltOk)
+        Editor->>BL: Success("Build succeeded")
+        Editor->>Dock: SetActive(Entities)
 
-    User->>ButtonCollapse: Click "Validate Program"
-    ButtonCollapse->>Editor: OnBuildButtonClicked
-    Editor->>ProgramBuilder: Build(ProjectFile)
-    ProgramBuilder->>Parser: ParseFile()
-
-    loop Build Progress
-        ProgressReporter-->>ProgramBuilder: OnProgressChanged(float, string)
-        ProgramBuilder-->>ButtonCollapse: OnBuildProgressChanged
-        Note over ButtonCollapse: Update progress bar & status
+        Editor->>Sim: SetState(Running)
+        Editor->>BL: Info("Simulation starting ...")
+        Editor->>Dock: SetActive(Waveforms)
+        Editor-->>PB: RunSimulationAsync(ports, duration)
+        loop every tick
+            PB-->>Editor: OnProgressAdvanced(percent)
+            Editor->>Sim: SetProgress(percent)
+        end
+        TimeMachine-->>PB: OnSimulationEnded
+        PB-->>Editor: OnSimulationCompleted(history)
+        Editor->>Sim: SetState(Complete)
+        Editor->>BL: Success("Simulation completed")
+    else Parse failed
+        Editor->>Sim: SetState(BuildError)
+        Editor->>BL: Error("Build failed ...")
+        Editor->>Dock: SetActive(Output)
     end
 
-    alt Build Success
-        ProgressReporter-->>ProgramBuilder: OnCompleted(message)
-        ProgramBuilder-->>ButtonCollapse: OnBuildCompleted
-        Parser-->>ProgramBuilder: Entities
-        ProgramBuilder-->>Editor: Build Success
-    else Build Error
-        ProgressReporter-->>ProgramBuilder: OnErrorOccurred(message, detail)
-        ProgramBuilder-->>ButtonCollapse: OnBuildError
-        Note over ButtonCollapse: Display error details
-    else Build Cancelled
-        User->>ButtonCollapse: Click Cancel Button
-        ButtonCollapse->>ProgramBuilder: CancelBuild()
-        ProgramBuilder->>ProgressReporter: RequestCancellation()
-        ProgressReporter-->>ProgramBuilder: OnCancellationRequested
-        ProgramBuilder-->>ButtonCollapse: OnBuildCancelled
-        Note over ButtonCollapse: Display cancellation status
-    end
+    Note over RunBar,Sim: RunBar re-renders off Sim.State → button morphs<br/>through Run → Building… → Pause → Resume → Run again.
+    Note over Dock: Dock auto-focuses the correct tab per transition<br/>(Entities on BuildOk, Waveforms on Run, Output on errors).
+```
 
-    User->>Editor: Configure Simulation
-    Editor->>SimModal: Show Parameters
-    User->>SimModal: Set Time & Scale
-    SimModal-->>Editor: TimeSpan
+A simpler view of pause / stop:
 
-    Editor->>ProgramBuilder: SetSimulationTime(TimeSpan)
-    ProgramBuilder->>TimeMachine: Start(TimeSpan)
+```mermaid
+sequenceDiagram
+    participant User
+    participant RunBar
+    participant Editor
+    participant Sim as SimulationParameters
+    participant PB as ProgramBuilder
 
-    loop Simulation Progress
-        TimeMachine-->>ProgramBuilder: OnProgressAdvance(double)
-        ProgramBuilder-->>Editor: Update Progress
-    end
+    User->>RunBar: Click ⏸ Pause (state is Running)
+    RunBar->>Editor: OnPauseClicked
+    Editor->>PB: PauseTimer
+    Editor->>Sim: SetState(Paused)
 
-    TimeMachine-->>ProgramBuilder: OnSimulationEnded(bool)
-    ProgramBuilder-->>Editor: Simulation Complete
+    User->>RunBar: Click ▶ Resume
+    RunBar->>Editor: OnResumeClicked
+    Editor->>PB: ContinueTimer
+    Editor->>Sim: SetState(Running)
+
+    User->>RunBar: Click ■ Stop
+    RunBar->>Editor: OnStopClicked
+    Editor->>PB: StopTimer
+    Editor->>Sim: SetState(Complete)
 ```
 
 ## 11. Implementation Details
@@ -717,6 +768,43 @@ public interface IFileSystem
 *   **Desktop**: Parallel processing for multiple VHDL processes
 *   **Mobile**: Memory-efficient single-threaded execution with UI yielding
 *   **Web**: Web Workers via JavaScript interop for background processing
+
+### 11.3 Simulation Tick Resolution (important note)
+
+> **Heads-up — fixed-tick Nyquist limit.** The batch simulator advances in
+> discrete ticks. By default one tick is `TimeClock.NS_PER_TICK = 10 ns`,
+> which means the fastest clock the engine can represent without aliasing
+> is **50 MHz** (two ticks per period = 20 ns period). Any clock frequency
+> above ~50 MHz — whether it comes from the Run-bar override or from the
+> selected FPGA's PLL default — gets clamped by `Math.Max(1, …)` on the
+> half-period calculation and ends up toggling every single tick, which
+> is indistinguishable from 50 MHz in the waveform. In other words,
+> configuring a 100 MHz clock and a 200 MHz clock both render the same
+> square wave.
+
+This is a fundamental consequence of discrete-time simulation, not a bug
+in the injector. Finer time resolution is available as a user preference
+in **Settings → Simulation → Tick resolution**:
+
+| Mode | Tick | Max faithful clock | Cost per run | When to use |
+|------|------|-------------------|--------------|-------------|
+| **Default** (baseline) | 10 ns | 50 MHz | Fastest, lowest memory | Learning-oriented / 50 MHz-class designs — matches every lesson and snapshot captured before v1.14.x |
+| **High precision** | 1 ns | 500 MHz | ~10× tick count: ~10× slower, ~10× more `SignalHistory` memory | Accurately visualising 100 MHz+ clocks, fine-grained propagation delays |
+| **Adaptive** (auto) | computed per-run from the effective clock frequency | matches the clock | Only pays the precision cost for runs that actually need it | Recommended for most users once validated — fast for slow designs, accurate for fast ones |
+
+Default mode is preserved for backwards compatibility: existing projects,
+lessons, and `SimulationSnapshot` JSON blobs all encode tick counts
+against the 10 ns scale, so switching a saved run to a finer resolution
+would re-scale its time axis. The preference is persisted globally
+through `AppSettings` (key `KMILA_TICK_RESOLUTION_MODE`) and read at
+`ProgramBuilder.RunSimulationAsync` time, so changing the mode takes
+effect on the next Run — no app restart required.
+
+**Implementation:** `StimulusBuilder.BuildConfig` already takes
+`tickResNs` as a parameter. The mode only changes how that parameter is
+computed upstream — the simulator itself is agnostic to the value and
+just counts ticks. `WaveformData.FromSignalHistory` is called with the
+same `tickResNs` so time labels on the waveform stay truthful.
 
 ## 12. Testing Strategy
 
@@ -764,21 +852,23 @@ The application uses GitHub Actions for continuous integration and deployment:
 
 ### Kmila.Shared
 ├── Components/
-│   ├── BuildProgressDisplay.razor
-│   ├── ButtonCollapse.razor
-│   ├── ConfigTabContent.razor
+│   ├── Breadcrumbs.razor
+│   ├── ConfigurationsPill.razor
+│   ├── EditorDock.razor
 │   ├── EntityResourceUsage.razor
 │   ├── EntityView.razor
-│   ├── EnhancedRangeSlider.razor
 │   ├── FilesCard.razor
 │   ├── FPGASimpleView.razor
-│   ├── FPGATabContent.razor
+│   ├── KmilaThemeSwitcher.razor
 │   ├── LanguageChanger.razor
+│   ├── OutputPanel.razor
 │   ├── PortMomentInput.razor
-│   ├── PortMomentExtraInputs.razor
+│   ├── PortsPanel.razor
 │   ├── ResourceMetricBox.razor
 │   ├── ResourceProgressBar.razor
-│   └── RunTabContent.razor
+│   ├── RunBar.razor
+│   ├── StatusBar.razor
+│   └── WaveformViewer.razor
 ├── Data/
 │   └── ApplicationDbContext.cs
 ├── Interfaces/
@@ -805,23 +895,36 @@ The application uses GitHub Actions for continuous integration and deployment:
 ├── Pages/
 │   ├── Editor.razor
 │   ├── Home.razor
-│   └── ProjectsView.razor
+│   ├── Logs.razor
+│   ├── ProjectsView.razor
+│   └── Settings.razor
 ├── Repositories/
 │   ├── Projects.cs
 │   ├── ProjectFiles.cs
 │   └── JSONFileReader.cs
 ├── Services/
-│   ├── ProgramBuilder.cs
+│   ├── AppLogStore.cs
+│   ├── BuildLog.cs
+│   ├── ConfigurationService.cs
+│   ├── EditorDockState.cs
 │   ├── IFormFactor.cs
-│   ├── Traductor.cs
-│   └── ConfigurationService.cs
+│   ├── InMemoryLoggerProvider.cs
+│   ├── ProgramBuilder.cs
+│   ├── SidebarState.cs
+│   ├── SimulationParameters.cs
+│   └── Traductor.cs
 ├── Modals/
 │   ├── ConfigurationModal.razor
 │   ├── CreateFileModal.razor
 │   ├── MarkdownModal.razor
-│   ├── ProjectDetailsModal.razor
-│   └── SimulationParametersModal.razor
+│   └── ProjectDetailsModal.razor
 └── wwwroot/
+    ├── css/
+    │   ├── tokens.css       (design tokens: palette, spacing, typography)
+    │   └── pages.css        (non-scoped page + component styles)
+    ├── js/
+    │   ├── vhdl.js          (Monaco Monarch tokenizer + 6 providers)
+    │   └── vhdl-data/       (per-language keyword/IEEE docs, 7 files)
     └── Dictionaries/
         ├── en.json (English)
         ├── es.json (Spanish)
@@ -836,40 +939,43 @@ The application uses GitHub Actions for continuous integration and deployment:
 
 ### Overview
 
-The Kmila-9s codebase maintains comprehensive XML documentation for all public APIs. As of the latest review (December 2025), **100% of files have complete XML documentation** covering all public methods, properties, and classes.
+The Kmila-9s codebase maintains comprehensive XML documentation for all public APIs. As of the latest review (April 2026), **100% of files have complete XML documentation** covering all public methods, properties, and classes.
 
 ### Fully Documented Components
 
 All areas of the codebase now have complete XML documentation:
 
 #### Components
-*   **BuildProgressDisplay.razor** - Build progress display with status icons, progress bar, error alerts, and dismiss button (implements IDisposable)
-*   **ButtonCollapse.razor** - Main editor button controls with build progress display (implements IDisposable)
-*   **ConfigTabContent.razor** - Config tab sub-component for SimulationParametersModal (time configuration, port variables, configuration save/load)
-*   **EntityResourceUsage.razor** - FPGA resource usage grid display using ResourceMetricBox components
-*   **EntityView.razor** - VHDL entity visualization
-*   **EnhancedRangeSlider.razor** - Advanced range slider component
-*   **FilesCard.razor** - Project files list component
-*   **FPGASimpleView.razor** - Compact FPGA information display widget
-*   **FPGATabContent.razor** - FPGA tab sub-component for SimulationParametersModal (device details, resource utilization)
-*   **LanguageChanger.razor** - Language selection dropdown with reactive architecture
-*   **PortMomentInput.razor** - Port input configuration
-*   **PortMomentExtraInputs.razor** - Additional time moment inputs
-*   **ResourceMetricBox.razor** - Reusable single FPGA resource metric display box with icon, badge, and accuracy label
-*   **ResourceProgressBar.razor** - Reusable FPGA resource utilization progress bar with color-coded thresholds
-*   **RunTabContent.razor** - Run tab sub-component for SimulationParametersModal (simulation controls, progress display)
+*   **Breadcrumbs.razor** - TopBar breadcrumb trail driven by `NavigationManager.Uri`.
+*   **ConfigurationsPill.razor** - Named-configuration picker with dirty marker.
+*   **EditorDock.razor** - Bottom dock with five tabs (Entities · Ports · Waveforms · Files · Output) + collapse.
+*   **EntityResourceUsage.razor** - FPGA resource grid using `ResourceMetricBox`.
+*   **EntityView.razor** - Parsed-entity panel with VHDL-styled title and signal list.
+*   **FilesCard.razor** - Project-files list with rename/delete kebab menu.
+*   **FPGASimpleView.razor** - Compact FPGA information widget.
+*   **KmilaThemeSwitcher.razor** - Light / Dark / Auto theme popover, persisted to `localStorage`.
+*   **LanguageChanger.razor** - Language popover pushing into `Traductor` + `window.kmilaCurrentDocsLang`.
+*   **OutputPanel.razor** - Output dock tab; ARIA live region over `BuildLog`.
+*   **PortMomentInput.razor** - Per-IN-port timeline editor with per-datatype validation.
+*   **PortsPanel.razor** - Ports dock tab, groups `PortMomentInput` by entity.
+*   **ResourceMetricBox.razor** - Tokenized metric card with icon, value, accuracy pill.
+*   **ResourceProgressBar.razor** - Pill progress bar with success/info/warning/danger tiers.
+*   **RunBar.razor** - Build/Run/Pause/Stop state machine above the dock.
+*   **StatusBar.razor** - File info · build status · resource % · sim state.
+*   **WaveformViewer.razor** - Chart.js digital-waveform chart per signal.
 
 #### Pages
-*   **Editor.razor** - Main VHDL editor page
-*   **ProjectsView.razor** - Projects management page
-*   **Home.razor** - Home/landing page
+*   **Editor.razor** - Workbench page; marshals `ProgramBuilder` events into `SimulationParameters` + `BuildLog`.
+*   **Home.razor** - Landing page with hero + bento grid.
+*   **Logs.razor** - Live viewer over `AppLogStore` with search / level filter / auto-scroll.
+*   **ProjectsView.razor** - Projects card grid with sample-project CTA.
+*   **Settings.razor** - Skeleton preference surface (Appearance, Editor, Simulation, Diagnostics).
 
 #### Modals
-*   **SimulationParametersModal.razor** - Simulation configuration modal with FPGA fallback selector
-*   **ConfigurationModal.razor** - Configuration save/load/export/import modal
-*   **CreateFileModal.razor** - File creation modal
-*   **ProjectDetailsModal.razor** - Project creation/editing modal
-*   **MarkdownModal.razor** - Markdown file viewer modal
+*   **ConfigurationModal.razor** - Manage configs power surface (save/load/delete/export/import).
+*   **CreateFileModal.razor** - File creation modal.
+*   **MarkdownModal.razor** - Markdown file viewer triggered on Build against `.md`.
+*   **ProjectDetailsModal.razor** - Project creation form with sanitised-folder-name preview.
 
 #### Models
 *   **Project.cs** - Project entity
@@ -886,12 +992,19 @@ All areas of the codebase now have complete XML documentation:
 *   **KmilaConfiguration.cs** - Simulation configuration model with FPGAConfiguration, TimeConfiguration, PortMomentConfiguration
 
 #### Services & Repositories
-*   **ProgramBuilder.cs** - Orchestrates VHDL simulation lifecycle
-*   **IFormFactor.cs** - Form factor abstraction interface
-*   **ConfigurationService.cs** - Configuration save/load/export/import service
-*   **Projects.cs** - Project CRUD operations
-*   **ProjectFiles.cs** - Project file management
-*   **JSONFileReader.cs** - FPGA device JSON file reader
+*   **ProgramBuilder.cs** - Orchestrates VHDL simulation lifecycle; accepts both `.vhd` and `.vhdl`.
+*   **ConfigurationService.cs** - Named-config save/load/delete with `OnConfigurationsChanged` event.
+*   **Traductor.cs** - 7-language i18n service with optional `ILogger<Traductor>` injection.
+*   **IFormFactor.cs** - Form factor abstraction interface.
+*   **SimulationParameters.cs** - Run-bar state machine (`SimState` enum · time · scale · port moments · `IsDirty`).
+*   **EditorDockState.cs** - Active dock tab + collapsed flag, persisted to `localStorage`.
+*   **SidebarState.cs** - Desktop collapse + mobile drawer state for the custom sidebar.
+*   **BuildLog.cs** - Bounded in-memory build/run log for the Output dock tab.
+*   **AppLogStore.cs** - Thread-safe ring buffer of `ILogger` writes (backs `/logs`).
+*   **InMemoryLoggerProvider.cs** - `ILoggerProvider` wiring `ILogger<T>` calls to `AppLogStore`.
+*   **Projects.cs** - Project CRUD; fires `OnListChanged` on create/remove/update.
+*   **ProjectFiles.cs** - File CRUD with `RemoveAsync` + `RenameAsync`.
+*   **JSONFileReader.cs** - FPGA device JSON reader with optional `ILogger<JSONFileReader>`.
 
 #### Data Layer & Interfaces
 *   **ApplicationDbContext.cs** - SQLite database context
@@ -958,6 +1071,21 @@ We welcome contributions to Kmila-9s! Please check our GitHub repository for con
 Kmila-9s is released as free and open-source software. Please refer to the LICENSE file in the repository for specific licensing terms.
 
 ## 19. Changelog
+
+### Version 1.14.0 (2026-04-20)
+
+#### UX redesign — tokens, dark mode, workbench editor
+
+*   **Design system.** New `wwwroot/css/tokens.css` defines the full palette (mandatory brand colors preserved: `#475569`, `#64748b`, `#334155`, `#3C82F6`), spacing, typography, shadows, motion; dark-mode resolved via `[data-bs-theme="dark"]`. Blazor-scoped CSS dropped in favor of a single non-scoped `pages.css` so `:has()` ancestor selectors work.
+*   **Custom sidebar + topbar.** Replaced BlazorBootstrap `Sidebar2` and the ad-hoc header with a custom `NavMenu.razor` (collapsible rail on desktop, off-canvas drawer on mobile via `SidebarState`) and a `TopBar.razor` with breadcrumbs + FPGA picker + Configurations pill + language + theme popovers.
+*   **Workbench editor.** `Editor.razor` is now a single surface — Monaco on top, `RunBar` with a Build → Build OK → Run → Pause → Resume → Complete state machine, `EditorDock` with five tabs (Entities · Ports · Waveforms · Files · Output) + collapse, and a `StatusBar` (file info · build status · resource % · sim state). The `SimulationParametersModal` / `FPGATabContent` / `ConfigTabContent` / `RunTabContent` / `ButtonCollapse` / `BuildProgressDisplay` / `PortMomentExtraInputs` components were removed; their responsibilities moved into the new components + shared state services (`SimulationParameters`, `EditorDockState`, `BuildLog`).
+*   **Monaco intelligence.** Rewrote `wwwroot/js/vhdl.js` with six providers — hover, completion, go-to-definition, references, doc symbols, signature help — covering the VHDL keyword set, IEEE packages, and user declarations. Docs translate with the UI language (EN + ES full; other 5 languages stub back to English) via `wwwroot/js/vhdl-data/{lang}.json`.
+*   **Pages.** New `Home.razor` (hero + bento grid + closing CTA), `ProjectsView.razor` (responsive card grid + live search + "Try a sample" button creating a ready-to-run 4-bit counter project *and* a matching config), `Settings.razor` (four placeholder cards), `Logs.razor` (live viewer over `AppLogStore` with search / level filter / auto-scroll / pause).
+*   **In-app logging.** Every `ILogger<T>` write in the app fans into `AppLogStore` via the new `InMemoryLoggerProvider`, so `/logs` shows real log traffic (critical on mobile / MAUI where there's no console). Migrated remaining `Console.WriteLine` call sites in `Traductor` lambdas (Web + MAUI) to resolved `ILogger` instances at `LogDebug` level.
+*   **Data & repositories.** `Projects.cs` now fires `OnListChanged` on every Create / Remove / Update; the sidebar & Projects page subscribe so their lists refresh without polling. `ProjectFiles.cs` got real `RemoveAsync` (disk + DB) and `RenameAsync` (duplicate-name refusal).
+*   **Builder.** `ProgramBuilder.cs` now accepts both `.vhd` and `.vhdl` files (prior version strictly required `.vhdl`).
+*   **Fixes.** Editor route now fills the viewport via `MainLayout` computing `IsEditorRoute` + a `LocationChanged` subscription toggling `.content--wide` (replaces an unreliable `:has(.editor-page)` trick). Port-moment reactive loop that wiped just-added empty rows resolved by emitting all rows including empties and pre-setting `_appliedInitial` before emit. Sidebar collapse no longer truncates section labels.
+*   **Removed files.** `ButtonCollapse.razor(.css)`, `SimulationParametersModal.razor`, `FPGATabContent.razor`, `ConfigTabContent.razor`, `RunTabContent.razor`, `BuildProgressDisplay.razor`, `PortMomentExtraInputs.razor`, `EnhancedRangeSlider.razor`.
 
 ### Version 0.15.1 (2026-02-21)
 
@@ -1258,9 +1386,109 @@ The following items remain documented as placeholders or incomplete implementati
 
 ---
 
+### Version 1.14.0 (2026-04-19)
+
+Large batch release — a single execution sweep that finished every pending
+task from the previous month of work. Grouped by theme:
+
+#### Clock system rework
+
+*   **Hybrid default + override.** `Models/FPGAClocking.cs` gained a
+    `GetDefaultSimClockMhz()` helper that returns
+    `SystemClockMhz ?? min(MaxPllOutputMhz, 100) ?? 50`. This is the value
+    the simulator picks up when the user doesn't override.
+*   **Per-project override.** `Services/SimulationParameters.cs` exposes
+    `ClockOverrideMhz`, `ClockIsCustom`, `SetClockOverride(int?, int)` and
+    `GetEffectiveClockMhz(int)`. `Components/RunBar.razor` surfaces the
+    value with a reset button and a warning beside the input about
+    possible long simulation times / calculation errors, per the user's
+    explicit request.
+*   **Manual "mark as clock" removed.** `Components/PortMomentInput.razor`
+    no longer has the checkbox. Clock detection is automatic on ports
+    named `clk` or `clock` and shown with a "System clock" badge. Legacy
+    `"CLK"` moments in existing configs are skipped by `StimulusBuilder`
+    for backward compat.
+*   **Waveform visibility toggle.** `Components/WaveformViewer.razor`
+    gained an eye icon that hides / shows the clock trace via
+    `IsClockName` — keeps the viewer uncluttered when the user only
+    cares about data signals.
+
+#### Parser / editor integration
+
+*   **Structured diagnostics** flowed up from the Parser project into
+    `Pages/Editor.razor`. The `PublishDiagnosticsAsync` method maps them
+    to Monaco's `setModelMarkers` payload; markers clear on content change
+    via the new JS helper `kmilaSetMonacoMarkers`. Both
+    `Kmila.Web/Components/App.razor` and `Kmila/wwwroot/index.html` carry
+    the helper so Web and MAUI builds behave identically.
+
+#### Execution view polish
+
+*   Run bar, waveforms and status bar were redesigned to match the rest
+    of the app's design language. The waveform viewer now uses
+    `contain: inline-size` so wide traces clip cleanly inside the dock.
+
+#### Persistence & history
+
+*   **Snapshots + Runs tab.** `Services/SimulationSnapshotStore.cs` stores
+    captured runs (metadata in SQLite + inline `WaveformData` JSON). The
+    new "Runs" tab in `Components/EditorDock.razor` lists them, with
+    `LoadSnapshotAsync` and `OpenCompareAsync` entry points from
+    `Pages/Editor.razor`.
+*   **Project bundles.** `Services/ProjectBundleService.cs` packs a whole
+    project — metadata, files, saved configs, snapshots — into a single
+    JSON `.kmila` file for diff-friendly export / import. Wired into
+    `Pages/Settings.razor` with a download button and a 50 MB import
+    cap. Imports never overwrite: names collide into
+    `"(imported)"` / `"(imported N)"`.
+
+#### Dock UX
+
+*   **Drag-to-resize.** `EditorDock.razor` gained a grabber handle that
+    sets a CSS variable `--kmila-dock-height`; `EditorDockState.cs`
+    stores the height (clamped 200–1200) alongside the active tab and
+    collapse state in localStorage.
+
+#### FPGA picker
+
+*   **Manufacturer / family filter.** `Layout/TopBar.razor` preloads a
+    `_fpgaMeta` dictionary at init time and exposes manufacturer chips;
+    `FilteredFPGAs()` combines text and manufacturer predicates.
+
+#### Learn module
+
+*   **Five new language stubs.** `digital-fundamentals/01-number-systems`
+    now has FR / DE / CH / JP / AR translations alongside EN and ES.
+*   **Four new modules.** `discrete-math`, `soc`, `pipelining` and
+    `verification` were added to `wwwroot/Learn/manifest.json` with
+    English first-lesson bodies and Spanish translations. Ordering:
+    discrete-math at 0 (Beginner), soc at 11 (Expert), pipelining at 12
+    (Expert), verification at 13 (Advanced).
+*   **Continue-banner resilience.** The banner no longer crashes when a
+    lesson referenced by the last-read pointer has been renamed or
+    removed — it now falls back to the module intro.
+
+#### Dead code / build
+
+*   `WaveformData.TimeLabels` generation loop was pruned. The property
+    is kept (returning an empty list) so old snapshot JSON still
+    deserializes.
+*   `<NoWarn>` suppressions added across every csproj (CS1587 / CS1591 /
+    CS1570 / CS1573 / CS1574 / CS1998 / CS8602–8625 / CS8892 / CS0219 /
+    CS0618 / CS4014 / NETSDK1206). The full Web build now reports **0
+    warnings, 0 errors**.
+
+#### Service registrations
+
+*   `Kmila.Web/Program.cs` and the MAUI `Kmila/MauiProgram.cs` register
+    `SimulationSnapshotStore` and `ProjectBundleService` as scoped
+    services so they resolve against the current circuit's DB context.
+
+---
+
 ## 20. Contact
 
 For questions, support, or feedback, please open an issue on our GitHub repository or contact the development team through the project page.
 
 ---
-*Last Updated: February 21, 2026*
+*Last Updated: 2026-04-19*

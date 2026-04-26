@@ -16,7 +16,10 @@ public class WaveformData
     public List<WaveformSignal> Signals { get; init; } = new();
 
     /// <summary>
-    /// Time labels for the X-axis (e.g., "0ns", "10ns", "20ns", ...).
+    /// (Deprecated.) Time labels for the legacy Chart.js categorical X-axis.
+    /// The SVG viewer derives its own ruler from <see cref="TotalTicks"/> +
+    /// <see cref="TimescaleNs"/>; kept as an empty list for JSON-shape
+    /// compatibility with older snapshot payloads.
     /// </summary>
     public List<string> TimeLabels { get; init; } = new();
 
@@ -34,6 +37,54 @@ public class WaveformData
     /// The underlying SignalHistory for VCD export.
     /// </summary>
     public SignalHistory? SourceHistory { get; init; }
+
+    /// <summary>
+    /// JSON round-trip used by <c>SimulationSnapshotStore</c> to persist and
+    /// replay runs. Drops <see cref="SourceHistory"/> — it references live
+    /// Interpreter objects that can't serialize — but keeps every rendered
+    /// transition, so the stored run replays pixel-identically to the
+    /// original.
+    /// </summary>
+    public string ToJson()
+    {
+        var payload = new SerializedForm
+        {
+            TotalTicks  = TotalTicks,
+            TimescaleNs = TimescaleNs,
+            Signals     = Signals
+        };
+        return System.Text.Json.JsonSerializer.Serialize(payload,
+            new System.Text.Json.JsonSerializerOptions { WriteIndented = false });
+    }
+
+    public static WaveformData? FromJson(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            var payload = System.Text.Json.JsonSerializer.Deserialize<SerializedForm>(json);
+            if (payload == null) return null;
+            return new WaveformData
+            {
+                Signals     = payload.Signals ?? new(),
+                TimeLabels  = new(),
+                TotalTicks  = payload.TotalTicks,
+                TimescaleNs = payload.TimescaleNs,
+                SourceHistory = null
+            };
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private class SerializedForm
+    {
+        public ulong TotalTicks { get; set; }
+        public int TimescaleNs { get; set; }
+        public List<WaveformSignal>? Signals { get; set; }
+    }
 
     /// <summary>
     /// Creates WaveformData from a SignalHistory produced by the simulation engine.
@@ -54,15 +105,12 @@ public class WaveformData
         ulong maxTick = maxTime > 0 ? (ulong)(maxTime / 1000) : 0;
         ulong totalTicks = maxTick + 1;
 
-        // Generate time labels for the X-axis
-        var timeLabels = new List<string>();
-        // Limit labels to a maximum of ~200 to avoid massive arrays and chart clutter
-        int labelStep = Math.Max(1, (int)(totalTicks / 200));
-        for (ulong t = 0; t < totalTicks; t += (ulong)labelStep)
-        {
-            long ns = (long)t * timescaleNs;
-            timeLabels.Add(FormatTimeLabel(ns));
-        }
+        // Sample stride for the legacy uniform-sample arrays (ChartValues +
+        // DisplayLabels). The SVG viewer reads from Transitions directly
+        // and ignores these, but snapshot JSON round-trip still serialises
+        // them for forward-compat. ~2000 samples to prevent aliasing when
+        // a legacy renderer is ever re-enabled.
+        int sampleStep = Math.Max(1, (int)(totalTicks / 2000));
 
         var waveformSignals = new List<WaveformSignal>();
 
@@ -93,9 +141,11 @@ public class WaveformData
                 tickValues[tick] = entry.Item2; // last delta wins
             }
 
-            // Fill chart arrays at label resolution (one data point per labelStep ticks)
+            // Fill chart arrays at the high-density sample resolution so fast
+            // signals (e.g. a 50 MHz clock with a 2-tick period) don't alias
+            // into a flat line.
             object? lastValue = null;
-            for (ulong t = 0; t < totalTicks; t += (ulong)labelStep)
+            for (ulong t = 0; t < totalTicks; t += (ulong)sampleStep)
             {
                 // Search backwards from the current tick to find the most recent
                 // value assignment (signals hold their value until changed)
@@ -140,6 +190,34 @@ public class WaveformData
                 lastValue = value;
             }
 
+            // Build the transition list from the (already-collapsed) tick
+            // map. One entry per tick with a recorded value, in tick order,
+            // duplicates collapsed — the SVG renderer emits a horizontal
+            // segment between consecutive entries and a vertical step at
+            // each. No downsampling: fast signals like a 50 MHz clock show
+            // up as an honest square wave instead of aliasing flat.
+            var transitions = new List<WaveformTransition>(tickValues.Count);
+            double? prevVal = null;
+            foreach (var kv in tickValues.OrderBy(kv => kv.Key))
+            {
+                long ns = (long)kv.Key * timescaleNs;
+                double? val = ConvertToChartValue(kv.Value, dataType, bitWidth);
+                string? lbl = (dataType != "std_logic" && kv.Value != null)
+                    ? FormatDisplayLabel(kv.Value, dataType, bitWidth)
+                    : null;
+
+                // Skip consecutive duplicates to keep the list small. The
+                // step-function render only cares about actual changes.
+                if (transitions.Count > 0 && Equals(val, prevVal) &&
+                    string.Equals(lbl, transitions[^1].Label, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                transitions.Add(new WaveformTransition(ns, val, lbl));
+                prevVal = val;
+            }
+
             waveformSignals.Add(new WaveformSignal
             {
                 Name = signal.Name,
@@ -147,14 +225,14 @@ public class WaveformData
                 BitWidth = bitWidth,
                 PortType = portType,
                 ChartValues = chartValues,
-                DisplayLabels = displayLabels
+                DisplayLabels = displayLabels,
+                Transitions = transitions
             });
         }
 
         return new WaveformData
         {
             Signals = waveformSignals,
-            TimeLabels = timeLabels,
             TotalTicks = totalTicks,
             TimescaleNs = timescaleNs,
             SourceHistory = history
@@ -353,4 +431,21 @@ public class WaveformSignal
     /// Null for std_logic, hex/decimal string at transitions for vectors.
     /// </summary>
     public List<string?> DisplayLabels { get; init; } = new();
+
+    /// <summary>
+    /// Raw transitions in (time-ns, numeric-value) form — one entry per real
+    /// change in the signal's history, with no downsampling. This is what
+    /// the SVG waveform renderer plots: a step function from one transition
+    /// to the next. Authoritative over <see cref="ChartValues"/>, which
+    /// remains for any legacy code still expecting a uniform sample grid.
+    /// </summary>
+    public List<WaveformTransition> Transitions { get; init; } = new();
 }
+
+/// <summary>
+/// A single step-function transition: at <see cref="TimeNs"/> the signal
+/// becomes <see cref="Value"/>. For multi-bit signals we also carry the
+/// human-readable formatted label (hex / decimal) so the SVG can stamp it
+/// inside the plateau.
+/// </summary>
+public readonly record struct WaveformTransition(long TimeNs, double? Value, string? Label);

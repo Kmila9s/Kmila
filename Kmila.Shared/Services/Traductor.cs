@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using Kmila.Shared.Data;
 using Kmila.Shared.Models;
@@ -96,7 +97,7 @@ public class Traductor : IDisposable
     /// </summary>
     private void NotifyLanguageChanged()
     {
-        Console.WriteLine("[Traductor] Notifying language change to all subscribers...");
+        _logger.LogInformation("[Traductor] Notifying language change to all subscribers...");
         StaticOnLangChanged?.Invoke();
         OnLangChanged?.Invoke();
     }
@@ -113,9 +114,11 @@ public class Traductor : IDisposable
     private Func<string, Task<string?>>? _settingsReader;
 
     /// <summary>
-    /// Available languages with their display names.
+    /// Available languages with their display names (display → code). Mutable
+    /// at runtime so <see cref="AddUserLanguage"/> can merge in user-imported
+    /// packs discovered via <see cref="UserAssetStore"/>.
     /// </summary>
-    public static readonly Dictionary<string, string> AvailableLanguages = new()
+    public static Dictionary<string, string> AvailableLanguages { get; } = new()
     {
         { "English", "en" },
         { "Español", "es" },
@@ -126,17 +129,40 @@ public class Traductor : IDisposable
         { "عربي", "ar" }
     };
 
+    /// <summary>
+    /// Register a user-provided language pack so it shows up in the language
+    /// picker and <see cref="LoadTranslationsAsync"/> can resolve it. No-op if
+    /// the code already exists (bundled languages always win).
+    /// </summary>
+    /// <param name="displayName">Name shown in the picker (e.g. "Klingon").</param>
+    /// <param name="code">Short code used in file names and settings (e.g. "klg").</param>
+    public static void AddUserLanguage(string displayName, string code)
+    {
+        if (string.IsNullOrWhiteSpace(displayName) || string.IsNullOrWhiteSpace(code)) return;
+        if (AvailableLanguages.ContainsValue(code)) return; // bundled or already added
+        AvailableLanguages[displayName] = code;
+    }
+
     #endregion
 
     #region Constructors
 
     /// <summary>
+    /// Logger — flows to both the console AND the in-app Logs page via the
+    /// registered <see cref="InMemoryLoggerProvider"/>. Never null; callers that
+    /// don't pass a logger get a no-op instance.
+    /// </summary>
+    private readonly Microsoft.Extensions.Logging.ILogger _logger;
+
+    /// <summary>
     /// Initializes a new instance of the Traductor class for MAUI applications.
     /// </summary>
     /// <param name="fileReader">Function to read files from the app package.</param>
-    public Traductor(Func<string, Task<Stream>> fileReader)
+    /// <param name="logger">Optional logger (NullLogger fallback when omitted).</param>
+    public Traductor(Func<string, Task<Stream>> fileReader, Microsoft.Extensions.Logging.ILogger<Traductor>? logger = null)
     {
         _fileReader = fileReader;
+        _logger = (Microsoft.Extensions.Logging.ILogger?)logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<Traductor>.Instance;
         ApplicationDbContext.StaticOnValueChanged += OnValueChanged;
     }
 
@@ -147,6 +173,7 @@ public class Traductor : IDisposable
     public Traductor()
     {
         _fileReader = DefaultFileReader;
+        _logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<Traductor>.Instance;
         ApplicationDbContext.StaticOnValueChanged += OnValueChanged;
     }
 
@@ -163,7 +190,7 @@ public class Traductor : IDisposable
     {
         if (key == AppSettings.KEY_LANGUAGE)
         {
-            Console.WriteLine($"[Traductor] Language configuration changed via storage event");
+            _logger.LogInformation($"[Traductor] Language configuration changed via storage event");
             Task.Run(async () => await ReloadLanguageFromStorageAsync(), _cts.Token);
         }
     }
@@ -187,12 +214,12 @@ public class Traductor : IDisposable
             }
 
             _languageKeys = await LoadTranslationsAsync(_lang);
-            Console.WriteLine($"[Traductor] Language reloaded: {_lang}");
+            _logger.LogInformation($"[Traductor] Language reloaded: {_lang}");
             NotifyLanguageChanged();
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[Traductor] Error reloading language: {ex.Message}");
+            _logger.LogError($"[Traductor] Error reloading language: {ex.Message}");
         }
     }
 
@@ -217,7 +244,7 @@ public class Traductor : IDisposable
             return translation;
 
         // Return the key itself as fallback (useful for debugging missing translations)
-        Console.WriteLine($"[Traductor] Missing translation key: {key} for language: {_lang}");
+        _logger.LogWarning($"[Traductor] Missing translation key: {key} for language: {_lang}");
         return key;
     }
 
@@ -263,7 +290,7 @@ public class Traductor : IDisposable
     /// <param name="settingsReader">Optional callback to read settings from storage (for reactive updates).</param>
     public async Task InitializeAsync(string? savedLanguage = null, Func<string, Task<string?>>? settingsReader = null)
     {
-        Console.WriteLine($"[Traductor] Initializing with savedLanguage: {savedLanguage ?? "(null)"}");
+        _logger.LogInformation($"[Traductor] Initializing with savedLanguage: {savedLanguage ?? "(null)"}");
 
         _settingsReader = settingsReader;
         _lang = !string.IsNullOrEmpty(savedLanguage) ? savedLanguage : DEFAULT_LANGUAGE;
@@ -271,7 +298,7 @@ public class Traductor : IDisposable
         // Validate the language code
         if (!AvailableLanguages.ContainsValue(_lang))
         {
-            Console.WriteLine($"[Traductor] Invalid language '{_lang}', falling back to {DEFAULT_LANGUAGE}");
+            _logger.LogWarning($"[Traductor] Invalid language '{_lang}', falling back to {DEFAULT_LANGUAGE}");
             _lang = DEFAULT_LANGUAGE;
         }
 
@@ -279,29 +306,29 @@ public class Traductor : IDisposable
         {
             _languageKeys = await LoadTranslationsAsync(_lang);
             _isInitialized = true;
-            Console.WriteLine($"[Traductor] Successfully initialized with {_languageKeys.Count} keys for language: {_lang}");
+            _logger.LogInformation($"[Traductor] Successfully initialized with {_languageKeys.Count} keys for language: {_lang}");
             NotifyLanguageChanged();
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[Traductor] Failed to load '{_lang}': {ex.Message}");
+            _logger.LogError($"[Traductor] Failed to load '{_lang}': {ex.Message}");
 
             // If not already trying default language, try it as fallback
             if (_lang != DEFAULT_LANGUAGE)
             {
-                Console.WriteLine($"[Traductor] Trying fallback language: {DEFAULT_LANGUAGE}");
+                _logger.LogWarning($"[Traductor] Trying fallback language: {DEFAULT_LANGUAGE}");
                 try
                 {
                     _languageKeys = await LoadTranslationsAsync(DEFAULT_LANGUAGE);
                     _lang = DEFAULT_LANGUAGE;
                     _isInitialized = true;
-                    Console.WriteLine($"[Traductor] Fallback successful with {_languageKeys.Count} keys");
+                    _logger.LogWarning($"[Traductor] Fallback successful with {_languageKeys.Count} keys");
                     NotifyLanguageChanged();
                     return;
                 }
                 catch (Exception fallbackEx)
                 {
-                    Console.WriteLine($"[Traductor] Fallback also failed: {fallbackEx.Message}");
+                    _logger.LogError($"[Traductor] Fallback also failed: {fallbackEx.Message}");
                 }
             }
 
@@ -310,7 +337,7 @@ public class Traductor : IDisposable
             _lang = DEFAULT_LANGUAGE;
             _languageKeys = new Dictionary<string, string>();
             _isInitialized = true;
-            Console.WriteLine($"[Traductor] Initialization failed completely. Running without translations.");
+            _logger.LogError($"[Traductor] Initialization failed completely. Running without translations.");
             NotifyLanguageChanged();
         }
     }
@@ -336,17 +363,17 @@ public class Traductor : IDisposable
 
         try
         {
-            Console.WriteLine($"[Traductor] Setting language to: {languageCode}");
+            _logger.LogInformation($"[Traductor] Setting language to: {languageCode}");
             _languageKeys = await LoadTranslationsAsync(languageCode);
             _lang = languageCode;
-            Console.WriteLine($"[Traductor] Language set successfully, notifying subscribers...");
+            _logger.LogInformation($"[Traductor] Language set successfully, notifying subscribers...");
             NotifyLanguageChanged();
             return true;
         }
         catch (Exception ex)
         {
             LastError = ex.Message;
-            Console.WriteLine($"[Traductor] Error setting language: {ex.Message}");
+            _logger.LogError($"[Traductor] Error setting language: {ex.Message}");
             return false;
         }
     }
@@ -375,14 +402,14 @@ public class Traductor : IDisposable
         // For MAUI, files are in Resources/Raw/Dictionaries/ - accessed without the Resources/Raw prefix
         // For Web, the file reader handles path resolution
         var filePath = $"Dictionaries/{languageCode}.json";
-        Console.WriteLine($"[Traductor] Attempting to load: {filePath}");
+        _logger.LogInformation($"[Traductor] Attempting to load: {filePath}");
 
         try
         {
             using var stream = await _fileReader(filePath);
             if (stream == null)
             {
-                Console.WriteLine($"[Traductor] File reader returned null for: {filePath}");
+                _logger.LogWarning($"[Traductor] File reader returned null for: {filePath}");
                 throw new FileNotFoundException($"Dictionary file returned null: {filePath}");
             }
 
@@ -390,26 +417,26 @@ public class Traductor : IDisposable
 
             if (dictionary == null || dictionary.Count == 0)
             {
-                Console.WriteLine($"[Traductor] Dictionary was empty or null for language: {languageCode}");
+                _logger.LogWarning($"[Traductor] Dictionary was empty or null for language: {languageCode}");
                 throw new InvalidOperationException($"Dictionary was empty for language: {languageCode}");
             }
 
-            Console.WriteLine($"[Traductor] Successfully loaded {dictionary.Count} translations for language: {languageCode}");
+            _logger.LogInformation($"[Traductor] Successfully loaded {dictionary.Count} translations for language: {languageCode}");
             return dictionary;
         }
         catch (FileNotFoundException ex)
         {
-            Console.WriteLine($"[Traductor] File not found for language {languageCode}: {ex.Message}");
+            _logger.LogInformation($"[Traductor] File not found for language {languageCode}: {ex.Message}");
             throw; // Re-throw to propagate to InitializeAsync for proper error handling
         }
         catch (JsonException ex)
         {
-            Console.WriteLine($"[Traductor] JSON parsing error for language {languageCode}: {ex.Message}");
+            _logger.LogError($"[Traductor] JSON parsing error for language {languageCode}: {ex.Message}");
             throw;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[Traductor] Error loading translations for {languageCode}: {ex.GetType().Name} - {ex.Message}");
+            _logger.LogError($"[Traductor] Error loading translations for {languageCode}: {ex.GetType().Name} - {ex.Message}");
             throw;
         }
     }

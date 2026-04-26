@@ -1,0 +1,269 @@
+@*
+    ConfigurationsPill — TopBar dropdown for save/load of simulation configs.
+
+    Trigger pill shows the current config name, or "No config" when nothing is
+    loaded. A small amber dot appears when the live state drifts from the
+    saved snapshot (SimulationParameters.IsDirty).
+
+    Popover layout:
+      ┌─ Current ────────────────────────┐
+      │ • Default · modified             │
+      │                                  │
+      │ Saved                            │
+      │ ○ fast-clock                     │
+      │ ○ reset-sweep                    │
+      │                                  │
+      │ [💾 Save changes]   (if named+dirty)
+      │ [+ Save as…]        (always)     │
+      │ [🗂 Manage…]        (opens BB Modal → ConfigurationModal)
+      └──────────────────────────────────┘
+
+    "Save as…" and "Save changes" both round-trip through ConfigurationService.
+    Loading a config pushes the saved snapshot back into Sim + SelectedFPGA.
+*@
+@implements IDisposable
+@inject ConfigurationService ConfigService
+@inject SimulationParameters Sim
+@inject SelectedFPGA SelectedFPGA
+
+<details class="kmila-config-pill" @ref="_detailsRef">
+    <summary class="kmila-config-pill__summary" aria-label="@Traductor.T("CONFIG_PILL_LABEL")">
+        <Icon Name="IconName.Bookmarks" />
+        <span class="kmila-config-pill__name">
+            @(string.IsNullOrEmpty(Sim.LoadedName) ? Traductor.T("CONFIG_NONE") : Sim.LoadedName)
+        </span>
+        @if (Sim.IsDirty)
+        {
+            <span class="kmila-config-pill__dirty" title="@Traductor.T("CONFIG_MODIFIED")" aria-hidden="true"></span>
+        }
+        <Icon Name="IconName.ChevronDown" Class="kmila-config-pill__chevron" />
+    </summary>
+
+    <div class="kmila-config-pill__panel" role="menu">
+
+        @* Current row — highlighted, shows modified flag *@
+        <div class="kmila-config-pill__section">
+            <span class="kmila-config-pill__label">@Traductor.T("CONFIG_CURRENT")</span>
+            <div class="kmila-config-pill__current">
+                <Icon Name="@(string.IsNullOrEmpty(Sim.LoadedName) ? IconName.Circle : IconName.CircleFill)" />
+                <span class="kmila-config-pill__current-name">
+                    @(string.IsNullOrEmpty(Sim.LoadedName) ? Traductor.T("CONFIG_UNSAVED") : Sim.LoadedName)
+                </span>
+                @if (Sim.IsDirty)
+                {
+                    <span class="kmila-config-pill__modified">@Traductor.T("CONFIG_MODIFIED")</span>
+                }
+            </div>
+        </div>
+
+        @* Saved list — compact *@
+        @if (_savedNames.Any())
+        {
+            <div class="kmila-config-pill__section">
+                <span class="kmila-config-pill__label">@Traductor.T("CONFIG_SAVED")</span>
+                <div class="kmila-config-pill__list">
+                    @foreach (var name in _savedNames)
+                    {
+                        var isCurrent = string.Equals(name, Sim.LoadedName, StringComparison.Ordinal);
+                        <button type="button"
+                                role="menuitem"
+                                class="kmila-config-pill__item @(isCurrent ? "is-current" : "")"
+                                @onclick="() => LoadAsync(name)">
+                            <Icon Name="@(isCurrent ? IconName.CheckLg : IconName.Circle)" />
+                            <span>@name</span>
+                            <button type="button"
+                                    class="kmila-config-pill__item-delete"
+                                    title="@Traductor.T("CONFIG_DELETE")"
+                                    @onclick="() => DeleteAsync(name)"
+                                    @onclick:stopPropagation>
+                                <Icon Name="IconName.Trash" />
+                            </button>
+                        </button>
+                    }
+                </div>
+            </div>
+        }
+
+        @* Action buttons *@
+        <div class="kmila-config-pill__actions">
+            @if (!string.IsNullOrEmpty(Sim.LoadedName) && Sim.IsDirty)
+            {
+                <button type="button" class="btn btn-secondary btn-sm"
+                        @onclick="() => SaveAsync(Sim.LoadedName!)">
+                    <Icon Name="IconName.Floppy2" />
+                    <span>@Traductor.T("CONFIG_SAVE_CHANGES")</span>
+                </button>
+            }
+
+            @if (_showSaveAs)
+            {
+                <div class="kmila-config-pill__saveas">
+                    <input type="text"
+                           class="form-control form-control-sm"
+                           placeholder="@Traductor.T("CONFIG_NAME_PLACEHOLDER")"
+                           @bind="_newName"
+                           @bind:event="oninput"
+                           @onkeydown="OnSaveAsKeyDownAsync"
+                           aria-label="@Traductor.T("CONFIG_SAVE_AS")" />
+                    <button type="button" class="btn btn-primary btn-sm"
+                            disabled="@string.IsNullOrWhiteSpace(_newName)"
+                            @onclick="() => SaveAsync(_newName!.Trim())">
+                        <Icon Name="IconName.CheckLg" />
+                    </button>
+                    <button type="button" class="btn btn-ghost btn-sm"
+                            @onclick="() => { _showSaveAs = false; _newName = string.Empty; }"
+                            title="@Traductor.T("COMMON_GO_BACK")">
+                        <Icon Name="IconName.X" />
+                    </button>
+                </div>
+            }
+            else
+            {
+                <button type="button" class="btn btn-ghost btn-sm" @onclick="() => _showSaveAs = true">
+                    <Icon Name="IconName.Plus" />
+                    <span>@Traductor.T("CONFIG_SAVE_AS")</span>
+                </button>
+            }
+        </div>
+    </div>
+</details>
+
+@code {
+    private ElementReference _detailsRef;
+    private List<string> _savedNames = new();
+    private bool _showSaveAs;
+    private string _newName = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        ConfigService.OnConfigurationsChanged += OnConfigsChanged;
+        Sim.OnChange += OnStateChanged;
+        Traductor.StaticOnLangChanged += OnStateChanged;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshNamesAsync();
+    }
+
+    private async Task RefreshNamesAsync()
+    {
+        _savedNames = await ConfigService.GetConfigurationNamesAsync() ?? new();
+        StateHasChanged();
+    }
+
+    private void OnConfigsChanged() => InvokeAsync(RefreshNamesAsync);
+    private void OnStateChanged()   => InvokeAsync(StateHasChanged);
+
+    private async Task OnSaveAsKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_newName))
+            await SaveAsync(_newName.Trim());
+        else if (e.Key == "Escape")
+            { _showSaveAs = false; _newName = string.Empty; }
+    }
+
+    /// <summary>
+    /// Builds a <see cref="KmilaConfiguration"/> from the current live state
+    /// and persists it under <paramref name="name"/>.
+    /// </summary>
+    private async Task SaveAsync(string name)
+    {
+        var config = ConfigService.CreateConfiguration(
+            name,
+            description: null,
+            fpga: SelectedFPGA?.FPGA,
+            fpgaPath: SelectedFPGA?.Path ?? string.Empty,
+            timeValue: Sim.Time,
+            timeScale: Sim.Scale.ToString(),
+            portMoments: Sim.GetPortMomentsForRun());
+
+        var ok = await ConfigService.SaveConfigurationAsync(config);
+        if (ok)
+        {
+            Sim.MarkSaved(name);
+            _showSaveAs = false;
+            _newName = string.Empty;
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"),
+                string.Format(Traductor.T("CONFIG_SAVED_OK"), name), ToastType.Success));
+            await RefreshNamesAsync();
+        }
+        else
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                $"{Traductor.T("CONFIG_SAVE_FAILED")}: {ConfigService.LastError}", ToastType.Danger));
+        }
+    }
+
+    /// <summary>
+    /// Loads the saved config under <paramref name="name"/> and pushes its
+    /// snapshot into SimulationParameters + SelectedFPGA. FPGA matching is
+    /// best-effort: exact path first, then filename, then model name.
+    /// </summary>
+    private async Task LoadAsync(string name)
+    {
+        var config = await ConfigService.LoadConfigurationAsync(name);
+        if (config == null)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                $"{Traductor.T("CONFIG_LOAD_FAILED")}: {ConfigService.LastError}", ToastType.Danger));
+            return;
+        }
+
+        // Apply time/scale
+        if (config.Time != null)
+        {
+            Sim.SetTime(config.Time.Value);
+            if (Enum.TryParse<TimeScale>(config.Time.Scale, out var scale))
+                Sim.SetScale(scale);
+        }
+
+        // Apply port moments in one shot
+        Sim.ReplacePortMoments(config.PortMoments);
+
+        // Apply FPGA — match by path first, fall back to model
+        if (config.FPGA != null && !string.IsNullOrEmpty(config.FPGA.Model))
+        {
+            try
+            {
+                var fpga = !string.IsNullOrEmpty(config.FPGA.Path)
+                    ? await JSONFileReader.ReadFPGAJsonFileAsync(config.FPGA.Path)
+                    : null;
+                if (fpga != null)
+                {
+                    SelectedFPGA.SetFPGA(fpga, config.FPGA.Path);
+                }
+            }
+            catch { /* non-fatal — config still loads without FPGA */ }
+        }
+
+        Sim.MarkLoaded(name);
+        ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"),
+            string.Format(Traductor.T("CONFIG_LOADED"), name), ToastType.Success));
+    }
+
+    private async Task DeleteAsync(string name)
+    {
+        var ok = await ConfigService.DeleteConfigurationAsync(name);
+        if (ok)
+        {
+            if (string.Equals(Sim.LoadedName, name, StringComparison.Ordinal))
+                Sim.ClearLoaded();
+            await RefreshNamesAsync();
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"),
+                string.Format(Traductor.T("CONFIG_DELETED"), name), ToastType.Info));
+        }
+        else
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                $"{Traductor.T("CONFIG_DELETE_FAILED")}: {ConfigService.LastError}", ToastType.Danger));
+        }
+    }
+
+    public void Dispose()
+    {
+        ConfigService.OnConfigurationsChanged -= OnConfigsChanged;
+        Sim.OnChange -= OnStateChanged;
+        Traductor.StaticOnLangChanged -= OnStateChanged;
+    }
+}

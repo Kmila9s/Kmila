@@ -1,165 +1,461 @@
 @page "/projects"
 @page "/projects/{Option}"
 @implements IDisposable
+@inject Kmila.Shared.Services.SimulationParameters Sim
+
 <PageTitle>@Traductor.T("NAV_PROJECTS")</PageTitle>
-<div class="d-grid gap-2 my-3">
-    <Button
-        TooltipTitle="@Traductor.T("PROJECTS_CREATE_NEW")"
-        Color="ButtonColor.Success"
-        Outline=true
-        @onclick=CreateProjectAsync
-    >
-        @Traductor.T("PROJECTS_CREATE_NEW")
-        <Icon Name="IconName.FolderPlus"/>
-    </Button>
-</div>
-<Grid TItem="Project"
-      Data=@_projects
-      AllowFiltering="true"
-      AllowPaging="true"
-      AllowSorting="true"
-      Class="table table-hover table-bordered table-striped my-3"
-      PageSize="35"
-      Responsive="true">
 
-    <GridColumns>
-        <GridColumn TItem="Project" HeaderText="@Traductor.T("PROJECTS_NAME")" PropertyName="Name" SortKeySelector="item => item.Name">
-            @context.Name
-        </GridColumn>
-        <GridColumn TItem="Project" HeaderText="@Traductor.T("PROJECTS_DESCRIPTION")" PropertyName="Description" SortKeySelector="item => item.Description">
-            @context.Description
-        </GridColumn>
-        <GridColumn TItem="Project" HeaderText="@Traductor.T("PROJECTS_CREATED")" PropertyName="CreationTime" SortKeySelector="item => item.CreationTime">
-            @context.CreationTime
-        </GridColumn>
-        <GridColumn TItem="Project" HeaderText="@Traductor.T("PROJECTS_OPTIONS")" Sortable=false Filterable=false>
-            <div class="btn-group">
-                <Button
-                    Outline=true
-                    Color="ButtonColor.Info"
-                    TooltipTitle="@Traductor.T("PROJECTS_OPEN")"
-                    Type="ButtonType.Link"
-                    @onclick='() => NavigationManager.NavigateTo($"/editor/{context.Id}")'
-                >
-                    <Icon Name="IconName.Folder2Open"/>
-                </Button>
-                <Button
-                    Outline=true
-                    Color="ButtonColor.Warning"
-                    TooltipTitle="@Traductor.T("PROJECTS_EDIT")"
-                    Type="ButtonType.Button"
-                >
-                    <Icon Name="IconName.PencilSquare"/>
-                </Button>
-                <Button
-                    Outline=true
-                    Color="ButtonColor.Danger"
-                    TooltipTitle="@Traductor.T("PROJECTS_REMOVE")"
-                    Type="ButtonType.Button"
-                    @onclick="async () => await RemoveProjectAsync(context)"
-                >
-                    <Icon Name="IconName.Trash"/>
-                </Button>
+<section class="projects-page">
+
+    @* Header: eyebrow, title, count, search, primary CTA *@
+    <header class="projects-header">
+        <div class="projects-header__titles">
+            <span class="home-section__eyebrow">@Traductor.T("NAV_PROJECT_OPTIONS")</span>
+            <h1 class="projects-header__title">
+                @Traductor.T("NAV_PROJECTS")
+                @if (!_loading && _projects.Count > 0)
+                {
+                    <span class="projects-header__count">@_projects.Count</span>
+                }
+            </h1>
+        </div>
+
+        <div class="projects-header__tools">
+            <label class="projects-search">
+                <Icon Name="IconName.Search" />
+                <input type="search"
+                       class="form-control"
+                       placeholder="@Traductor.T("PROJECTS_SEARCH_PLACEHOLDER")"
+                       aria-label="@Traductor.T("PROJECTS_SEARCH_PLACEHOLDER")"
+                       @bind="_filter"
+                       @bind:event="oninput" />
+                @if (!string.IsNullOrEmpty(_filter))
+                {
+                    <button type="button" class="projects-search__clear"
+                            @onclick="() => _filter = string.Empty"
+                            aria-label="@Traductor.T("COMMON_CLEAR")">
+                        <Icon Name="IconName.X" />
+                    </button>
+                }
+            </label>
+
+            <button type="button" class="btn btn-ghost projects-sample"
+                    @onclick="CreateSampleAsync"
+                    title="@Traductor.T("PROJECTS_SAMPLE_HINT")">
+                <Icon Name="IconName.LightningChargeFill" />
+                <span>@Traductor.T("PROJECTS_CREATE_SAMPLE")</span>
+            </button>
+
+            <button type="button" class="btn btn-primary projects-cta" @onclick="CreateProjectAsync">
+                <Icon Name="IconName.PlusLg" />
+                <span>@Traductor.T("PROJECTS_CREATE_NEW")</span>
+            </button>
+        </div>
+    </header>
+
+    @* Body: loading / empty / no-match / grid *@
+    @if (_loading)
+    {
+        <div class="projects-grid">
+            @for (var i = 0; i < 6; i++)
+            {
+                <div class="project-card project-card--skeleton">
+                    <div class="skeleton skeleton--avatar"></div>
+                    <div class="skeleton skeleton--title"></div>
+                    <div class="skeleton skeleton--line"></div>
+                    <div class="skeleton skeleton--line skeleton--short"></div>
+                </div>
+            }
+        </div>
+    }
+    else if (_projects.Count == 0)
+    {
+        <div class="projects-empty">
+            <div class="projects-empty__icon"><Icon Name="IconName.Folder2" /></div>
+            <h2>@Traductor.T("PROJECTS_EMPTY_TITLE")</h2>
+            <p>@Traductor.T("PROJECTS_EMPTY_BODY")</p>
+            <div class="projects-empty__actions">
+                <button type="button" class="btn btn-primary btn-lg" @onclick="CreateProjectAsync">
+                    <Icon Name="IconName.PlusLg" />
+                    <span>@Traductor.T("PROJECTS_CREATE_NEW")</span>
+                </button>
+                <button type="button" class="btn btn-ghost btn-lg" @onclick="CreateSampleAsync">
+                    <Icon Name="IconName.LightningChargeFill" />
+                    <span>@Traductor.T("PROJECTS_CREATE_SAMPLE")</span>
+                </button>
             </div>
-        </GridColumn>
-    </GridColumns>
+        </div>
+    }
+    else if (!Filtered.Any())
+    {
+        <div class="projects-empty projects-empty--compact">
+            <div class="projects-empty__icon"><Icon Name="IconName.Search" /></div>
+            <h2>@Traductor.T("PROJECTS_NO_MATCH_TITLE")</h2>
+            <p>@string.Format(Traductor.T("PROJECTS_NO_MATCH_BODY"), _filter)</p>
+            <button type="button" class="btn btn-outline-primary" @onclick="() => _filter = string.Empty">
+                <Icon Name="IconName.ArrowCounterclockwise" />
+                <span>@Traductor.T("COMMON_CLEAR")</span>
+            </button>
+        </div>
+    }
+    else
+    {
+        <div class="projects-grid">
+            @foreach (var project in Filtered)
+            {
+                <article class="project-card">
+                    <a href="@($"/editor/{project.Id}")" class="project-card__link" aria-label="@project.Name">
+                        <div class="project-card__avatar">
+                            <Icon Name="IconName.FileEarmarkCode" />
+                        </div>
+                        <div class="project-card__body">
+                            <h3 class="project-card__name">@project.Name</h3>
+                            @if (!string.IsNullOrWhiteSpace(project.Description))
+                            {
+                                <p class="project-card__description">@project.Description</p>
+                            }
+                            else
+                            {
+                                <p class="project-card__description project-card__description--muted">
+                                    @Traductor.T("PROJECTS_NO_DESCRIPTION")
+                                </p>
+                            }
+                        </div>
+                        <div class="project-card__meta">
+                            <span class="project-card__date" title="@project.CreationTime.ToString("F")">
+                                <Icon Name="IconName.Clock" />
+                                @FormatDate(project.CreationTime)
+                            </span>
+                        </div>
+                    </a>
 
-</Grid>
-<Modal Size="ModalSize.Large" IsScrollable=true @ref="_newProjectModal"/>
+                    <div class="project-card__actions" aria-label="@Traductor.T("PROJECTS_OPTIONS")">
+                        <a href="@($"/editor/{project.Id}")"
+                           class="project-card__action"
+                           title="@Traductor.T("PROJECTS_OPEN")">
+                            <Icon Name="IconName.BoxArrowUpRight" />
+                        </a>
+                        <button type="button"
+                                class="project-card__action project-card__action--danger"
+                                title="@Traductor.T("PROJECTS_REMOVE")"
+                                @onclick="() => RemoveProjectAsync(project)"
+                                @onclick:preventDefault
+                                @onclick:stopPropagation>
+                            <Icon Name="IconName.Trash" />
+                        </button>
+                    </div>
+                </article>
+            }
+        </div>
+    }
+</section>
+
+<Modal Size="ModalSize.Large" IsScrollable=true @ref="_newProjectModal" />
 <ConfirmDialog @ref="_removeProjectDialog" />
 
-@code{
-    /// <summary>
-    /// Gets or sets the option for the view.
-    /// </summary>
-    [Parameter]
-    public string? Option { get; set; } = null!;
+@code {
+    [Parameter] public string? Option { get; set; }
+
     private Modal _newProjectModal = new();
     private ConfirmDialog _removeProjectDialog = new();
     private List<Project> _projects = new();
+    private string _filter = string.Empty;
+    private bool _loading = true;
+
+    private IEnumerable<Project> Filtered =>
+        string.IsNullOrWhiteSpace(_filter)
+            ? _projects
+            : _projects.Where(p =>
+                (p.Name?.Contains(_filter, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (p.Description?.Contains(_filter, StringComparison.OrdinalIgnoreCase) ?? false));
 
     protected override void OnInitialized()
     {
         Traductor.StaticOnLangChanged += OnLanguageChanged;
     }
 
-    private void OnLanguageChanged()
-    {
-        InvokeAsync(StateHasChanged);
-    }
+    private void OnLanguageChanged() => InvokeAsync(StateHasChanged);
 
     public void Dispose()
     {
         Traductor.StaticOnLangChanged -= OnLanguageChanged;
     }
 
-    /// <summary>
-    /// Method invoked when the component is initialized.
-    /// </summary>
-    protected override async Task OnInitializedAsync(){
-        _projects = await Projects.GetListAsync();
-
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _projects = await Projects.GetListAsync() ?? new();
+        }
+        catch
+        {
+            _projects = new();
+        }
+        finally
+        {
+            _loading = false;
+        }
     }
-    /// <summary>
-    /// Method invoked after the component has rendered.
-    /// </summary>
-    /// <param name="firstRender">A boolean value indicating if it is the first render.</param>
-    protected override async Task OnAfterRenderAsync(bool firstRender){
-        if(firstRender){
-            if(!String.IsNullOrEmpty(Option)){
-                switch(Option.ToLowerInvariant()){
-                    case "create":
-                        await CreateProjectAsync();
-                    break;
-                }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !string.IsNullOrEmpty(Option))
+        {
+            if (string.Equals(Option, "create", StringComparison.OrdinalIgnoreCase))
+            {
+                await CreateProjectAsync();
             }
         }
     }
+
     /// <summary>
-    /// Removes a project asynchronously.
+    /// Renders a compact, human-friendly date ("Today", "Yesterday", "3d ago",
+    /// otherwise localized short date). Tooltip shows the full timestamp.
     /// </summary>
-    /// <param name="project">The project to remove.</param>
-    private async Task RemoveProjectAsync(Project project){
-        ConfirmDialogOptions options = new(){
+    private string FormatDate(DateTime dt)
+    {
+        var now = DateTime.Now;
+        var span = now - dt;
+        if (span.TotalDays < 1 && dt.Date == now.Date) return Traductor.T("DATE_TODAY");
+        if (dt.Date == now.Date.AddDays(-1)) return Traductor.T("DATE_YESTERDAY");
+        if (span.TotalDays < 7) return $"{(int)span.TotalDays}{Traductor.T("DATE_DAYS_SHORT")}";
+        return dt.ToString("yyyy-MM-dd");
+    }
+
+    /// <summary>
+    /// The VHDL content shipped with the sample project. Kept as a constant
+    /// (not a translated resource) since VHDL itself is English-keyworded and
+    /// students benefit from seeing canonical source code in the language they
+    /// encounter everywhere else.
+    /// </summary>
+    private const string SAMPLE_MAIN_VHD =
+@"-- Kmila sample project: a 4-bit counter.
+-- Try it:
+--   1. Click the ⚒ Build button to parse the design.
+--   2. Open the Ports tab and:
+--        • set `clk`    as a clock signal
+--        • set `reset`  to '1' at time 0, '0' at time 5
+--   3. Click ▶ Run, then switch to the Waveforms tab.
+
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
+
+entity counter is
+  port (
+    clk   : in  std_logic;
+    reset : in  std_logic;
+    q     : out std_logic_vector(3 downto 0)
+  );
+end entity counter;
+
+architecture behavioral of counter is
+  signal cnt : unsigned(3 downto 0) := (others => '0');
+begin
+  process(clk, reset)
+  begin
+    if reset = '1' then
+      cnt <= (others => '0');
+    elsif rising_edge(clk) then
+      cnt <= cnt + 1;
+    end if;
+  end process;
+
+  q <= std_logic_vector(cnt);
+end architecture behavioral;
+";
+
+    /// <summary>
+    /// Creates a ready-to-run sample project and navigates straight to its editor.
+    /// Name collisions are resolved by appending "(2)", "(3)", … so repeated clicks
+    /// create distinct copies rather than failing silently.
+    /// </summary>
+    private async Task CreateSampleAsync()
+    {
+        try
+        {
+            // Platform-appropriate data directory (matches ProjectDetailsModal)
+            string basePath;
+#if WINDOWS || MACCATALYST || ANDROID || IOS
+            basePath = FileSystem.AppDataDirectory;
+#else
+            basePath = Path.Combine(
+                System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData),
+                "KmilaData");
+#endif
+
+            var baseName = Traductor.T("PROJECTS_SAMPLE_NAME");
+            var name = await FindAvailableNameAsync(baseName);
+            var folder = name.Replace(" ", "").Replace("·", "").Replace("/", "_").Replace("-", "_");
+            var projectPath = Path.Combine(basePath, "Projects", folder);
+
+            var project = new Project
+            {
+                Name = name,
+                Description = Traductor.T("PROJECTS_SAMPLE_DESCRIPTION"),
+                BasePath = projectPath
+            };
+
+            var created = await Projects.CreateAsync(project);
+            if (!created)
+            {
+                ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                    $"{Traductor.T("PROJECTS_SAMPLE_ERROR")}: {Projects.LastError}", ToastType.Danger));
+                return;
+            }
+
+            // Write the starter VHDL file via the ProjectFiles repository so
+            // the disk + DB stay in lockstep with the rest of the app.
+            var file = new ProjectFile
+            {
+                Project = project,
+                FileName = "main.vhd",
+                Content = SAMPLE_MAIN_VHD
+            };
+            await ProjectFiles.CreateAsync(file);
+
+            // Save a companion simulation configuration and ask the Editor to
+            // auto-apply it as soon as the project finishes loading. We don't
+            // bind configs to projects in the DB (they're global), but the
+            // one-shot pending slot on SimulationParameters lets us hand off
+            // without stale-stimulus-across-projects side effects.
+            await SaveSampleConfigurationAsync();
+            Sim.PendingConfigurationName = Traductor.T("PROJECTS_SAMPLE_CONFIG_NAME");
+
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"),
+                Traductor.T("PROJECTS_SAMPLE_CREATED"), ToastType.Success));
+
+            // Jump into the new project's editor — the user wants to see the code.
+            NavigationManager.NavigateTo($"/editor/{project.Id}");
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+    }
+
+    /// <summary>
+    /// Persists a ready-to-run simulation configuration keyed to the sample
+    /// project's ports. Saving idempotently — if the name already exists
+    /// (user clicked "Try a sample" before), we just overwrite, which is
+    /// what <see cref="ConfigurationService.SaveConfigurationAsync"/> does
+    /// under the hood anyway.
+    ///
+    /// Shape:
+    ///   • Time          : 100 US
+    ///   • FPGA          : whatever the user currently has selected (may be null)
+    ///   • Port moments  :
+    ///       – clk   → clock signal marker
+    ///       – reset → '1' @ t=0, '0' @ t=5
+    /// </summary>
+    private async Task SaveSampleConfigurationAsync()
+    {
+        try
+        {
+            var portMoments = new List<PortMomentConfiguration>
+            {
+                new PortMomentConfiguration
+                {
+                    PortName = "clk",
+                    Values = new List<PortMomentValue>
+                    {
+                        new PortMomentValue { Time = 0, TimeScale = "CLK", Value = "CLOCK" }
+                    }
+                },
+                new PortMomentConfiguration
+                {
+                    PortName = "reset",
+                    Values = new List<PortMomentValue>
+                    {
+                        new PortMomentValue { Time = 0, TimeScale = "US", Value = "1" },
+                        new PortMomentValue { Time = 5, TimeScale = "US", Value = "0" }
+                    }
+                }
+            };
+
+            var cfg = ConfigService.CreateConfiguration(
+                name: Traductor.T("PROJECTS_SAMPLE_CONFIG_NAME"),
+                description: Traductor.T("PROJECTS_SAMPLE_CONFIG_DESCRIPTION"),
+                fpga: SelectedFPGA?.FPGA,
+                fpgaPath: SelectedFPGA?.Path ?? string.Empty,
+                timeValue: 100,
+                timeScale: "US",
+                portMoments: portMoments);
+
+            await ConfigService.SaveConfigurationAsync(cfg);
+        }
+        catch
+        {
+            // Non-fatal: the project + VHDL file are already created; the user
+            // can still configure manually. Stay silent to avoid confusing the
+            // main success toast with a secondary warning.
+        }
+    }
+
+    /// <summary>
+    /// Suffixes " (N)" onto the name until it doesn't collide with an existing
+    /// project name in the DB. Case-insensitive comparison matches what the
+    /// repository enforces.
+    /// </summary>
+    private async Task<string> FindAvailableNameAsync(string baseName)
+    {
+        var existing = (await Projects.GetListAsync() ?? new())
+            .Select(p => p.Name.ToLowerInvariant()).ToHashSet();
+        if (!existing.Contains(baseName.ToLowerInvariant())) return baseName;
+        for (var i = 2; i < 1000; i++)
+        {
+            var candidate = $"{baseName} ({i})";
+            if (!existing.Contains(candidate.ToLowerInvariant())) return candidate;
+        }
+        return $"{baseName} ({DateTime.Now:yyyyMMdd_HHmmss})";
+    }
+
+    private async Task RemoveProjectAsync(Project project)
+    {
+        var options = new ConfirmDialogOptions
+        {
             YesButtonColor = ButtonColor.Danger,
-            NoButtonColor = ButtonColor.Success,
+            NoButtonColor = ButtonColor.Secondary,
             AutoFocusYesButton = false,
             YesButtonText = Traductor.T("PROJECTS_REMOVE"),
             NoButtonText = Traductor.T("COMMON_GO_BACK")
         };
-        var confirmation = await _removeProjectDialog.ShowAsync(
+        var ok = await _removeProjectDialog.ShowAsync(
             title: $"{Traductor.T("PROJECTS_REMOVING")}: {project.Name}",
             message1: $"{Traductor.T("PROJECTS_REMOVE_MSG1")} {project.BasePath}",
             message2: Traductor.T("PROJECTS_REMOVE_MSG2"),
             confirmDialogOptions: options
         );
-        if(confirmation){
+
+        if (ok)
+        {
             var result = await Projects.RemoveAsync(project);
             ToastService.Notify(Message(
                 result ? Traductor.T("PROJECTS_REMOVED") : Traductor.T("COMMON_ERROR"),
                 result ? Traductor.T("PROJECTS_REMOVED_SUCCESS") : $"{Traductor.T("PROJECTS_REMOVED_ERROR")}: {Projects.LastError}",
                 result ? ToastType.Success : ToastType.Warning
             ));
-        }else{
+        }
+        else
+        {
             ToastService.Notify(Message(Traductor.T("PROJECTS_NOT_REMOVED"), Traductor.T("PROJECTS_NOT_REMOVED_MSG")));
         }
-        _projects = await Projects.GetListAsync();
+        _projects = await Projects.GetListAsync() ?? new();
+        StateHasChanged();
     }
-    /// <summary>
-    /// Creates a new project asynchronously.
-    /// </summary>
-    private async Task CreateProjectAsync(){
-        Dictionary<string, object> parameters = new(){
-            {"OnProjectCreated", EventCallback.Factory.Create<bool>(this, OnProjectCreatedAsync)}
+
+    private async Task CreateProjectAsync()
+    {
+        var parameters = new Dictionary<string, object>
+        {
+            { "OnProjectCreated", EventCallback.Factory.Create<bool>(this, OnProjectCreatedAsync) }
         };
         await _newProjectModal.ShowAsync<ProjectDetailsModal>(Traductor.T("PROJECTS_NEW"), parameters: parameters);
     }
-    /// <summary>
-    /// Handles the project created event.
-    /// </summary>
-    /// <param name="status">The status of the project creation.</param>
-    private async Task OnProjectCreatedAsync(bool status){
-        _projects = await Projects.GetListAsync();
+
+    private async Task OnProjectCreatedAsync(bool status)
+    {
+        _projects = await Projects.GetListAsync() ?? new();
         await _newProjectModal.HideAsync();
         await InvokeAsync(StateHasChanged);
     }

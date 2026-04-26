@@ -1,0 +1,266 @@
+@*
+    Logs page — live viewer of every ILogger event routed through
+    InMemoryLoggerProvider. Mirrors the console without needing a terminal,
+    which is especially useful on mobile where there's no console to watch.
+
+    Controls:
+      • Search (substring match, case-insensitive, over message + category)
+      • Level filter — All | Info | Warning | Error
+      • Auto-scroll toggle — jumps to newest on each new entry
+      • Pause — stops updating the UI (log capture still runs in the background)
+      • Clear — wipes the in-memory buffer
+
+    Rendering: the list is capped at 500 displayed rows out of a 2000-entry
+    buffer. Beyond that the DOM gets heavy and blasts re-render time.
+*@
+@page "/logs"
+@implements IDisposable
+@inject AppLogStore Store
+@inject Microsoft.JSInterop.IJSRuntime JS
+@using Microsoft.Extensions.Logging
+@using Kmila.Shared.Services
+
+<PageTitle>@Traductor.T("NAV_LOGS")</PageTitle>
+
+<section class="logs-page">
+
+    <header class="logs-page__header">
+        <div class="logs-page__titles">
+            <span class="home-section__eyebrow">@Traductor.T("LOGS_EYEBROW")</span>
+            <h1 class="logs-page__title">
+                @Traductor.T("NAV_LOGS")
+                <span class="logs-page__count">@_filtered.Count / @_snapshot.Count</span>
+            </h1>
+        </div>
+
+        <div class="logs-page__tools">
+            <label class="projects-search logs-page__search">
+                <Icon Name="IconName.Search" />
+                <input type="search"
+                       class="form-control"
+                       placeholder="@Traductor.T("LOGS_SEARCH_PLACEHOLDER")"
+                       aria-label="@Traductor.T("LOGS_SEARCH_PLACEHOLDER")"
+                       @bind="_filter"
+                       @bind:event="oninput" />
+                @if (!string.IsNullOrEmpty(_filter))
+                {
+                    <button type="button" class="projects-search__clear"
+                            @onclick="() => _filter = string.Empty">
+                        <Icon Name="IconName.X" />
+                    </button>
+                }
+            </label>
+
+            <select class="form-select form-select-sm logs-page__level"
+                    value="@_levelFilter"
+                    @onchange="OnLevelChanged"
+                    aria-label="@Traductor.T("LOGS_LEVEL_FILTER")">
+                <option value="all">@Traductor.T("LOGS_LEVEL_ALL")</option>
+                <option value="info">@Traductor.T("LOGS_LEVEL_INFO")+</option>
+                <option value="warning">@Traductor.T("LOGS_LEVEL_WARN")+</option>
+                <option value="error">@Traductor.T("LOGS_LEVEL_ERROR")+</option>
+            </select>
+
+            <button type="button"
+                    class="btn btn-ghost btn-sm logs-page__toggle @(_autoScroll ? "is-active" : "")"
+                    @onclick="() => _autoScroll = !_autoScroll"
+                    title="@Traductor.T("LOGS_AUTOSCROLL")">
+                <Icon Name="IconName.ArrowDownSquare" />
+            </button>
+
+            <button type="button"
+                    class="btn btn-ghost btn-sm logs-page__toggle @(_paused ? "is-active" : "")"
+                    @onclick="() => _paused = !_paused"
+                    title="@Traductor.T(_paused ? "LOGS_RESUME" : "LOGS_PAUSE")">
+                <Icon Name="@(_paused ? IconName.PlayFill : IconName.PauseFill)" />
+            </button>
+
+            <button type="button"
+                    class="btn btn-ghost btn-sm"
+                    @onclick="Store.Clear"
+                    title="@Traductor.T("LOGS_CLEAR")">
+                <Icon Name="IconName.Trash" />
+            </button>
+        </div>
+    </header>
+
+    @if (_filtered.Count == 0)
+    {
+        <div class="logs-page__empty">
+            <div class="projects-empty__icon"><Icon Name="IconName.TerminalFill" /></div>
+            @if (_snapshot.Count == 0)
+            {
+                <h2>@Traductor.T("LOGS_EMPTY_TITLE")</h2>
+                <p>@Traductor.T("LOGS_EMPTY_BODY")</p>
+            }
+            else
+            {
+                <h2>@Traductor.T("LOGS_NO_MATCH_TITLE")</h2>
+                <p>@Traductor.T("LOGS_NO_MATCH_BODY")</p>
+            }
+        </div>
+    }
+    else
+    {
+        <ol class="logs-page__list" role="log" aria-live="polite" aria-relevant="additions">
+            @foreach (var e in _filtered.TakeLast(500))
+            {
+                var variant = LevelVariant(e.Level);
+                <li class="output-row output-row--@variant">
+                    <span class="output-row__time">@e.Timestamp.ToString("HH:mm:ss.fff")</span>
+                    <span class="output-row__icon"><Icon Name="@LevelIcon(e.Level)" /></span>
+                    <span class="logs-row__body">
+                        <span class="logs-row__category">@ShortenCategory(e.Category)</span>
+                        <span class="output-row__msg">@e.Message</span>
+                        @if (!string.IsNullOrEmpty(e.Exception))
+                        {
+                            <pre class="logs-row__exception">@e.Exception</pre>
+                        }
+                    </span>
+                    @* Per-entry Report button — only on Error / Critical rows.
+                       Opens a pre-filled GitHub issue with the log context.
+                       Students stop having to manually copy-paste the
+                       stacktrace when something breaks. *@
+                    @if (e.Level >= Microsoft.Extensions.Logging.LogLevel.Error)
+                    {
+                        <button type="button"
+                                class="logs-row__report btn btn-ghost btn-sm"
+                                title="@Traductor.T("LOGS_REPORT_THIS")"
+                                aria-label="@Traductor.T("LOGS_REPORT_THIS")"
+                                @onclick="() => ReportEntryAsync(e)">
+                            <Icon Name="IconName.FlagFill" />
+                            <span>@Traductor.T("LOGS_REPORT_SHORT")</span>
+                        </button>
+                    }
+                </li>
+            }
+        </ol>
+    }
+</section>
+
+@code {
+    private IReadOnlyList<AppLogEntry> _snapshot = Array.Empty<AppLogEntry>();
+    private List<AppLogEntry> _filtered = new();
+    private string _filter = "";
+    private string _levelFilter = "all";
+    private bool _autoScroll = true;
+    private bool _paused;
+
+    protected override void OnInitialized()
+    {
+        Store.OnChange += OnStoreChanged;
+        Traductor.StaticOnLangChanged += OnLangChanged;
+        RebuildSnapshot();
+    }
+
+    private void OnStoreChanged()
+    {
+        if (_paused) return;
+        InvokeAsync(() =>
+        {
+            RebuildSnapshot();
+            StateHasChanged();
+        });
+    }
+
+    private void OnLangChanged() => InvokeAsync(StateHasChanged);
+
+    private void RebuildSnapshot()
+    {
+        _snapshot = Store.Snapshot();
+        _filtered = _snapshot.Where(Matches).ToList();
+    }
+
+    /// <summary>Filters by message/category substring + minimum level.</summary>
+    private bool Matches(AppLogEntry e)
+    {
+        if (_levelFilter switch
+            {
+                "info"    => e.Level < Microsoft.Extensions.Logging.LogLevel.Information,
+                "warning" => e.Level < Microsoft.Extensions.Logging.LogLevel.Warning,
+                "error"   => e.Level < Microsoft.Extensions.Logging.LogLevel.Error,
+                _         => false
+            })
+            return false;
+
+        if (string.IsNullOrEmpty(_filter)) return true;
+        return e.Message.Contains(_filter, StringComparison.OrdinalIgnoreCase)
+            || e.Category.Contains(_filter, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void OnLevelChanged(ChangeEventArgs e)
+    {
+        _levelFilter = e.Value?.ToString() ?? "all";
+        RebuildSnapshot();
+    }
+
+    // -----
+
+    /// <summary>Friendly short name for a fully-qualified logger category.</summary>
+    private static string ShortenCategory(string cat)
+    {
+        var lastDot = cat.LastIndexOf('.');
+        return lastDot >= 0 && lastDot < cat.Length - 1 ? cat[(lastDot + 1)..] : cat;
+    }
+
+    private static string LevelVariant(Microsoft.Extensions.Logging.LogLevel lvl) => lvl switch
+    {
+        Microsoft.Extensions.Logging.LogLevel.Trace       => "info",
+        Microsoft.Extensions.Logging.LogLevel.Debug       => "info",
+        Microsoft.Extensions.Logging.LogLevel.Information => "info",
+        Microsoft.Extensions.Logging.LogLevel.Warning     => "warning",
+        Microsoft.Extensions.Logging.LogLevel.Error       => "danger",
+        Microsoft.Extensions.Logging.LogLevel.Critical    => "danger",
+        _                    => "info"
+    };
+
+    private static IconName LevelIcon(Microsoft.Extensions.Logging.LogLevel lvl) => lvl switch
+    {
+        Microsoft.Extensions.Logging.LogLevel.Warning  => IconName.ExclamationTriangleFill,
+        Microsoft.Extensions.Logging.LogLevel.Error    => IconName.XCircleFill,
+        Microsoft.Extensions.Logging.LogLevel.Critical => IconName.XCircleFill,
+        _                 => IconName.InfoCircleFill
+    };
+
+    /// <summary>
+    /// Builds a GitHub issue URL prefilled from a specific log entry and
+    /// opens it in a new tab. Title carries the shortened message so the
+    /// issue list is scannable; body carries the full entry (category,
+    /// level, timestamp, message, exception) plus the standard env block
+    /// from <see cref="FeedbackHelper.BuildDiagnostics"/>.
+    /// </summary>
+    private async Task ReportEntryAsync(AppLogEntry entry)
+    {
+        try
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"Level: {entry.Level}");
+            sb.AppendLine($"Category: {entry.Category}");
+            sb.AppendLine($"Timestamp: {entry.Timestamp:O}");
+            sb.AppendLine($"Message: {entry.Message}");
+            if (!string.IsNullOrEmpty(entry.Exception))
+            {
+                sb.AppendLine();
+                sb.AppendLine("Exception:");
+                sb.AppendLine(entry.Exception);
+            }
+
+            var body  = FeedbackHelper.BuildDiagnostics(Traductor.Lang ?? "en",
+                                                        logContext: sb.ToString());
+            var title = $"[{entry.Level}] {entry.Message}";
+            var url   = FeedbackHelper.BuildIssueUrl(title, body);
+            await JS.InvokeVoidAsync("open", url, "_blank");
+        }
+        catch
+        {
+            // Ghost-failing a log-report button is better than a toast —
+            // if the browser blocked the popup the user will try again.
+        }
+    }
+
+    public void Dispose()
+    {
+        Store.OnChange -= OnStoreChanged;
+        Traductor.StaticOnLangChanged -= OnLangChanged;
+    }
+}

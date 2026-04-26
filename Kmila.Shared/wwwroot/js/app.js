@@ -18,3 +18,13 @@ window.downloadFile = function (fileName, content) {
     document.body.removeChild(anchor);
     URL.revokeObjectURL(url);
 };
+
+/*
+ * Theme persistence lives entirely in two places now:
+ *   1. An inline <head> script in the host HTMLs applies localStorage['kmila-theme']
+ *      to <html data-bs-theme=…> before first paint (no flash of wrong theme).
+ *   2. TopBar.OnThemeChanged calls localStorage.setItem + DbContext directly via
+ *      Blazor's dotted-path JSInterop — no wrapper function needed.
+ * That way there is no custom JS on the interop path that could be missing at
+ * startup, which avoided the "kmilaTheme is undefined" circuit crash.
+ */

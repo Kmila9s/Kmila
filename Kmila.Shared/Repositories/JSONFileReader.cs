@@ -1,5 +1,7 @@
+using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using Kmila.Shared.Models;
+using Kmila.Shared.Services;
 #if LINUX || ASPNETCORE
 using Microsoft.AspNetCore.Hosting;
 #endif
@@ -16,6 +18,21 @@ namespace Kmila.Shared.Repositories;
 /// </remarks>
 public class JSONFileReader
 {
+    /// <summary>
+    /// Logger (web + MAUI). Optional at construction time — falls back to a
+    /// no-op so the DI factories that don't pass one still work.
+    /// </summary>
+    private readonly Microsoft.Extensions.Logging.ILogger _logger =
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<JSONFileReader>.Instance;
+
+    /// <summary>
+    /// Optional backing store for user-imported FPGA JSON files. When set,
+    /// <see cref="GetFPGAsAsync"/> merges the user-supplied paths on top of
+    /// the bundled ones, and <see cref="ReadFPGAJsonFileAsync"/> reads
+    /// directly from disk whenever the caller hands over an absolute path.
+    /// </summary>
+    private readonly UserAssetStore? _userAssets;
+
 #if LINUX || ASPNETCORE
     private readonly string _devicesPath;
     private readonly IWebHostEnvironment _env;
@@ -24,9 +41,14 @@ public class JSONFileReader
     /// Initializes a new instance of the <see cref="JSONFileReader"/> class for web environments.
     /// </summary>
     /// <param name="env">The web host environment.</param>
-    public JSONFileReader(IWebHostEnvironment env)
+    /// <param name="logger">Optional logger.</param>
+    public JSONFileReader(IWebHostEnvironment env,
+                          Microsoft.Extensions.Logging.ILogger<JSONFileReader>? logger = null,
+                          UserAssetStore? userAssets = null)
     {
         _env = env;
+        if (logger != null) _logger = logger;
+        _userAssets = userAssets;
         // First try the RCL static files path
         _devicesPath = Path.Combine(_env.WebRootPath ?? "", "_content", "Kmila.Shared", "Devices");
         if (!Directory.Exists(_devicesPath))
@@ -34,10 +56,10 @@ public class JSONFileReader
             // Fall back to direct wwwroot path (development)
             _devicesPath = Path.Combine(_env.ContentRootPath, "..", "Kmila.Shared", "wwwroot", "Devices");
         }
-        Console.WriteLine($"[JSONFileReader] WebRootPath: {_env.WebRootPath}");
-        Console.WriteLine($"[JSONFileReader] ContentRootPath: {_env.ContentRootPath}");
-        Console.WriteLine($"[JSONFileReader] DevicesPath: {_devicesPath}");
-        Console.WriteLine($"[JSONFileReader] DevicesPath exists: {Directory.Exists(_devicesPath)}");
+        _logger.LogInformation($"[JSONFileReader] WebRootPath: {_env.WebRootPath}");
+        _logger.LogInformation($"[JSONFileReader] ContentRootPath: {_env.ContentRootPath}");
+        _logger.LogInformation($"[JSONFileReader] DevicesPath: {_devicesPath}");
+        _logger.LogInformation($"[JSONFileReader] DevicesPath exists: {Directory.Exists(_devicesPath)}");
     }
 
     /// <summary>
@@ -66,10 +88,10 @@ public class JSONFileReader
     {
         try
         {
-            Console.WriteLine($"[JSONFileReader] GetFPGAsAsync - Checking path: {_devicesPath}");
+            _logger.LogInformation($"[JSONFileReader] GetFPGAsAsync - Checking path: {_devicesPath}");
             if (!Directory.Exists(_devicesPath))
             {
-                Console.WriteLine($"[JSONFileReader] GetFPGAsAsync - Directory does not exist!");
+                _logger.LogInformation($"[JSONFileReader] GetFPGAsAsync - Directory does not exist!");
                 return new List<string>();
             }
 
@@ -77,12 +99,23 @@ public class JSONFileReader
                 .OrderBy(f => Path.GetFileNameWithoutExtension(f))
                 .ToList();
 
-            Console.WriteLine($"[JSONFileReader] GetFPGAsAsync - Found {fpgaFiles.Count} files");
+            // Merge in user-imported FPGA files on top of the bundled ones.
+            if (_userAssets != null)
+            {
+                var userFiles = _userAssets.ListUserFpgaPaths();
+                if (userFiles.Count > 0)
+                {
+                    fpgaFiles.AddRange(userFiles);
+                    _logger.LogInformation("[JSONFileReader] Added {Count} user-imported FPGA files", userFiles.Count);
+                }
+            }
+
+            _logger.LogInformation($"[JSONFileReader] GetFPGAsAsync - Found {fpgaFiles.Count} files");
             return await Task.FromResult(fpgaFiles);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[JSONFileReader] Error reading FPGA files: {ex.Message}");
+            _logger.LogError($"[JSONFileReader] Error reading FPGA files: {ex.Message}");
             return new List<string>();
         }
     }
@@ -116,7 +149,7 @@ public class JSONFileReader
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error creating FPGA dictionary: {ex.Message}");
+            _logger.LogError($"Error creating FPGA dictionary: {ex.Message}");
             return new Dictionary<string, string>();
         }
     }
@@ -145,9 +178,13 @@ public class JSONFileReader
     /// A function to open app package files. In MAUI, pass:
     /// path => FileSystem.OpenAppPackageFileAsync(path)
     /// </param>
-    public JSONFileReader(Func<string, Task<Stream>>? openPackageFileAsync = null)
+    public JSONFileReader(Func<string, Task<Stream>>? openPackageFileAsync = null,
+                          Microsoft.Extensions.Logging.ILogger<JSONFileReader>? logger = null,
+                          UserAssetStore? userAssets = null)
     {
         _openPackageFileAsync = openPackageFileAsync;
+        if (logger != null) _logger = logger;
+        _userAssets = userAssets;
     }
 
     /// <summary>
@@ -159,6 +196,15 @@ public class JSONFileReader
     {
         try
         {
+            // If the caller handed us an absolute path (user-imported FPGA
+            // under UserAssets/Devices, or any path-shaped string), skip the
+            // app-package lookup and read straight from disk.
+            if (Path.IsPathRooted(deviceNameOrPath) && File.Exists(deviceNameOrPath))
+            {
+                string directJson = await File.ReadAllTextAsync(deviceNameOrPath);
+                return JsonSerializer.Deserialize<FPGA>(directJson);
+            }
+
             string deviceName = Path.GetFileNameWithoutExtension(deviceNameOrPath);
             string resourcePath = $"Devices/{deviceName}.json";
 
@@ -184,18 +230,29 @@ public class JSONFileReader
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error reading FPGA file '{deviceNameOrPath}': {ex.Message}");
+            _logger.LogError($"Error reading FPGA file '{deviceNameOrPath}': {ex.Message}");
             return null;
         }
     }
 
     /// <summary>
-    /// Gets a list of all known FPGA device names.
+    /// Gets a list of all known FPGA device names plus any user-imported
+    /// FPGA files (as absolute paths — <see cref="ReadFPGAJsonFileAsync"/>
+    /// handles both shapes).
     /// </summary>
-    /// <returns>A list of FPGA device names.</returns>
     public Task<List<string>> GetFPGAsAsync()
     {
-        return Task.FromResult(_knownDevices.OrderBy(d => d).ToList());
+        var all = _knownDevices.OrderBy(d => d).Cast<string>().ToList();
+        if (_userAssets != null)
+        {
+            var userFiles = _userAssets.ListUserFpgaPaths();
+            if (userFiles.Count > 0)
+            {
+                all.AddRange(userFiles);
+                _logger.LogInformation("[JSONFileReader] Added {Count} user-imported FPGA files", userFiles.Count);
+            }
+        }
+        return Task.FromResult(all);
     }
 
     /// <summary>
@@ -208,16 +265,19 @@ public class JSONFileReader
         {
             var fpgaDictionary = new Dictionary<string, string>();
 
-            foreach (var deviceName in _knownDevices)
+            // Use the merged list so user-imported FPGAs appear in the picker.
+            var entries = await GetFPGAsAsync();
+            foreach (var entry in entries)
             {
-                var fpga = await ReadFPGAJsonFileAsync(deviceName);
+                var fpga = await ReadFPGAJsonFileAsync(entry);
                 if (fpga != null && !string.IsNullOrEmpty(fpga.Model))
                 {
-                    fpgaDictionary[fpga.Model] = deviceName;
+                    fpgaDictionary[fpga.Model] = entry;
                 }
                 else
                 {
-                    fpgaDictionary[deviceName] = deviceName;
+                    var key = Path.GetFileNameWithoutExtension(entry);
+                    fpgaDictionary[key] = entry;
                 }
             }
 
@@ -225,7 +285,7 @@ public class JSONFileReader
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error creating FPGA dictionary: {ex.Message}");
+            _logger.LogError($"Error creating FPGA dictionary: {ex.Message}");
             return new Dictionary<string, string>();
         }
     }

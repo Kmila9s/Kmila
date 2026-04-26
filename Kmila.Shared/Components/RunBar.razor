@@ -1,0 +1,336 @@
+@*
+    RunBar — horizontal action strip between Monaco and the EditorDock.
+
+    Owns the UX for Build + Run, time + scale, FPGA reference chip, and an
+    overflow menu (Save / New File / Export VCD). Actual behavior lives in
+    the parent Editor.razor: it handles the callbacks, talks to ProgramBuilder,
+    and updates <see cref="SimulationParameters"/> + <see cref="BuildLog"/>
+    which RunBar reads back to render its state machine.
+
+    State machine (see <see cref="SimState"/>):
+
+      Idle / BuiltOk / BuildError / Complete   →  [▶ Run]
+      Building  (auto after Run clicked)       →  [⟳ Building…]  (disabled)
+      Building  (explicit Build click)         →  [▶ Run]  +  Build shows [⟳ …]
+      Running                                  →  [⏸ Pause]      +  [■ Stop]
+      Paused                                   →  [▶ Resume]     +  [■ Stop]
+
+    Progress line under the bar animates while State == Running.
+*@
+@implements IDisposable
+@inject SimulationParameters Sim
+@inject SelectedFPGA SelectedFPGA
+
+<div class="run-bar @(Sim.State == SimState.Running ? "run-bar--running" : "")">
+    <div class="run-bar__row">
+
+        @* FPGA reference chip. When nothing is selected we flag it in the
+           danger tone so students know this is the blocker for Build/Run. *@
+        <span class="run-bar__fpga @(NoFpga ? "run-bar__fpga--missing" : "")"
+              title="@(NoFpga ? Traductor.T("RUNBAR_FPGA_REQUIRED") : SelectedFPGA.FPGA.Model)">
+            <Icon Name="@(NoFpga ? IconName.ExclamationTriangleFill : IconName.CpuFill)" />
+            @if (!NoFpga)
+            {
+                <span class="run-bar__fpga-model">@SelectedFPGA.FPGA.Model</span>
+            }
+            else
+            {
+                <span class="run-bar__fpga-empty">@Traductor.T("RUNBAR_SELECT_FPGA_FIRST")</span>
+            }
+        </span>
+
+        @* Time input + scale select — simulation duration *@
+        <div class="run-bar__time" role="group" aria-label="@Traductor.T("SIM_DURATION")">
+            <Icon Name="IconName.Clock" Class="run-bar__time-icon" />
+            <input type="number"
+                   class="run-bar__time-input"
+                   min="1"
+                   step="1"
+                   value="@Sim.Time"
+                   disabled="@IsBusy"
+                   @onchange="OnTimeChanged"
+                   aria-label="@Traductor.T("SIM_DURATION")" />
+            <select class="run-bar__scale"
+                    value="@Sim.Scale.ToString()"
+                    disabled="@IsBusy"
+                    @onchange="OnScaleChanged"
+                    aria-label="@Traductor.T("SIM_SCALE")">
+                <option value="NS">NS</option>
+                <option value="US">US</option>
+                <option value="MS">MS</option>
+                <option value="S">S</option>
+                <option value="M">M</option>
+                <option value="H">H</option>
+            </select>
+        </div>
+
+        @* System clock — FPGA-sourced default with optional per-project
+           override. The input field shows the effective MHz. Typing any
+           value other than the FPGA default lights up the warning pill
+           below to explain the runtime / accuracy risk. *@
+        <div class="run-bar__clock @(Sim.ClockIsCustom ? "run-bar__clock--custom" : "")"
+             role="group" aria-label="@Traductor.T("RUNBAR_CLOCK_LABEL")">
+            <Icon Name="IconName.CpuFill" Class="run-bar__time-icon" />
+            <input type="number"
+                   class="run-bar__time-input"
+                   min="1"
+                   step="1"
+                   value="@EffectiveClockMhz"
+                   disabled="@(IsBusy || NoFpga)"
+                   @onchange="OnClockChanged"
+                   aria-label="@Traductor.T("RUNBAR_CLOCK_LABEL")"
+                   title="@(Sim.ClockIsCustom
+                        ? Traductor.T("RUNBAR_CLOCK_CUSTOM_TOOLTIP")
+                        : Traductor.T("RUNBAR_CLOCK_DEFAULT_TOOLTIP"))" />
+            <span class="run-bar__clock-unit">MHz</span>
+            @if (Sim.ClockIsCustom)
+            {
+                <button type="button" class="run-bar__clock-reset"
+                        @onclick="ResetClock"
+                        title="@Traductor.T("RUNBAR_CLOCK_RESET")"
+                        aria-label="@Traductor.T("RUNBAR_CLOCK_RESET")">
+                    <Icon Name="IconName.ArrowCounterclockwise" />
+                </button>
+            }
+        </div>
+
+        <div class="run-bar__spacer"></div>
+
+        @* Build button (secondary). Shows spinner when explicitly building. *@
+        <button type="button"
+                class="btn btn-secondary run-bar__build"
+                disabled="@BuildDisabled"
+                title="@(NoFpga ? Traductor.T("RUNBAR_FPGA_REQUIRED") : Traductor.T("SIM_BUILD"))"
+                @onclick="OnBuildClickAsync">
+            @if (IsExplicitBuilding)
+            {
+                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                <span>@Traductor.T("SIM_BUILDING")</span>
+            }
+            else
+            {
+                <Icon Name="IconName.Tools" />
+                <span>@Traductor.T("SIM_BUILD")</span>
+            }
+        </button>
+
+        @* Run button (primary, state-machine). *@
+        <button type="button"
+                class="btn btn-primary run-bar__run"
+                disabled="@RunDisabled"
+                title="@(NoFpga ? Traductor.T("RUNBAR_FPGA_REQUIRED") : Traductor.T("SIM_RUN"))"
+                @onclick="OnRunClickAsync">
+            @switch (Sim.State)
+            {
+                case SimState.Building when _autoBuilding:
+                    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                    <span>@Traductor.T("SIM_BUILDING")</span>
+                    break;
+                case SimState.Running:
+                    <Icon Name="IconName.PauseFill" />
+                    <span>@Traductor.T("SIM_PAUSE")</span>
+                    break;
+                case SimState.Paused:
+                    <Icon Name="IconName.PlayFill" />
+                    <span>@Traductor.T("SIM_RESUME")</span>
+                    break;
+                case SimState.Complete:
+                    <Icon Name="IconName.ArrowClockwise" />
+                    <span>@Traductor.T("SIM_RUN_AGAIN")</span>
+                    break;
+                default:
+                    <Icon Name="IconName.PlayFill" />
+                    <span>@Traductor.T("SIM_RUN")</span>
+                    break;
+            }
+        </button>
+
+        @* Stop button — visible only during Running/Paused *@
+        @if (Sim.State == SimState.Running || Sim.State == SimState.Paused)
+        {
+            <button type="button"
+                    class="btn btn-ghost run-bar__stop"
+                    @onclick="OnStopClickAsync"
+                    aria-label="@Traductor.T("SIM_STOP")"
+                    title="@Traductor.T("SIM_STOP")">
+                <Icon Name="IconName.StopFill" />
+            </button>
+        }
+
+        @* Visible file actions — Save and New file. Users asked for these to
+           live on the bar itself (not hidden in the overflow) since they're
+           used on almost every session. Kept in the overflow too as a fallback
+           for narrow viewports where we hide these to save horizontal space. *@
+        <button type="button"
+                class="btn btn-ghost run-bar__file-btn run-bar__file-btn--save"
+                @onclick="() => OnSaveClickedCallback.InvokeAsync()"
+                title="@Traductor.T("EDITOR_SAVE_FILE")"
+                aria-label="@Traductor.T("EDITOR_SAVE_FILE")">
+            <Icon Name="IconName.Floppy2" />
+            <span class="run-bar__file-btn-label">@Traductor.T("EDITOR_SAVE_FILE")</span>
+        </button>
+        <button type="button"
+                class="btn btn-ghost run-bar__file-btn run-bar__file-btn--new"
+                @onclick="() => OnNewFileClickedCallback.InvokeAsync()"
+                title="@Traductor.T("EDITOR_NEW_FILE")"
+                aria-label="@Traductor.T("EDITOR_NEW_FILE")">
+            <Icon Name="IconName.FilePlus" />
+            <span class="run-bar__file-btn-label">@Traductor.T("EDITOR_NEW_FILE")</span>
+        </button>
+
+        @* Overflow menu — kept for future actions (Export VCD…) *@
+        <details class="run-bar__overflow">
+            <summary class="btn btn-ghost"
+                     aria-label="@Traductor.T("EDITOR_MORE_ACTIONS")"
+                     title="@Traductor.T("EDITOR_MORE_ACTIONS")">
+                <Icon Name="IconName.ThreeDotsVertical" />
+            </summary>
+            <div class="run-bar__overflow-panel" role="menu">
+                <button type="button" role="menuitem" class="run-bar__overflow-item"
+                        @onclick="() => OnSaveClickedCallback.InvokeAsync()">
+                    <Icon Name="IconName.Floppy2" />
+                    <span>@Traductor.T("EDITOR_SAVE_FILE")</span>
+                    <kbd class="run-bar__shortcut">⌃S</kbd>
+                </button>
+                <button type="button" role="menuitem" class="run-bar__overflow-item"
+                        @onclick="() => OnNewFileClickedCallback.InvokeAsync()">
+                    <Icon Name="IconName.FilePlus" />
+                    <span>@Traductor.T("EDITOR_NEW_FILE")</span>
+                </button>
+            </div>
+        </details>
+    </div>
+
+    @* Progress line — only rendered while running, fills left-to-right *@
+    @if (Sim.State == SimState.Running || Sim.State == SimState.Paused)
+    {
+        <div class="run-bar__progress" role="progressbar"
+             aria-valuenow="@Sim.Progress.ToString("F1")"
+             aria-valuemin="0" aria-valuemax="100">
+            <span class="run-bar__progress-fill"
+                  style="width: @Sim.Progress.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)%;"></span>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public EventCallback OnBuildClicked { get; set; }
+    [Parameter] public EventCallback OnRunClicked { get; set; }
+    [Parameter] public EventCallback OnPauseClicked { get; set; }
+    [Parameter] public EventCallback OnResumeClicked { get; set; }
+    [Parameter] public EventCallback OnStopClicked { get; set; }
+    [Parameter] public EventCallback OnSaveClickedCallback { get; set; }
+    [Parameter] public EventCallback OnNewFileClickedCallback { get; set; }
+
+    /// <summary>
+    /// True when this component triggered the current build as part of Run,
+    /// vs. the user clicking Build directly. Controls which button shows the
+    /// spinner during <see cref="SimState.Building"/>.
+    /// </summary>
+    private bool _autoBuilding;
+
+    /// <summary>
+    /// True until the user has picked an FPGA target in the TopBar. Build and
+    /// Run are both gated on this — no FPGA means no resource validation, and
+    /// we want students to learn that picking a device is step zero of any
+    /// design. The native `disabled` attribute hides the click entirely; the
+    /// tooltip tells them why.
+    /// </summary>
+    private bool NoFpga => SelectedFPGA?.FPGA == null || string.IsNullOrEmpty(SelectedFPGA.FPGA.Model);
+
+    private bool IsBusy => Sim.State is SimState.Building or SimState.Running;
+    private bool BuildDisabled => IsBusy || NoFpga;
+    private bool RunDisabled =>
+        NoFpga ||
+        Sim.State == SimState.Building ||
+        (Sim.State == SimState.Running && _suppressClicks) ||
+        (Sim.State == SimState.Paused  && _suppressClicks);
+
+    private bool IsExplicitBuilding => Sim.State == SimState.Building && !_autoBuilding;
+
+    // Guard against double-click races during transient transitions
+    private bool _suppressClicks;
+
+    protected override void OnInitialized()
+    {
+        Sim.OnChange += OnStateChanged;
+        SelectedFPGA.OnFPGAChange += OnStateChanged;
+        Traductor.StaticOnLangChanged += OnStateChanged;
+    }
+
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+
+    private void OnTimeChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var value) && value > 0)
+            Sim.SetTime(value);
+    }
+
+    private void OnScaleChanged(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<TimeScale>(e.Value?.ToString(), out var s))
+            Sim.SetScale(s);
+    }
+
+    /// <summary>Effective clock MHz used by the Run-bar display + sim launch.</summary>
+    private int EffectiveClockMhz
+    {
+        get
+        {
+            var fpgaDefault = SelectedFPGA?.FPGA?.Clocking?.GetDefaultSimClockMhz() ?? 50;
+            return Sim.GetEffectiveClockMhz(fpgaDefault);
+        }
+    }
+
+    private int FpgaDefaultClockMhz
+        => SelectedFPGA?.FPGA?.Clocking?.GetDefaultSimClockMhz() ?? 50;
+
+    private void OnClockChanged(ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var v) || v <= 0) return;
+        Sim.SetClockOverride(v == FpgaDefaultClockMhz ? null : v, FpgaDefaultClockMhz);
+    }
+
+    private void ResetClock()
+        => Sim.SetClockOverride(null, FpgaDefaultClockMhz);
+
+    private async Task OnBuildClickAsync()
+    {
+        _autoBuilding = false;
+        await OnBuildClicked.InvokeAsync();
+    }
+
+    private async Task OnRunClickAsync()
+    {
+        switch (Sim.State)
+        {
+            case SimState.Running:
+                await OnPauseClicked.InvokeAsync();
+                break;
+            case SimState.Paused:
+                await OnResumeClicked.InvokeAsync();
+                break;
+            default:
+                // Idle / BuildError / BuiltOk / Complete → run. Parent decides
+                // whether to auto-build first; we just flag our intent so the
+                // right button shows the spinner during Building.
+                _autoBuilding = Sim.State != SimState.BuiltOk;
+                await OnRunClicked.InvokeAsync();
+                break;
+        }
+    }
+
+    private async Task OnStopClickAsync()
+    {
+        _suppressClicks = true;
+        try { await OnStopClicked.InvokeAsync(); }
+        finally { _suppressClicks = false; }
+    }
+
+    public void Dispose()
+    {
+        Sim.OnChange -= OnStateChanged;
+        SelectedFPGA.OnFPGAChange -= OnStateChanged;
+        Traductor.StaticOnLangChanged -= OnStateChanged;
+    }
+}

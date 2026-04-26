@@ -1,196 +1,90 @@
+@*
+    EntityView — parsed entity panel (shown inside the Entities dock tab).
+
+    Rebuilt without BB Card/Grid. Title reads like VHDL syntax so students see
+    the source-code flavor mirrored back at them: `entity <name> is`. Ports
+    render as a compact signal list rather than a table — no pagination, no
+    filtering, no sorting; these lists are tiny (usually 4–10 ports).
+
+    The "Current Value" column only renders once at least one port has a
+    value (i.e., a simulation has run). Before then it's hidden entirely
+    rather than a column of placeholder dashes.
+*@
 @using Interpreter.Services
 @using Parser.Models
 
-<!-- Enhanced Entity View Component -->
-<Card Class="h-100 shadow-sm">
-    <CardHeader>
-        <div class="d-flex justify-content-between align-items-center">
-            <div class="d-flex align-items-center">
-                <Icon Name="IconName.Diagram3Fill" Size="IconSize.x5" Class="me-3 text-primary" />
-                <div>
-                    <h5 class="mb-0">VHDL/Verilog Entity</h5>
-                    <small class="text-muted">Hardware Description</small>
-                </div>
-            </div>
-            <Badge Color="BadgeColor.Primary" Pill="true">
-                <Icon Name="IconName.Braces" Class="me-1" />
-                @Entity.Ports.Count port@(Entity.Ports.Count != 1 ? "s" : "")
-            </Badge>
-        </div>
-    </CardHeader>
-    <CardBody>
-        <!-- Entity Name Section -->
-        <div class="mb-4">
-            <div class="d-flex align-items-center mb-2">
-                <Icon Name="IconName.Tag" Class="me-2 text-muted" />
-                <strong class="text-muted small">Entity Name</strong>
-            </div>
-            <h4 class="mb-0 ms-4">
-                <Badge Color="BadgeColor.Secondary" Class="px-3 py-2 fs-6">
-                    <Icon Name="IconName.CodeSlash" Class="me-2" />
-                    @Entity.Name
-                </Badge>
-            </h4>
-        </div>
-
-        <hr class="my-3" />
-
-        <!-- Ports Section -->
-        <div class="mb-3">
-            <div class="d-flex align-items-center justify-content-between mb-3">
-                <div class="d-flex align-items-center">
-                    <Icon Name="IconName.Plugin" Class="me-2 text-primary" />
-                    <h6 class="mb-0">Port Signals</h6>
-                </div>
-                @if (Entity.Ports.Any())
-                {
-                    <div class="d-flex gap-2">
-                        @{
-                            var inputCount = Entity.Ports.Count(p => p.PortType == PortType.IN);
-                            var outputCount = Entity.Ports.Count(p => p.PortType == PortType.OUT);
-                        }
-                        @if (inputCount > 0)
-                        {
-                            <Badge Color="BadgeColor.Success" Pill="true">
-                                <Icon Name="IconName.ArrowDown" Class="me-1" />
-                                @inputCount IN
-                            </Badge>
-                        }
-                        @if (outputCount > 0)
-                        {
-                            <Badge Color="BadgeColor.Info" Pill="true">
-                                <Icon Name="IconName.ArrowUp" Class="me-1" />
-                                @outputCount OUT
-                            </Badge>
-                        }
-                    </div>
-                }
-            </div>
-
-            @if (Entity.Ports.Any())
+<article class="entity-panel">
+    <header class="entity-panel__header">
+        <h3 class="entity-panel__title">
+            <span class="entity-panel__kw">entity</span>
+            <span class="entity-panel__name">@Entity.Name</span>
+            <span class="entity-panel__kw">is</span>
+        </h3>
+        <div class="entity-panel__meta" aria-hidden="true">
+            @if (_inCount > 0)
             {
-                <Grid TItem="Variable"
-                      Class="table table-hover table-bordered"
-                      Data="Entity.Ports"
-                      PageSize="10"
-                      AllowPaging="true"
-                      AllowSorting="true"
-                      Responsive="true">
-
-                    <GridColumns>
-                        <!-- Port Name Column -->
-                        <GridColumn TItem="Variable"
-                                    HeaderText="Port Name"
-                                    PropertyName="Name"
-                                    SortKeySelector="item => item.Name">
-                            <div class="d-flex align-items-center">
-                                <Icon Name="IconName.Terminal" Class="me-2 text-muted" Size="IconSize.x4" />
-                                <strong>@context.Name</strong>
-                            </div>
-                        </GridColumn>
-
-                        <!-- Port Direction Column -->
-                        <GridColumn TItem="Variable"
-                                    HeaderText="Direction"
-                                    PropertyName="PortType"
-                                    SortKeySelector="item => item.PortType">
-                            @{
-                                var (badgeColor, iconName, directionText) = GetPortTypeInfo(context.PortType);
-                            }
-                            <Badge Color="@badgeColor" Pill="true">
-                                <Icon Name="@iconName" Class="me-1" />
-                                @directionText
-                            </Badge>
-                        </GridColumn>
-
-                        <!-- Data Type Column -->
-                        <GridColumn TItem="Variable"
-                                    HeaderText="Data Type"
-                                    PropertyName="Type"
-                                    SortKeySelector="item => item.Type">
-                            <Badge Color="BadgeColor.Dark" Class="font-monospace">
-                                @Enum.GetName(typeof(DATATYPES), context.Type)
-                            </Badge>
-                        </GridColumn>
-
-                        <!-- Current Value Column -->
-                        <GridColumn TItem="Variable"
-                                    HeaderText="Current Value"
-                                    PropertyName="Value">
-                            <div class="d-flex align-items-center">
-                                @{
-                                    var valueStr = context.Value?.ToString() ?? "";
-                                }
-                                @if (!string.IsNullOrEmpty(valueStr))
-                                {
-                                    <Badge Color="BadgeColor.Primary" Class="font-monospace px-2">
-                                        @valueStr
-                                    </Badge>
-                                }
-                                else
-                                {
-                                    <span class="text-muted fst-italic small">Not set</span>
-                                }
-                            </div>
-                        </GridColumn>
-                    </GridColumns>
-                </Grid>
+                <span class="entity-chip entity-chip--in">
+                    <Icon Name="IconName.ArrowDownCircleFill" />
+                    @_inCount @Traductor.T("ENTITY_PORT_IN_ABBR")
+                </span>
             }
-            else
+            @if (_outCount > 0)
             {
-                <Alert Color="AlertColor.Info" Class="mb-0">
-                    <Icon Name="IconName.InfoCircle" Class="me-2" />
-                    No ports defined for this entity.
-                </Alert>
+                <span class="entity-chip entity-chip--out">
+                    <Icon Name="IconName.ArrowUpCircleFill" />
+                    @_outCount @Traductor.T("ENTITY_PORT_OUT_ABBR")
+                </span>
             }
         </div>
+    </header>
 
-        <!-- Resource Usage Section -->
-        <EntityResourceUsage ResourceUsage="Entity.ResourceUsage" />
-    </CardBody>
-    <CardFooter Class="text-muted">
-        <small class="d-flex align-items-center">
-            <Icon Name="IconName.Clock" Class="me-2" />
-            Entity: @Entity.Name | Ports: @Entity.Ports.Count
-            @if (Entity.ResourceUsage != null)
-            {
-                <span class="mx-2">|</span>
-                <Icon Name="IconName.Cpu" Class="me-1" />
-                <text>Resources: @Entity.ResourceUsage.LUTs LUTs, @Entity.ResourceUsage.FlipFlops FFs</text>
-            }
-        </small>
-    </CardFooter>
-</Card>
-
-@code {
-    #region Parameters
-
-    /// <summary>
-    /// Gets or sets the entity to display.
-    /// This represents a VHDL/Verilog hardware entity with its ports and properties.
-    /// </summary>
-    [Parameter]
-    [EditorRequired]
-    public Entity Entity { get; set; } = default!;
-
-    #endregion
-
-    #region Helper Methods
-
-    /// <summary>
-    /// Gets the visual information for a port type including badge color, icon, and display text.
-    /// </summary>
-    /// <param name="portType">The type of port (IN or OUT).</param>
-    /// <returns>A tuple containing the badge color, icon name, and direction text.</returns>
-    private (BadgeColor badgeColor, IconName iconName, string directionText) GetPortTypeInfo(PortType portType)
+    @if (!Entity.Ports.Any())
     {
-        return portType switch
-        {
-            PortType.IN => (BadgeColor.Success, IconName.ArrowDown, "INPUT"),
-            PortType.OUT => (BadgeColor.Info, IconName.ArrowUp, "OUTPUT"),
-            _ => (BadgeColor.Secondary, IconName.QuestionCircle, "UNKNOWN")
-        };
+        <p class="entity-panel__empty">
+            <Icon Name="IconName.InfoCircle" />
+            @Traductor.T("ENTITY_NO_PORTS")
+        </p>
+    }
+    else
+    {
+        <ul class="signal-list @(_hasValues ? "signal-list--with-values" : "")" role="list">
+            @foreach (var port in Entity.Ports)
+            {
+                var isIn = port.PortType == PortType.IN;
+                var typeLabel = Enum.GetName(typeof(DATATYPES), port.Type) ?? "";
+                var valueStr = port.Value?.ToString() ?? "";
+
+                <li class="signal-row signal-row--@(isIn ? "in" : "out")">
+                    <span class="signal-row__dir" aria-hidden="true">
+                        <Icon Name="@(isIn ? IconName.ArrowDownCircleFill : IconName.ArrowUpCircleFill)" />
+                    </span>
+                    <span class="signal-row__name">@port.Name</span>
+                    <span class="signal-row__type">@typeLabel</span>
+                    @if (_hasValues)
+                    {
+                        <span class="signal-row__value @(string.IsNullOrEmpty(valueStr) ? "is-unset" : "")">
+                            @(string.IsNullOrEmpty(valueStr) ? "—" : valueStr)
+                        </span>
+                    }
+                </li>
+            }
+        </ul>
     }
 
-    #endregion
+    <EntityResourceUsage ResourceUsage="Entity.ResourceUsage" />
+</article>
+
+@code {
+    [Parameter, EditorRequired]
+    public Entity Entity { get; set; } = default!;
+
+    private int _inCount  => Entity.Ports.Count(p => p.PortType == PortType.IN);
+    private int _outCount => Entity.Ports.Count(p => p.PortType == PortType.OUT);
+
+    /// <summary>
+    /// True once at least one port has a non-empty current value — i.e. a
+    /// simulation has run and populated signal state. Drives whether the
+    /// "Current Value" column shows at all.
+    /// </summary>
+    private bool _hasValues => Entity.Ports.Any(p => !string.IsNullOrEmpty(p.Value?.ToString()));
 }

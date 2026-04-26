@@ -2,6 +2,7 @@ using Debugger;
 using Interpreter.Models;
 using Interpreter.Services;
 using Kmila.Shared.Models;
+using Parser.Models;
 namespace Kmila.Shared.Services;
 
 /// <summary>
@@ -49,6 +50,16 @@ public class ProgramBuilder : IDisposable
     /// Gets the signal history from the last simulation run.
     /// </summary>
     public SignalHistory? SimulationHistory => _simulationRunner?.Engine?.History;
+    /// <summary>
+    /// Effective ns-per-tick used by the most recent run. Persisted on the
+    /// builder (not the config) so the waveform factory — which is called
+    /// from an event handler on a later frame — can label time axes with
+    /// the same scale the simulation actually ran at.
+    /// Defaults to <see cref="TimeMachine.Models.TimeClock.NS_PER_TICK"/>
+    /// (10) so call sites that haven't been updated still get sensible
+    /// labels.
+    /// </summary>
+    public int LastTickResNs { get; private set; } = TimeMachine.Models.TimeClock.NS_PER_TICK;
     // Legacy timer for step-by-step simulation (TimeMachine path)
     private TimeMachine.Repositories.Timer _timeMachine = new();
     // SimulationRunner for fast full-simulation execution
@@ -134,8 +145,12 @@ public class ProgramBuilder : IDisposable
         try
         {
             string filePath = Path.Join(file.Project.BasePath, file.FileName);
-            string ext = Path.GetExtension(filePath);
-            if (ext.ToLowerInvariant() != ".vhdl") throw new Exception($"File not valid: {Path.GetFileName(filePath)}");
+            string ext = Path.GetExtension(filePath).ToLowerInvariant();
+            // Accept both .vhd (IEEE 1076 traditional) and .vhdl (common on Linux
+            // tooling). The Parser treats them identically — this is just an
+            // input gate.
+            if (ext != ".vhdl" && ext != ".vhd")
+                throw new Exception($"File not valid: {Path.GetFileName(filePath)}");
 
             // Check for cancellation before starting parse
             ProgressReporter.Instance.ThrowIfCancellationRequested();
@@ -167,28 +182,85 @@ public class ProgramBuilder : IDisposable
     /// </summary>
     /// <param name="portMoments">Port moment configurations from the UI.</param>
     /// <param name="duration">Total simulation duration.</param>
-    public async Task RunSimulationAsync(List<PortMomentConfiguration>? portMoments, TimeSpan duration)
+    /// <param name="systemClockMhz">
+    /// Effective system clock frequency (MHz) for this run. Resolved by the
+    /// caller from the selected FPGA's default and any per-project override.
+    /// Defaults to 50 MHz when the caller didn't compute one (kept for
+    /// call sites that predate the FPGA-sourced clock).
+    /// </param>
+    public async Task RunSimulationAsync(
+        List<PortMomentConfiguration>? portMoments,
+        TimeSpan duration,
+        int systemClockMhz = 50,
+        int tickResNs = TimeMachine.Models.TimeClock.NS_PER_TICK)
     {
         // Get first entity with architecture
         var entity = Parser.Entities.FirstOrDefault(e => e.Architecture != null);
         if (entity == null)
             throw new InvalidOperationException("No entity with architecture found.");
 
+        // Remember the effective tick resolution for downstream waveform
+        // labelling — see LastTickResNs doc comment.
+        LastTickResNs = tickResNs > 0 ? tickResNs : TimeMachine.Models.TimeClock.NS_PER_TICK;
+
         // Build simulation config from UI parameters
-        var config = StimulusBuilder.BuildConfig(entity, portMoments, duration);
+        var config = StimulusBuilder.BuildConfig(entity, portMoments, duration,
+            tickResNs: LastTickResNs,
+            systemClockMhz: systemClockMhz);
+
+        // Surface the config to stdout (and therefore /logs via the Console
+        // redirector wired up in Program.cs) so the user can see exactly what
+        // the auto-clock + stimulus injector produced. Wrapped in try/catch
+        // because null values on a Variable's getters would otherwise crash
+        // the entire Run click before the simulator gets a chance.
+        try
+        {
+            Console.WriteLine($"[Sim] Entity={entity?.Name ?? "?"} ports={entity?.Ports?.Count ?? 0} " +
+                $"totalTicks={config?.TotalTicks} clocks={config?.Clocks?.Count ?? 0} stimuli={config?.Stimuli?.Count ?? 0}");
+            if (config?.Clocks != null)
+            {
+                foreach (var clk in config.Clocks)
+                {
+                    if (clk == null) continue;
+                    Console.WriteLine($"[Sim.Clock] name={clk.Signal?.Name ?? "?"} " +
+                        $"halfPeriodTicks={clk.HalfPeriodTicks} initialHigh={clk.InitialHigh}");
+                }
+            }
+            if (entity?.Ports != null)
+            {
+                foreach (var p in entity.Ports)
+                {
+                    if (p == null) continue;
+                    Console.WriteLine($"[Sim.Port] name={p.Name ?? "?"} dir={p.PortType} size={p.Size}");
+                }
+            }
+        }
+        catch (Exception diagEx)
+        {
+            Console.WriteLine($"[Sim.Diag] failed: {diagEx.Message}");
+        }
 
         // Dispose previous runner if any
         _simulationRunner?.Dispose();
         _simulationRunner = new SimulationRunner();
 
-        // Subscribe to runner events and forward them
+        // Subscribe to runner events and forward them. Important: we fire
+        // OnSimulationCompleted whenever *any* signal history exists — even
+        // on user-stopped runs (completed=false). That way the user sees a
+        // partial waveform of whatever ran, instead of a blank Waveforms tab
+        // after they hit Stop mid-simulation.
         _simulationRunner.OnProgressChanged += progress => OnProgressAdvanced?.Invoke(progress);
         _simulationRunner.OnSimulationEnded += completed =>
         {
             OnSimulationEnded?.Invoke(completed);
-            if (completed && _simulationRunner.Engine?.History != null)
+            var history = _simulationRunner?.Engine?.History;
+            if (history != null && history.TotalSamples > 0)
             {
-                OnSimulationCompleted?.Invoke(_simulationRunner.Engine.History);
+                // SimulationRunner now records stimulus + clock transitions
+                // live during its tick loop (via engine.History.RecordChanges
+                // on the direct-write set), so the post-run synthesis we
+                // used to run here is no longer needed.
+                OnSimulationCompleted?.Invoke(history);
             }
         };
         _simulationRunner.OnError += msg => OnBuildError?.Invoke("Simulation error", msg);

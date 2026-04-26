@@ -24,8 +24,11 @@ public static class StimulusBuilder
         Entity entity,
         List<PortMomentConfiguration>? portMoments,
         TimeSpan duration,
-        int tickResNs = TimeClock.NS_PER_TICK)
+        int tickResNs = TimeClock.NS_PER_TICK,
+        int systemClockMhz = 50)
     {
+        ArgumentNullException.ThrowIfNull(entity);
+
         // Convert duration to ticks
         double totalNs = duration.TotalSeconds * 1e9;
         ulong totalTicks = (ulong)(totalNs / tickResNs);
@@ -34,11 +37,21 @@ public static class StimulusBuilder
         var clocks = new List<ClockConfig>();
         var stimuli = new List<StimulusEvent>();
 
-        // Build a lookup for ports by name
-        var allPorts = entity.Ports.ToDictionary(
-            p => p.Name,
-            p => p,
-            StringComparer.OrdinalIgnoreCase);
+        // Build a lookup for ports by name. Defensive against null entries
+        // in the HashSet and against ports with a null Name — both have
+        // been observed coming out of the parser on certain malformed or
+        // incomplete port blocks, and the previous direct `ToDictionary`
+        // call threw a bare NullReferenceException that masked the real
+        // parse issue.
+        var allPorts = new Dictionary<string, Variable>(StringComparer.OrdinalIgnoreCase);
+        if (entity.Ports != null)
+        {
+            foreach (var p in entity.Ports)
+            {
+                if (p == null || string.IsNullOrEmpty(p.Name)) continue;
+                allPorts[p.Name] = p;
+            }
+        }
 
         if (portMoments != null)
         {
@@ -50,61 +63,117 @@ public static class StimulusBuilder
                 if (pm.Values == null || pm.Values.Count == 0)
                     continue;
 
-                // Check if this port is configured as a clock
-                // A port is a clock if it has a single value entry with TimeScale == "CLK"
+                // Clock-marker rows (TimeScale == "CLK") are a legacy format
+                // from when students configured clocks manually. We no longer
+                // expose that UI — a system clock is always auto-injected
+                // below from the FPGA/override frequency. Silently skip so
+                // saved lessons that still carry CLK markers don't double
+                // the clock or produce noisy stimulus events.
                 var firstVal = pm.Values[0];
                 if (firstVal.TimeScale.Equals("CLK", StringComparison.OrdinalIgnoreCase))
                 {
-                    // Clock configuration: Time field is frequency in MHz, Value is ignored
-                    // Formula: freq(MHz) -> period(ns) = 1000/freq -> half-period(ticks) = period/(2*tickRes)
-                    double freqMhz = firstVal.Time > 0 ? firstVal.Time : 50; // default 50 MHz
-                    double periodNs = 1_000.0 / freqMhz; // full period in ns
-                    ulong halfPeriodTicks = (ulong)(periodNs / 2.0 / tickResNs);
-                    if (halfPeriodTicks == 0) halfPeriodTicks = 1; // minimum 1 tick to avoid zero-period clock
+                    continue;
+                }
 
-                    clocks.Add(new ClockConfig
+                // Stimulus events: each PortMomentValue is a (time, value) pair.
+                // SimulationRunner now applies tick-0 events naturally so we
+                // no longer pre-seed signal.Value here.
+                foreach (var pmv in pm.Values)
+                {
+                    ulong tick = ConvertToTicks(pmv.Time, pmv.TimeScale, tickResNs);
+                    stimuli.Add(new StimulusEvent
                     {
+                        Tick = tick,
                         Signal = signal,
-                        HalfPeriodTicks = halfPeriodTicks,
-                        InitialHigh = false
+                        Value = pmv.Value
                     });
                 }
-                else
+            }
+        }
+
+        // System clock — ALWAYS injected when the entity declares a clk/clock
+        // IN port. Frequency comes from the caller (Run-bar override OR the
+        // selected FPGA's default). Students no longer mark clocks manually.
+        if (systemClockMhz <= 0) systemClockMhz = 50;
+        double halfPeriodNs = 1_000.0 / systemClockMhz / 2.0; // ns
+        ulong halfPeriodTicks = (ulong)Math.Max(1, (long)Math.Round(halfPeriodNs / tickResNs));
+
+        // Auto-clock detection. Defensive iteration because some code paths
+        // have seeded `entity.Ports` with null entries on the HashSet — any
+        // direct LINQ lambda that reads `p.PortType` before guarding against
+        // null p would throw the cryptic NRE students were hitting.
+        Variable? autoClkPort = null;
+        try
+        {
+            if (entity.Ports != null)
+            {
+                // Pass 1 — prefer an explicit IN port with a clock-like name.
+                foreach (var p in entity.Ports)
                 {
-                    // Stimulus events: each PortMomentValue is a (time, value) pair
-                    foreach (var pmv in pm.Values)
+                    if (p == null) continue;
+                    Constants.PortType dir;
+                    try { dir = p.PortType; } catch { continue; }
+                    if (dir != Constants.PortType.IN) continue;
+                    if (!IsClockPortName(p.Name)) continue;
+                    autoClkPort = p;
+                    break;
+                }
+                // Pass 2 — some parsers leave PortType at the default when
+                // direction isn't spelled out. Fall back to any port with a
+                // clock-like name so a mis-typed port still lights up.
+                // `is null` bypasses Variable's overloaded `==` operators,
+                // which resolve to the (Variable, string) overload for a
+                // null literal and wrongly return false when the LHS is null.
+                if (autoClkPort is null)
+                {
+                    foreach (var p in entity.Ports)
                     {
-                        ulong tick = ConvertToTicks(pmv.Time, pmv.TimeScale, tickResNs);
-                        stimuli.Add(new StimulusEvent
-                        {
-                            Tick = tick,
-                            Signal = signal,
-                            Value = pmv.Value
-                        });
+                        if (p == null) continue;
+                        if (!IsClockPortName(p.Name)) continue;
+                        autoClkPort = p;
+                        break;
                     }
                 }
             }
         }
-
-        // Auto-detect clocks: if no clock was configured but there's a port named clk/clock,
-        // add a default clock at half-period = 1 tick (toggles every tick)
-        if (clocks.Count == 0)
+        catch (Exception scanEx)
         {
-            var clkSignal = entity.Ports.FirstOrDefault(p =>
-                p.PortType == Constants.PortType.IN &&
-                (p.Name.Equals("clk", StringComparison.OrdinalIgnoreCase) ||
-                 p.Name.Equals("clock", StringComparison.OrdinalIgnoreCase)));
-
-            if (clkSignal != null)
-            {
-                clocks.Add(new ClockConfig
-                {
-                    Signal = clkSignal,
-                    HalfPeriodTicks = 1,
-                    InitialHigh = false
-                });
-            }
+            Console.WriteLine($"[StimulusBuilder] Auto-clock scan threw {scanEx.GetType().Name}: {scanEx.Message}");
+            autoClkPort = null;
         }
+
+        // Synthesize a virtual clock when the entity doesn't declare one.
+        // Previously this path just left `clocks` empty, which meant
+        // combinational designs produced no clock trace at all. The user
+        // asked for a clock *always* to be present in the waveform, so we
+        // fabricate one here and splice it into the entity's port set so
+        // SimulationRunner registers + records it alongside real signals.
+        // `is null` bypasses Variable's overloaded `==` — see pass 2 note.
+        if (autoClkPort is null)
+        {
+            var synth = new Variable("_clk")
+            {
+                Type     = Constants.DATATYPES.STD_LOGIC,
+                Size     = 1,
+                Value    = "0",
+                IsPort   = true,
+                PortType = Constants.PortType.IN
+            };
+            try { entity.Ports?.Add(synth); } catch { /* frozen collection — still drive it via clocks list */ }
+            autoClkPort = synth;
+        }
+        else if (autoClkPort.PortType != Constants.PortType.IN)
+        {
+            // Real port, but mis-directed. Force input since we're driving it.
+            try { autoClkPort.PortType = Constants.PortType.IN; } catch { /* read-only proxy — harmless */ }
+        }
+
+        clocks.Add(new ClockConfig
+        {
+            Signal = autoClkPort,
+            HalfPeriodTicks = halfPeriodTicks,
+            InitialHigh = false
+        });
 
         // Sort stimuli by tick
         stimuli.Sort((a, b) => a.Tick.CompareTo(b.Tick));
@@ -116,6 +185,34 @@ public static class StimulusBuilder
             Clocks = clocks,
             Stimuli = stimuli
         };
+    }
+
+    /// <summary>
+    /// True when a port name reads like a clock — exact <c>clk</c>/<c>clock</c>
+    /// plus common variants (<c>clk_i</c>, <c>sys_clk</c>, <c>aclk</c>,
+    /// <c>master_clock</c>, etc). Case-insensitive. Keeping this broad is
+    /// safer than narrow: a stray match still works because the Run-bar owns
+    /// the frequency and the user can inspect the injected clock in
+    /// Waveforms; a missed match means the sim runs without a clock and the
+    /// student sees an empty waveform with no obvious cause.
+    /// </summary>
+    public static bool IsClockPortName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        var n = name.Trim().ToLowerInvariant();
+        if (n == "clk" || n == "clock") return true;
+        // Token-based scan — split on common separators and check for a clk /
+        // clock token rather than raw substring so "blockade" or "clocking"
+        // don't falsely register.
+        foreach (var token in n.Split(new[] { '_', '-', '.' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (token == "clk" || token == "clock") return true;
+        }
+        // Prefixed / suffixed single-token forms: aclk, hclk, pclk, clki,
+        // clkn, clkp, clk1, clk2 …
+        if (n.Length >= 4 && n.EndsWith("clk") && n.Length <= 6) return true;
+        if (n.StartsWith("clk") && n.Length <= 6) return true;
+        return false;
     }
 
     /// <summary>

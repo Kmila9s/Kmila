@@ -1,0 +1,605 @@
+@*
+    Settings page — currently a placeholder with tokenized section cards so
+    future preferences (autosave, default FPGA, accent override, keyboard
+    shortcuts, etc.) have a natural home. Everything lives under /settings and
+    is reachable from the sidebar's "System" section.
+
+    Each card here is a slot. Wire behavior into the individual cards as
+    features land; the shell + navigation are already in place.
+*@
+@page "/settings"
+@using Kmila.Shared.Services
+@using Kmila.Shared.Repositories
+@using Kmila.Shared.Models
+@inject UserAssetStore UserAssets
+@inject LessonProgressStore LearnProgress
+@inject ProjectBundleService Bundles
+@inject Projects ProjectsRepo
+@implements IDisposable
+
+<PageTitle>@Traductor.T("NAV_SETTINGS")</PageTitle>
+
+<section class="settings-page">
+    <header class="settings-page__header">
+        <span class="home-section__eyebrow">@Traductor.T("SETTINGS_EYEBROW")</span>
+        <h1>@Traductor.T("NAV_SETTINGS")</h1>
+        <p class="settings-page__intro">@Traductor.T("SETTINGS_INTRO")</p>
+    </header>
+
+    <div class="settings-page__grid">
+
+        @* --- Appearance --- *@
+        <article class="settings-card">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--accent">
+                    <Icon Name="IconName.PaletteFill" />
+                </span>
+                <div>
+                    <h2>@Traductor.T("SETTINGS_APPEARANCE_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("SETTINGS_APPEARANCE_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                <div class="settings-row">
+                    <div class="settings-row__label">
+                        <strong>@Traductor.T("SETTINGS_THEME")</strong>
+                        <small>@Traductor.T("SETTINGS_THEME_HINT")</small>
+                    </div>
+                    <div class="settings-row__control">
+                        <KmilaThemeSwitcher />
+                    </div>
+                </div>
+                <div class="settings-row">
+                    <div class="settings-row__label">
+                        <strong>@Traductor.T("SETTINGS_LANGUAGE")</strong>
+                        <small>@Traductor.T("SETTINGS_LANGUAGE_HINT")</small>
+                    </div>
+                    <div class="settings-row__control">
+                        <LanguageChanger />
+                    </div>
+                </div>
+            </div>
+        </article>
+
+        @* --- Editor --- *@
+        <article class="settings-card">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--info">
+                    <Icon Name="IconName.CodeSquare" />
+                </span>
+                <div>
+                    <h2>@Traductor.T("SETTINGS_EDITOR_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("SETTINGS_EDITOR_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                <p class="settings-card__placeholder">@Traductor.T("SETTINGS_COMING_SOON")</p>
+            </div>
+        </article>
+
+        @* --- Simulation --- *@
+        <article class="settings-card">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--success">
+                    <Icon Name="IconName.CpuFill" />
+                </span>
+                <div>
+                    <h2>@Traductor.T("SETTINGS_SIMULATION_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("SETTINGS_SIMULATION_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                <div class="settings-row">
+                    <div class="settings-row__label">
+                        <strong>@Traductor.T("SETTINGS_TICK_RES_TITLE")</strong>
+                        <small>@Traductor.T("SETTINGS_TICK_RES_HINT")</small>
+                    </div>
+                    <div class="settings-row__control">
+                        <select class="form-select form-select-sm"
+                                value="@_tickMode.ToToken()"
+                                @onchange="OnTickModeChanged">
+                            <option value="default">@Traductor.T("SETTINGS_TICK_RES_DEFAULT")</option>
+                            <option value="high">@Traductor.T("SETTINGS_TICK_RES_HIGH")</option>
+                            <option value="adaptive">@Traductor.T("SETTINGS_TICK_RES_ADAPTIVE")</option>
+                        </select>
+                    </div>
+                </div>
+                <p class="settings-card__hint">@Traductor.T(_tickMode switch {
+                    TickResolutionMode.HighPrecision => "SETTINGS_TICK_RES_HIGH_DESC",
+                    TickResolutionMode.Adaptive      => "SETTINGS_TICK_RES_ADAPTIVE_DESC",
+                    _                                 => "SETTINGS_TICK_RES_DEFAULT_DESC"
+                })</p>
+            </div>
+        </article>
+
+        @* --- User FPGAs --- *@
+        <article class="settings-card settings-card--wide">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--success">
+                    <Icon Name="IconName.CpuFill" />
+                </span>
+                <div>
+                    <h2>@Traductor.T("SETTINGS_USER_FPGAS_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("SETTINGS_USER_FPGAS_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                <div class="settings-actions">
+                    <button type="button" class="btn btn-secondary"
+                            @onclick="DownloadFpgaTemplate">
+                        <Icon Name="IconName.Download" />
+                        <span>@Traductor.T("SETTINGS_DOWNLOAD_TEMPLATE")</span>
+                    </button>
+                    <label class="btn btn-primary settings-import-btn">
+                        <Icon Name="IconName.FileEarmarkPlus" />
+                        <span>@Traductor.T("SETTINGS_IMPORT_FPGA")</span>
+                        <InputFile OnChange="OnFpgaImportAsync" accept=".json" class="d-none" />
+                    </label>
+                </div>
+
+                @if (_userFpgas.Count == 0)
+                {
+                    <p class="settings-card__placeholder">@Traductor.T("SETTINGS_NO_USER_FPGA")</p>
+                }
+                else
+                {
+                    <ul class="settings-list">
+                        @foreach (var path in _userFpgas)
+                        {
+                            var name = System.IO.Path.GetFileName(path);
+                            <li class="settings-list__item">
+                                <div class="settings-list__info">
+                                    <Icon Name="IconName.FileEarmarkCode" />
+                                    <span class="settings-list__name">@name</span>
+                                </div>
+                                <button type="button" class="btn btn-ghost btn-sm"
+                                        @onclick="() => DeleteFpga(name)"
+                                        aria-label="@Traductor.T("COMMON_DELETE")"
+                                        title="@Traductor.T("COMMON_DELETE")">
+                                    <Icon Name="IconName.Trash" />
+                                </button>
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+        </article>
+
+        @* --- User languages --- *@
+        <article class="settings-card settings-card--wide">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--info">
+                    <Icon Name="IconName.Translate" />
+                </span>
+                <div>
+                    <h2>@Traductor.T("SETTINGS_USER_LANGS_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("SETTINGS_USER_LANGS_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                <div class="settings-actions">
+                    <button type="button" class="btn btn-secondary"
+                            @onclick="DownloadLanguageTemplate">
+                        <Icon Name="IconName.Download" />
+                        <span>@Traductor.T("SETTINGS_DOWNLOAD_TEMPLATE")</span>
+                    </button>
+                    <label class="btn btn-primary settings-import-btn">
+                        <Icon Name="IconName.FileEarmarkPlus" />
+                        <span>@Traductor.T("SETTINGS_IMPORT_LANG")</span>
+                        <InputFile OnChange="OnLangImportAsync" accept=".json" class="d-none" />
+                    </label>
+                </div>
+
+                @if (_userLangs.Count == 0)
+                {
+                    <p class="settings-card__placeholder">@Traductor.T("SETTINGS_NO_USER_LANG")</p>
+                }
+                else
+                {
+                    <ul class="settings-list">
+                        @foreach (var path in _userLangs)
+                        {
+                            var name = System.IO.Path.GetFileName(path);
+                            var display = UserAssetStore.ReadLanguageDisplayName(path);
+                            <li class="settings-list__item">
+                                <div class="settings-list__info">
+                                    <Icon Name="IconName.Translate" />
+                                    <span class="settings-list__name">@display</span>
+                                    <span class="settings-list__code">@name</span>
+                                </div>
+                                <button type="button" class="btn btn-ghost btn-sm"
+                                        @onclick="() => DeleteLang(name)"
+                                        aria-label="@Traductor.T("COMMON_DELETE")"
+                                        title="@Traductor.T("COMMON_DELETE")">
+                                    <Icon Name="IconName.Trash" />
+                                </button>
+                            </li>
+                        }
+                    </ul>
+                }
+
+                <p class="settings-card__note">
+                    <Icon Name="IconName.InfoCircle" />
+                    <span>@Traductor.T("SETTINGS_USER_LANGS_NOTE")</span>
+                </p>
+            </div>
+        </article>
+
+        @* --- Project bundle export / import --- *@
+        <article class="settings-card settings-card--wide">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--accent">
+                    <Icon Name="IconName.BoxArrowUpRight" />
+                </span>
+                <div>
+                    <h2>@Traductor.T("SETTINGS_BUNDLE_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("SETTINGS_BUNDLE_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                <div class="settings-actions">
+                    <select class="form-select" style="max-width: 260px;" @bind="_exportProjectId">
+                        <option value="0">@Traductor.T("SETTINGS_BUNDLE_PICK")</option>
+                        @foreach (var p in _projects)
+                        {
+                            <option value="@p.Id">@p.Name</option>
+                        }
+                    </select>
+                    <button type="button" class="btn btn-secondary"
+                            disabled="@(_exportProjectId <= 0)"
+                            @onclick="ExportBundleAsync">
+                        <Icon Name="IconName.Download" />
+                        <span>@Traductor.T("SETTINGS_BUNDLE_EXPORT")</span>
+                    </button>
+                    <label class="btn btn-primary settings-import-btn">
+                        <Icon Name="IconName.FileEarmarkPlus" />
+                        <span>@Traductor.T("SETTINGS_BUNDLE_IMPORT")</span>
+                        <InputFile OnChange="OnBundleImportAsync" accept=".kmila,.json" class="d-none" />
+                    </label>
+                </div>
+            </div>
+        </article>
+
+        @* --- Learn progress --- *@
+        <article class="settings-card">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--accent">
+                    <Icon Name="IconName.MortarboardFill" />
+                </span>
+                <div>
+                    <h2>@Traductor.T("SETTINGS_LEARN_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("SETTINGS_LEARN_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                <div class="settings-row">
+                    <div class="settings-row__label">
+                        <strong>@Traductor.T("SETTINGS_LEARN_COMPLETED")</strong>
+                        <small>@string.Format(Traductor.T("SETTINGS_LEARN_COMPLETED_N"), _learnCompleted)</small>
+                    </div>
+                    <div class="settings-row__control">
+                        <button type="button" class="btn btn-outline-danger btn-sm"
+                                @onclick="ResetLearnProgressAsync"
+                                disabled="@(_learnCompleted == 0)">
+                            <Icon Name="IconName.ArrowCounterclockwise" />
+                            <span>@Traductor.T("SETTINGS_LEARN_RESET")</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </article>
+
+        @* --- Diagnostics --- *@
+        <article class="settings-card">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--warning">
+                    <Icon Name="IconName.TerminalFill" />
+                </span>
+                <div>
+                    <h2>@Traductor.T("SETTINGS_DIAGNOSTICS_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("SETTINGS_DIAGNOSTICS_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                <a href="/logs" class="btn btn-secondary">
+                    <Icon Name="IconName.JournalText" />
+                    <span>@Traductor.T("SETTINGS_OPEN_LOGS")</span>
+                </a>
+            </div>
+        </article>
+
+        @* --- Feedback / Issue reporting ---
+            Tier 1: copy diagnostics to clipboard (offline, no auth).
+            Tier 2: open a pre-filled GitHub issue URL (new tab, no auth).
+            Tier 3 (Device Flow in-app submission) is parked — needs an OAuth
+            App Client ID before it can ship. *@
+        <article class="settings-card">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--accent">
+                    <Icon Name="IconName.Github" />
+                </span>
+                <div>
+                    <h2>@Traductor.T("SETTINGS_FEEDBACK_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("SETTINGS_FEEDBACK_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                <div class="settings-card__actions">
+                    <button type="button"
+                            class="btn btn-secondary"
+                            @onclick="CopyDiagnosticsAsync">
+                        <Icon Name="IconName.Clipboard2CheckFill" />
+                        <span>@Traductor.T("SETTINGS_FEEDBACK_COPY")</span>
+                    </button>
+                    <button type="button"
+                            class="btn btn-primary"
+                            @onclick="OpenIssueUrlAsync">
+                        <Icon Name="IconName.BoxArrowUpRight" />
+                        <span>@Traductor.T("SETTINGS_FEEDBACK_OPEN_ISSUE")</span>
+                    </button>
+                </div>
+                <p class="settings-card__hint">@Traductor.T("SETTINGS_FEEDBACK_HINT")</p>
+            </div>
+        </article>
+    </div>
+</section>
+
+<ConfirmDialog @ref="_confirmDialog" />
+
+@code {
+    private List<string> _userFpgas = new();
+    private List<string> _userLangs = new();
+    private int _learnCompleted;
+    private ConfirmDialog _confirmDialog = default!;
+
+    /// <summary>
+    /// Current simulation tick-resolution mode. Loaded from AppSettings on
+    /// init, written back on change. Default mode is assumed when the
+    /// setting is missing or unreadable so Run never blocks on this.
+    /// </summary>
+    private TickResolutionMode _tickMode = TickResolutionMode.Default;
+
+    /// <summary>Projects available to export — loaded alongside user assets.</summary>
+    private List<Kmila.Shared.Models.Project> _projects = new();
+    private int _exportProjectId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Traductor.StaticOnLangChanged += OnLang;
+        UserAssets.OnChange += OnLang;
+        LearnProgress.OnChange += OnLang;
+        RefreshLists();
+        _learnCompleted = await LearnProgress.TotalCompletedAsync();
+        _projects = (await ProjectsRepo.GetListAsync()) ?? new();
+
+        // Hydrate the tick-mode dropdown from the persisted setting. Unknown
+        // or missing values resolve to Default — safer than surfacing the
+        // load failure on the Settings page.
+        var raw = await DbContext.GetSettingAsync(AppSettings.KEY_TICK_RESOLUTION_MODE);
+        _tickMode = TickResolutionModeExtensions.ParseToken(raw);
+    }
+
+    /// <summary>
+    /// Persist the new mode immediately so the next Run picks it up — no
+    /// Save/Apply button. Writes the token form (not the int) to keep the
+    /// AppSettings value human-readable and version-stable.
+    /// </summary>
+    private async Task OnTickModeChanged(ChangeEventArgs e)
+    {
+        _tickMode = TickResolutionModeExtensions.ParseToken(e.Value?.ToString());
+        await DbContext.SetSettingAsync(AppSettings.KEY_TICK_RESOLUTION_MODE, _tickMode.ToToken());
+        StateHasChanged();
+    }
+
+    private void OnLang() => InvokeAsync(async () =>
+    {
+        RefreshLists();
+        _learnCompleted = await LearnProgress.TotalCompletedAsync();
+        StateHasChanged();
+    });
+
+    private void RefreshLists()
+    {
+        _userFpgas = UserAssets.ListUserFpgaPaths();
+        _userLangs = UserAssets.ListUserLanguagePaths();
+    }
+
+    /// <summary>
+    /// Triggers a browser download of the FPGA starter template. Uses the
+    /// shared <c>window.kmilaDownloadText</c> helper so the same flow works
+    /// on Web and MAUI without touching the file system.
+    /// </summary>
+    private async Task DownloadFpgaTemplate()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("kmilaDownloadText",
+                "fpga-template.json", "application/json",
+                UserAssetStore.BuildFpgaTemplate());
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+    }
+
+    private async Task DownloadLanguageTemplate()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("kmilaDownloadText",
+                "language-template.json", "application/json",
+                UserAssetStore.BuildLanguageTemplate());
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+    }
+
+    private async Task OnFpgaImportAsync(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+        // 2 MB cap — FPGA device JSONs are tiny (~2-3 KB), anything larger is
+        // almost certainly wrong and we don't want to buffer unbounded.
+        using var src = file.OpenReadStream(maxAllowedSize: 2 * 1024 * 1024);
+        var saved = await UserAssets.ImportFpgaAsync(src, file.Name);
+        ToastService.Notify(saved != null
+            ? Message(Traductor.T("COMMON_MESSAGE"), Traductor.T("SETTINGS_FPGA_IMPORTED"), ToastType.Success)
+            : Message(Traductor.T("COMMON_ERROR"), Traductor.T("SETTINGS_IMPORT_FAILED"), ToastType.Danger));
+    }
+
+    private async Task OnLangImportAsync(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+        // 512 KB cap — dictionary files are a few hundred keys; very rarely
+        // more than 50 KB even when fully translated.
+        using var src = file.OpenReadStream(maxAllowedSize: 512 * 1024);
+        var saved = await UserAssets.ImportLanguageAsync(src, file.Name);
+        if (saved != null)
+        {
+            // Register the new language into the picker so the user doesn't
+            // have to restart to see it.
+            var code = System.IO.Path.GetFileNameWithoutExtension(saved);
+            var display = UserAssetStore.ReadLanguageDisplayName(saved);
+            Traductor.AddUserLanguage(display, code);
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), Traductor.T("SETTINGS_LANG_IMPORTED"), ToastType.Success));
+        }
+        else
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), Traductor.T("SETTINGS_IMPORT_FAILED"), ToastType.Danger));
+        }
+    }
+
+    private void DeleteFpga(string name)
+    {
+        if (UserAssets.DeleteFpga(name))
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), Traductor.T("SETTINGS_FPGA_REMOVED"), ToastType.Info));
+        }
+    }
+
+    private void DeleteLang(string name)
+    {
+        if (UserAssets.DeleteLanguage(name))
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), Traductor.T("SETTINGS_LANG_REMOVED"), ToastType.Info));
+        }
+    }
+
+    /// <summary>
+    /// Asks for confirmation, then wipes every <c>learn.done.*</c> entry plus
+    /// the last-opened pointer. The UI re-renders via the <see cref="LessonProgressStore.OnChange"/>
+    /// subscription above, so the completed counter flips to 0 immediately.
+    /// </summary>
+    private async Task ResetLearnProgressAsync()
+    {
+        var options = new ConfirmDialogOptions
+        {
+            YesButtonColor = ButtonColor.Danger,
+            YesButtonText = Traductor.T("SETTINGS_LEARN_RESET"),
+            NoButtonColor = ButtonColor.Secondary,
+            NoButtonText  = Traductor.T("COMMON_CANCEL")
+        };
+        var ok = await _confirmDialog.ShowAsync(
+            title:   Traductor.T("SETTINGS_LEARN_RESET_TITLE"),
+            message1: Traductor.T("SETTINGS_LEARN_RESET_MSG"),
+            confirmDialogOptions: options);
+        if (!ok) return;
+
+        await LearnProgress.ResetAllAsync();
+        ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"),
+            Traductor.T("SETTINGS_LEARN_RESET_DONE"), ToastType.Info));
+    }
+
+    private async Task ExportBundleAsync()
+    {
+        var proj = _projects.FirstOrDefault(p => p.Id == _exportProjectId);
+        if (proj == null) return;
+        try
+        {
+            var json = await Bundles.ExportAsync(proj);
+            var safeName = proj.Name.Replace(' ', '_');
+            await JS.InvokeVoidAsync("kmilaDownloadText",
+                $"{safeName}.kmila", "application/json", json);
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+    }
+
+    private async Task OnBundleImportAsync(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+        try
+        {
+            using var stream = file.OpenReadStream(maxAllowedSize: 50 * 1024 * 1024);
+            using var reader = new StreamReader(stream);
+            var json = await reader.ReadToEndAsync();
+
+            // Same logic the Projects page uses for picking a base path.
+            var basePath =
+#if WINDOWS || MACCATALYST || ANDROID || IOS
+                Microsoft.Maui.Storage.FileSystem.AppDataDirectory;
+#else
+                Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData), "KmilaData");
+#endif
+
+            var project = await Bundles.ImportAsync(json, basePath);
+            ToastService.Notify(project != null
+                ? Message(Traductor.T("COMMON_MESSAGE"),
+                    string.Format(Traductor.T("SETTINGS_BUNDLE_IMPORTED"), project.Name), ToastType.Success)
+                : Message(Traductor.T("COMMON_ERROR"),
+                    Traductor.T("SETTINGS_BUNDLE_IMPORT_FAILED"), ToastType.Danger));
+
+            _projects = (await ProjectsRepo.GetListAsync()) ?? new();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+    }
+
+    /// <summary>Tier 1: copy diagnostics to clipboard. Offline, no auth.</summary>
+    private async Task CopyDiagnosticsAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText",
+                FeedbackHelper.BuildDiagnostics(Traductor.Lang ?? "en"));
+            ToastService.Notify(Message(Traductor.T("COMMON_OK"),
+                Traductor.T("SETTINGS_FEEDBACK_COPIED"), ToastType.Success));
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+    }
+
+    /// <summary>Tier 2: open GitHub's new-issue URL with the diagnostics prefilled.</summary>
+    private async Task OpenIssueUrlAsync()
+    {
+        try
+        {
+            var body = FeedbackHelper.BuildDiagnostics(Traductor.Lang ?? "en");
+            var url  = FeedbackHelper.BuildIssueUrl("[Report] ", body);
+            await JS.InvokeVoidAsync("open", url, "_blank");
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+    }
+
+    public void Dispose()
+    {
+        Traductor.StaticOnLangChanged -= OnLang;
+        UserAssets.OnChange -= OnLang;
+        LearnProgress.OnChange -= OnLang;
+    }
+}

@@ -1,70 +1,365 @@
-﻿@implements IDisposable
-<Sidebar2 @ref="_sidebar"
-    ImageSrc="img/Logo.png"
-    Href="/"
-    IconName="IconName.BootstrapFill"
-    Title="Kmila"
-    BadgeText="v0.5.0"
-    DataProvider="SidebarDataProvider" />
-@code{
-    private Sidebar2 _sidebar = new();
-    private IEnumerable<NavItem>? _navItems;
+@*
+    NavMenu — Kmila custom sidebar
+
+    Fully hand-rolled; no BlazorBootstrap Sidebar2 dependency so we have total
+    control over markup, icons, active state, collapse behavior, and mobile drawer.
+
+    Three display modes coordinated via SidebarState service:
+      • Expanded (default, desktop)    — 260px, icons + labels, section headers visible
+      • Rail/collapsed (desktop)        — 72px,  icons only, labels appear as tooltips
+      • Drawer (mobile)                 — off-canvas slide-in, backdrop + esc/overlay close
+
+    Active-route detection uses NavigationManager.LocationChanged so highlighting
+    updates immediately when the user clicks a link, without waiting for a full render.
+*@
+@implements IDisposable
+@inject SidebarState SidebarState
+@inject Microsoft.Extensions.Logging.ILogger<NavMenu> Logger
+@inject Kmila.Shared.Services.RecentProjectsTracker Recent
+@inject Kmila.Shared.Services.LessonProgressStore LearnProgress
+@inject Kmila.Shared.Services.LessonCatalog LessonCatalog
+@inject Kmila.Shared.Services.SimulationParameters Sim
+
+<aside class="kmila-sidebar @_rootClass" aria-label="Main navigation">
+    @* Top row: logo + wordmark + version chip *@
+    <a href="/" class="kmila-sidebar__brand" @onclick="OnNavClicked">
+        <img src="_content/Kmila.Shared/img/Logo.png" alt="Kmila" class="kmila-sidebar__logo" />
+        <span class="kmila-sidebar__wordmark">
+            <span class="kmila-sidebar__name">Kmila</span>
+            <span class="kmila-sidebar__version">@Traductor.T("APP_VERSION")</span>
+        </span>
+    </a>
+
+    @* Scrollable nav body *@
+    <nav class="kmila-sidebar__nav" role="navigation">
+
+        <div class="kmila-sidebar__section" aria-label="@Traductor.T("NAV_PROJECT_OPTIONS")">
+            <span class="kmila-sidebar__section-label">
+                <span>@Traductor.T("NAV_PROJECT_OPTIONS")</span>
+            </span>
+
+            <a href="/projects"
+               class="kmila-nav-item @ActiveClass("/projects", exact: true)"
+               @onclick="OnNavClicked"
+               data-tooltip="@Traductor.T("NAV_PROJECTS")">
+                <span class="kmila-nav-item__indicator"></span>
+                <Icon Name="IconName.Collection" Class="kmila-nav-item__icon" />
+                <span class="kmila-nav-item__label">@Traductor.T("NAV_PROJECTS")</span>
+            </a>
+
+            <a href="/projects/create"
+               class="kmila-nav-item @ActiveClass("/projects/create", exact: true)"
+               @onclick="OnNavClicked"
+               data-tooltip="@Traductor.T("NAV_CREATE_PROJECT")">
+                <span class="kmila-nav-item__indicator"></span>
+                <Icon Name="IconName.PlusCircleFill" Class="kmila-nav-item__icon" />
+                <span class="kmila-nav-item__label">@Traductor.T("NAV_CREATE_PROJECT")</span>
+            </a>
+
+            <a href="/learn"
+               class="kmila-nav-item @ActiveClass("/learn", exact: false)"
+               @onclick="OnNavClicked"
+               data-tooltip="@Traductor.T("NAV_LEARN")">
+                <span class="kmila-nav-item__indicator"></span>
+                <Icon Name="IconName.MortarboardFill" Class="kmila-nav-item__icon" />
+                <span class="kmila-nav-item__label">@Traductor.T("NAV_LEARN")</span>
+                @if (_learnTotal > 0)
+                {
+                    <span class="kmila-nav-item__badge" title="@string.Format(Traductor.T("LEARN_YOUR_PROGRESS_FMT"), _learnDone, _learnTotal)">
+                        @_learnDone / @_learnTotal
+                    </span>
+                }
+            </a>
+        </div>
+
+        @if (_visibleProjects.Count > 0)
+        {
+            <div class="kmila-sidebar__section" aria-label="@Traductor.T("NAV_PROJECTS_RECENT")">
+                <span class="kmila-sidebar__section-label">
+                    <span>@Traductor.T("NAV_PROJECTS_RECENT")</span>
+                    <span class="kmila-sidebar__count">@_visibleProjects.Count@(_projects.Count > RecentProjectsTracker.SidebarLimit ? $"/{_projects.Count}" : "")</span>
+                </span>
+
+                <div class="kmila-sidebar__project-list">
+                    @foreach (var project in _visibleProjects)
+                    {
+                        var href = $"/editor/{project.Id}";
+                        var isRunning = Sim.RunningProjectId == project.Id;
+                        <div class="kmila-nav-item kmila-nav-item--project @ActiveClass(href, exact: true) @(isRunning ? "kmila-nav-item--running" : "")"
+                             data-tooltip="@(isRunning ? $"{project.Name} — {Traductor.T("SIDEBAR_PROJECT_RUNNING")}" : project.Name)">
+                            <a href="@href" class="kmila-nav-item__main"
+                               @onclick="OnNavClicked"
+                               aria-label="@string.Format(Traductor.T("NAV_OPEN_PROJECT"), project.Name)">
+                                <span class="kmila-nav-item__indicator"></span>
+                                <Icon Name="IconName.FileEarmarkCode" Class="kmila-nav-item__icon" />
+                                <span class="kmila-nav-item__label">@project.Name</span>
+                                @if (isRunning)
+                                {
+                                    <span class="kmila-nav-item__pulse" title="@Traductor.T("SIDEBAR_PROJECT_RUNNING")" aria-hidden="true"></span>
+                                }
+                            </a>
+                            <span class="kmila-nav-item__actions">
+                                <button type="button" class="kmila-nav-item__action"
+                                        @onclick="() => RemoveProjectAsync(project)"
+                                        @onclick:stopPropagation="true"
+                                        aria-label="@string.Format(Traductor.T("NAV_REMOVE_PROJECT"), project.Name)"
+                                        title="@string.Format(Traductor.T("NAV_REMOVE_PROJECT"), project.Name)">
+                                    <Icon Name="IconName.Trash" />
+                                </button>
+                            </span>
+                        </div>
+                    }
+                </div>
+
+                @if (_projects.Count > RecentProjectsTracker.SidebarLimit)
+                {
+                    <a href="/projects" class="kmila-sidebar__view-all"
+                       @onclick="OnNavClicked"
+                       data-tooltip="@Traductor.T("NAV_VIEW_ALL_PROJECTS")">
+                        <Icon Name="IconName.Collection" />
+                        <span>@string.Format(Traductor.T("NAV_VIEW_ALL_PROJECTS_N"), _projects.Count)</span>
+                    </a>
+                }
+            </div>
+        }
+
+        @* System section — app-level tools, always visible *@
+        <div class="kmila-sidebar__section" aria-label="@Traductor.T("NAV_SYSTEM")">
+            <span class="kmila-sidebar__section-label">
+                <span>@Traductor.T("NAV_SYSTEM")</span>
+            </span>
+            <a href="/settings"
+               class="kmila-nav-item @ActiveClass("/settings", exact: true)"
+               @onclick="OnNavClicked"
+               data-tooltip="@Traductor.T("NAV_SETTINGS")">
+                <span class="kmila-nav-item__indicator"></span>
+                <Icon Name="IconName.GearFill" Class="kmila-nav-item__icon" />
+                <span class="kmila-nav-item__label">@Traductor.T("NAV_SETTINGS")</span>
+            </a>
+            <a href="/logs"
+               class="kmila-nav-item @ActiveClass("/logs", exact: true)"
+               @onclick="OnNavClicked"
+               data-tooltip="@Traductor.T("NAV_LOGS")">
+                <span class="kmila-nav-item__indicator"></span>
+                <Icon Name="IconName.JournalText" Class="kmila-nav-item__icon" />
+                <span class="kmila-nav-item__label">@Traductor.T("NAV_LOGS")</span>
+            </a>
+        </div>
+    </nav>
+
+    @* Footer: collapse toggle (desktop only) *@
+    <div class="kmila-sidebar__footer">
+        <button type="button"
+                class="kmila-sidebar__collapse-btn"
+                @onclick="ToggleCollapsed"
+                aria-label="@(SidebarState.IsCollapsed ? Traductor.T("SIDEBAR_EXPAND") : Traductor.T("SIDEBAR_COLLAPSE"))"
+                title="@(SidebarState.IsCollapsed ? Traductor.T("SIDEBAR_EXPAND") : Traductor.T("SIDEBAR_COLLAPSE"))">
+            <Icon Name="@(SidebarState.IsCollapsed ? IconName.ChevronDoubleRight : IconName.ChevronDoubleLeft)" />
+            <span class="kmila-nav-item__label">@Traductor.T("SIDEBAR_COLLAPSE")</span>
+        </button>
+    </div>
+</aside>
+
+@* Mobile backdrop — shown only when drawer is open on narrow viewports *@
+@if (SidebarState.IsMobileOpen)
+{
+    <div class="kmila-sidebar__backdrop" @onclick="SidebarState.CloseMobile" aria-hidden="true"></div>
+}
+
+@code {
+    /// <summary>Full project list from the DB.</summary>
     private List<Project> _projects = new();
 
-    protected override void OnInitialized()
+    /// <summary>
+    /// Sorted + capped list actually rendered in the sidebar. MRU first (per
+    /// RecentProjectsTracker), falling back to creation time for projects the
+    /// user hasn't opened yet. Capped to <see cref="RecentProjectsTracker.SidebarLimit"/>
+    /// so the sidebar stays reasonable once students have dozens of projects.
+    /// </summary>
+    private List<Project> _visibleProjects = new();
+
+    private int _learnDone;
+    private int _learnTotal;
+
+    private string _currentPath = "/";
+
+    private string _rootClass =>
+        (SidebarState.IsCollapsed ? "kmila-sidebar--collapsed " : "") +
+        (SidebarState.IsMobileOpen ? "kmila-sidebar--open " : "");
+
+    protected override async Task OnInitializedAsync()
     {
         Traductor.StaticOnLangChanged += OnLanguageChanged;
+        SidebarState.OnChange += OnSidebarStateChanged;
+        NavigationManager.LocationChanged += OnLocationChanged;
+        Projects.OnListChanged += OnProjectListChanged;
+        Recent.OnChange += OnRecentChanged;
+        LearnProgress.OnChange += OnLearnProgressChanged;
+        Sim.OnChange += OnSimChanged;
+
+        _currentPath = new Uri(NavigationManager.Uri).AbsolutePath;
+        await LoadProjectsAsync();
+        await LoadLearnProgressAsync();
+    }
+
+    private async Task LoadLearnProgressAsync()
+    {
+        try
+        {
+            var manifest = await LessonCatalog.GetManifestAsync();
+            _learnTotal = manifest.Modules.Sum(m => m.Lessons.Count);
+            _learnDone  = await LearnProgress.TotalCompletedAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[NavMenu] Failed to load learn progress");
+            _learnTotal = 0;
+            _learnDone = 0;
+        }
+    }
+
+    private async void OnLearnProgressChanged()
+    {
+        await LoadLearnProgressAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Refresh when the global <see cref="SimulationParameters.RunningProjectId"/>
+    /// flips on/off so the "project is running" pulse animates even when the
+    /// user has navigated away from the Editor.
+    /// </summary>
+    private void OnSimChanged() => InvokeAsync(StateHasChanged);
+
+    private async void OnProjectListChanged()
+    {
+        await LoadProjectsAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async void OnRecentChanged()
+    {
+        await RebuildVisibleAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadProjectsAsync()
+    {
+        try
+        {
+            _projects = await Projects.GetListAsync() ?? new();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[NavMenu] Failed to load projects");
+            _projects = new();
+        }
+        await RebuildVisibleAsync();
+    }
+
+    /// <summary>
+    /// Re-derives <see cref="_visibleProjects"/> from the full project list +
+    /// the MRU tracker. Intersects MRU ids with the current list (so deleted
+    /// projects drop out automatically) and then pads with never-opened ones
+    /// sorted by creation time descending so new projects are instantly
+    /// visible even before their first open.
+    /// </summary>
+    private async Task RebuildVisibleAsync()
+    {
+        var mru = await Recent.GetOrderedAsync();
+        var byId = _projects.ToDictionary(p => p.Id);
+
+        var ordered = new List<Project>();
+        foreach (var id in mru)
+        {
+            if (byId.TryGetValue(id, out var p))
+            {
+                ordered.Add(p);
+                byId.Remove(id);
+            }
+        }
+        // Pad with never-opened projects (newest first).
+        ordered.AddRange(byId.Values.OrderByDescending(p => p.CreationTime));
+        _visibleProjects = ordered.Take(RecentProjectsTracker.SidebarLimit).ToList();
+    }
+
+    /// <summary>
+    /// Sidebar row delete. No confirmation dialog here — sidebar real estate
+    /// is tight and a double-click on a trash icon is an intentional action.
+    /// The Projects page still has the full confirm flow for destructive
+    /// deletes from the card grid.
+    /// </summary>
+    private async Task RemoveProjectAsync(Project project)
+    {
+        try
+        {
+            var ok = await Projects.RemoveAsync(project);
+            if (ok)
+            {
+                await Recent.ForgetAsync(project.Id);
+                // If the user was on this project's editor, bounce to /projects.
+                if (_currentPath.EndsWith($"/editor/{project.Id}", StringComparison.OrdinalIgnoreCase))
+                {
+                    NavigationManager.NavigateTo("/projects");
+                }
+            }
+            else
+            {
+                Logger.LogWarning("[NavMenu] Project remove failed: {Err}", Projects.LastError);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[NavMenu] Remove project {Id} threw", project.Id);
+        }
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        _currentPath = new Uri(e.Location).AbsolutePath;
+        InvokeAsync(StateHasChanged);
     }
 
     private void OnLanguageChanged()
     {
-        _navItems = GetNavItems();
         InvokeAsync(StateHasChanged);
+    }
+
+    private void OnSidebarStateChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Close the mobile drawer after any nav click. On desktop this is a no-op.
+    /// </summary>
+    private void OnNavClicked()
+    {
+        SidebarState.CloseMobile();
+    }
+
+    private void ToggleCollapsed() => SidebarState.ToggleCollapsed();
+
+    /// <summary>
+    /// Returns the active CSS class when the current route matches <paramref name="href"/>.
+    /// </summary>
+    private string ActiveClass(string href, bool exact)
+    {
+        if (string.Equals(_currentPath, href, StringComparison.OrdinalIgnoreCase))
+            return "is-active";
+        if (!exact && _currentPath.StartsWith(href + "/", StringComparison.OrdinalIgnoreCase))
+            return "is-active";
+        return "";
     }
 
     public void Dispose()
     {
         Traductor.StaticOnLangChanged -= OnLanguageChanged;
+        SidebarState.OnChange -= OnSidebarStateChanged;
+        NavigationManager.LocationChanged -= OnLocationChanged;
+        Projects.OnListChanged -= OnProjectListChanged;
+        Recent.OnChange -= OnRecentChanged;
+        LearnProgress.OnChange -= OnLearnProgressChanged;
+        Sim.OnChange -= OnSimChanged;
     }
-
-    /// <summary>
-    /// Provides data to the sidebar.
-    /// </summary>
-    /// <param name="request">The request for data.</param>
-    /// <returns>The data for the sidebar.</returns>
-    private async Task<Sidebar2DataProviderResult> SidebarDataProvider(Sidebar2DataProviderRequest request)
-    {
-        _projects = await Projects.GetListAsync();
-
-        _navItems = GetNavItems();
-
-        return await Task.FromResult(request.ApplyTo(_navItems));
-    }
-    /// <summary>
-    /// Gets the navigation items for the sidebar.
-    /// </summary>
-    /// <returns>A collection of navigation items.</returns>
-    private IEnumerable<NavItem> GetNavItems()
-    {
-        var items = new List<NavItem>
-        {
-            new () { Id = "1", Text = Traductor.T("NAV_PROJECT_OPTIONS")},
-            new () { Id = "2", Href = "/projects", IconName = IconName.FolderPlus, Text = Traductor.T("NAV_PROJECTS"), IconColor = IconColor.Success, ParentId = "1" },
-            new () { Id = "3", Href = "/projects/create", IconName = IconName.Plus, Text = Traductor.T("NAV_CREATE_PROJECT"), IconColor = IconColor.Info, ParentId = "1" },
-            new () { Id = "4", Text = Traductor.T("NAV_PROJECTS_CREATED"), IconName = IconName.Folder2Open, ParentId = "1" }
-        };
-        foreach(var project in _projects){
-            items.Add(new(){
-                Id = Guid.NewGuid().ToString(),
-                Text = project.Name,
-                ParentId = "4",
-                Href = $"/editor/{project.Id}",
-                IconName = IconName.DeviceHdd,
-                IconColor = IconColor.Warning
-            });
-        }
-        return items;
-    }
-
-    private void ToggleSidebar() => _sidebar.ToggleSidebar();
 }

@@ -1,0 +1,74 @@
+@*
+    OutputPanel — content for the Output dock tab.
+
+    Render-only view onto <see cref="BuildLog"/>. Anything that wants to
+    surface a message to the user (build success/failure, simulation start/end,
+    validation warnings) appends to BuildLog and this panel picks it up.
+
+    Auto-scrolls to the newest entry on change.
+*@
+@implements IDisposable
+@inject BuildLog Log
+
+@if (Log.Entries.Count == 0)
+{
+    <div class="kmila-dock__empty">
+        <div class="kmila-dock__empty-icon"><Icon Name="IconName.TerminalFill" /></div>
+        <p>@Traductor.T("EDITOR_EMPTY_OUTPUT")</p>
+    </div>
+}
+else
+{
+    <div class="output-panel">
+        <div class="output-panel__toolbar">
+            <span class="output-panel__count">@Log.Entries.Count</span>
+            <button type="button" class="btn btn-ghost btn-sm"
+                    @onclick="Log.Clear"
+                    title="@Traductor.T("OUTPUT_CLEAR")">
+                <Icon Name="IconName.Trash" />
+                <span>@Traductor.T("OUTPUT_CLEAR")</span>
+            </button>
+        </div>
+
+        <ol class="output-panel__list" role="log" aria-live="polite" aria-relevant="additions">
+            @foreach (var entry in Log.Entries)
+            {
+                var variant = entry.Level switch
+                {
+                    BuildLogLevel.Success => "success",
+                    BuildLogLevel.Warn    => "warning",
+                    BuildLogLevel.Error   => "danger",
+                    _                => "info"
+                };
+                var icon = entry.Level switch
+                {
+                    BuildLogLevel.Success => IconName.CheckCircleFill,
+                    BuildLogLevel.Warn    => IconName.ExclamationTriangleFill,
+                    BuildLogLevel.Error   => IconName.XCircleFill,
+                    _                => IconName.InfoCircleFill
+                };
+                <li class="output-row output-row--@variant">
+                    <span class="output-row__time">@entry.Timestamp.ToString("HH:mm:ss")</span>
+                    <span class="output-row__icon"><Icon Name="@icon" /></span>
+                    <span class="output-row__msg">@entry.Message</span>
+                </li>
+            }
+        </ol>
+    </div>
+}
+
+@code {
+    protected override void OnInitialized()
+    {
+        Log.OnChange += OnLogChanged;
+        Traductor.StaticOnLangChanged += OnLogChanged;
+    }
+
+    private void OnLogChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Log.OnChange -= OnLogChanged;
+        Traductor.StaticOnLangChanged -= OnLogChanged;
+    }
+}

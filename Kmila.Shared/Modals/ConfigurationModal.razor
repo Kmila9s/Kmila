@@ -17,6 +17,7 @@
     - BlazorBootstrap components
 *@
 
+@inject Microsoft.Extensions.Logging.ILogger<Kmila.Shared.Modals.ConfigurationModal> Logger
 <Card>
     <CardHeader Class="bg-body-tertiary">
         <div class="d-flex align-items-center gap-2">
@@ -328,18 +329,18 @@
             var file = e.File;
             if (file == null)
             {
-                Console.WriteLine("[ConfigurationModal] No file selected");
+                Logger.LogWarning("[ConfigurationModal] No file selected");
                 return;
             }
 
-            Console.WriteLine($"[ConfigurationModal] File selected: {file.Name}, Size: {file.Size}");
+            Logger.LogInformation($"[ConfigurationModal] File selected: {file.Name}, Size: {file.Size}");
 
             using var stream = file.OpenReadStream();
             using var reader = new StreamReader(stream);
             var content = await reader.ReadToEndAsync();
 
-            Console.WriteLine($"[ConfigurationModal] File content length: {content.Length}");
-            Console.WriteLine($"[ConfigurationModal] File content preview: {content.Substring(0, Math.Min(200, content.Length))}...");
+            Logger.LogInformation($"[ConfigurationModal] File content length: {content.Length}");
+            Logger.LogInformation($"[ConfigurationModal] File content preview: {content.Substring(0, Math.Min(200, content.Length))}...");
 
             var config = ConfigService.ImportConfiguration(content);
             if (config != null)
@@ -357,19 +358,19 @@
                 await ConfigService.SaveConfigurationAsync(config);
                 await LoadConfigurationListAsync();
 
-                Console.WriteLine($"[ConfigurationModal] Config imported: {config.Name}");
+                Logger.LogInformation($"[ConfigurationModal] Config imported: {config.Name}");
                 ToastService.Notify(new ToastMessage(ToastType.Success, $"Configuration '{config.Name}' imported and saved"));
                 StateHasChanged();
             }
             else
             {
-                Console.WriteLine($"[ConfigurationModal] Import failed: {ConfigService.LastError}");
+                Logger.LogError($"[ConfigurationModal] Import failed: {ConfigService.LastError}");
                 ToastService.Notify(new ToastMessage(ToastType.Danger, $"Invalid configuration file: {ConfigService.LastError}"));
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[ConfigurationModal] Import exception: {ex.Message}");
+            Logger.LogError($"[ConfigurationModal] Import exception: {ex.Message}");
             ToastService.Notify(new ToastMessage(ToastType.Danger, $"Import failed: {ex.Message}"));
         }
     }

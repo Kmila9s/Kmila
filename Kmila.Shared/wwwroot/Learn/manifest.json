@@ -1,0 +1,1546 @@
+{
+  "version": 1,
+  "modules": [
+    {
+      "id": "digital-fundamentals",
+      "icon": "Lightning",
+      "order": 1,
+      "level": "Beginner",
+      "titles": {
+        "en": "Digital Fundamentals",
+        "es": "Fundamentos Digitales"
+      },
+      "summaries": {
+        "en": "Binary, boolean algebra, and logic gates — the mental model you need before VHDL.",
+        "es": "Binario, álgebra booleana y compuertas — el modelo mental que necesitas antes del VHDL."
+      },
+      "lessons": [
+        {
+          "id": "01-number-systems",
+          "kind": "Reading",
+          "level": "Beginner",
+          "estimatedMinutes": 12,
+          "titles": {
+            "en": "Number systems: bits, hex, two's complement",
+            "es": "Sistemas numéricos: bits, hex, complemento a dos"
+          },
+          "summaries": {
+            "en": "How digital circuits represent numbers, why hex exists, and how negatives are encoded.",
+            "es": "Cómo los circuitos digitales representan números, para qué sirve hex y cómo se codifican los negativos."
+          }
+        },
+        {
+          "id": "02-boolean-algebra",
+          "kind": "Reading",
+          "level": "Beginner",
+          "estimatedMinutes": 14,
+          "titles": {
+            "en": "Boolean algebra and the laws that matter",
+            "es": "Álgebra booleana y las leyes que importan"
+          },
+          "summaries": {
+            "en": "Commutative, distributive, De Morgan — the identities you'll lean on when simplifying logic.",
+            "es": "Conmutativa, distributiva, De Morgan — las identidades que usarás al simplificar lógica."
+          }
+        },
+        {
+          "id": "03-logic-gates",
+          "kind": "Reading",
+          "level": "Beginner",
+          "estimatedMinutes": 10,
+          "titles": {
+            "en": "The seven logic gates",
+            "es": "Las siete compuertas lógicas"
+          },
+          "summaries": {
+            "en": "AND, OR, NOT, NAND, NOR, XOR, XNOR — and how each shows up in VHDL.",
+            "es": "AND, OR, NOT, NAND, NOR, XOR, XNOR — y cómo aparecen en VHDL."
+          }
+        },
+        {
+          "id": "04-truth-table-lab",
+          "kind": "Sample",
+          "level": "Beginner",
+          "estimatedMinutes": 15,
+          "titles": {
+            "en": "Lab: truth-table explorer",
+            "es": "Laboratorio: explorador de tablas de verdad"
+          },
+          "summaries": {
+            "en": "Open a tiny VHDL design, drive its two inputs, and watch the outputs in the waveform viewer.",
+            "es": "Abre un diseño VHDL mínimo, estimula sus dos entradas y observa las salidas en el visor de formas de onda."
+          },
+          "sample": {
+            "fileName": "gates.vhd",
+            "content": "-- Truth-table explorer: all six 2-input gates in one entity.\n-- Set a=0/1 and b=0/1 at different times in the Ports tab\n-- and watch how each output reacts.\n\nlibrary IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\n\nentity gates is\n  port (\n    a      : in  std_logic;\n    b      : in  std_logic;\n    o_and  : out std_logic;\n    o_or   : out std_logic;\n    o_xor  : out std_logic;\n    o_nand : out std_logic;\n    o_nor  : out std_logic;\n    o_xnor : out std_logic\n  );\nend entity gates;\n\narchitecture rtl of gates is\nbegin\n  o_and  <= a and b;\n  o_or   <= a or  b;\n  o_xor  <= a xor b;\n  o_nand <= a nand b;\n  o_nor  <= a nor  b;\n  o_xnor <= a xnor b;\nend architecture rtl;\n",
+            "config": {
+              "time": 40,
+              "scale": "US",
+              "ports": [
+                {
+                  "name": "a",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 0,
+                      "scale": "US",
+                      "value": "0"
+                    },
+                    {
+                      "time": 10,
+                      "scale": "US",
+                      "value": "1"
+                    },
+                    {
+                      "time": 20,
+                      "scale": "US",
+                      "value": "0"
+                    },
+                    {
+                      "time": 30,
+                      "scale": "US",
+                      "value": "1"
+                    }
+                  ]
+                },
+                {
+                  "name": "b",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 0,
+                      "scale": "US",
+                      "value": "0"
+                    },
+                    {
+                      "time": 5,
+                      "scale": "US",
+                      "value": "1"
+                    },
+                    {
+                      "time": 15,
+                      "scale": "US",
+                      "value": "0"
+                    },
+                    {
+                      "time": 25,
+                      "scale": "US",
+                      "value": "1"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "vhdl-basics",
+      "icon": "CodeSlash",
+      "order": 2,
+      "level": "Easy",
+      "titles": {
+        "en": "VHDL basics",
+        "es": "Fundamentos de VHDL"
+      },
+      "summaries": {
+        "en": "The anatomy of a VHDL file, types you'll actually use, and how signals differ from variables.",
+        "es": "La anatomía de un archivo VHDL, los tipos que realmente usarás y en qué se distingue una signal de una variable."
+      },
+      "lessons": [
+        {
+          "id": "01-anatomy",
+          "kind": "Reading",
+          "level": "Easy",
+          "estimatedMinutes": 14,
+          "titles": {
+            "en": "Anatomy of a VHDL file",
+            "es": "Anatomía de un archivo VHDL"
+          },
+          "summaries": {
+            "en": "library, use, entity, architecture — what each section is for and why it's in that order.",
+            "es": "library, use, entity, architecture — qué hace cada sección y por qué van en ese orden."
+          }
+        },
+        {
+          "id": "02-data-types",
+          "kind": "Reading",
+          "level": "Easy",
+          "estimatedMinutes": 15,
+          "titles": {
+            "en": "Data types: std_logic, vectors, unsigned, integer",
+            "es": "Tipos de datos: std_logic, vectores, unsigned, integer"
+          },
+          "summaries": {
+            "en": "Which type to use when — and why std_logic has nine values, not two.",
+            "es": "Qué tipo usar y cuándo — y por qué std_logic tiene nueve valores, no dos."
+          }
+        },
+        {
+          "id": "03-signal-vs-variable",
+          "kind": "Reading",
+          "level": "Easy",
+          "estimatedMinutes": 12,
+          "titles": {
+            "en": "Signal vs. variable",
+            "es": "Signal vs. variable"
+          },
+          "summaries": {
+            "en": "The single most misunderstood distinction in VHDL, illustrated with a delta-cycle trace.",
+            "es": "La distinción más mal entendida de VHDL, explicada con una traza de delta-ciclos."
+          }
+        },
+        {
+          "id": "04-first-entity",
+          "kind": "Sample",
+          "level": "Easy",
+          "estimatedMinutes": 15,
+          "titles": {
+            "en": "Sample: your first entity (2-to-1 MUX)",
+            "es": "Ejemplo: tu primera entidad (MUX 2 a 1)"
+          },
+          "summaries": {
+            "en": "Open a tiny 2-to-1 multiplexer and watch the output track the selected input.",
+            "es": "Abre un multiplexor 2 a 1 mínimo y observa cómo la salida sigue a la entrada seleccionada."
+          },
+          "sample": {
+            "fileName": "mux21.vhd",
+            "content": "library IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\n\nentity mux21 is\n  port (\n    sel : in  std_logic;\n    a   : in  std_logic;\n    b   : in  std_logic;\n    y   : out std_logic\n  );\nend entity mux21;\n\narchitecture rtl of mux21 is\nbegin\n  y <= a when sel = '0' else b;\nend architecture rtl;\n",
+            "config": {
+              "time": 40,
+              "scale": "US",
+              "ports": [
+                {
+                  "name": "sel",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 0,
+                      "scale": "US",
+                      "value": "0"
+                    },
+                    {
+                      "time": 20,
+                      "scale": "US",
+                      "value": "1"
+                    }
+                  ]
+                },
+                {
+                  "name": "a",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 0,
+                      "scale": "US",
+                      "value": "0"
+                    },
+                    {
+                      "time": 5,
+                      "scale": "US",
+                      "value": "1"
+                    },
+                    {
+                      "time": 15,
+                      "scale": "US",
+                      "value": "0"
+                    }
+                  ]
+                },
+                {
+                  "name": "b",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 0,
+                      "scale": "US",
+                      "value": "1"
+                    },
+                    {
+                      "time": 25,
+                      "scale": "US",
+                      "value": "0"
+                    },
+                    {
+                      "time": 35,
+                      "scale": "US",
+                      "value": "1"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "combinational",
+      "icon": "Diagram2",
+      "order": 3,
+      "level": "Easy",
+      "titles": {
+        "en": "Combinational logic",
+        "es": "Lógica combinacional"
+      },
+      "summaries": {
+        "en": "MUXes, decoders, adders — no memory, output is a pure function of the inputs.",
+        "es": "MUX, decodificadores, sumadores — sin memoria, la salida depende solo de las entradas."
+      },
+      "lessons": [
+        {
+          "id": "01-concurrent-statements",
+          "kind": "Reading",
+          "level": "Easy",
+          "estimatedMinutes": 14,
+          "titles": {
+            "en": "Concurrent assignments: when/else and with/select",
+            "es": "Asignaciones concurrentes: when/else y with/select"
+          },
+          "summaries": {
+            "en": "Two ways to write the same combinational logic — and when each reads better.",
+            "es": "Dos maneras de escribir la misma lógica combinacional — y cuándo se lee mejor cada una."
+          }
+        },
+        {
+          "id": "02-decoder",
+          "kind": "Sample",
+          "level": "Easy",
+          "estimatedMinutes": 12,
+          "titles": {
+            "en": "Sample: 3-to-8 decoder",
+            "es": "Ejemplo: decodificador 3 a 8"
+          },
+          "summaries": {
+            "en": "Drive a 3-bit code and watch one-hot outputs light up in the waveform.",
+            "es": "Aplica un código de 3 bits y observa las salidas one-hot en las formas de onda."
+          },
+          "sample": {
+            "fileName": "decoder38.vhd",
+            "content": "library IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\n\nentity decoder38 is\n  port (\n    sel : in  std_logic_vector(2 downto 0);\n    y   : out std_logic_vector(7 downto 0)\n  );\nend entity decoder38;\n\narchitecture rtl of decoder38 is\nbegin\n  with sel select\n    y <=\n      \"00000001\" when \"000\",\n      \"00000010\" when \"001\",\n      \"00000100\" when \"010\",\n      \"00001000\" when \"011\",\n      \"00010000\" when \"100\",\n      \"00100000\" when \"101\",\n      \"01000000\" when \"110\",\n      \"10000000\" when others;\nend architecture rtl;\n",
+            "config": {
+              "time": 80,
+              "scale": "US",
+              "ports": [
+                {
+                  "name": "sel",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 0,
+                      "scale": "US",
+                      "value": "000"
+                    },
+                    {
+                      "time": 10,
+                      "scale": "US",
+                      "value": "001"
+                    },
+                    {
+                      "time": 20,
+                      "scale": "US",
+                      "value": "010"
+                    },
+                    {
+                      "time": 30,
+                      "scale": "US",
+                      "value": "011"
+                    },
+                    {
+                      "time": 40,
+                      "scale": "US",
+                      "value": "100"
+                    },
+                    {
+                      "time": 50,
+                      "scale": "US",
+                      "value": "101"
+                    },
+                    {
+                      "time": 60,
+                      "scale": "US",
+                      "value": "110"
+                    },
+                    {
+                      "time": 70,
+                      "scale": "US",
+                      "value": "111"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "03-full-adder",
+          "kind": "Sample",
+          "level": "Easy",
+          "estimatedMinutes": 14,
+          "titles": {
+            "en": "Sample: 4-bit ripple-carry adder",
+            "es": "Ejemplo: sumador por acarreo serie de 4 bits"
+          },
+          "summaries": {
+            "en": "A classic — two 4-bit numbers in, 4-bit sum + carry-out. The simplest piece of an ALU.",
+            "es": "Un clásico — dos números de 4 bits, salida de suma de 4 bits y acarreo. La pieza más simple de una ALU."
+          },
+          "sample": {
+            "fileName": "adder4.vhd",
+            "content": "library IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\nuse IEEE.NUMERIC_STD.ALL;\n\nentity adder4 is\n  port (\n    a    : in  std_logic_vector(3 downto 0);\n    b    : in  std_logic_vector(3 downto 0);\n    cin  : in  std_logic;\n    sum  : out std_logic_vector(3 downto 0);\n    cout : out std_logic\n  );\nend entity adder4;\n\narchitecture rtl of adder4 is\n  signal t : unsigned(4 downto 0);\nbegin\n  t    <= resize(unsigned(a), 5) + resize(unsigned(b), 5) + (\"0000\" & cin);\n  sum  <= std_logic_vector(t(3 downto 0));\n  cout <= t(4);\nend architecture rtl;\n",
+            "config": {
+              "time": 40,
+              "scale": "US",
+              "ports": [
+                {
+                  "name": "a",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 0,
+                      "scale": "US",
+                      "value": "0011"
+                    },
+                    {
+                      "time": 20,
+                      "scale": "US",
+                      "value": "1010"
+                    }
+                  ]
+                },
+                {
+                  "name": "b",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 0,
+                      "scale": "US",
+                      "value": "0101"
+                    },
+                    {
+                      "time": 10,
+                      "scale": "US",
+                      "value": "0110"
+                    },
+                    {
+                      "time": 30,
+                      "scale": "US",
+                      "value": "1111"
+                    }
+                  ]
+                },
+                {
+                  "name": "cin",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 0,
+                      "scale": "US",
+                      "value": "0"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "04-fix-tristate",
+          "kind": "Exercise",
+          "level": "Easy",
+          "estimatedMinutes": 18,
+          "titles": {
+            "en": "Fix it: the tristate buffer that always drives",
+            "es": "Arréglalo: el buffer tri-estado que siempre maneja"
+          },
+          "summaries": {
+            "en": "This tristate buffer never releases the bus. Find the typo, fix the behavior.",
+            "es": "Este buffer tri-estado nunca libera el bus. Encuentra el error y arregla el comportamiento."
+          },
+          "sample": {
+            "fileName": "tristate.vhd",
+            "content": "-- BUG: this tristate buffer should output 'Z' (high impedance)\n-- when oe='0'. Right now it drives the bus either way.\n-- Fix the condition on the concurrent assignment.\n\nlibrary IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\n\nentity tristate is\n  port (\n    oe : in  std_logic;\n    d  : in  std_logic;\n    y  : out std_logic\n  );\nend entity tristate;\n\narchitecture rtl of tristate is\nbegin\n  -- Hint: the 'Z' branch fires when oe is low, not the other way around.\n  y <= d when oe = '0' else 'Z';\nend architecture rtl;\n",
+            "config": {
+              "time": 40,
+              "scale": "US",
+              "ports": [
+                {
+                  "name": "oe",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 0,
+                      "scale": "US",
+                      "value": "0"
+                    },
+                    {
+                      "time": 15,
+                      "scale": "US",
+                      "value": "1"
+                    },
+                    {
+                      "time": 30,
+                      "scale": "US",
+                      "value": "0"
+                    }
+                  ]
+                },
+                {
+                  "name": "d",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 0,
+                      "scale": "US",
+                      "value": "0"
+                    },
+                    {
+                      "time": 5,
+                      "scale": "US",
+                      "value": "1"
+                    },
+                    {
+                      "time": 20,
+                      "scale": "US",
+                      "value": "0"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "sequential",
+      "icon": "Hourglass",
+      "order": 4,
+      "level": "Intermediate",
+      "titles": {
+        "en": "Sequential logic",
+        "es": "Lógica secuencial"
+      },
+      "summaries": {
+        "en": "Circuits that remember. Flip-flops, registers, shift registers, counters.",
+        "es": "Circuitos que recuerdan. Flip-flops, registros, registros de desplazamiento, contadores."
+      },
+      "lessons": [
+        {
+          "id": "01-processes",
+          "kind": "Reading",
+          "level": "Intermediate",
+          "estimatedMinutes": 16,
+          "titles": {
+            "en": "Processes and sensitivity lists",
+            "es": "Procesos y listas de sensibilidad"
+          },
+          "summaries": {
+            "en": "What a process really is, and why leaving a signal off the sensitivity list is a bug.",
+            "es": "Qué es en realidad un proceso, y por qué dejar una señal fuera de la lista de sensibilidad es un bug."
+          }
+        },
+        {
+          "id": "02-d-ff",
+          "kind": "Sample",
+          "level": "Intermediate",
+          "estimatedMinutes": 12,
+          "titles": {
+            "en": "Sample: D flip-flop with async reset",
+            "es": "Ejemplo: flip-flop D con reset asíncrono"
+          },
+          "summaries": {
+            "en": "The simplest stateful element. Watch d propagate to q only on rising clock edges.",
+            "es": "El elemento de estado más simple. Observa cómo d llega a q solo en los flancos de subida del reloj."
+          },
+          "sample": {
+            "fileName": "dff.vhd",
+            "content": "library IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\n\nentity dff is\n  port (\n    clk   : in  std_logic;\n    reset : in  std_logic;\n    d     : in  std_logic;\n    q     : out std_logic\n  );\nend entity dff;\n\narchitecture rtl of dff is\nbegin\n  process(clk, reset)\n  begin\n    if reset = '1' then\n      q <= '0';\n    elsif rising_edge(clk) then\n      q <= d;\n    end if;\n  end process;\nend architecture rtl;\n",
+            "config": {
+              "time": 80,
+              "scale": "US",
+              "ports": [
+                {
+                  "name": "clk",
+                  "clock": true,
+                  "values": []
+                },
+                {
+                  "name": "reset",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 0,
+                      "scale": "US",
+                      "value": "1"
+                    },
+                    {
+                      "time": 5,
+                      "scale": "US",
+                      "value": "0"
+                    }
+                  ]
+                },
+                {
+                  "name": "d",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 10,
+                      "scale": "US",
+                      "value": "1"
+                    },
+                    {
+                      "time": 30,
+                      "scale": "US",
+                      "value": "0"
+                    },
+                    {
+                      "time": 50,
+                      "scale": "US",
+                      "value": "1"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "03-shift-register",
+          "kind": "Sample",
+          "level": "Intermediate",
+          "estimatedMinutes": 14,
+          "titles": {
+            "en": "Sample: 8-bit shift register",
+            "es": "Ejemplo: registro de desplazamiento de 8 bits"
+          },
+          "summaries": {
+            "en": "Serial-in / parallel-out shift register — useful inside UARTs, SPI controllers, deserializers.",
+            "es": "Entrada serial / salida paralela — la base de UARTs, controladores SPI y deserializadores."
+          },
+          "sample": {
+            "fileName": "shift8.vhd",
+            "content": "library IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\n\nentity shift8 is\n  port (\n    clk   : in  std_logic;\n    reset : in  std_logic;\n    din   : in  std_logic;\n    q     : out std_logic_vector(7 downto 0)\n  );\nend entity shift8;\n\narchitecture rtl of shift8 is\n  signal r : std_logic_vector(7 downto 0) := (others => '0');\nbegin\n  process(clk, reset)\n  begin\n    if reset = '1' then\n      r <= (others => '0');\n    elsif rising_edge(clk) then\n      -- shift left, new bit comes in at the LSB\n      r <= r(6 downto 0) & din;\n    end if;\n  end process;\n\n  q <= r;\nend architecture rtl;\n",
+            "config": {
+              "time": 100,
+              "scale": "US",
+              "ports": [
+                {
+                  "name": "clk",
+                  "clock": true,
+                  "values": []
+                },
+                {
+                  "name": "reset",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 0,
+                      "scale": "US",
+                      "value": "1"
+                    },
+                    {
+                      "time": 5,
+                      "scale": "US",
+                      "value": "0"
+                    }
+                  ]
+                },
+                {
+                  "name": "din",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 10,
+                      "scale": "US",
+                      "value": "1"
+                    },
+                    {
+                      "time": 15,
+                      "scale": "US",
+                      "value": "0"
+                    },
+                    {
+                      "time": 20,
+                      "scale": "US",
+                      "value": "1"
+                    },
+                    {
+                      "time": 25,
+                      "scale": "US",
+                      "value": "1"
+                    },
+                    {
+                      "time": 30,
+                      "scale": "US",
+                      "value": "0"
+                    },
+                    {
+                      "time": 35,
+                      "scale": "US",
+                      "value": "1"
+                    },
+                    {
+                      "time": 40,
+                      "scale": "US",
+                      "value": "0"
+                    },
+                    {
+                      "time": 45,
+                      "scale": "US",
+                      "value": "1"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "04-fix-latch",
+          "kind": "Exercise",
+          "level": "Intermediate",
+          "estimatedMinutes": 20,
+          "titles": {
+            "en": "Fix it: the accidental latch",
+            "es": "Arréglalo: el latch accidental"
+          },
+          "summaries": {
+            "en": "This combinational design synthesizes a latch. Identify why and fix the code so only a flip-flop is inferred.",
+            "es": "Este diseño combinacional infiere un latch. Identifica la causa y arregla el código para que se infiera solo un flip-flop."
+          },
+          "sample": {
+            "fileName": "latch_bug.vhd",
+            "content": "-- BUG: this process forgets to assign y in one branch,\n-- which causes the synthesizer to infer a latch.\n-- Fix it so the behavior is purely combinational\n-- (assign y on EVERY path through the process).\n\nlibrary IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\n\nentity latch_bug is\n  port (\n    enable : in  std_logic;\n    a      : in  std_logic;\n    b      : in  std_logic;\n    y      : out std_logic\n  );\nend entity latch_bug;\n\narchitecture rtl of latch_bug is\nbegin\n  process(enable, a, b)\n  begin\n    if enable = '1' then\n      y <= a and b;\n    end if;\n    -- Missing: what should y be when enable = '0'?\n  end process;\nend architecture rtl;\n",
+            "config": {
+              "time": 40,
+              "scale": "US",
+              "ports": [
+                {
+                  "name": "enable",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 0,
+                      "scale": "US",
+                      "value": "0"
+                    },
+                    {
+                      "time": 10,
+                      "scale": "US",
+                      "value": "1"
+                    },
+                    {
+                      "time": 25,
+                      "scale": "US",
+                      "value": "0"
+                    }
+                  ]
+                },
+                {
+                  "name": "a",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 0,
+                      "scale": "US",
+                      "value": "1"
+                    }
+                  ]
+                },
+                {
+                  "name": "b",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 0,
+                      "scale": "US",
+                      "value": "1"
+                    },
+                    {
+                      "time": 20,
+                      "scale": "US",
+                      "value": "0"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "fsm",
+      "icon": "Diagram3Fill",
+      "order": 5,
+      "level": "Intermediate",
+      "titles": {
+        "en": "Finite-state machines",
+        "es": "Máquinas de estados finitos"
+      },
+      "summaries": {
+        "en": "Control logic that remembers where it is — Mealy vs Moore, two-process and three-process patterns.",
+        "es": "Lógica de control que recuerda en qué estado está — Mealy vs Moore, patrones de dos y tres procesos."
+      },
+      "lessons": [
+        {
+          "id": "01-mealy-vs-moore",
+          "kind": "Reading",
+          "level": "Intermediate",
+          "estimatedMinutes": 14,
+          "titles": {
+            "en": "Mealy vs Moore machines",
+            "es": "Máquinas Mealy vs Moore"
+          },
+          "summaries": {
+            "en": "Outputs as a function of state (Moore) vs state + input (Mealy) — and when to pick which.",
+            "es": "Salidas en función del estado (Moore) vs estado + entrada (Mealy) — y cuándo elegir cada una."
+          }
+        },
+        {
+          "id": "02-traffic-light",
+          "kind": "Sample",
+          "level": "Intermediate",
+          "estimatedMinutes": 20,
+          "titles": {
+            "en": "Sample: traffic light FSM",
+            "es": "Ejemplo: FSM de semáforo"
+          },
+          "summaries": {
+            "en": "A two-process Moore FSM cycling through red → green → yellow with a configurable hold count.",
+            "es": "Un FSM Moore de dos procesos que cicla rojo → verde → amarillo con un contador de espera configurable."
+          },
+          "sample": {
+            "fileName": "traffic.vhd",
+            "content": "library IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\nuse IEEE.NUMERIC_STD.ALL;\n\nentity traffic is\n  port (\n    clk    : in  std_logic;\n    reset  : in  std_logic;\n    red    : out std_logic;\n    yellow : out std_logic;\n    green  : out std_logic\n  );\nend entity traffic;\n\narchitecture rtl of traffic is\n  type state_t is (S_RED, S_GREEN, S_YELLOW);\n  signal state, next_state : state_t;\n  signal count : unsigned(3 downto 0) := (others => '0');\n  constant HOLD : unsigned(3 downto 0) := \"0111\";  -- 7 ticks per colour\nbegin\n\n  -- state register\n  process(clk, reset)\n  begin\n    if reset = '1' then\n      state <= S_RED;\n      count <= (others => '0');\n    elsif rising_edge(clk) then\n      if count = HOLD then\n        state <= next_state;\n        count <= (others => '0');\n      else\n        count <= count + 1;\n      end if;\n    end if;\n  end process;\n\n  -- next-state logic\n  process(state)\n  begin\n    case state is\n      when S_RED    => next_state <= S_GREEN;\n      when S_GREEN  => next_state <= S_YELLOW;\n      when S_YELLOW => next_state <= S_RED;\n    end case;\n  end process;\n\n  -- Moore outputs: function of state only\n  red    <= '1' when state = S_RED    else '0';\n  green  <= '1' when state = S_GREEN  else '0';\n  yellow <= '1' when state = S_YELLOW else '0';\n\nend architecture rtl;\n",
+            "config": {
+              "time": 400,
+              "scale": "US",
+              "ports": [
+                {
+                  "name": "clk",
+                  "clock": true,
+                  "values": []
+                },
+                {
+                  "name": "reset",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 0,
+                      "scale": "US",
+                      "value": "1"
+                    },
+                    {
+                      "time": 5,
+                      "scale": "US",
+                      "value": "0"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "03-vending-machine",
+          "kind": "Project",
+          "level": "Intermediate",
+          "estimatedMinutes": 45,
+          "titles": {
+            "en": "Project: coin-operated vending machine",
+            "es": "Proyecto: máquina expendedora por monedas"
+          },
+          "summaries": {
+            "en": "Design an FSM that accepts 5¢ and 10¢ coins, dispenses when total ≥ 25¢, and returns change. Full spec inside.",
+            "es": "Diseña un FSM que acepta monedas de 5¢ y 10¢, entrega producto al llegar a 25¢ y devuelve cambio. Especificación completa adentro."
+          },
+          "sample": {
+            "fileName": "vending.vhd",
+            "content": "-- Project: vending machine\n--\n-- Your FSM must:\n--   • accept two pulses: nickel (5¢) and dime (10¢)\n--   • track the running total\n--   • assert 'dispense' for exactly one clock cycle when total >= 25¢\n--   • assert 'change' if total > 25¢ after the coin that triggered the sale\n--   • return to the idle state after dispensing\n--\n-- Acceptance criteria:\n--   nickel*5 (=25¢)   → dispense=1, change=0\n--   dime*2 + nickel*1 → dispense=1, change=0\n--   dime*3 (=30¢)     → dispense=1, change=1\n\nlibrary IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\nuse IEEE.NUMERIC_STD.ALL;\n\nentity vending is\n  port (\n    clk      : in  std_logic;\n    reset    : in  std_logic;\n    nickel   : in  std_logic;  -- 5-cent coin pulse\n    dime     : in  std_logic;  -- 10-cent coin pulse\n    dispense : out std_logic;\n    change   : out std_logic\n  );\nend entity vending;\n\narchitecture rtl of vending is\n  -- TODO(student): add a coin-total register and the dispense/change logic.\n  signal total : unsigned(5 downto 0) := (others => '0');\nbegin\n  -- starter: counts coins; does not yet dispense. That's your job.\n  process(clk, reset)\n  begin\n    if reset = '1' then\n      total <= (others => '0');\n    elsif rising_edge(clk) then\n      if    nickel = '1' then total <= total + 5;\n      elsif dime   = '1' then total <= total + 10;\n      end if;\n    end if;\n  end process;\n\n  dispense <= '0';  -- TODO\n  change   <= '0';  -- TODO\nend architecture rtl;\n",
+            "config": {
+              "time": 200,
+              "scale": "US",
+              "ports": [
+                {
+                  "name": "clk",
+                  "clock": true,
+                  "values": []
+                },
+                {
+                  "name": "reset",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 0,
+                      "scale": "US",
+                      "value": "1"
+                    },
+                    {
+                      "time": 5,
+                      "scale": "US",
+                      "value": "0"
+                    }
+                  ]
+                },
+                {
+                  "name": "nickel",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 0,
+                      "scale": "US",
+                      "value": "0"
+                    },
+                    {
+                      "time": 10,
+                      "scale": "US",
+                      "value": "1"
+                    },
+                    {
+                      "time": 12,
+                      "scale": "US",
+                      "value": "0"
+                    }
+                  ]
+                },
+                {
+                  "name": "dime",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 0,
+                      "scale": "US",
+                      "value": "0"
+                    },
+                    {
+                      "time": 20,
+                      "scale": "US",
+                      "value": "1"
+                    },
+                    {
+                      "time": 22,
+                      "scale": "US",
+                      "value": "0"
+                    },
+                    {
+                      "time": 30,
+                      "scale": "US",
+                      "value": "1"
+                    },
+                    {
+                      "time": 32,
+                      "scale": "US",
+                      "value": "0"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "concurrent-thinking",
+      "icon": "ShareFill",
+      "order": 6,
+      "level": "Intermediate",
+      "titles": {
+        "en": "Concurrent thinking",
+        "es": "Pensar en concurrente"
+      },
+      "summaries": {
+        "en": "VHDL is not software — every statement outside a process runs at the same time. Master this or fight the tools forever.",
+        "es": "VHDL no es software — cada sentencia fuera de un proceso ocurre al mismo tiempo. Domínalo o peleas con la herramienta para siempre."
+      },
+      "lessons": [
+        {
+          "id": "01-hardware-is-parallel",
+          "kind": "Reading",
+          "level": "Intermediate",
+          "estimatedMinutes": 12,
+          "titles": {
+            "en": "Hardware is parallel",
+            "es": "El hardware es paralelo"
+          },
+          "summaries": {
+            "en": "Why VHDL statements don't execute top-to-bottom — the mental shift from software to hardware.",
+            "es": "Por qué las sentencias de VHDL no se ejecutan de arriba abajo — el cambio de mentalidad de software a hardware."
+          }
+        },
+        {
+          "id": "02-delta-cycles",
+          "kind": "Reading",
+          "level": "Intermediate",
+          "estimatedMinutes": 15,
+          "titles": {
+            "en": "Delta cycles and race conditions",
+            "es": "Delta-ciclos y condiciones de carrera"
+          },
+          "summaries": {
+            "en": "What happens between clock edges in a simulation, and why two signals can update in the 'same' tick.",
+            "es": "Qué ocurre entre flancos de reloj en la simulación y por qué dos señales pueden actualizarse en el 'mismo' tick."
+          }
+        }
+      ]
+    },
+    {
+      "id": "memories",
+      "icon": "Hdd",
+      "order": 7,
+      "level": "Advanced",
+      "titles": {
+        "en": "Memories (ROM and RAM)",
+        "es": "Memorias (ROM y RAM)"
+      },
+      "summaries": {
+        "en": "Infer block RAM and ROM from portable VHDL — no vendor primitives, no macros.",
+        "es": "Inferir block RAM y ROM con VHDL portable — sin primitivas del fabricante, sin macros."
+      },
+      "lessons": [
+        {
+          "id": "01-rom-inference",
+          "kind": "Sample",
+          "level": "Advanced",
+          "estimatedMinutes": 20,
+          "titles": {
+            "en": "Sample: inferred synchronous ROM",
+            "es": "Ejemplo: ROM síncrona inferida"
+          },
+          "summaries": {
+            "en": "A 16×8 read-only memory pattern every synthesizer recognises as block RAM.",
+            "es": "Un patrón de ROM de 16×8 que cualquier sintetizador reconoce como block RAM."
+          },
+          "sample": {
+            "fileName": "rom16x8.vhd",
+            "content": "library IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\nuse IEEE.NUMERIC_STD.ALL;\n\nentity rom16x8 is\n  port (\n    clk  : in  std_logic;\n    addr : in  std_logic_vector(3 downto 0);\n    data : out std_logic_vector(7 downto 0)\n  );\nend entity rom16x8;\n\narchitecture rtl of rom16x8 is\n  type rom_t is array(0 to 15) of std_logic_vector(7 downto 0);\n  -- Example contents: first 16 squares (0,1,4,9,16,25,36,49,64,81,100,121,144,169,196,225)\n  constant ROM : rom_t := (\n    x\"00\", x\"01\", x\"04\", x\"09\", x\"10\", x\"19\", x\"24\", x\"31\",\n    x\"40\", x\"51\", x\"64\", x\"79\", x\"90\", x\"A9\", x\"C4\", x\"E1\"\n  );\nbegin\n  process(clk)\n  begin\n    if rising_edge(clk) then\n      data <= ROM(to_integer(unsigned(addr)));\n    end if;\n  end process;\nend architecture rtl;\n",
+            "config": {
+              "time": 200,
+              "scale": "US",
+              "ports": [
+                {
+                  "name": "clk",
+                  "clock": true,
+                  "values": []
+                },
+                {
+                  "name": "addr",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 0,
+                      "scale": "US",
+                      "value": "0000"
+                    },
+                    {
+                      "time": 10,
+                      "scale": "US",
+                      "value": "0001"
+                    },
+                    {
+                      "time": 20,
+                      "scale": "US",
+                      "value": "0100"
+                    },
+                    {
+                      "time": 30,
+                      "scale": "US",
+                      "value": "1000"
+                    },
+                    {
+                      "time": 40,
+                      "scale": "US",
+                      "value": "1111"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "02-single-port-ram",
+          "kind": "Sample",
+          "level": "Advanced",
+          "estimatedMinutes": 22,
+          "titles": {
+            "en": "Sample: single-port RAM with write-first read",
+            "es": "Ejemplo: RAM de un puerto con lectura después de escritura"
+          },
+          "summaries": {
+            "en": "32×8 single-port block RAM with the \"write-first\" read policy — the vendor-friendly template.",
+            "es": "Block RAM de un puerto 32×8 con política \"write-first\" — la plantilla amigable con cualquier sintetizador."
+          },
+          "sample": {
+            "fileName": "ram32x8.vhd",
+            "content": "library IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\nuse IEEE.NUMERIC_STD.ALL;\n\nentity ram32x8 is\n  port (\n    clk  : in  std_logic;\n    we   : in  std_logic;\n    addr : in  std_logic_vector(4 downto 0);\n    din  : in  std_logic_vector(7 downto 0);\n    dout : out std_logic_vector(7 downto 0)\n  );\nend entity ram32x8;\n\narchitecture rtl of ram32x8 is\n  type mem_t is array(0 to 31) of std_logic_vector(7 downto 0);\n  signal mem : mem_t := (others => (others => '0'));\nbegin\n  process(clk)\n  begin\n    if rising_edge(clk) then\n      if we = '1' then\n        mem(to_integer(unsigned(addr))) <= din;\n        dout <= din;                                 -- write-first read\n      else\n        dout <= mem(to_integer(unsigned(addr)));\n      end if;\n    end if;\n  end process;\nend architecture rtl;\n",
+            "config": {
+              "time": 200,
+              "scale": "US",
+              "ports": [
+                {
+                  "name": "clk",
+                  "clock": true,
+                  "values": []
+                },
+                {
+                  "name": "we",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 0,
+                      "scale": "US",
+                      "value": "1"
+                    },
+                    {
+                      "time": 30,
+                      "scale": "US",
+                      "value": "0"
+                    }
+                  ]
+                },
+                {
+                  "name": "addr",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 0,
+                      "scale": "US",
+                      "value": "00000"
+                    },
+                    {
+                      "time": 10,
+                      "scale": "US",
+                      "value": "00001"
+                    },
+                    {
+                      "time": 20,
+                      "scale": "US",
+                      "value": "00010"
+                    },
+                    {
+                      "time": 40,
+                      "scale": "US",
+                      "value": "00000"
+                    }
+                  ]
+                },
+                {
+                  "name": "din",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 0,
+                      "scale": "US",
+                      "value": "00001111"
+                    },
+                    {
+                      "time": 10,
+                      "scale": "US",
+                      "value": "10101010"
+                    },
+                    {
+                      "time": 20,
+                      "scale": "US",
+                      "value": "11110000"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "arithmetic",
+      "icon": "Calculator",
+      "order": 8,
+      "level": "Advanced",
+      "titles": {
+        "en": "Arithmetic units",
+        "es": "Unidades aritméticas"
+      },
+      "summaries": {
+        "en": "From a 4-bit adder to a full 8-bit ALU with flags and a shifter.",
+        "es": "Del sumador de 4 bits a una ALU completa de 8 bits con banderas y desplazador."
+      },
+      "lessons": [
+        {
+          "id": "01-alu-project",
+          "kind": "Project",
+          "level": "Advanced",
+          "estimatedMinutes": 60,
+          "titles": {
+            "en": "Project: 8-bit ALU with flags",
+            "es": "Proyecto: ALU de 8 bits con banderas"
+          },
+          "summaries": {
+            "en": "Build add/sub/and/or/xor/shl/shr, plus zero and carry flags. A starter scaffold is provided.",
+            "es": "Construye add/sub/and/or/xor/shl/shr más banderas zero y carry. Se proporciona andamiaje inicial."
+          },
+          "sample": {
+            "fileName": "alu8.vhd",
+            "content": "-- Project: 8-bit ALU\n--\n-- opcode (3 bits) chooses the operation:\n--   000 = ADD    (y = a + b)\n--   001 = SUB    (y = a - b)\n--   010 = AND\n--   011 = OR\n--   100 = XOR\n--   101 = SHL    (y = a shifted left by 1)\n--   110 = SHR    (y = a shifted right by 1)\n--   111 = PASS_A (y = a)\n--\n-- Flags:\n--   zero  = '1' when y is all zeros\n--   carry = add/sub carry-out; undefined for logic ops (drive '0')\n--\n-- TODO: fill in the case branches.\n\nlibrary IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\nuse IEEE.NUMERIC_STD.ALL;\n\nentity alu8 is\n  port (\n    op    : in  std_logic_vector(2 downto 0);\n    a     : in  std_logic_vector(7 downto 0);\n    b     : in  std_logic_vector(7 downto 0);\n    y     : out std_logic_vector(7 downto 0);\n    zero  : out std_logic;\n    carry : out std_logic\n  );\nend entity alu8;\n\narchitecture rtl of alu8 is\n  signal result : std_logic_vector(7 downto 0);\n  signal cout   : std_logic;\nbegin\n  process(op, a, b)\n    variable ext : unsigned(8 downto 0);\n  begin\n    cout   <= '0';\n    case op is\n      when \"000\" =>  -- ADD\n        ext    := resize(unsigned(a), 9) + resize(unsigned(b), 9);\n        result <= std_logic_vector(ext(7 downto 0));\n        cout   <= ext(8);\n      when \"001\" =>  -- SUB\n        ext    := resize(unsigned(a), 9) - resize(unsigned(b), 9);\n        result <= std_logic_vector(ext(7 downto 0));\n        cout   <= ext(8);\n      -- TODO: AND / OR / XOR / SHL / SHR / PASS_A\n      when others =>\n        result <= (others => '0');\n    end case;\n  end process;\n\n  y     <= result;\n  zero  <= '1' when result = x\"00\" else '0';\n  carry <= cout;\nend architecture rtl;\n",
+            "config": {
+              "time": 100,
+              "scale": "US",
+              "ports": [
+                {
+                  "name": "op",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 0,
+                      "scale": "US",
+                      "value": "000"
+                    },
+                    {
+                      "time": 20,
+                      "scale": "US",
+                      "value": "001"
+                    },
+                    {
+                      "time": 40,
+                      "scale": "US",
+                      "value": "010"
+                    },
+                    {
+                      "time": 60,
+                      "scale": "US",
+                      "value": "101"
+                    },
+                    {
+                      "time": 80,
+                      "scale": "US",
+                      "value": "111"
+                    }
+                  ]
+                },
+                {
+                  "name": "a",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 0,
+                      "scale": "US",
+                      "value": "00001111"
+                    },
+                    {
+                      "time": 50,
+                      "scale": "US",
+                      "value": "10110000"
+                    }
+                  ]
+                },
+                {
+                  "name": "b",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 0,
+                      "scale": "US",
+                      "value": "00000101"
+                    },
+                    {
+                      "time": 30,
+                      "scale": "US",
+                      "value": "00001111"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "uart",
+      "icon": "PlugFill",
+      "order": 9,
+      "level": "Advanced",
+      "titles": {
+        "en": "Serial communication (UART)",
+        "es": "Comunicación serial (UART)"
+      },
+      "summaries": {
+        "en": "The simplest real-world protocol — start bit, 8 data bits, stop bit, no handshake.",
+        "es": "El protocolo real más simple — bit de inicio, 8 bits de datos, bit de parada, sin handshake."
+      },
+      "lessons": [
+        {
+          "id": "01-uart-tx",
+          "kind": "Project",
+          "level": "Advanced",
+          "estimatedMinutes": 60,
+          "titles": {
+            "en": "Project: UART transmitter",
+            "es": "Proyecto: transmisor UART"
+          },
+          "summaries": {
+            "en": "Build a 115200-baud UART TX with start/stop framing. Scaffold provided, you fill in the shift timing.",
+            "es": "Construye un TX UART a 115200 baudios con marco start/stop. Se da el andamiaje; tú completas el desplazamiento."
+          },
+          "sample": {
+            "fileName": "uart_tx.vhd",
+            "content": "-- Project: UART TX\n--\n-- Assumes a 50 MHz clock. Baud = 115200.\n-- You need to:\n--   (1) count clk cycles to generate the baud tick (≈ 434 cycles / bit)\n--   (2) when 'send' is pulsed, latch 'data' and start the frame\n--   (3) transmit: start(0), bit0..bit7 (LSB first), stop(1)\n--   (4) raise 'busy' during the whole frame\n\nlibrary IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\nuse IEEE.NUMERIC_STD.ALL;\n\nentity uart_tx is\n  port (\n    clk   : in  std_logic;\n    reset : in  std_logic;\n    send  : in  std_logic;\n    data  : in  std_logic_vector(7 downto 0);\n    tx    : out std_logic;\n    busy  : out std_logic\n  );\nend entity uart_tx;\n\narchitecture rtl of uart_tx is\n  -- idle state holds tx high; the receiver detects start by the falling edge\n  signal tx_reg : std_logic := '1';\nbegin\n  -- TODO: implement the state machine + shift register.\n  tx   <= tx_reg;\n  busy <= '0';\nend architecture rtl;\n",
+            "config": {
+              "time": 100,
+              "scale": "US",
+              "ports": [
+                {
+                  "name": "clk",
+                  "clock": true,
+                  "values": []
+                },
+                {
+                  "name": "reset",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 0,
+                      "scale": "US",
+                      "value": "1"
+                    },
+                    {
+                      "time": 5,
+                      "scale": "US",
+                      "value": "0"
+                    }
+                  ]
+                },
+                {
+                  "name": "send",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 10,
+                      "scale": "US",
+                      "value": "1"
+                    },
+                    {
+                      "time": 12,
+                      "scale": "US",
+                      "value": "0"
+                    }
+                  ]
+                },
+                {
+                  "name": "data",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 0,
+                      "scale": "US",
+                      "value": "01001000"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cpu",
+      "icon": "Cpu",
+      "order": 10,
+      "level": "Expert",
+      "titles": {
+        "en": "A small CPU",
+        "es": "Un CPU pequeño"
+      },
+      "summaries": {
+        "en": "A single-cycle 8-bit RISC datapath — four instructions, no pipelining. All the pieces from earlier, assembled.",
+        "es": "Datapath RISC de 8 bits monociclo — cuatro instrucciones, sin segmentación. Todas las piezas anteriores integradas."
+      },
+      "lessons": [
+        {
+          "id": "01-cpu-overview",
+          "kind": "Reading",
+          "level": "Expert",
+          "estimatedMinutes": 20,
+          "titles": {
+            "en": "How a CPU executes one instruction",
+            "es": "Cómo un CPU ejecuta una instrucción"
+          },
+          "summaries": {
+            "en": "Fetch, decode, execute, writeback — the five-stage model and what each stage is physically made of.",
+            "es": "Fetch, decode, execute, writeback — el modelo de cinco etapas y de qué está hecha cada etapa físicamente."
+          }
+        },
+        {
+          "id": "02-cpu-project",
+          "kind": "Project",
+          "level": "Expert",
+          "estimatedMinutes": 120,
+          "titles": {
+            "en": "Project: single-cycle 8-bit CPU",
+            "es": "Proyecto: CPU de 8 bits monociclo"
+          },
+          "summaries": {
+            "en": "An 8-bit CPU with a 16-byte ROM, four registers, and instructions: LOAD, ADD, JUMP, HALT.",
+            "es": "Un CPU de 8 bits con ROM de 16 bytes, cuatro registros e instrucciones: LOAD, ADD, JUMP, HALT."
+          },
+          "sample": {
+            "fileName": "cpu8.vhd",
+            "content": "-- Project: single-cycle 8-bit CPU\n--\n-- ISA (4-bit opcode + 4-bit immediate):\n--   0000 iiii  LOAD  R0, #imm       -- R0 <= imm\n--   0001 iiii  ADD   R0, #imm       -- R0 <= R0 + imm\n--   0010 aaaa  JUMP  addr           -- PC <= addr\n--   1111 ----  HALT\n--\n-- Scaffold:\n--   • PC + ROM fetch\n--   • Decode + execute + writeback\n--   • 'halted' output once HALT is hit\n--\n-- Fill in the case statement for decode/execute.\n\nlibrary IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\nuse IEEE.NUMERIC_STD.ALL;\n\nentity cpu8 is\n  port (\n    clk    : in  std_logic;\n    reset  : in  std_logic;\n    r0_out : out std_logic_vector(7 downto 0);\n    halted : out std_logic\n  );\nend entity cpu8;\n\narchitecture rtl of cpu8 is\n  type rom_t is array(0 to 15) of std_logic_vector(7 downto 0);\n  constant PROGRAM : rom_t := (\n    x\"03\",  -- LOAD R0, #3\n    x\"14\",  -- ADD  R0, #4        -> R0 = 7\n    x\"12\",  -- ADD  R0, #2        -> R0 = 9\n    x\"F0\",  -- HALT\n    others => x\"00\"\n  );\n  signal pc     : unsigned(3 downto 0) := (others => '0');\n  signal r0     : unsigned(7 downto 0) := (others => '0');\n  signal halt   : std_logic            := '0';\n  signal instr  : std_logic_vector(7 downto 0);\nbegin\n  instr <= PROGRAM(to_integer(pc));\n\n  process(clk, reset)\n  begin\n    if reset = '1' then\n      pc   <= (others => '0');\n      r0   <= (others => '0');\n      halt <= '0';\n    elsif rising_edge(clk) then\n      if halt = '0' then\n        case instr(7 downto 4) is\n          when \"0000\" => r0 <= resize(unsigned(instr(3 downto 0)), 8); pc <= pc + 1;\n          when \"0001\" => r0 <= r0 + resize(unsigned(instr(3 downto 0)), 8); pc <= pc + 1;\n          when \"0010\" => pc <= unsigned(instr(3 downto 0));\n          when \"1111\" => halt <= '1';\n          when others => pc <= pc + 1;\n        end case;\n      end if;\n    end if;\n  end process;\n\n  r0_out <= std_logic_vector(r0);\n  halted <= halt;\nend architecture rtl;\n",
+            "config": {
+              "time": 200,
+              "scale": "US",
+              "ports": [
+                {
+                  "name": "clk",
+                  "clock": true,
+                  "values": []
+                },
+                {
+                  "name": "reset",
+                  "clock": false,
+                  "values": [
+                    {
+                      "time": 0,
+                      "scale": "US",
+                      "value": "1"
+                    },
+                    {
+                      "time": 5,
+                      "scale": "US",
+                      "value": "0"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "discrete-math",
+      "icon": "Braces",
+      "order": 0,
+      "level": "Beginner",
+      "titles": {
+        "en": "Discrete math prerequisites",
+        "es": "Prerrequisitos de matemáticas discretas"
+      },
+      "summaries": {
+        "en": "The sets, functions, counting and logic you need before the first VHDL lesson.",
+        "es": "Los conjuntos, funciones, conteo y lógica que necesitas antes de la primera lección de VHDL."
+      },
+      "lessons": [
+        {
+          "id": "01-prereqs",
+          "kind": "Reading",
+          "level": "Beginner",
+          "estimatedMinutes": 20,
+          "titles": {
+            "en": "Discrete math prerequisites",
+            "es": "Prerrequisitos de matemáticas discretas"
+          },
+          "summaries": {
+            "en": "Fast refresh on sets, functions, proofs, logic and counting — everything a later module assumes.",
+            "es": "Repaso rápido de conjuntos, funciones, demostraciones, lógica y conteo — todo lo que las siguientes lecciones asumen."
+          }
+        }
+      ]
+    },
+    {
+      "id": "soc",
+      "icon": "Hdd",
+      "order": 11,
+      "level": "Expert",
+      "titles": {
+        "en": "Systems-on-Chip",
+        "es": "Sistemas en Chip"
+      },
+      "summaries": {
+        "en": "CPUs + peripherals + interconnects. AXI, Avalon, Wishbone — what the protocols actually do.",
+        "es": "CPUs + periféricos + interconexión. AXI, Avalon, Wishbone — qué hacen realmente estos protocolos."
+      },
+      "lessons": [
+        {
+          "id": "01-what-is-a-soc",
+          "kind": "Reading",
+          "level": "Expert",
+          "estimatedMinutes": 18,
+          "titles": {
+            "en": "What is a System-on-Chip?",
+            "es": "¿Qué es un System-on-Chip?"
+          },
+          "summaries": {
+            "en": "The three mandatory pieces, and why every SoC looks similar once you strip away marketing.",
+            "es": "Las tres piezas obligatorias y por qué todo SoC se parece una vez quitas el marketing."
+          }
+        }
+      ]
+    },
+    {
+      "id": "pipelining",
+      "icon": "Layers",
+      "order": 12,
+      "level": "Expert",
+      "titles": {
+        "en": "Pipelining and hazards",
+        "es": "Segmentación y hazards"
+      },
+      "summaries": {
+        "en": "From single-cycle to pipelined: data/control/structural hazards and the forwarding logic that papers over them.",
+        "es": "De monociclo a segmentado: hazards de datos/control/estructurales y la lógica de forwarding que los compensa."
+      },
+      "lessons": [
+        {
+          "id": "01-why-pipeline",
+          "kind": "Reading",
+          "level": "Expert",
+          "estimatedMinutes": 15,
+          "titles": {
+            "en": "Why pipeline a CPU?",
+            "es": "¿Por qué segmentar un CPU?"
+          },
+          "summaries": {
+            "en": "Throughput vs latency, the three hazard families, and the pattern for each fix.",
+            "es": "Throughput vs latencia, las tres familias de hazards, y el patrón para cada arreglo."
+          }
+        }
+      ]
+    },
+    {
+      "id": "verification",
+      "icon": "CheckCircle",
+      "order": 13,
+      "level": "Advanced",
+      "titles": {
+        "en": "Testbenches and verification",
+        "es": "Testbenches y verificación"
+      },
+      "summaries": {
+        "en": "Write a self-checking testbench instead of eyeballing waveforms. The shift from \"it looks right\" to \"it passes\".",
+        "es": "Escribe un testbench auto-verificable en vez de mirar formas de onda. El paso de \"se ve bien\" a \"pasa\"."
+      },
+      "lessons": [
+        {
+          "id": "01-testbench-mindset",
+          "kind": "Reading",
+          "level": "Advanced",
+          "estimatedMinutes": 14,
+          "titles": {
+            "en": "The testbench mindset",
+            "es": "La mentalidad del testbench"
+          },
+          "summaries": {
+            "en": "Self-checking stimulus + assertions — the foundation of every serious verification flow.",
+            "es": "Estímulo con auto-verificación + asserts — la base de cualquier flujo de verificación serio."
+          }
+        }
+      ]
+    }
+  ]
+}

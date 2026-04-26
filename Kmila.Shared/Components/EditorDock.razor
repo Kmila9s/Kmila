@@ -1,0 +1,257 @@
+@*
+    EditorDock — the bottom dock on the Editor page.
+
+    Renders a horizontal tab strip over five slots (Entities · Ports ·
+    Waveforms · Files · Output). Active tab and collapsed state live in the
+    scoped <see cref="EditorDockState"/> service so other components (e.g. a
+    future Run button) can focus a tab programmatically.
+
+    Persistence (Chunk 2): the user's last-selected tab and collapsed flag
+    are mirrored to localStorage and restored on first render. Opening a
+    project in a fresh browser lands on Entities.
+
+    Each tab can carry an indicator — a count pill (Entities, Files) or a
+    ready dot (Waveforms has data, Output has new lines).
+*@
+@implements IDisposable
+@inject EditorDockState DockState
+
+<section class="kmila-dock @(DockState.IsCollapsed ? "kmila-dock--collapsed" : "")"
+         role="tablist"
+         aria-label="@Traductor.T("EDITOR_DOCK_ARIA")"
+         style="@($"--kmila-dock-height: {DockState.Height}px;")">
+
+    @* Drag handle — pointer-events on the grabber change the dock height live;
+       DockState persists to localStorage via the EditorDock's OnAfterRender. *@
+    <div class="kmila-dock__grabber"
+         role="separator"
+         aria-orientation="horizontal"
+         aria-label="@Traductor.T("DOCK_RESIZE_ARIA")"
+         @onpointerdown="OnGrabberDown"></div>
+
+    <nav class="kmila-dock__tabs">
+        @foreach (var tab in _tabs)
+        {
+            var isActive = DockState.Active == tab.Id;
+            <button type="button"
+                    role="tab"
+                    aria-selected="@isActive"
+                    aria-controls="@($"dock-panel-{tab.Id}")"
+                    id="@($"dock-tab-{tab.Id}")"
+                    class="kmila-dock__tab @(isActive ? "is-active" : "")"
+                    @onclick="() => DockState.SetActive(tab.Id)">
+                <Icon Name="@tab.Icon" />
+                <span class="kmila-dock__tab-label">@Traductor.T(tab.LabelKey)</span>
+                @{ var count = CountFor(tab.Id); var ready = ReadyFor(tab.Id); }
+                @if (count > 0)
+                {
+                    <span class="kmila-dock__count">@count</span>
+                }
+                else if (ready)
+                {
+                    <span class="kmila-dock__dot" aria-hidden="true"></span>
+                }
+            </button>
+        }
+
+        <button type="button"
+                class="kmila-dock__collapse"
+                @onclick="ToggleCollapsedAsync"
+                aria-expanded="@(!DockState.IsCollapsed)"
+                aria-controls="dock-panel"
+                aria-label="@Traductor.T(DockState.IsCollapsed ? "DOCK_EXPAND" : "DOCK_COLLAPSE")"
+                title="@Traductor.T(DockState.IsCollapsed ? "DOCK_EXPAND" : "DOCK_COLLAPSE")">
+            <Icon Name="@(DockState.IsCollapsed ? IconName.ChevronUp : IconName.ChevronDown)" />
+        </button>
+    </nav>
+
+    <div class="kmila-dock__panel"
+         id="dock-panel"
+         role="tabpanel"
+         aria-labelledby="@($"dock-tab-{DockState.Active}")"
+         hidden="@DockState.IsCollapsed">
+        @switch (DockState.Active)
+        {
+            case EditorTab.Entities:
+                @if (EntitiesContent != null) { @EntitiesContent }
+                else { @RenderEmpty(IconName.Diagram3, "EDITOR_EMPTY_ENTITIES") }
+                break;
+            case EditorTab.Ports:
+                @if (PortsContent != null) { @PortsContent }
+                else { @RenderEmpty(IconName.Plugin, "EDITOR_EMPTY_PORTS") }
+                break;
+            case EditorTab.Waveforms:
+                @if (WaveformsContent != null) { @WaveformsContent }
+                else { @RenderEmpty(IconName.GraphUp, "EDITOR_EMPTY_WAVEFORMS") }
+                break;
+            case EditorTab.Runs:
+                @if (RunsContent != null) { @RunsContent }
+                else { @RenderEmpty(IconName.ClockHistory, "EDITOR_EMPTY_RUNS") }
+                break;
+            case EditorTab.Files:
+                @if (FilesContent != null) { @FilesContent }
+                else { @RenderEmpty(IconName.Folder2Open, "EDITOR_EMPTY_FILES") }
+                break;
+            case EditorTab.Output:
+                @if (OutputContent != null) { @OutputContent }
+                else { @RenderEmpty(IconName.TerminalFill, "EDITOR_EMPTY_OUTPUT") }
+                break;
+        }
+    </div>
+</section>
+
+@code {
+    [Parameter] public RenderFragment? EntitiesContent { get; set; }
+    [Parameter] public RenderFragment? PortsContent { get; set; }
+    [Parameter] public RenderFragment? WaveformsContent { get; set; }
+    [Parameter] public RenderFragment? RunsContent { get; set; }
+    [Parameter] public RenderFragment? FilesContent { get; set; }
+    [Parameter] public RenderFragment? OutputContent { get; set; }
+
+    /// <summary>Count shown as a pill next to the tab label (e.g. entity count).</summary>
+    [Parameter] public int EntitiesCount { get; set; }
+    [Parameter] public int FilesCount { get; set; }
+    [Parameter] public int RunsCount { get; set; }
+
+    /// <summary>Ready indicator (small dot) shown when count isn't useful but the tab has data.</summary>
+    [Parameter] public bool WaveformsReady { get; set; }
+    [Parameter] public bool OutputReady { get; set; }
+
+    private record TabDef(EditorTab Id, IconName Icon, string LabelKey);
+
+    private static readonly TabDef[] _tabs = new[]
+    {
+        new TabDef(EditorTab.Entities,  IconName.Diagram3Fill,     "EDITOR_ENTITIES"),
+        new TabDef(EditorTab.Ports,     IconName.Plugin,           "EDITOR_TAB_PORTS"),
+        new TabDef(EditorTab.Waveforms, IconName.GraphUp,          "EDITOR_WAVEFORMS"),
+        new TabDef(EditorTab.Runs,      IconName.ClockHistory,     "EDITOR_TAB_RUNS"),
+        new TabDef(EditorTab.Files,     IconName.Folder2Open,      "EDITOR_FILES"),
+        new TabDef(EditorTab.Output,    IconName.TerminalFill,     "EDITOR_TAB_OUTPUT")
+    };
+
+    private const string TAB_KEY       = "kmila-dock-tab";
+    private const string COLLAPSED_KEY = "kmila-dock-collapsed";
+    private const string HEIGHT_KEY    = "kmila-dock-height";
+    private bool _hydrated;
+
+    /// <summary>
+    /// Mouse/pointer drag start on the grabber. Subsequent moves write the
+    /// new height into <see cref="EditorDockState"/> via a JS helper; on
+    /// release we persist the final value.
+    /// </summary>
+    private async Task OnGrabberDown(Microsoft.AspNetCore.Components.Web.PointerEventArgs e)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("kmilaDockDragStart",
+                Microsoft.JSInterop.DotNetObjectReference.Create(this),
+                e.ClientY);
+        }
+        catch { /* JS missing — no-op */ }
+    }
+
+    /// <summary>Called from JS during drag with the current delta (px).</summary>
+    [Microsoft.JSInterop.JSInvokable]
+    public Task OnGrabberMove(int newHeight)
+    {
+        DockState.SetHeight(newHeight);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Called from JS on pointer-up — persists the final height.</summary>
+    [Microsoft.JSInterop.JSInvokable]
+    public async Task OnGrabberUp()
+    {
+        await PersistAsync();
+    }
+
+    protected override void OnInitialized()
+    {
+        DockState.OnChange += OnStateChanged;
+        Traductor.StaticOnLangChanged += OnStateChanged;
+    }
+
+    /// <summary>
+    /// After the first render we have JS available, so we can read the last
+    /// tab + collapse state from localStorage and rehydrate the service.
+    /// Subsequent state changes write back to localStorage.
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _hydrated) return;
+        _hydrated = true;
+
+        try
+        {
+            var tabStr      = await JS.InvokeAsync<string?>("localStorage.getItem", TAB_KEY);
+            var collapsedStr = await JS.InvokeAsync<string?>("localStorage.getItem", COLLAPSED_KEY);
+            var heightStr    = await JS.InvokeAsync<string?>("localStorage.getItem", HEIGHT_KEY);
+
+            EditorTab? tab = Enum.TryParse<EditorTab>(tabStr, out var parsed) ? parsed : null;
+            var collapsed = string.Equals(collapsedStr, "true", StringComparison.OrdinalIgnoreCase);
+            int? height = int.TryParse(heightStr, out var h) ? h : null;
+
+            if (tab.HasValue || collapsed || height.HasValue)
+            {
+                DockState.HydrateFromStorage(tab, collapsed, height);
+                StateHasChanged();
+            }
+        }
+        catch
+        {
+            // localStorage may be blocked (private mode, sandboxed iframe) —
+            // fall back to the in-memory default silently.
+        }
+    }
+
+    private async Task PersistAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("localStorage.setItem", TAB_KEY, DockState.Active.ToString());
+            await JS.InvokeVoidAsync("localStorage.setItem", COLLAPSED_KEY, DockState.IsCollapsed ? "true" : "false");
+            await JS.InvokeVoidAsync("localStorage.setItem", HEIGHT_KEY, DockState.Height.ToString());
+        }
+        catch { /* see OnAfterRenderAsync */ }
+    }
+
+    private async Task ToggleCollapsedAsync()
+    {
+        DockState.ToggleCollapsed();
+        await PersistAsync();
+    }
+
+    private void OnStateChanged()
+    {
+        // Persist lazily on any state change — fire-and-forget is fine here,
+        // the write is idempotent and tiny.
+        _ = PersistAsync();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private int CountFor(EditorTab t) => t switch
+    {
+        EditorTab.Entities => EntitiesCount,
+        EditorTab.Files    => FilesCount,
+        EditorTab.Runs     => RunsCount,
+        _                  => 0
+    };
+
+    private bool ReadyFor(EditorTab t) => t switch
+    {
+        EditorTab.Waveforms => WaveformsReady,
+        EditorTab.Output    => OutputReady,
+        _                   => false
+    };
+
+    public void Dispose()
+    {
+        DockState.OnChange -= OnStateChanged;
+        Traductor.StaticOnLangChanged -= OnStateChanged;
+    }
+
+    private RenderFragment RenderEmpty(IconName icon, string key) => @<div class="kmila-dock__empty">
+        <div class="kmila-dock__empty-icon"><Icon Name="@icon" /></div>
+        <p>@Traductor.T(key)</p>
+    </div>;
+}

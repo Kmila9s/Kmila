@@ -1,268 +1,570 @@
 @*
-    WaveformViewer Component
+    WaveformViewer — inline-SVG digital-waveform renderer.
 
-    Displays cycle-accurate digital waveforms using BlazorBootstrap LineChart components
-    with stepped line mode. One LineChart per signal, vertically stacked.
+    Why SVG instead of Chart.js:
+      • fast signals (a 50 MHz clock on a 40 µs sim) don't alias into a flat
+        line — every transition in the signal history produces a real step in
+        the path;
+      • zoom just changes the SVG's width and the browser repaints the path
+        pixel-accurately — no canvas reinitialization dance;
+      • every row shares the same viewBox-derived time axis, so inputs +
+        outputs line up vertically by construction.
 
-    Features:
-    - Stepped lines for digital waveform display (square waves)
-    - Separate charts per signal with appropriate Y-axis scaling
-    - Color coding: green=clock, blue=input, orange=output, purple=vector
-    - Zoom in/out with horizontal scroll
-    - VCD export button
-    - Shared time ruler on bottom chart only
+    Each signal gets:
+      • a fixed-width label column (160 px) on the left — direction chip,
+        name, bit width;
+      • a flexible SVG strip on the right that renders a step-function from
+        the signal's WaveformSignal.Transitions list. std_logic signals go
+        low/high; vectors render a constant-level line with the hex/decimal
+        value stamped mid-plateau at each transition.
+
+    A shared time ruler at the bottom marks ~12 labels across the X range.
 *@
 
-@if (Data != null && Data.Signals.Count > 0)
-{
-    <Card Class="waveform-viewer-card mb-3">
-        <CardHeader Class="py-2 d-flex justify-content-between align-items-center">
-            <div>
-                <Icon Name="IconName.Activity" Class="me-2" />
-                <strong>Waveform Viewer</strong>
-                <Badge Color="BadgeColor.Info" Class="ms-2">@Data.Signals.Count signals</Badge>
-            </div>
-            <div class="d-flex gap-2">
-                <Button Color="ButtonColor.Secondary" Size="ButtonSize.Small" Outline="true"
-                        @onclick="ZoomIn" TooltipTitle="Zoom In">
-                    <Icon Name="IconName.ZoomIn" />
-                </Button>
-                <Button Color="ButtonColor.Secondary" Size="ButtonSize.Small" Outline="true"
-                        @onclick="ZoomOut" TooltipTitle="Zoom Out">
-                    <Icon Name="IconName.ZoomOut" />
-                </Button>
-                <Button Color="ButtonColor.Primary" Size="ButtonSize.Small" Outline="true"
-                        @onclick="HandleVcdExport" TooltipTitle="Export VCD">
-                    <Icon Name="IconName.Download" Class="me-1" />
-                    VCD
-                </Button>
-            </div>
-        </CardHeader>
-        <CardBody Class="p-2 waveform-scroll-container">
-            <div class="waveform-charts-wrapper" style="min-width: @(_zoomWidth)px;">
-                @for (int i = 0; i < Data.Signals.Count; i++)
-                {
-                    var signal = Data.Signals[i];
-                    var isLast = i == Data.Signals.Count - 1;
-                    var color = GetSignalColor(signal);
-                    var idx = i;
+@using Kmila.Shared.Models
+@inject Microsoft.Extensions.Logging.ILogger<Kmila.Shared.Components.WaveformViewer> Logger
 
-                    <div class="waveform-signal-row">
-                        <div class="waveform-signal-label">
-                            <Badge Color="@GetBadgeColor(signal.PortType)" Class="me-1">@signal.PortType</Badge>
-                            <span class="fw-semibold small">@signal.Name</span>
-                            @if (signal.BitWidth > 1)
+@if (_compareTracks != null && _compareTracks.Count >= 2)
+{
+    @* Compare mode: union all signals across the selected snapshots, render
+       each as a row with N overlaid step-function traces (one per snapshot,
+       coloured from the shared palette). Signals present in only some runs
+       still get a row — missing traces just drop out, so the viewer never
+       hides a signal the student wants to see. *@
+    <section class="waveform-viewer waveform-viewer--compare" aria-label="@Traductor.T("WAVEFORM_VIEWER")">
+        <header class="waveform-viewer__toolbar">
+            <div class="waveform-viewer__title">
+                <Icon Name="IconName.LayersHalf" />
+                <strong>@Traductor.T("WAVEFORM_COMPARE_TITLE")</strong>
+                <span class="waveform-viewer__chip">@_compareTracks.Count</span>
+            </div>
+            <div class="waveform-viewer__actions">
+                <button type="button" class="btn btn-ghost btn-sm" @onclick="ZoomIn"   title="@Traductor.T("WAVEFORM_ZOOM_IN")"><Icon Name="IconName.ZoomIn" /></button>
+                <button type="button" class="btn btn-ghost btn-sm" @onclick="ZoomOut"  title="@Traductor.T("WAVEFORM_ZOOM_OUT")"><Icon Name="IconName.ZoomOut" /></button>
+                <button type="button" class="btn btn-ghost btn-sm" @onclick="ZoomReset" title="@Traductor.T("WAVEFORM_ZOOM_RESET")"><Icon Name="IconName.ArrowCounterclockwise" /></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => OnClearCompare.InvokeAsync()"
+                        title="@Traductor.T("WAVEFORM_COMPARE_CLOSE")">
+                    <Icon Name="IconName.XLg" />
+                    <span>@Traductor.T("WAVEFORM_COMPARE_CLOSE")</span>
+                </button>
+            </div>
+        </header>
+
+        @* Legend — one pill per snapshot with its colour swatch. Compact and
+           horizontally scrollable so long compares on narrow viewports stay
+           readable. *@
+        <div class="waveform-viewer__legend">
+            @foreach (var t in _compareTracks)
+            {
+                <span class="waveform-legend-pill">
+                    <span class="waveform-legend-swatch" style="background-color: @t.Colour;"></span>
+                    <span>@t.Label</span>
+                </span>
+            }
+        </div>
+
+        <div class="waveform-viewer__body">
+            <div class="waveform-grid">
+                @{
+                    var trackWidthPx = _zoomWidth;
+                    var signalNames = _compareTracks
+                        .SelectMany(t => t.Data.Signals.Select(s => s.Name))
+                        .Distinct(StringComparer.Ordinal)
+                        .ToList();
+                    var maxNs = _compareTracks.Max(t => (long)t.Data.TotalTicks * t.Data.TimescaleNs);
+                }
+
+                @foreach (var name in signalNames)
+                {
+                    var per = _compareTracks
+                        .Select(t => (Track: t, Sig: t.Data.Signals.FirstOrDefault(s =>
+                            string.Equals(s.Name, name, StringComparison.Ordinal))))
+                        .Where(x => x.Sig != null)
+                        .ToList();
+                    var first = per.First().Sig!;
+                    <div class="waveform-row">
+                        <div class="waveform-row__label">
+                            <span class="waveform-signal-chip waveform-signal-chip--@first.PortType.ToLowerInvariant()">@first.PortType</span>
+                            <span class="waveform-signal-name">@first.Name</span>
+                            @if (first.BitWidth > 1)
                             {
-                                <span class="text-muted small ms-1">[@signal.BitWidth-bit]</span>
+                                <span class="waveform-signal-width">[@first.BitWidth]</span>
                             }
                         </div>
-                        <div class="waveform-chart-container">
-                            <LineChart @ref="_chartRefs[idx]" />
+                        <div class="waveform-row__track" style="width: @(trackWidthPx)px;">
+                            @((MarkupString)BuildCompareTraceSvg(name, per, trackWidthPx, maxNs))
                         </div>
                     </div>
                 }
+
+                <div class="waveform-row waveform-row--ruler">
+                    <div class="waveform-row__label"></div>
+                    <div class="waveform-row__track" style="width: @(trackWidthPx)px;">
+                        @((MarkupString)BuildRulerSvg(trackWidthPx, maxNs))
+                    </div>
+                </div>
             </div>
-        </CardBody>
-    </Card>
+        </div>
+    </section>
+}
+else if (Data != null && Data.Signals.Count > 0)
+{
+    <section class="waveform-viewer" aria-label="@Traductor.T("WAVEFORM_VIEWER")">
+        <header class="waveform-viewer__toolbar">
+            <div class="waveform-viewer__title">
+                <Icon Name="IconName.Activity" />
+                <strong>@Traductor.T("WAVEFORM_VIEWER")</strong>
+                <span class="waveform-viewer__chip">@Data.Signals.Count @Traductor.T("WAVEFORM_SIGNALS")</span>
+            </div>
+            <div class="waveform-viewer__actions">
+                <button type="button" class="btn btn-ghost btn-sm"
+                        @onclick="ZoomIn" aria-label="@Traductor.T("WAVEFORM_ZOOM_IN")" title="@Traductor.T("WAVEFORM_ZOOM_IN")">
+                    <Icon Name="IconName.ZoomIn" />
+                </button>
+                <button type="button" class="btn btn-ghost btn-sm"
+                        @onclick="ZoomOut" aria-label="@Traductor.T("WAVEFORM_ZOOM_OUT")" title="@Traductor.T("WAVEFORM_ZOOM_OUT")">
+                    <Icon Name="IconName.ZoomOut" />
+                </button>
+                <button type="button" class="btn btn-ghost btn-sm"
+                        @onclick="ZoomReset" aria-label="@Traductor.T("WAVEFORM_ZOOM_RESET")" title="@Traductor.T("WAVEFORM_ZOOM_RESET")">
+                    <Icon Name="IconName.ArrowCounterclockwise" />
+                </button>
+                <button type="button" class="btn btn-ghost btn-sm @(_showClock ? "" : "is-off")"
+                        @onclick="() => _showClock = !_showClock"
+                        title="@Traductor.T(_showClock ? "WAVEFORM_HIDE_CLOCK" : "WAVEFORM_SHOW_CLOCK")"
+                        aria-pressed="@_showClock">
+                    <Icon Name="@(_showClock ? IconName.EyeFill : IconName.EyeSlash)" />
+                </button>
+                <button type="button" class="btn btn-primary btn-sm"
+                        @onclick="HandleVcdExport" title="@Traductor.T("WAVEFORM_EXPORT_VCD")">
+                    <Icon Name="IconName.Download" />
+                    <span>VCD</span>
+                </button>
+            </div>
+        </header>
+
+        <div class="waveform-viewer__body">
+            <div class="waveform-grid">
+                @{ var trackWidthPx = _zoomWidth; }
+                @for (int i = 0; i < Data.Signals.Count; i++)
+                {
+                    var signal = Data.Signals[i];
+                    // Honor the eye toggle: when off, clk / clock rows hide.
+                    // The data remains in Data + the exported VCD.
+                    if (!_showClock && IsClockName(signal.Name)) continue;
+                    var color  = GetSignalColor(signal);
+                    <div class="waveform-row">
+                        <div class="waveform-row__label">
+                            <span class="waveform-signal-chip waveform-signal-chip--@signal.PortType.ToLowerInvariant()">@signal.PortType</span>
+                            <span class="waveform-signal-name">@signal.Name</span>
+                            @if (signal.BitWidth > 1)
+                            {
+                                <span class="waveform-signal-width">[@signal.BitWidth]</span>
+                            }
+                        </div>
+                        <div class="waveform-row__track" style="width: @(trackWidthPx)px;">
+                            @((MarkupString)BuildTraceSvg(signal, trackWidthPx, color))
+                        </div>
+                    </div>
+                }
+
+                @* Shared time ruler — last row. *@
+                <div class="waveform-row waveform-row--ruler">
+                    <div class="waveform-row__label"></div>
+                    <div class="waveform-row__track" style="width: @(trackWidthPx)px;">
+                        @((MarkupString)BuildRulerSvg(trackWidthPx))
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
 }
 
 @code {
-    /// <summary>
-    /// The waveform data to display.
-    /// </summary>
-    [Parameter]
-    public WaveformData? Data { get; set; }
+    [Parameter] public WaveformData? Data { get; set; }
+    [Parameter] public EventCallback<string> OnExportVcd { get; set; }
 
     /// <summary>
-    /// Event callback for VCD export.
+    /// Multi-snapshot compare mode. When non-null and populated with ≥2
+    /// entries, each snapshot renders as a separate coloured trace
+    /// overlaid in the same row per signal. Takes precedence over
+    /// <see cref="Data"/>.
     /// </summary>
-    [Parameter]
-    public EventCallback<string> OnExportVcd { get; set; }
+    [Parameter] public List<Kmila.Shared.Models.SimulationSnapshot>? Snapshots { get; set; }
 
-    private LineChart[] _chartRefs = Array.Empty<LineChart>();
-    private int _zoomWidth = 800;
-    private bool _chartsInitialized = false;
-    private WaveformData? _previousData;
+    /// <summary>Parent's "stop comparing" hook — wires the X button on the banner.</summary>
+    [Parameter] public EventCallback OnClearCompare { get; set; }
+
+    /// <summary>
+    /// Pre-materialised compare datasets — one entry per snapshot carrying
+    /// the deserialised waveform + a stable colour. Re-derived on
+    /// parameter change via OnParametersSet.
+    /// </summary>
+    private List<CompareTrack>? _compareTracks;
+    private record CompareTrack(string Label, string Colour, WaveformData Data);
+
+    /// <summary>
+    /// Palette used for compare overlays. Walks in order; N >= 2 needs ≥ 2
+    /// visually distinct colours. Keeps the per-signal base colour for the
+    /// first snapshot so "open one run" and "open two runs with the first
+    /// matching" feel consistent.
+    /// </summary>
+    private static readonly string[] _comparePalette = new[]
+    {
+        "#3c82f6", // brand accent
+        "#ef4444", // red
+        "#10b981", // green
+        "#a855f7", // purple
+        "#f59e0b", // amber
+        "#06b6d4", // cyan
+        "#ec4899"  // pink
+    };
 
     protected override void OnParametersSet()
     {
-        if (Data != null && Data.Signals.Count > 0)
+        if (Snapshots != null && Snapshots.Count >= 2)
         {
-            // Resize chart refs array if needed
-            if (_chartRefs.Length != Data.Signals.Count)
+            _compareTracks = new List<CompareTrack>();
+            for (int i = 0; i < Snapshots.Count; i++)
             {
-                _chartRefs = new LineChart[Data.Signals.Count];
+                var s = Snapshots[i];
+                var wd = Kmila.Shared.Models.WaveformData.FromJson(s.WaveformJson);
+                if (wd == null) continue;
+                _compareTracks.Add(new CompareTrack(
+                    Label: s.Label,
+                    Colour: _comparePalette[i % _comparePalette.Length],
+                    Data: wd));
             }
         }
-
-        // Reset initialization when data changes
-        if (Data != _previousData)
+        else
         {
-            _chartsInitialized = false;
-            _previousData = Data;
+            _compareTracks = null;
         }
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    // Default width keeps the whole sim visible at 1× in a ~1400 px workbench.
+    private const int BaseWidth = 1200;
+    private int _zoomWidth = BaseWidth;
+
+    /// <summary>
+    /// When false, clock rows (signals named clk/clock) are hidden from the
+    /// grid. Data is unchanged — VCD export and the underlying snapshot
+    /// still include the clock. Default on.
+    /// </summary>
+    private bool _showClock = true;
+
+    private static bool IsClockName(string name)
+        => Kmila.Shared.Services.StimulusBuilder.IsClockPortName(name);
+
+    private void ZoomIn()    => _zoomWidth = Math.Min((int)(_zoomWidth * 1.5), 24000);
+    private void ZoomOut()   => _zoomWidth = Math.Max((int)(_zoomWidth / 1.5),  600);
+    private void ZoomReset() => _zoomWidth = BaseWidth;
+
+    /// <summary>
+    /// Builds the SVG path + optional value labels for a single signal's
+    /// step-function trace. Returned as a raw HTML string so Blazor can
+    /// inject it without round-tripping through the component system.
+    /// </summary>
+    private string BuildTraceSvg(WaveformSignal signal, int widthPx, string color)
     {
-        if (!_chartsInitialized && Data != null && Data.Signals.Count > 0)
+        const int H = 40;         // row height in SVG units
+        const int PadY = 4;       // vertical padding so strokes don't clip
+        const double ValHi = PadY;
+        const double ValLo = H - PadY;
+        const double ValMid = H / 2.0;
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"<svg class=\"waveform-svg\" viewBox=\"0 0 {widthPx} {H}\" preserveAspectRatio=\"none\" width=\"{widthPx}\" height=\"{H}\">");
+
+        var maxNs = (long)(Data?.TotalTicks ?? 0) * (Data?.TimescaleNs ?? 1);
+        if (maxNs <= 0 || signal.Transitions.Count == 0)
         {
-            // Check all refs are available
-            bool allRefsReady = true;
-            for (int i = 0; i < _chartRefs.Length; i++)
+            // Nothing to draw — render the baseline only so the row still
+            // aligns visually with siblings.
+            sb.Append($"<line x1=\"0\" y1=\"{ValMid}\" x2=\"{widthPx}\" y2=\"{ValMid}\" stroke=\"var(--border-subtle)\" stroke-dasharray=\"2 4\" />");
+            sb.Append("</svg>");
+            return sb.ToString();
+        }
+
+        double X(long ns) => (double)ns / maxNs * widthPx;
+
+        if (signal.DataType == "std_logic")
+        {
+            // Proper SVG step-function: a single continuous subpath built
+            // from `L` commands only. Horizontal at current level, then
+            // vertical step (same x, new y), then horizontal at new level.
+            //
+            //   M x0 y0
+            //   L x1 y0       -- horizontal
+            //   L x1 y1       -- vertical step
+            //   L x2 y1       -- horizontal
+            //   ...
+            //
+            // The previous version used `M` for vertical steps, which closed
+            // the subpath and left the output literally looking like "-_-_-_"
+            // with no connecting verticals.
+            static double LevelY(double? v) => v.HasValue ? (v.Value >= 0.5 ? 4.0 : 36.0) : 20.0;
+
+            var solid  = new System.Text.StringBuilder();
+            var dashed = new System.Text.StringBuilder();
+
+            bool onDashed = !signal.Transitions[0].Value.HasValue;
+            double curY = LevelY(signal.Transitions[0].Value);
+            var target  = onDashed ? dashed : solid;
+            target.Append($"M 0 {curY:0.##} ");
+
+            for (int i = 0; i < signal.Transitions.Count; i++)
             {
-                if (_chartRefs[i] == null)
+                var t  = signal.Transitions[i];
+                double tx = X(t.TimeNs);
+                bool nextDashed = !t.Value.HasValue;
+                double nextY    = LevelY(t.Value);
+
+                // Horizontal segment to the transition's X at current level.
+                target.Append($"L {tx:0.##} {curY:0.##} ");
+
+                // Transition between solid (known) and dashed (unknown):
+                // pen-up on one path, pen-down on the other at the same point.
+                if (nextDashed != onDashed)
                 {
-                    allRefsReady = false;
-                    break;
+                    var other = nextDashed ? dashed : solid;
+                    other.Append($"M {tx:0.##} {curY:0.##} ");
+                    target   = other;
+                    onDashed = nextDashed;
+                }
+
+                // Vertical step at the transition's X — same path, new Y.
+                if (!Equals(nextY, curY))
+                {
+                    target.Append($"L {tx:0.##} {nextY:0.##} ");
+                    curY = nextY;
                 }
             }
 
-            if (allRefsReady)
-            {
-                _chartsInitialized = true;
-                await InitializeChartsAsync();
-            }
+            // Extend to the right edge at the last level so the trace fills
+            // the whole row instead of ending mid-chart.
+            target.Append($"L {widthPx} {curY:0.##} ");
+
+            if (solid.Length > 0)
+                sb.Append($"<path d=\"{solid}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"2\" stroke-linejoin=\"miter\" stroke-linecap=\"butt\" />");
+            if (dashed.Length > 0)
+                sb.Append($"<path d=\"{dashed}\" fill=\"none\" stroke=\"#f59e0b\" stroke-width=\"2\" stroke-dasharray=\"4 3\" />");
         }
-    }
-
-    private async Task InitializeChartsAsync()
-    {
-        if (Data == null) return;
-
-        for (int i = 0; i < Data.Signals.Count; i++)
+        else
         {
-            var signal = Data.Signals[i];
-            var isLast = i == Data.Signals.Count - 1;
-            var color = GetSignalColor(signal);
-
-            var chartData = new ChartData
+            // Multi-bit signal: single horizontal line at mid-row, with
+            // diamond value markers (<===>) and a text label stamped inside
+            // each plateau. Mirrors the way GTKWave renders bus signals.
+            var d = new System.Text.StringBuilder();
+            d.Append($"M 0 {ValMid:0.##} ");
+            for (int i = 0; i < signal.Transitions.Count; i++)
             {
-                Labels = Data.TimeLabels,
-                Datasets = new List<IChartDataset>
-                {
-                    new LineChartDataset
-                    {
-                        Label = $"{signal.Name} ({signal.PortType})",
-                        Data = signal.ChartValues,
-                        Stepped = true,
-                        Tension = 0,
-                        BorderWidth = 2,
-                        PointRadius = new List<double> { 0 },
-                        BorderColor = color,
-                        BackgroundColor = color + "20",
-                        Fill = signal.DataType != "std_logic"
-                    }
-                }
-            };
-
-            var options = new LineChartOptions
-            {
-                Responsive = true,
-                MaintainAspectRatio = false
-            };
-
-            // Configure scales
-            options.Scales = new Scales();
-
-            // Y-axis configuration
-            if (signal.DataType == "std_logic")
-            {
-                // For 1-bit signals: fixed 0-1 range, hide ticks
-                options.Scales.Y = new ChartAxes
-                {
-                    Min = -0.1,
-                    Max = 1.1
-                };
-                options.Scales.Y.Title = new ChartAxesTitle { Display = false };
+                var t = signal.Transitions[i];
+                double tx = X(t.TimeNs);
+                // A pinch at every transition (triangle marker).
+                d.Append($"L {tx - 3:0.##} {ValMid:0.##} ");
+                d.Append($"L {tx:0.##} {ValHi:0.##} ");
+                d.Append($"L {tx + 3:0.##} {ValMid:0.##} ");
             }
-            else
-            {
-                // For vectors/integers: auto-scale
-                options.Scales.Y = new ChartAxes();
-                options.Scales.Y.Title = new ChartAxesTitle
-                {
-                    Display = true,
-                    Text = signal.DataType == "integer" ? "Value" : "Hex"
-                };
-            }
+            d.Append($"L {widthPx} {ValMid:0.##}");
+            sb.Append($"<path d=\"{d}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"2\" />");
 
-            // X-axis: only show labels on the last chart
-            options.Scales.X = new ChartAxes();
-            if (!isLast)
+            // Value text in each plateau (skip if the plateau is too narrow
+            // to fit legibly — SVG text doesn't clip cleanly without extra
+            // clip paths, and a label wider than its plateau just looks wrong).
+            for (int i = 0; i < signal.Transitions.Count; i++)
             {
-                options.Scales.X.Title = new ChartAxesTitle { Display = false };
-            }
-            else
-            {
-                options.Scales.X.Title = new ChartAxesTitle
-                {
-                    Display = true,
-                    Text = "Time"
-                };
-            }
+                var t = signal.Transitions[i];
+                if (string.IsNullOrEmpty(t.Label)) continue;
+                double tx = X(t.TimeNs);
+                double nextX = i + 1 < signal.Transitions.Count
+                    ? X(signal.Transitions[i + 1].TimeNs)
+                    : widthPx;
+                double midX = (tx + nextX) / 2.0;
+                if (nextX - tx < 24) continue; // too narrow
 
-            // Plugins configuration
-            options.Plugins = new LineChartPlugins();
-
-            try
-            {
-                await _chartRefs[i].InitializeAsync(chartData, options);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[WaveformViewer] Error initializing chart for {signal.Name}: {ex.Message}");
+                sb.Append($"<text x=\"{midX:0.##}\" y=\"{ValMid + 4:0.##}\" text-anchor=\"middle\" font-size=\"10\" font-family=\"ui-monospace, Menlo, monospace\" fill=\"var(--text-strong)\">{System.Net.WebUtility.HtmlEncode(t.Label)}</text>");
             }
         }
+
+        sb.Append("</svg>");
+        return sb.ToString();
     }
 
+    /// <summary>
+    /// Shared time ruler across the bottom of the waveform grid. ~12 tick
+    /// labels evenly spaced, rendered in the appropriate unit (ns → µs → ms)
+    /// so the axis stays readable at every zoom level.
+    /// </summary>
+    /// <summary>
+    /// Compare-mode overload: draws each snapshot's trace for a single signal
+    /// as an overlaid step function using the snapshot's palette colour.
+    /// Uses a shared <paramref name="maxNs"/> across all tracks so the X-axis
+    /// aligns even when snapshots had different durations.
+    /// </summary>
+    private string BuildCompareTraceSvg(
+        string signalName,
+        List<(CompareTrack Track, WaveformSignal? Sig)> picks,
+        int widthPx,
+        long maxNs)
+    {
+        const int H = 40;
+        const double ValHi = 4.0, ValLo = 36.0, ValMid = 20.0;
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"<svg class=\"waveform-svg\" viewBox=\"0 0 {widthPx} {H}\" preserveAspectRatio=\"none\" width=\"{widthPx}\" height=\"{H}\">");
+
+        if (maxNs <= 0)
+        {
+            sb.Append($"<line x1=\"0\" y1=\"{ValMid}\" x2=\"{widthPx}\" y2=\"{ValMid}\" stroke=\"#475569\" stroke-dasharray=\"2 4\" />");
+            sb.Append("</svg>");
+            return sb.ToString();
+        }
+
+        double X(long ns) => (double)ns / maxNs * widthPx;
+        static double LevelY(double? v) => v.HasValue ? (v.Value >= 0.5 ? 4.0 : 36.0) : 20.0;
+
+        foreach (var (track, sig) in picks)
+        {
+            if (sig == null || sig.Transitions.Count == 0) continue;
+
+            // Rebuild the same step-function path the single-mode renderer
+            // uses, but with the palette colour and a touch of opacity so
+            // overlapping traces remain visible.
+            var d = new System.Text.StringBuilder();
+            double curY = LevelY(sig.Transitions[0].Value);
+            d.Append($"M 0 {curY:0.##} ");
+
+            foreach (var t in sig.Transitions)
+            {
+                double tx = X(t.TimeNs);
+                double nextY = LevelY(t.Value);
+                d.Append($"L {tx:0.##} {curY:0.##} ");
+                if (!Equals(nextY, curY))
+                {
+                    d.Append($"L {tx:0.##} {nextY:0.##} ");
+                    curY = nextY;
+                }
+            }
+            d.Append($"L {widthPx} {curY:0.##} ");
+
+            sb.Append($"<path d=\"{d}\" fill=\"none\" stroke=\"{track.Colour}\" stroke-width=\"2\" stroke-opacity=\"0.85\" stroke-linejoin=\"miter\" stroke-linecap=\"butt\" />");
+        }
+
+        sb.Append("</svg>");
+        return sb.ToString();
+    }
+
+    private string BuildRulerSvg(int widthPx) =>
+        BuildRulerSvg(widthPx, (long)(Data?.TotalTicks ?? 0) * (Data?.TimescaleNs ?? 1));
+
+    private string BuildRulerSvg(int widthPx, long maxNs)
+    {
+        const int H = 22;
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"<svg class=\"waveform-svg waveform-svg--ruler\" viewBox=\"0 0 {widthPx} {H}\" preserveAspectRatio=\"none\" width=\"{widthPx}\" height=\"{H}\">");
+        if (maxNs <= 0) { sb.Append("</svg>"); return sb.ToString(); }
+
+        int labelCount = 12;
+        for (int i = 0; i <= labelCount; i++)
+        {
+            double frac = (double)i / labelCount;
+            double x = frac * widthPx;
+            long ns = (long)(frac * maxNs);
+            sb.Append($"<line x1=\"{x:0.##}\" y1=\"0\" x2=\"{x:0.##}\" y2=\"5\" stroke=\"var(--text-muted)\" />");
+            var anchor = i == 0 ? "start" : (i == labelCount ? "end" : "middle");
+            sb.Append($"<text x=\"{x:0.##}\" y=\"17\" text-anchor=\"{anchor}\" font-size=\"10\" font-family=\"ui-monospace, Menlo, monospace\" fill=\"var(--text-muted)\">{FormatAxisLabel(ns)}</text>");
+        }
+        sb.Append("</svg>");
+        return sb.ToString();
+    }
+
+    private static string FormatAxisLabel(long ns)
+    {
+        if (Math.Abs(ns) >= 1_000_000_000) return $"{ns / 1_000_000_000.0:0.##} s";
+        if (Math.Abs(ns) >= 1_000_000)     return $"{ns / 1_000_000.0:0.##} ms";
+        if (Math.Abs(ns) >= 1_000)         return $"{ns / 1_000.0:0.##} µs";
+        return $"{ns} ns";
+    }
+
+    /// <summary>Per-signal stroke colour — clock in green, inputs blue, outputs orange, vectors purple.</summary>
     private static string GetSignalColor(WaveformSignal signal)
     {
-        // Clock signals (named clk/clock)
-        if (signal.Name.Equals("clk", StringComparison.OrdinalIgnoreCase) ||
-            signal.Name.Equals("clock", StringComparison.OrdinalIgnoreCase))
-        {
-            return "rgb(40, 167, 69)"; // green
-        }
-
+        if (Kmila.Shared.Services.StimulusBuilder.IsClockPortName(signal.Name))
+            return "#10b981"; // success
+        if (signal.BitWidth > 1) return "#a855f7"; // purple
         return signal.PortType switch
         {
-            "IN" => "rgb(13, 110, 253)", // blue
-            "OUT" => "rgb(255, 153, 0)", // orange
-            "INOUT" => "rgb(111, 66, 193)", // purple
-            _ => signal.DataType != "std_logic"
-                ? "rgb(111, 66, 193)" // purple for vectors
-                : "rgb(108, 117, 125)" // gray for internal
+            "IN"  => "#3c82f6", // brand accent
+            "OUT" => "#f59e0b", // warning
+            _     => "#94a3b8"  // muted
         };
-    }
-
-    private static BadgeColor GetBadgeColor(string portType)
-    {
-        return portType switch
-        {
-            "IN" => BadgeColor.Primary,
-            "OUT" => BadgeColor.Warning,
-            "INOUT" => BadgeColor.Info,
-            _ => BadgeColor.Secondary
-        };
-    }
-
-    private void ZoomIn()
-    {
-        _zoomWidth = Math.Min(_zoomWidth + 200, 4000);
-    }
-
-    private void ZoomOut()
-    {
-        _zoomWidth = Math.Max(_zoomWidth - 200, 400);
     }
 
     private async Task HandleVcdExport()
     {
-        if (Data?.SourceHistory != null)
+        // Minimal IEEE-1364 VCD emitter built from the transition list. No
+        // Interpreter-side helper exists yet, so we synthesise the same data
+        // the SVG renders from.
+        try
         {
-            string vcd = Data.SourceHistory.ExportToVcd("simulation", Data.TimescaleNs);
-            await OnExportVcd.InvokeAsync(vcd);
+            await OnExportVcd.InvokeAsync(BuildVcd());
         }
+        catch (Exception ex)
+        {
+            Logger.LogError($"[WaveformViewer] VCD export failed: {ex.Message}");
+        }
+    }
+
+    private string BuildVcd()
+    {
+        if (Data == null) return string.Empty;
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("$date ").AppendLine($"  {DateTime.Now:yyyy-MM-dd HH:mm:ss}").AppendLine("$end");
+        sb.AppendLine("$version ").AppendLine("  Kmila-9s waveform exporter").AppendLine("$end");
+        sb.AppendLine($"$timescale {Data.TimescaleNs} ns $end");
+        sb.AppendLine("$scope module top $end");
+
+        var ids = new Dictionary<string, string>();
+        int next = 33; // '!' — first printable VCD identifier
+        foreach (var signal in Data.Signals)
+        {
+            var id = ((char)next).ToString();
+            ids[signal.Name] = id;
+            next++;
+            sb.AppendLine($"$var wire {signal.BitWidth} {id} {signal.Name} $end");
+        }
+        sb.AppendLine("$upscope $end");
+        sb.AppendLine("$enddefinitions $end");
+
+        // Merge every signal's transitions into one time-sorted stream.
+        var stream = new SortedDictionary<long, List<(string Id, double? V, int W)>>();
+        foreach (var signal in Data.Signals)
+        {
+            foreach (var t in signal.Transitions)
+            {
+                if (!stream.TryGetValue(t.TimeNs, out var list))
+                {
+                    list = new(); stream[t.TimeNs] = list;
+                }
+                list.Add((ids[signal.Name], t.Value, signal.BitWidth));
+            }
+        }
+
+        foreach (var kv in stream)
+        {
+            sb.Append('#').AppendLine((kv.Key / Math.Max(1, Data.TimescaleNs)).ToString());
+            foreach (var (id, v, w) in kv.Value)
+            {
+                if (w <= 1)
+                    sb.AppendLine($"{(v == 1.0 ? '1' : v == 0.0 ? '0' : 'x')}{id}");
+                else
+                {
+                    var bits = v.HasValue ? Convert.ToString((long)v.Value, 2).PadLeft(w, '0') : new string('x', w);
+                    sb.AppendLine($"b{bits} {id}");
+                }
+            }
+        }
+        return sb.ToString();
     }
 }

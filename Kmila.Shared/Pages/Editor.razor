@@ -1,110 +1,174 @@
 ﻿@page "/editor/{ProjectId}"
+@inject Microsoft.Extensions.Logging.ILogger<Kmila.Shared.Pages.Editor> Logger
 @using Kmila.Shared.Services
+@implements IDisposable
+@inject SimulationParameters Sim
+@inject BuildLog Log
+@inject EditorDockState DockState
+@inject Kmila.Shared.Services.RecentProjectsTracker Recent
+@inject Kmila.Shared.Services.SimulationSnapshotStore Snapshots
 <PageTitle>Project: @_project?.Name</PageTitle>
-@if(_projectId != -1 && _project != null){
-    <h2>@_project.Name</h2>
-    <div class="row my-3">
-        <!-- Editor: Full width on mobile and tablet, 10/12 on desktop -->
-        <div class="col-lg-10 col-12 order-1">
-            <div class="editor-container">
-                <!-- Editor Header -->
-                <div class="editor-header">
-                    <div class="editor-file-info">
-                        @if(_hasUnsavedChanges)
-                        {
-                            <span class="editor-unsaved-indicator" title="Unsaved changes"></span>
-                        }
-                        <Icon Name="@GetFileIcon()" Class="text-primary" />
-                        <span class="editor-file-name" title="@(_openedFile?.FileName ?? "No file open")">
-                            @(_openedFile?.FileName ?? "No file open")
-                        </span>
-                        <span class="shortcut-hint ms-2">(Ctrl+S to save)</span>
-                    </div>
-                    <div class="editor-status">
-                        <span class="editor-position">Ln @_cursorLine, Col @_cursorColumn</span>
-                        <span class="editor-language">@_currentLanguage</span>
-                    </div>
+@*
+    The outer `<section class="editor-page">` wraps the route unconditionally
+    so the `.content:has(.editor-page)` CSS rule (in app.css) can activate
+    immediately on navigation, not only after the async project load finishes.
+    Without this, the workbench would briefly inherit the 1440px content cap
+    until the project record hydrated — visible as a layout jump.
+*@
+<section class="editor-page">
+@if (_projectId != -1 && _project != null)
+{
+
+        @* ---------- Workbench: editor + action rail ---------- *@
+        <div class="editor-workbench">
+
+            @* File info bar on top of the editor *@
+            <header class="editor-workbench__header">
+                <div class="editor-file-info">
+                    @if (_hasUnsavedChanges)
+                    {
+                        <span class="editor-unsaved" title="@Traductor.T("EDITOR_UNSAVED")" aria-label="@Traductor.T("EDITOR_UNSAVED")"></span>
+                    }
+                    <Icon Name="@GetFileIcon()" Class="editor-file-icon" />
+                    <span class="editor-file-name" title="@(_openedFile?.FileName ?? Traductor.T("EDITOR_NO_FILE"))">
+                        @(_openedFile?.FileName ?? Traductor.T("EDITOR_NO_FILE"))
+                    </span>
+                    <span class="editor-lang-chip">@_currentLanguage</span>
                 </div>
-                @if(IsMarkdownFile)
+
+                <div class="editor-status">
+                    <span class="editor-position">
+                        @Traductor.T("EDITOR_LINE_ABBR") @_cursorLine · @Traductor.T("EDITOR_COL_ABBR") @_cursorColumn
+                    </span>
+                    <span class="editor-shortcut" aria-hidden="true">
+                        <kbd>Ctrl</kbd><kbd>S</kbd>
+                    </span>
+                </div>
+            </header>
+
+            @* Body: Monaco fills the full workbench width — no more right rail *@
+            <div class="editor-workbench__body">
+                @if (IsMarkdownFile)
                 {
-                    <!-- Split view for Markdown: Preview on left, Editor on right (desktop) / Top-Bottom (mobile) -->
-                    <div class="split-editor-container">
-                        <!-- Preview Pane -->
-                        <div class="split-editor-pane">
-                            <div class="split-pane-header">
+                    <div class="editor-split">
+                        <div class="editor-split__pane">
+                            <div class="editor-split__header">
                                 <Icon Name="IconName.Eye" />
-                                Preview
+                                <span>@Traductor.T("EDITOR_MD_PREVIEW")</span>
                             </div>
-                            <div class="markdown-preview-pane">
-                                <Markdown>@_markdownPreview</Markdown>
+                            <div class="editor-markdown">
+                                @Kmila.Shared.Services.MarkdownRenderer.Render(_markdownPreview)
                             </div>
                         </div>
-                        <!-- Editor Pane -->
-                        <div class="split-editor-pane">
-                            <div class="split-pane-header">
+                        <div class="editor-split__pane">
+                            <div class="editor-split__header">
                                 <Icon Name="IconName.Code" />
-                                Source
+                                <span>@Traductor.T("EDITOR_MD_SOURCE")</span>
                             </div>
                             <StandaloneCodeEditor @ref="_editor"
-                                CssClass="editor"
+                                CssClass="editor-monaco"
                                 ConstructionOptions="EditorConstructionOptions"
                                 OnDidInit="OnEditorInitAsync"
                                 OnDidChangeCursorPosition="OnCursorPositionChanged"
                                 OnDidChangeModelContent="OnModelContentChanged"
-                                OnKeyDown="OnEditorKeyDown"
-                            />
+                                OnKeyDown="OnEditorKeyDown" />
                         </div>
                     </div>
                 }
                 else
                 {
-                    <!-- Standard Monaco Editor for non-markdown files -->
                     <StandaloneCodeEditor @ref="_editor"
-                        CssClass="editor"
+                        CssClass="editor-monaco"
                         ConstructionOptions="EditorConstructionOptions"
                         OnDidInit="OnEditorInitAsync"
                         OnDidChangeCursorPosition="OnCursorPositionChanged"
                         OnDidChangeModelContent="OnModelContentChanged"
-                        OnKeyDown="OnEditorKeyDown"
-                    />
+                        OnKeyDown="OnEditorKeyDown" />
                 }
             </div>
         </div>
-        <!-- Toolbar: Full width on mobile/tablet (stacked below), 2/12 on desktop (side) -->
-        <div class="col-lg-2 col-12 order-2 mt-3 mt-lg-0">
-            <ButtonCollapse
-                @ref="_buttonsCollapse"
-                OnNewFileButtonClicked="ShowCreateFileModalAsync"
-                OnSaveFileButtonClicked="OnSaveFile"
-                OnBuildButtonClicked="OnBuildRequested"
-                OnSimulationStarted="OnSimulationStarted"
-            />
-        </div>
-    </div>
-    @if(_waveformData != null)
-    {
-        <div class="row my-3">
-            <div class="col-12">
-                <WaveformViewer Data="_waveformData" OnExportVcd="HandleVcdExport" />
-            </div>
-        </div>
-    }
-    <div class="row my-3">
-        @if(Builder.Parser != null){
-            <div class="col-lg-6 col-sm-12">
-                @foreach(var entity in Builder.Parser.Entities){
-                    <EntityView Entity=entity/>
+
+        @* ---------- Run bar ---------- *@
+        <RunBar OnBuildClicked="OnBuildRequested"
+                OnRunClicked="OnRunRequested"
+                OnPauseClicked="OnPauseSimulation"
+                OnResumeClicked="OnContinueSimulation"
+                OnStopClicked="OnStopSimulation"
+                OnSaveClickedCallback="OnSaveFile"
+                OnNewFileClickedCallback="ShowCreateFileModalAsync" />
+
+        @* ---------- Editor Dock: Entities · Ports · Waveforms · Runs · Files · Output ---------- *@
+        <EditorDock EntitiesCount="@(Builder.Parser?.Entities.Count() ?? 0)"
+                    FilesCount="@_projectFiles.Count"
+                    RunsCount="@_runsCount"
+                    WaveformsReady="@(_waveformData != null)"
+                    OutputReady="@(Log.Entries.Count > 0)">
+
+            <EntitiesContent>
+                @if (Builder.Parser != null && Builder.Parser.Entities.Any())
+                {
+                    @foreach (var entity in Builder.Parser.Entities)
+                    {
+                        <EntityView Entity="entity" />
+                    }
                 }
-            </div>
-        }
-        <div class='col-lg-@(Builder.Parser != null ? "6" : "12") col-sm-12'>
-            <FilesCard
-                @ref="_filesCard"
-                OnProjectFileClicked="OnProjectFileOpened"
-                Project="_project"/>
-        </div>
-    </div>
+            </EntitiesContent>
+
+            <PortsContent>
+                <PortsPanel OnBuildRequested="OnBuildRequested" />
+            </PortsContent>
+
+            <WaveformsContent>
+                @if (_compareSnapshots != null && _compareSnapshots.Count >= 2)
+                {
+                    <WaveformViewer Snapshots="_compareSnapshots"
+                                    OnClearCompare="ClearCompare"
+                                    OnExportVcd="HandleVcdExport" />
+                }
+                else if (_waveformData != null && _waveformData.Signals.Count > 0)
+                {
+                    <WaveformViewer Data="_waveformData" OnExportVcd="HandleVcdExport" />
+                }
+                else if (Sim.State == SimState.Complete)
+                {
+                    @* Sim ran but produced no signals — most common cause: no
+                       stimulus on any input port. Surface it explicitly instead
+                       of falling through to the generic empty-waveforms state. *@
+                    <div class="kmila-dock__empty">
+                        <div class="kmila-dock__empty-icon"><Icon Name="IconName.ExclamationTriangleFill" /></div>
+                        <p>@Traductor.T("EDITOR_WAVE_NO_DATA")</p>
+                        <small class="text-muted">@Traductor.T("EDITOR_WAVE_NO_DATA_HINT")</small>
+                    </div>
+                }
+            </WaveformsContent>
+
+            <RunsContent>
+                <RunsPanel ProjectId="@_projectId"
+                           OnLoadSnapshot="LoadSnapshotAsync"
+                           OnCompareSnapshots="OpenCompareAsync" />
+            </RunsContent>
+
+            <FilesContent>
+                <FilesCard
+                    @ref="_filesCard"
+                    OnProjectFileClicked="OnProjectFileOpened"
+                    OnProjectFileRemoved="OnFileRemoved"
+                    Project="_project" />
+            </FilesContent>
+
+            <OutputContent>
+                <OutputPanel />
+            </OutputContent>
+        </EditorDock>
+
+        @* ---------- Status bar (bottom of the editor page) ---------- *@
+        <StatusBar HasUnsavedChanges="_hasUnsavedChanges"
+                   FileName="@_openedFile?.FileName"
+                   Line="_cursorLine"
+                   Column="_cursorColumn"
+                   Language="@_currentLanguage" />
 }
+</section>
 <Modal @ref="_multiUseModal" />
 @code {
     /// <summary>
@@ -115,7 +179,6 @@
     private int _projectId = -1;
     private Project _project = null!;
     private FilesCard _filesCard = new();
-    private ButtonCollapse _buttonsCollapse = new();
     private StandaloneCodeEditor _editor = new();
     private Modal _multiUseModal = new();
     private ProjectFile _openedFile = null!;
@@ -134,6 +197,16 @@
     // Waveform data from simulation
     private WaveformData? _waveformData;
 
+    /// <summary>Snapshot count for the Runs tab badge.</summary>
+    private int _runsCount;
+
+    /// <summary>
+    /// Two-or-more snapshots to overlay in compare mode. When non-null, the
+    /// Waveforms tab renders them instead of <see cref="_waveformData"/>.
+    /// Cleared via the "X" button on the compare banner.
+    /// </summary>
+    private List<Kmila.Shared.Models.SimulationSnapshot>? _compareSnapshots;
+
     /// <summary>
     /// Gets whether the currently opened file is a Markdown file.
     /// </summary>
@@ -141,51 +214,335 @@
         (_openedFile.FileName.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ||
          _openedFile.FileName.EndsWith(".markdown", StringComparison.OrdinalIgnoreCase));
     /// <summary>
-    /// Method invoked when the component is initialized.
+    /// Event subscriptions live here — they only need to happen once per
+    /// component mount. Per-project loading is handled by
+    /// <see cref="OnParametersSetAsync"/> so it re-runs when the user
+    /// navigates between /editor/{a} and /editor/{b} (Blazor reuses the
+    /// component when the route template matches).
     /// </summary>
-    protected override async Task OnInitializedAsync(){
-        if(String.IsNullOrEmpty(ProjectId)){
-            ToastService.Notify(Message("Project not set", "Error opening the project", ToastType.Danger));
-        }else{
-            _projectId = int.Parse(ProjectId);
-            _project = await Projects.GetByAsync(_projectId);
-            _projectFiles = await ProjectFiles.GetProjectFilesAsync(_project);
-        }
-        Builder.OnSimulationCompleted += OnSimulationDataReady;
-    }
     /// <summary>
-    /// Method invoked after the component has rendered.
-    /// Automatically opens the main file (prioritizes main.vhd, then any .vhd file, then first file).
+    /// Snapshot of the Time/Scale pair used to build the current
+    /// <see cref="_waveformData"/>. Updated in <see cref="OnSimulationDataReady"/>.
+    /// When <see cref="OnSimParamsChanged"/> sees a divergence, the viewer's
+    /// backing data is cleared so students don't read stale traces next to a
+    /// different sim duration.
     /// </summary>
-    /// <param name="first">A boolean value indicating if it is the first render.</param>
-    protected override async void OnAfterRender(bool first){
-        if(first){
-            if(_projectFiles.Count > 0){
-                _openedFile = FindMainFile(_projectFiles);
-                _originalContent = _openedFile.Content ?? string.Empty;
-                _currentLanguage = GetLanguageFromExtension(_openedFile.FileName);
+    private int _lastBuiltTime;
+    private TimeScale _lastBuiltScale;
 
-                // Set markdown preview if it's a markdown file
-                if (IsMarkdownFile)
-                {
-                    _markdownPreview = _openedFile.Content ?? string.Empty;
-                }
+    protected override void OnInitialized()
+    {
+        Builder.OnSimulationCompleted += OnSimulationDataReady;
+        Builder.OnSimulationEnded     += OnSimulationEnded;
+        Builder.OnProgressAdvanced    += OnProgressAdvanced;
+        Sim.OnChange                  += OnSimParamsChanged;
+        Snapshots.OnChange            += OnSnapshotsChanged;
+    }
 
-                // Mark that we need to load a file once editor is ready
+    /// <summary>
+    /// Refresh the Runs-tab badge count when a snapshot is added/removed for
+    /// this project. Reactive so background captures (user navigated away mid
+    /// sim and came back after completion) update the UI without polling.
+    /// </summary>
+    private async void OnSnapshotsChanged(int projectId)
+    {
+        if (projectId != _projectId) return;
+        await RefreshRunsCountAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task RefreshRunsCountAsync()
+    {
+        if (_projectId <= 0) { _runsCount = 0; return; }
+        _runsCount = (await Snapshots.ListForProjectAsync(_projectId)).Count;
+    }
+
+    private Task LoadSnapshotAsync(Kmila.Shared.Models.SimulationSnapshot snap)
+    {
+        var wd = Kmila.Shared.Models.WaveformData.FromJson(snap.WaveformJson);
+        if (wd == null)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                Traductor.T("RUNS_LOAD_FAILED"), ToastType.Danger));
+            return Task.CompletedTask;
+        }
+        _waveformData = wd;
+        _lastBuiltTime  = snap.Time;
+        _ = Enum.TryParse<TimeScale>(snap.Scale, out var scale);
+        _lastBuiltScale = scale;
+        _compareSnapshots = null;
+        DockState.SetActive(EditorTab.Waveforms);
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private Task OpenCompareAsync(List<Kmila.Shared.Models.SimulationSnapshot> picks)
+    {
+        _compareSnapshots = picks;
+        DockState.SetActive(EditorTab.Waveforms);
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private void ClearCompare()
+    {
+        _compareSnapshots = null;
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Fired whenever any field of <see cref="SimulationParameters"/> moves
+    /// (time, scale, port moments, state, etc.). We only react when the user
+    /// has edited <c>Time</c> or <c>Scale</c> after a completed run — that
+    /// invalidates the waveform we're showing.
+    /// </summary>
+    private void OnSimParamsChanged()
+    {
+        if (_waveformData == null) return;
+        if (Sim.Time != _lastBuiltTime || Sim.Scale != _lastBuiltScale)
+        {
+            _waveformData = null;
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    /// <summary>
+    /// Marks <c>&lt;html&gt;</c> with <c>data-route="editor"</c> on first render.
+    /// MainLayout's URI-based class used to miss on the initial navigation in
+    /// some WebView builds (the article kept its `.content` max-width until
+    /// something — a Build click, a window resize — forced a re-layout). Going
+    /// through a DOM attribute sidesteps Blazor render timing entirely: the
+    /// attribute is set the moment Monaco mounts, cleared when we dispose.
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            await JS.InvokeVoidAsync("document.documentElement.setAttribute", "data-route", "editor");
+        }
+        catch
+        {
+            // JS not available (prerender) — fine, CSS fallback on .content--wide handles it.
+        }
+    }
+
+    /// <summary>
+    /// Runs on first mount AND whenever the ProjectId route parameter changes.
+    /// Short-circuits when the ID is unchanged (which happens on every language
+    /// switch etc., since Blazor re-invokes SetParameters on any cascade).
+    /// </summary>
+    protected override async Task OnParametersSetAsync()
+    {
+        if (string.IsNullOrEmpty(ProjectId))
+        {
+            ToastService.Notify(Message("Project not set", "Error opening the project", ToastType.Danger));
+            return;
+        }
+        if (!int.TryParse(ProjectId, out var newId)) return;
+        if (newId == _projectId) return; // already on this project — no reload
+        await LoadProjectAsync(newId);
+    }
+
+    /// <summary>
+    /// Loads a project, its files, and the designated main file into Monaco.
+    /// Also resets per-project transient state (sim status, waveform, log,
+    /// port moments) so nothing from the previous project leaks over.
+    /// </summary>
+    private async Task LoadProjectAsync(int newProjectId)
+    {
+        _projectId = newProjectId;
+        _project = await Projects.GetByAsync(_projectId);
+        _projectFiles = await ProjectFiles.GetProjectFilesAsync(_project);
+
+        // Record the open for the sidebar MRU so the top-10 reflects actual usage.
+        _ = Recent.TouchAsync(_projectId);
+
+        // Wipe per-project runtime state
+        Sim.SetState(SimState.Idle);
+        Sim.SetProgress(0);
+        Sim.ClearPortMoments();
+        Log.Clear();
+        _waveformData = null;
+        _hasUnsavedChanges = false;
+        _cursorLine = 1;
+        _cursorColumn = 1;
+        _markdownPreview = string.Empty;
+
+        if (_projectFiles.Count > 0)
+        {
+            _openedFile = FindMainFile(_projectFiles);
+            _originalContent = _openedFile.Content ?? string.Empty;
+            _currentLanguage = GetLanguageFromExtension(_openedFile.FileName);
+            if (IsMarkdownFile)
+                _markdownPreview = _openedFile.Content ?? string.Empty;
+
+            if (_editorInitialized)
+            {
+                // Monaco already exists (project switch) — push the new content in directly.
+                await _editor.SetValue(_openedFile.Content ?? string.Empty);
+                var model = await _editor.GetModel();
+                if (model != null)
+                    await BlazorMonaco.Editor.Global.SetModelLanguage(JS, model, _currentLanguage);
+            }
+            else
+            {
+                // First mount — Monaco hasn't initialised yet. Queue the load for
+                // OnEditorInitAsync to pick up.
                 _pendingFileLoad = true;
+            }
 
-                // If editor is already initialized, load the file now
-                if (_editorInitialized)
-                {
-                    await LoadPendingFileAsync();
-                }
+            _filesCard?.SetDefaultFile(_openedFile);
+        }
+        else
+        {
+            // Empty project — clear the editor so we don't display a stale buffer.
+            _openedFile = null!;
+            _originalContent = string.Empty;
+            if (_editorInitialized)
+                await _editor.SetValue(string.Empty);
+        }
 
-                _filesCard.SetDefaultFile(_openedFile);
-                StateHasChanged();
+        await RefreshRunsCountAsync();
+
+        // Consume any "apply this config once the project is loaded" request
+        // stashed by the caller. Payload slot wins over name slot — it skips
+        // the DB round-trip entirely so Unicode-name mismatches can't drop
+        // the auto-apply silently.
+        var payload = Sim.PendingConfigurationPayload;
+        if (payload != null)
+        {
+            Sim.PendingConfigurationPayload = null;
+            Sim.PendingConfigurationName = null;
+            await ApplyConfigurationAsync(payload);
+        }
+        else
+        {
+            var pending = Sim.PendingConfigurationName;
+            if (!string.IsNullOrEmpty(pending))
+            {
+                Sim.PendingConfigurationName = null;
+                await ApplySavedConfigurationAsync(pending);
             }
         }
+
+        StateHasChanged();
     }
 
+    /// <summary>
+    /// Applies an already-loaded <see cref="KmilaConfiguration"/> directly,
+    /// skipping the save/load round-trip used by
+    /// <see cref="ApplySavedConfigurationAsync"/>. Prefer this when the
+    /// caller constructed the config object itself.
+    /// </summary>
+    private async Task ApplyConfigurationAsync(KmilaConfiguration config)
+    {
+        try
+        {
+            if (config.Time != null)
+            {
+                Sim.SetTime(config.Time.Value);
+                if (Enum.TryParse<TimeScale>(config.Time.Scale, out var scale))
+                    Sim.SetScale(scale);
+            }
+            Sim.ReplacePortMoments(config.PortMoments);
+
+            if (config.FPGA != null && !string.IsNullOrEmpty(config.FPGA.Path))
+            {
+                try
+                {
+                    var fpga = await JSONFileReader.ReadFPGAJsonFileAsync(config.FPGA.Path);
+                    if (fpga != null) SelectedFPGA.SetFPGA(fpga, config.FPGA.Path);
+                }
+                catch { /* non-fatal */ }
+            }
+
+            Sim.MarkLoaded(config.Name ?? "Sample config");
+            Logger.LogInformation("[Editor] Applied pending payload — {Count} port moments",
+                config.PortMoments?.Count ?? 0);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "[Editor] Failed to apply pending config payload");
+        }
+    }
+
+    /// <summary>
+    /// Applies a named saved configuration to <see cref="Sim"/> (+ the FPGA
+    /// selection if the config carries one). Mirrors the logic in
+    /// <c>ConfigurationsPill.LoadAsync</c> so the first-open-sample flow
+    /// behaves identically to a manual "Load" from the pill.
+    /// </summary>
+    private async Task ApplySavedConfigurationAsync(string name)
+    {
+        try
+        {
+            var config = await ConfigService.LoadConfigurationAsync(name);
+            if (config == null)
+            {
+                // Surface the failure so it shows up in /logs and the user
+                // understands why their sample didn't get its stimuli applied.
+                Logger.LogWarning("[Editor] Pending config '{Name}' not found — port moments were NOT auto-applied. Use the Configurations pill to load it manually.",
+                    name);
+                Log.Warn(string.Format(Traductor.T("EDITOR_CONFIG_AUTOAPPLY_MISSING"), name));
+                return;
+            }
+
+            if (config.Time != null)
+            {
+                Sim.SetTime(config.Time.Value);
+                if (Enum.TryParse<TimeScale>(config.Time.Scale, out var scale))
+                    Sim.SetScale(scale);
+            }
+            Sim.ReplacePortMoments(config.PortMoments);
+
+            if (config.FPGA != null && !string.IsNullOrEmpty(config.FPGA.Path))
+            {
+                try
+                {
+                    var fpga = await JSONFileReader.ReadFPGAJsonFileAsync(config.FPGA.Path);
+                    if (fpga != null) SelectedFPGA.SetFPGA(fpga, config.FPGA.Path);
+                }
+                catch { /* non-fatal */ }
+            }
+
+            Sim.MarkLoaded(name);
+            Logger.LogInformation("[Editor] Applied config '{Name}' — {Count} port moments",
+                name, config.PortMoments?.Count ?? 0);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "[Editor] Failed to auto-apply pending config {Name}", name);
+        }
+    }
+
+    /// <summary>
+    /// Builder.OnSimulationEnded fires off the simulation thread. Marshal back
+    /// to the UI thread, update <see cref="Sim.State"/>, append to the log,
+    /// and auto-focus the Waveforms tab so the result is visible.
+    /// </summary>
+    private void OnSimulationEnded(bool ended)
+    {
+        InvokeAsync(() =>
+        {
+            Sim.SetState(SimState.Complete);
+            Sim.SetProgress(100);
+            Sim.EndRun();
+            Log.Success(ended
+                ? Traductor.T("SIM_LOG_ENDED_OK")
+                : Traductor.T("SIM_LOG_ENDED_STOPPED"));
+            DockState.SetActive(EditorTab.Waveforms);
+            StateHasChanged();
+        });
+    }
+
+    /// <summary>
+    /// Progress tick from the simulation timer. Thread-safe via InvokeAsync.
+    /// </summary>
+    private void OnProgressAdvanced(double progress)
+    {
+        InvokeAsync(() => Sim.SetProgress(progress));
+    }
     /// <summary>
     /// Loads the pending file content into the editor.
     /// Called when the editor is initialized and a file is waiting to be loaded.
@@ -201,7 +558,7 @@
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[Editor] Error loading file into editor: {ex.Message}");
+                Logger.LogError($"[Editor] Error loading file into editor: {ex.Message}");
             }
         }
     }
@@ -245,58 +602,309 @@
         await _multiUseModal.ShowAsync<CreateFileModal>("Creating new file", parameters: parameters);
     }
     /// <summary>
-    /// Handles the build requested event.
+    /// Internal build routine. Returns whether the build succeeded so callers
+    /// (e.g. <see cref="OnRunRequested"/>) can decide whether to continue into
+    /// a simulation. Updates <see cref="Sim.State"/>, appends to the log, and
+    /// focuses the appropriate dock tab.
     /// </summary>
-    private async Task OnBuildRequested(){
-        try{
-            if(_openedFile != null){
-                if(Path.GetExtension(_openedFile.FileName) == ".md"){
-                    Dictionary<string, object> parameters = new(){
-                        {"File", _openedFile}
-                    };
-                    await _multiUseModal.ShowAsync<MarkdownModal>("Opening Markdown preview", null, parameters);
-                    _buttonsCollapse.IsValidProgram(true);
-                }else{
-                    var result = Builder.Build(_openedFile);
-                    ToastService.Notify(Message(
-                        result ? "Correct" : "Error",
-                        result ? "Program build succesfully" : $"Error",
-                        result ? ToastType.Success : ToastType.Danger
-                    ));
-                    _buttonsCollapse.IsValidProgram(result);
-                }
-                
-            }else{
-                ToastService.Notify(Message("Entry point not found", "To build you must open first the entry point file", ToastType.Warning));
+    private async Task<bool> RunBuildAsync()
+    {
+        if (_openedFile == null)
+        {
+            Log.Warn(Traductor.T("SIM_LOG_NO_ENTRY"));
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), Traductor.T("SIM_LOG_NO_ENTRY"), ToastType.Warning));
+            return false;
+        }
+
+        // FPGA is mandatory — resource validation and the target-specific
+        // primitives downstream assume one is selected. Refuse to build
+        // otherwise and point the user at the TopBar picker.
+        if (SelectedFPGA?.FPGA == null || string.IsNullOrEmpty(SelectedFPGA.FPGA.Model))
+        {
+            Log.Warn(Traductor.T("RUNBAR_FPGA_REQUIRED"));
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                Traductor.T("RUNBAR_FPGA_REQUIRED"), ToastType.Warning));
+            DockState.SetActive(EditorTab.Output);
+            return false;
+        }
+
+        // Markdown "build" = preview modal, not a parse. Short-circuit.
+        if (Path.GetExtension(_openedFile.FileName) == ".md")
+        {
+            var parameters = new Dictionary<string, object> { { "File", _openedFile } };
+            await _multiUseModal.ShowAsync<MarkdownModal>(Traductor.T("EDITOR_MD_PREVIEW"), null, parameters);
+            return true;
+        }
+
+        // Auto-save before building so the parser sees what's on screen, not
+        // what was last written to disk. Skip if there's nothing new; the
+        // on-disk copy is already current.
+        if (_hasUnsavedChanges)
+        {
+            await OnSaveFile();
+        }
+
+        // Clearing stale waveform data here means the Waveforms tab shows the
+        // empty state during the new build+run instead of the previous run's
+        // trace misleadingly hanging around.
+        _waveformData = null;
+
+        Sim.SetState(SimState.Building);
+        Log.Info($"{Traductor.T("SIM_LOG_BUILDING")}: {_openedFile.FileName}");
+        StateHasChanged();
+
+        try
+        {
+            var ok = Builder.Build(_openedFile);
+            // Push the parser's structured diagnostics into Monaco so the
+            // student sees squiggles + hover messages pointing at the
+            // offending lines. Includes errors (from exceptions) and
+            // warnings from the post-parse lint pass.
+            await PublishDiagnosticsAsync();
+
+            if (ok)
+            {
+                Sim.SetState(SimState.BuiltOk);
+                Log.Success(Traductor.T("SIM_LOG_BUILD_OK"));
+                DockState.SetActive(EditorTab.Entities);
             }
-        }catch(Exception ex){
-            ToastService.Notify(Message("Error", ex.Message, ToastType.Danger));
-        }finally{
-            _buttonsCollapse.ReleaseBuild();
+            else
+            {
+                Sim.SetState(SimState.BuildError);
+                Log.Error(Traductor.T("SIM_LOG_BUILD_FAILED"));
+                DockState.SetActive(EditorTab.Output);
+            }
+            return ok;
+        }
+        catch (global::Parser.Models.ParserException pex)
+        {
+            // Known-shape parser error — synthesize an Error diagnostic from
+            // the exception's line/column/message and also push it through.
+            Builder.Parser?.Diagnostics.Add(global::Parser.Models.Diagnostic.FromException(pex));
+            await PublishDiagnosticsAsync();
+            Sim.SetState(SimState.BuildError);
+            Log.Error($"{Traductor.T("SIM_LOG_BUILD_FAILED")}: {pex.Message}");
+            DockState.SetActive(EditorTab.Output);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            // Any non-ParserException failure (missing entity, IO error, etc).
+            // Still push a best-effort error diagnostic to Monaco — without
+            // this, a student staring at a broken file sees nothing in the
+            // gutter and has to read the Output log.
+            try
+            {
+                Builder.Parser?.Diagnostics.Add(new global::Parser.Models.Diagnostic
+                {
+                    Severity    = global::Parser.Models.DiagnosticSeverity.Error,
+                    Line        = 1,
+                    StartColumn = 1,
+                    EndColumn   = 1,
+                    Code        = "BUILD-FAILED",
+                    Message     = ex.Message
+                });
+                await PublishDiagnosticsAsync();
+            }
+            catch { /* surfaced in Output log already */ }
+            Sim.SetState(SimState.BuildError);
+            Log.Error($"{Traductor.T("SIM_LOG_BUILD_FAILED")}: {ex.Message}");
+            DockState.SetActive(EditorTab.Output);
+            return false;
+        }
+        finally
+        {
             StateHasChanged();
         }
     }
+
     /// <summary>
-    /// Handles the simulation started event.
-    /// Launches the simulation on a background thread so the UI remains responsive.
+    /// Pushes the Parser's <see cref="global::Parser.Models.Diagnostic"/>
+    /// list into Monaco as markers on the current model. Each Kmila severity
+    /// maps to Monaco's numeric scale (Error=8, Warning=4, Info=2). Called
+    /// after every Build so the student gets immediate visual feedback.
     /// </summary>
-    private Task OnSimulationStarted((TimeSpan Duration, List<Models.PortMomentConfiguration>? PortMoments) args){
+    private async Task PublishDiagnosticsAsync()
+    {
+        try
+        {
+            var diags = Builder.Parser?.Diagnostics ?? new List<global::Parser.Models.Diagnostic>();
+            var markers = diags.Select(d => new
+            {
+                severity = d.Severity switch
+                {
+                    global::Parser.Models.DiagnosticSeverity.Error   => 8,
+                    global::Parser.Models.DiagnosticSeverity.Warning => 4,
+                    _                                                => 2
+                },
+                startLineNumber = d.Line,
+                startColumn     = d.StartColumn,
+                endLineNumber   = d.Line,
+                endColumn       = d.EndColumn,
+                message         = d.Message,
+                code            = d.Code,
+                source          = "Kmila VHDL"
+            }).ToArray();
+
+            await JS.InvokeVoidAsync("kmilaSetMonacoMarkers", markers);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "[Editor] Failed to push Monaco markers");
+        }
+    }
+
+    /// <summary>Explicit Build button click — just runs the build and stops.</summary>
+    private async Task OnBuildRequested() => await RunBuildAsync();
+
+    /// <summary>
+    /// Run button click. Auto-builds first if the last state wasn't
+    /// <see cref="SimState.BuiltOk"/>, then kicks off simulation. Simulation
+    /// runs on a worker thread so Blazor's circuit stays responsive.
+    /// </summary>
+    private async Task OnRunRequested()
+    {
+        // Auto-build when stale
+        if (Sim.State != SimState.BuiltOk && Sim.State != SimState.Complete && Sim.State != SimState.BuildError)
+        {
+            var ok = await RunBuildAsync();
+            if (!ok) return;
+        }
+        else if (Sim.State == SimState.BuildError)
+        {
+            // Try building once more — maybe the user fixed the code since
+            var ok = await RunBuildAsync();
+            if (!ok) return;
+        }
+
+        var ports = Sim.GetPortMomentsForRun();
+        var duration = Sim.GetDuration();
+
+        Sim.SetState(SimState.Running);
+        Sim.SetProgress(0);
+        Sim.BeginRun(_projectId);
+        Log.Info($"{Traductor.T("SIM_LOG_STARTING")} · {Sim.Time} {Sim.Scale}");
+        DockState.SetActive(EditorTab.Waveforms);
+        StateHasChanged();
+
+        // Task.Run detaches the sim from the Blazor circuit. If the user
+        // navigates away from /editor/{id} mid-run, the work keeps going
+        // because ProgramBuilder + SimulationParameters are singleton /
+        // scoped-to-circuit; returning to the project re-attaches via the
+        // OnSimulation* events on mount.
+        // Resolve effective clock: per-project override wins, otherwise
+        // fall back to the selected FPGA's default (or a safe 50 MHz).
+        var fpgaDefault = SelectedFPGA?.FPGA?.Clocking?.GetDefaultSimClockMhz() ?? 50;
+        var effectiveClockMhz = Sim.GetEffectiveClockMhz(fpgaDefault);
+
+        // Resolve tick resolution from the global user preference. Adaptive
+        // mode needs the effective clock to compute a sane tick; Default
+        // and HighPrecision ignore it. Reading fails soft to Default so a
+        // corrupt/missing setting never blocks Run.
+        var tickModeRaw = await DbContext.GetSettingAsync(AppSettings.KEY_TICK_RESOLUTION_MODE);
+        var tickMode    = TickResolutionModeExtensions.ParseToken(tickModeRaw);
+        var tickResNs   = tickMode.ResolveTickResNs(effectiveClockMhz);
+
+        // Log what the auto-clock injector is about to do so the student
+        // doesn't stare at an empty waveform wondering whether Kmila even
+        // wired a clock. Defensive null-guards because this block runs on
+        // the UI thread right before we detach into Task.Run — a silly NRE
+        // here blocked the whole simulation in one student's build.
+        try
+        {
+            string? clkName = null;
+            string? entityName = null;
+            var entityForLog = Builder?.Parser?.Entities?
+                .FirstOrDefault(e => e != null && e.Architecture != null);
+            if (entityForLog != null)
+            {
+                entityName = entityForLog.Name;
+                var entityPorts = entityForLog.Ports;
+                if (entityPorts != null)
+                {
+                    foreach (var p in entityPorts)
+                    {
+                        if (p == null) continue;
+                        if (p.PortType != global::Parser.Models.Constants.PortType.IN) continue;
+                        if (Kmila.Shared.Services.StimulusBuilder.IsClockPortName(p.Name))
+                        {
+                            clkName = p.Name;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (clkName != null)
+            {
+                Log.Info("Auto-clock: driving '" + clkName + "' at " + effectiveClockMhz + " MHz.");
+            }
+            else if (entityName != null)
+            {
+                // No clock port declared. StimulusBuilder will synthesize a
+                // virtual `_clk` signal so the waveform always carries a
+                // clock trace — helpful for combinational designs too.
+                Log.Info("Auto-clock: no clk-named port on '" + entityName +
+                         "'. Injecting a virtual _clk at " + effectiveClockMhz + " MHz " +
+                         "(tick=" + tickResNs + " ns, mode=" + tickMode.ToToken() + ").");
+            }
+        }
+        catch (Exception clkLogEx)
+        {
+            Logger.LogWarning(clkLogEx, "[Editor] Clock-status log failed — continuing run");
+        }
+
         _ = Task.Run(async () =>
         {
             try
             {
-                await Builder.RunSimulationAsync(args.PortMoments, args.Duration);
+                await Builder.RunSimulationAsync(ports, duration,
+                    systemClockMhz: effectiveClockMhz,
+                    tickResNs: tickResNs);
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
+                // Log the whole exception (stack + inner) so bare NREs don't
+                // surface as a useless "Object reference not set" toast.
+                Logger.LogError(ex, "[Editor] Simulation failed");
+                var detail = ex.ToString();
                 await InvokeAsync(() =>
                 {
-                    ToastService.Notify(Message("Simulation Error", ex.Message, ToastType.Danger));
+                    Sim.SetState(SimState.BuildError);
+                    Sim.EndRun();
+                    Log.Error($"{Traductor.T("SIM_LOG_ERROR")}: {ex.Message}");
+                    Log.Error(detail);
+                    DockState.SetActive(EditorTab.Output);
+                    ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
                     StateHasChanged();
                 });
             }
         });
-        return Task.CompletedTask;
+    }
+
+    private void OnPauseSimulation()
+    {
+        Builder.PauseTimer();
+        Sim.SetState(SimState.Paused);
+        Log.Info(Traductor.T("SIM_LOG_PAUSED"));
+        StateHasChanged();
+    }
+
+    private void OnContinueSimulation()
+    {
+        Builder.ContinueTimer();
+        Sim.SetState(SimState.Running);
+        Log.Info(Traductor.T("SIM_LOG_RESUMED"));
+        StateHasChanged();
+    }
+
+    private void OnStopSimulation()
+    {
+        Builder.StopTimer();
+        Sim.SetState(SimState.Complete);
+        Sim.SetProgress(0);
+        Log.Warn(Traductor.T("SIM_LOG_STOPPED"));
+        StateHasChanged();
     }
     /// <summary>
     /// Handles the save file event.
@@ -326,14 +934,35 @@
         }
     }
     /// <summary>
-    /// Handles the file removed event.
+    /// Handles the file removed event. FilesCard already ran the delete +
+    /// toast; all we need to do here is drop the file from our local list and
+    /// pick a sensible replacement for the currently-opened file if the user
+    /// just deleted it.
     /// </summary>
-    /// <param name="file">The file that was removed.</param>
     private async Task OnFileRemoved(ProjectFile file){
         try{
-            if(file != null){
-            //    var result = await _
+            if(file == null) return;
+
+            _projectFiles.RemoveAll(f => f.Id == file.Id);
+
+            if (_openedFile != null && _openedFile.Id == file.Id)
+            {
+                var fallback = _projectFiles.FirstOrDefault();
+                if (fallback != null)
+                {
+                    await OnProjectFileOpened(fallback);
+                }
+                else
+                {
+                    // No files left — clear the editor
+                    _openedFile = null!;
+                    _originalContent = string.Empty;
+                    _hasUnsavedChanges = false;
+                    await _editor.SetValue(string.Empty);
+                    StateHasChanged();
+                }
             }
+            return; // keep the existing catch block below from running the legacy code path
         }catch(Exception ex){
             ToastService.Notify(Message("Error", ex.Message, ToastType.Danger));
         }
@@ -394,6 +1023,15 @@
             WordWrap = "on",
             ScrollBeyondLastLine = false,
             RenderWhitespace = "selection",
+            // Minimap — enabled by default. CSS (max-width: 900px) hides it on
+            // narrow viewports and mobile where the sidebar real-estate matters.
+            Minimap = new EditorMinimapOptions
+            {
+                Enabled = true,
+                RenderCharacters = false, // Solid block style reads cleaner at 4pt
+                ShowSlider = "mouseover",
+                Size = "proportional"
+            },
             Value = 
 @"-- This is a VHDL Sample code, do not represent a file
 library IEEE;
@@ -433,6 +1071,40 @@ end architecture behavioral;",
         // Mark editor as initialized
         _editorInitialized = true;
 
+        // Align Monaco with the current app theme. Monaco defaults to "vs" (light),
+        // so without this the editor stays light even when the page is in dark mode
+        // (e.g. on navigation directly to /editor/X). We query the DOM attribute
+        // directly — avoids depending on any custom JS that might not be loaded yet.
+        var bsTheme = await JS.InvokeAsync<string?>("document.documentElement.getAttribute", "data-bs-theme");
+        var monacoTheme = bsTheme == "dark" ? "vs-dark" : "vs";
+        await BlazorMonaco.Editor.Global.SetTheme(JS, monacoTheme);
+
+        // Register keyboard shortcuts inside Monaco so Ctrl+S / Ctrl+B /
+        // Ctrl+Enter work even when Monaco's own key handling would normally
+        // eat the event. Monaco's AddCommand takes (KeyMod | KeyCode) packed
+        // into a single int — same bitmask convention as the JS API.
+        try
+        {
+            // Ctrl+S / Cmd+S → Save
+            await _editor.AddCommand(
+                (int)BlazorMonaco.KeyMod.CtrlCmd | (int)BlazorMonaco.KeyCode.KeyS,
+                async (_, _) => await OnSaveFile());
+
+            // Ctrl+B / Cmd+B → Build
+            await _editor.AddCommand(
+                (int)BlazorMonaco.KeyMod.CtrlCmd | (int)BlazorMonaco.KeyCode.KeyB,
+                async (_, _) => await OnBuildRequested());
+
+            // Ctrl+Enter / Cmd+Enter → Run (auto-builds if stale)
+            await _editor.AddCommand(
+                (int)BlazorMonaco.KeyMod.CtrlCmd | (int)BlazorMonaco.KeyCode.Enter,
+                async (_, _) => await OnRunRequested());
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "[Editor] Failed to register Monaco keyboard shortcuts");
+        }
+
         // If there's a pending file load, do it now
         if (_pendingFileLoad)
         {
@@ -454,6 +1126,11 @@ end architecture behavioral;",
         {
             _markdownPreview = currentContent;
         }
+
+        // Wipe any stale parser markers — the content has moved, the squiggle
+        // coordinates can't be trusted until the next Build.
+        try { await JS.InvokeVoidAsync("kmilaSetMonacoMarkers", new object[0]); }
+        catch { /* Monaco not ready — fine */ }
 
         await InvokeAsync(StateHasChanged);
     }
@@ -489,7 +1166,43 @@ end architecture behavioral;",
     /// </summary>
     private void OnSimulationDataReady(Interpreter.Services.SignalHistory history)
     {
-        _waveformData = WaveformData.FromSignalHistory(history, TimeMachine.Models.TimeClock.NS_PER_TICK);
+        try
+        {
+            var wd = WaveformData.FromSignalHistory(history, Builder.LastTickResNs);
+            _waveformData = wd;
+            _lastBuiltTime  = Sim.Time;
+            _lastBuiltScale = Sim.Scale;
+
+            // Fire-and-forget snapshot so the Runs tab picks it up on next
+            // render. Capture failures are logged but never block the UI.
+            if (_projectId > 0 && wd != null && wd.Signals.Count > 0)
+            {
+                _ = Snapshots.CaptureAsync(
+                    projectId: _projectId,
+                    waveform : wd,
+                    time     : Sim.Time,
+                    scale    : Sim.Scale.ToString(),
+                    fpgaModel: SelectedFPGA?.FPGA?.Model);
+            }
+            var sigs = wd?.Signals?.Count ?? 0;
+            var samples = history?.TotalSamples ?? 0;
+            Logger.LogInformation("[Editor] Waveform ready: {Signals} signals, {Samples} samples",
+                sigs, samples);
+
+            if (sigs == 0)
+            {
+                Log.Warn("Simulation finished but produced no signal history — check your port moments / clock configuration.");
+            }
+            else
+            {
+                Log.Info($"Waveform built: {sigs} signals · {samples} samples.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[Editor] Failed to build WaveformData from history");
+            Log.Error($"Waveform build failed: {ex.Message}");
+        }
         InvokeAsync(StateHasChanged);
     }
 
@@ -499,7 +1212,7 @@ end architecture behavioral;",
     private async Task HandleVcdExport(string vcdContent)
     {
         // For now, log to console - in the future, trigger file download via JS interop
-        Console.WriteLine($"[Editor] VCD export: {vcdContent.Length} characters");
+        Logger.LogInformation($"[Editor] VCD export: {vcdContent.Length} characters");
         ToastService.Notify(Message("VCD Export", $"VCD data generated ({vcdContent.Length} chars). Use browser download to save.", ToastType.Info));
     }
 
@@ -545,4 +1258,22 @@ end architecture behavioral;",
     }
 
     #endregion
+
+    /// <summary>
+    /// Unsubscribe all Builder events when the Editor page is torn down so
+    /// repeated navigations don't stack handlers.
+    /// </summary>
+    public void Dispose()
+    {
+        Builder.OnSimulationCompleted -= OnSimulationDataReady;
+        Builder.OnSimulationEnded     -= OnSimulationEnded;
+        Builder.OnProgressAdvanced    -= OnProgressAdvanced;
+        Sim.OnChange                  -= OnSimParamsChanged;
+        Snapshots.OnChange            -= OnSnapshotsChanged;
+
+        // Clear the editor-route attribute so non-editor pages get their normal
+        // max-width back. Fire-and-forget: Dispose is sync, JS interop is async.
+        _ = JS.InvokeVoidAsync("document.documentElement.removeAttribute", "data-route").AsTask()
+              .ContinueWith(_ => { }, TaskScheduler.Default);
+    }
 }

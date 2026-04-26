@@ -1,0 +1,6977 @@
+/* ============================================================================
+   Page-level styles (non-scoped)
+   ---------------------------------------------------------------------------
+   Consolidated here because Blazor scoped CSS adds a [b-xyz] attribute to
+   every selector, which prevents ancestor selectors like `[data-bs-theme=dark]
+   .thing` from matching (the <html> element has no scope attribute). Keeping
+   page styles global lets us use those ancestor selectors freely and also
+   sidesteps static-asset bundle caching issues we hit earlier.
+
+   Organized by page, top-down in the user journey.
+   ============================================================================ */
+
+
+/* ============================================================================
+   App Shell — sidebar + main area
+   ============================================================================ */
+
+.kmila-shell {
+    --sidebar-w: var(--sidebar-width, 260px);
+    --sidebar-w-collapsed: 72px;
+    position: relative;
+    display: grid;
+    grid-template-columns: var(--sidebar-w) 1fr;
+    min-height: 100vh;
+    min-height: 100dvh;
+    background-color: var(--surface-0);
+    transition: grid-template-columns var(--duration-base) var(--ease-standard);
+}
+
+.kmila-shell:has(.kmila-sidebar--collapsed) {
+    grid-template-columns: var(--sidebar-w-collapsed) 1fr;
+}
+
+.kmila-shell__main {
+    min-width: 0;                /* prevent children from overflowing the grid track */
+    display: flex;
+    flex-direction: column;
+}
+
+
+/* ============================================================================
+   Sidebar
+   ============================================================================ */
+
+.kmila-sidebar {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(180deg, var(--kmila-primary-dark) 0%, var(--kmila-primary) 100%);
+    color: rgba(255, 255, 255, 0.92);
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
+    z-index: var(--z-sidebar);
+    overflow: hidden;
+    transition: width var(--duration-base) var(--ease-standard);
+}
+
+/* RTL: border flips to the opposite edge */
+[dir="rtl"] .kmila-sidebar {
+    border-right: none;
+    border-left: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+
+/* --- Brand / top row --- */
+
+.kmila-sidebar__brand {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-4);
+    text-decoration: none;
+    color: #ffffff;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    min-height: var(--topbar-height);
+    flex-shrink: 0;
+}
+
+.kmila-sidebar__brand:hover {
+    color: #ffffff;
+    text-decoration: none;
+    background-color: rgba(255, 255, 255, 0.04);
+}
+
+.kmila-sidebar__logo {
+    width: 40px;
+    height: 40px;
+    object-fit: contain;
+    flex-shrink: 0;
+    filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.3));
+}
+
+.kmila-sidebar__wordmark {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    opacity: 1;
+    transition: opacity var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-sidebar__name {
+    font-size: var(--fs-md);
+    font-weight: var(--fw-bold);
+    letter-spacing: var(--tracking-tight);
+    color: #ffffff;
+    line-height: 1;
+}
+
+.kmila-sidebar__version {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    font-size: var(--fs-xs);
+    font-family: var(--font-mono);
+    font-weight: var(--fw-medium);
+    color: rgba(255, 255, 255, 0.7);
+    padding: 2px 6px;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-pill);
+    letter-spacing: 0;
+    line-height: 1;
+}
+
+
+/* --- Nav area --- */
+
+.kmila-sidebar__nav {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: var(--space-3) 0 var(--space-5);
+    scrollbar-gutter: stable;
+}
+
+.kmila-sidebar__section + .kmila-sidebar__section {
+    margin-top: var(--space-4);
+}
+
+.kmila-sidebar__section-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-2) var(--space-4);
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    font-family: var(--font-mono);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.55);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.kmila-sidebar__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    padding: 0 6px;
+    height: 18px;
+    background-color: rgba(255, 255, 255, 0.15);
+    color: #ffffff;
+    border-radius: var(--radius-pill);
+    font-size: 10px;
+    font-weight: var(--fw-semibold);
+    font-family: var(--font-sans);
+    letter-spacing: 0;
+}
+
+
+/* --- Nav items --- */
+
+.kmila-nav-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-4);
+    margin: 2px var(--space-2);
+    border-radius: var(--radius-sm);
+    color: rgba(255, 255, 255, 0.82);
+    text-decoration: none;
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-medium);
+    line-height: 1.2;
+    min-height: 40px;
+    white-space: nowrap;
+    overflow: hidden;
+    transition: background-color var(--duration-fast) var(--ease-standard),
+                color var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-nav-item:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+    text-decoration: none;
+}
+
+.kmila-nav-item:focus-visible {
+    outline: 2px solid var(--kmila-accent);
+    outline-offset: -2px;
+}
+
+.kmila-nav-item.is-active {
+    background-color: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+}
+
+.kmila-nav-item__indicator {
+    position: absolute;
+    left: 0;
+    top: 8px;
+    bottom: 8px;
+    width: 3px;
+    border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+    background-color: transparent;
+    transition: background-color var(--duration-fast) var(--ease-standard);
+}
+
+[dir="rtl"] .kmila-nav-item__indicator {
+    left: auto;
+    right: 0;
+    border-radius: var(--radius-xs) 0 0 var(--radius-xs);
+}
+
+.kmila-nav-item.is-active .kmila-nav-item__indicator {
+    background-color: var(--kmila-accent);
+}
+
+.kmila-nav-item__icon {
+    font-size: 1.15rem;
+    width: 1.15rem;
+    text-align: center;
+    flex-shrink: 0;
+    color: rgba(255, 255, 255, 0.75);
+    transition: color var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-nav-item:hover .kmila-nav-item__icon,
+.kmila-nav-item.is-active .kmila-nav-item__icon {
+    color: var(--kmila-accent);
+}
+
+.kmila-nav-item__label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Project items use a denser row */
+.kmila-nav-item--project {
+    min-height: 36px;
+    padding-top: var(--space-1);
+    padding-bottom: var(--space-1);
+    font-weight: var(--fw-regular);
+}
+
+
+/* --- Footer / collapse toggle --- */
+
+.kmila-sidebar__footer {
+    flex-shrink: 0;
+    padding: var(--space-2);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.kmila-sidebar__collapse-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    background-color: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    color: rgba(255, 255, 255, 0.65);
+    font-size: var(--fs-sm);
+    font-family: inherit;
+    cursor: pointer;
+    transition: background-color var(--duration-fast) var(--ease-standard),
+                color var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-sidebar__collapse-btn:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+}
+
+.kmila-sidebar__collapse-btn:focus-visible {
+    outline: 2px solid var(--kmila-accent);
+    outline-offset: -2px;
+}
+
+
+/* ============================================================================
+   Collapsed (rail) mode — desktop
+   ============================================================================ */
+
+.kmila-sidebar--collapsed .kmila-sidebar__brand {
+    padding-left: var(--space-2);
+    padding-right: var(--space-2);
+    justify-content: center;
+}
+
+.kmila-sidebar--collapsed .kmila-sidebar__wordmark {
+    display: none;
+}
+
+/* In rail mode the section label becomes a thin divider line rather than
+   partial text. Works for both single-span and label+count label shapes. */
+.kmila-sidebar--collapsed .kmila-sidebar__section-label {
+    position: relative;
+    height: 1px;
+    padding: 0;
+    margin: var(--space-3) var(--space-3);
+    background-color: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+    font-size: 0;
+    color: transparent;
+}
+
+.kmila-sidebar--collapsed .kmila-sidebar__section-label > * {
+    display: none;
+}
+
+.kmila-sidebar--collapsed .kmila-nav-item {
+    justify-content: center;
+    padding-left: var(--space-2);
+    padding-right: var(--space-2);
+}
+
+.kmila-sidebar--collapsed .kmila-nav-item__label {
+    display: none;
+}
+
+.kmila-sidebar--collapsed .kmila-sidebar__collapse-btn {
+    justify-content: center;
+}
+
+.kmila-sidebar--collapsed .kmila-sidebar__collapse-btn .kmila-nav-item__label {
+    display: none;
+}
+
+
+/* --- Tooltip on hover in collapsed state --- */
+
+.kmila-sidebar--collapsed .kmila-nav-item[data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: calc(100% + var(--space-2));
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: var(--z-popover);
+    padding: var(--space-1) var(--space-3);
+    background-color: var(--surface-inverse);
+    color: var(--text-inverse);
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-medium);
+    white-space: nowrap;
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-2);
+    pointer-events: none;
+}
+
+[dir="rtl"] .kmila-sidebar--collapsed .kmila-nav-item[data-tooltip]:hover::after {
+    left: auto;
+    right: calc(100% + var(--space-2));
+}
+
+
+/* ============================================================================
+   Mobile drawer (< 641 px) — off-canvas with backdrop
+   ============================================================================ */
+
+@media (max-width: 640.98px) {
+    .kmila-shell {
+        grid-template-columns: 1fr;       /* sidebar leaves the grid flow */
+    }
+
+    .kmila-shell:has(.kmila-sidebar--collapsed) {
+        grid-template-columns: 1fr;       /* collapsed state has no meaning on mobile */
+    }
+
+    .kmila-sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: min(320px, 88vw);
+        height: 100dvh;
+        transform: translateX(-105%);
+        box-shadow: var(--shadow-3);
+    }
+
+    [dir="rtl"] .kmila-sidebar {
+        left: auto;
+        right: 0;
+        transform: translateX(105%);
+    }
+
+    .kmila-sidebar--open {
+        transform: translateX(0);
+    }
+
+    /* Force expanded visuals in the drawer even if the user last left the
+       desktop in collapsed mode. */
+    .kmila-sidebar--collapsed {
+        width: min(320px, 88vw);
+    }
+    .kmila-sidebar--collapsed .kmila-sidebar__wordmark,
+    .kmila-sidebar--collapsed .kmila-nav-item__label,
+    .kmila-sidebar--collapsed .kmila-sidebar__section-label > span:first-child,
+    .kmila-sidebar--collapsed .kmila-sidebar__collapse-btn .kmila-nav-item__label {
+        display: inline-block;
+    }
+    .kmila-sidebar--collapsed .kmila-nav-item,
+    .kmila-sidebar--collapsed .kmila-sidebar__brand,
+    .kmila-sidebar--collapsed .kmila-sidebar__section-label {
+        justify-content: flex-start;
+    }
+
+    /* Collapse toggle is desktop-only UX */
+    .kmila-sidebar__footer { display: none; }
+
+    .kmila-sidebar__backdrop {
+        position: fixed;
+        inset: 0;
+        background-color: rgba(15, 23, 42, 0.45);
+        z-index: calc(var(--z-sidebar) - 1);
+        animation: kmilaFade var(--duration-base) var(--ease-standard);
+    }
+}
+
+@keyframes kmilaFade {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+
+/* ============================================================================
+   Scrollbar inside dark sidebar — visible on dark background
+   ============================================================================ */
+
+.kmila-sidebar__nav::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.18);
+}
+.kmila-sidebar__nav::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.3);
+}
+.kmila-sidebar__nav {
+    scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+
+/* ============================================================================
+   TopBar
+   ============================================================================ */
+
+.kmila-topbar {
+    position: sticky;
+    top: 0;
+    z-index: var(--z-sticky);
+    background-color: var(--surface-2);
+    border-bottom: 1px solid var(--border-subtle);
+    min-height: var(--topbar-height);
+    box-shadow: var(--shadow-1);
+}
+
+.kmila-topbar__inner {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-4);
+    min-height: var(--topbar-height);
+}
+
+.kmila-topbar__start {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.kmila-topbar__end {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-shrink: 0;
+}
+
+
+/* --- Hamburger button (mobile only) --- */
+
+.kmila-topbar__menu-btn {
+    display: none;          /* shown via media query below */
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--border-subtle);
+    background-color: var(--surface-2);
+    color: var(--text-default);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 1.1rem;
+    transition: background-color var(--duration-fast) var(--ease-standard),
+                color var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-topbar__menu-btn:hover {
+    background-color: var(--surface-3);
+    color: var(--text-strong);
+}
+
+.kmila-topbar__menu-btn:focus-visible {
+    outline: 2px solid var(--kmila-accent);
+    outline-offset: 2px;
+}
+
+@media (max-width: 640.98px) {
+    .kmila-topbar__menu-btn { display: inline-flex; }
+}
+
+
+/* ============================================================================
+   Breadcrumbs
+   ============================================================================ */
+
+.kmila-breadcrumbs {
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+}
+
+.kmila-breadcrumbs ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0;
+    min-width: 0;
+}
+
+.kmila-breadcrumbs__item {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+    max-width: 260px;
+}
+
+.kmila-breadcrumbs__link,
+.kmila-breadcrumbs__current {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-2);
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-medium);
+    color: var(--text-muted);
+    text-decoration: none;
+    border-radius: var(--radius-xs);
+    min-width: 0;
+}
+
+.kmila-breadcrumbs__link > span,
+.kmila-breadcrumbs__current > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.kmila-breadcrumbs__link:hover {
+    color: var(--text-strong);
+    background-color: var(--surface-3);
+    text-decoration: none;
+}
+
+.kmila-breadcrumbs__current {
+    color: var(--text-strong);
+    font-weight: var(--fw-semibold);
+}
+
+.kmila-breadcrumbs__sep {
+    display: inline-flex;
+    align-items: center;
+    color: var(--text-subtle);
+    padding: 0 var(--space-1);
+    font-size: 0.9rem;
+}
+
+[dir="rtl"] .kmila-breadcrumbs__sep .bi-chevron-right::before {
+    /* Mirror chevron in RTL */
+    content: "\F284"; /* bootstrap icons chevron-left */
+}
+
+/* On narrow screens, only the last two crumbs stay visible. */
+@media (max-width: 640.98px) {
+    .kmila-breadcrumbs__item:not(:nth-last-child(-n+2)) {
+        display: none;
+    }
+    .kmila-breadcrumbs__item { max-width: 200px; }
+}
+
+
+/* ============================================================================
+   FPGA picker (native <details> popover)
+   ============================================================================ */
+
+.kmila-fpga-picker {
+    position: relative;
+}
+
+.kmila-fpga-picker[open] > .kmila-fpga-picker__panel {
+    display: flex;
+}
+
+.kmila-fpga-picker__summary {
+    list-style: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background-color: var(--surface-3);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-pill);
+    color: var(--text-default);
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-medium);
+    line-height: 1.2;
+    max-width: 260px;
+    user-select: none;
+    transition: background-color var(--duration-fast) var(--ease-standard),
+                border-color var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-fpga-picker__summary::-webkit-details-marker { display: none; }
+.kmila-fpga-picker__summary::marker { display: none; content: ""; }
+
+.kmila-fpga-picker__summary:hover {
+    background-color: var(--surface-2);
+    border-color: var(--border-default);
+}
+
+.kmila-fpga-picker[open] .kmila-fpga-picker__summary {
+    border-color: var(--kmila-accent);
+    box-shadow: var(--shadow-focus);
+}
+
+.kmila-fpga-picker__text {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    min-width: 0;
+    overflow: hidden;
+}
+
+.kmila-fpga-picker__model {
+    color: var(--text-strong);
+    font-weight: var(--fw-semibold);
+    font-family: var(--font-mono);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.kmila-fpga-picker__family {
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
+    font-family: var(--font-mono);
+}
+
+.kmila-fpga-picker__placeholder {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.kmila-fpga-picker__chevron {
+    margin-left: auto;
+    color: var(--text-muted);
+    transition: transform var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-fpga-picker[open] .kmila-fpga-picker__chevron {
+    transform: rotate(180deg);
+}
+
+
+/* --- Panel --- */
+
+.kmila-fpga-picker__panel {
+    display: none;
+    position: absolute;
+    top: calc(100% + var(--space-2));
+    right: 0;
+    left: auto;
+    width: min(380px, 90vw);
+    max-height: 420px;
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-3);
+    flex-direction: column;
+    overflow: hidden;
+    z-index: var(--z-dropdown);
+    animation: kmilaPop var(--duration-fast) var(--ease-standard);
+}
+
+[dir="rtl"] .kmila-fpga-picker__panel {
+    right: auto;
+    left: 0;
+}
+
+@keyframes kmilaPop {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.kmila-fpga-picker__search {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-muted);
+}
+
+.kmila-fpga-picker__search .form-control {
+    border: none;
+    padding: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.kmila-fpga-picker__search .form-control:focus {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.kmila-fpga-picker__list {
+    overflow-y: auto;
+    padding: var(--space-2);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.kmila-fpga-picker__option {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    background: none;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-default);
+    font-size: var(--fs-sm);
+    font-family: var(--font-mono);
+    text-align: left;
+    cursor: pointer;
+    transition: background-color var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-fpga-picker__option > span {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.kmila-fpga-picker__option:hover {
+    background-color: var(--surface-3);
+    color: var(--text-strong);
+}
+
+.kmila-fpga-picker__option.is-selected {
+    background-color: var(--kmila-accent-soft);
+    color: var(--text-strong);
+}
+
+.kmila-fpga-picker__check {
+    color: var(--kmila-accent);
+}
+
+.kmila-fpga-picker__empty {
+    padding: var(--space-4);
+    text-align: center;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+
+/* Responsive: shrink the FPGA summary on very narrow viewports */
+@media (max-width: 575.98px) {
+    .kmila-fpga-picker__summary { max-width: 160px; }
+    .kmila-fpga-picker__family,
+    .kmila-fpga-picker__chevron { display: none; }
+}
+
+
+/* ============================================================================
+   Language picker (details popover — matches FPGA picker style)
+   ============================================================================ */
+
+.kmila-lang-picker {
+    position: relative;
+}
+
+.kmila-lang-picker__summary {
+    list-style: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background-color: var(--surface-3);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-pill);
+    color: var(--text-default);
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-semibold);
+    user-select: none;
+    transition: background-color var(--duration-fast) var(--ease-standard),
+                border-color var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-lang-picker__summary::-webkit-details-marker { display: none; }
+.kmila-lang-picker__summary::marker { display: none; content: ""; }
+
+.kmila-lang-picker__summary:hover {
+    background-color: var(--surface-2);
+    border-color: var(--border-default);
+}
+
+.kmila-lang-picker[open] .kmila-lang-picker__summary {
+    border-color: var(--kmila-accent);
+    box-shadow: var(--shadow-focus);
+}
+
+.kmila-lang-picker__code {
+    font-family: var(--font-mono);
+    letter-spacing: var(--tracking-wide);
+    color: var(--text-strong);
+}
+
+.kmila-lang-picker__chevron {
+    color: var(--text-muted);
+    transition: transform var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-lang-picker[open] .kmila-lang-picker__chevron {
+    transform: rotate(180deg);
+}
+
+.kmila-lang-picker__panel {
+    position: absolute;
+    top: calc(100% + var(--space-2));
+    right: 0;
+    left: auto;
+    z-index: var(--z-dropdown);
+    min-width: 220px;
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-3);
+    padding: var(--space-2);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    animation: kmilaPop var(--duration-fast) var(--ease-standard);
+}
+
+[dir="rtl"] .kmila-lang-picker__panel {
+    right: auto;
+    left: 0;
+}
+
+.kmila-lang-picker__option {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    background: none;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-default);
+    font-size: var(--fs-sm);
+    text-align: left;
+    cursor: pointer;
+    transition: background-color var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-lang-picker__option:hover {
+    background-color: var(--surface-3);
+    color: var(--text-strong);
+}
+
+.kmila-lang-picker__option.is-selected {
+    background-color: var(--kmila-accent-soft);
+    color: var(--text-strong);
+}
+
+.kmila-lang-picker__badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 36px;
+    padding: 2px 8px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    letter-spacing: var(--tracking-wide);
+    color: var(--text-muted);
+    background-color: var(--surface-3);
+    border-radius: var(--radius-xs);
+    flex-shrink: 0;
+}
+
+.kmila-lang-picker__option.is-selected .kmila-lang-picker__badge {
+    color: var(--kmila-accent);
+    background-color: rgba(60, 130, 246, 0.14);
+}
+
+.kmila-lang-picker__name {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.kmila-lang-picker__check {
+    color: var(--kmila-accent);
+    flex-shrink: 0;
+}
+
+
+/* ============================================================================
+   Theme picker (details popover)
+   ============================================================================ */
+
+.kmila-theme-picker {
+    position: relative;
+}
+
+.kmila-theme-picker__summary {
+    list-style: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    width: 44px;
+    height: 40px;
+    padding: 0;
+    background-color: var(--surface-3);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-pill);
+    color: var(--text-default);
+    user-select: none;
+    transition: background-color var(--duration-fast) var(--ease-standard),
+                border-color var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-theme-picker__summary::-webkit-details-marker { display: none; }
+.kmila-theme-picker__summary::marker { display: none; content: ""; }
+
+.kmila-theme-picker__summary:hover {
+    background-color: var(--surface-2);
+    border-color: var(--border-default);
+}
+
+.kmila-theme-picker[open] .kmila-theme-picker__summary {
+    border-color: var(--kmila-accent);
+    box-shadow: var(--shadow-focus);
+}
+
+/* The chevron is hidden on the compact square trigger to save space; only the
+   active-theme icon is visible. */
+.kmila-theme-picker__chevron {
+    display: none;
+}
+
+.kmila-theme-picker__panel {
+    position: absolute;
+    top: calc(100% + var(--space-2));
+    right: 0;
+    left: auto;
+    z-index: var(--z-dropdown);
+    min-width: 180px;
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-3);
+    padding: var(--space-2);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    animation: kmilaPop var(--duration-fast) var(--ease-standard);
+}
+
+[dir="rtl"] .kmila-theme-picker__panel {
+    right: auto;
+    left: 0;
+}
+
+.kmila-theme-picker__option {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    background: none;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-default);
+    font-size: var(--fs-sm);
+    text-align: left;
+    cursor: pointer;
+    transition: background-color var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-theme-picker__option > span {
+    flex: 1 1 auto;
+    font-weight: var(--fw-medium);
+}
+
+.kmila-theme-picker__option:hover {
+    background-color: var(--surface-3);
+    color: var(--text-strong);
+}
+
+.kmila-theme-picker__option.is-selected {
+    background-color: var(--kmila-accent-soft);
+    color: var(--text-strong);
+}
+
+.kmila-theme-picker__option.is-selected .bi {
+    color: var(--kmila-accent);
+}
+
+.kmila-theme-picker__check {
+    color: var(--kmila-accent);
+    flex-shrink: 0;
+}
+
+
+/* ============================================================================
+   Projects list (/projects)
+   ============================================================================ */
+
+.projects-page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+}
+
+.projects-header {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: var(--space-4);
+    padding-bottom: var(--space-4);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.projects-header__titles {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.projects-header__title {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin: 0;
+    font-size: var(--fs-2xl);
+    letter-spacing: var(--tracking-tight);
+    color: var(--text-strong);
+}
+
+.projects-header__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    height: 28px;
+    padding: 0 10px;
+    background-color: var(--surface-3);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-semibold);
+    border-radius: var(--radius-pill);
+}
+
+.projects-header__tools {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+
+/* Search input */
+.projects-search {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: clamp(200px, 34vw, 360px);
+    padding: 0 var(--space-3);
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-pill);
+    color: var(--text-muted);
+    transition: border-color var(--duration-fast) var(--ease-standard),
+                box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+.projects-search:focus-within {
+    border-color: var(--kmila-accent);
+    box-shadow: var(--shadow-focus);
+}
+
+.projects-search .form-control {
+    flex: 1 1 auto;
+    border: none;
+    background: transparent;
+    padding: var(--space-2) 0;
+    box-shadow: none;
+    color: var(--text-default);
+}
+
+.projects-search .form-control:focus {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.projects-search__clear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    background-color: var(--surface-3);
+    color: var(--text-muted);
+    border: none;
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    font-size: 0.75rem;
+    transition: background-color var(--duration-fast) var(--ease-standard),
+                color var(--duration-fast) var(--ease-standard);
+}
+
+.projects-search__clear:hover {
+    background-color: var(--danger-soft);
+    color: var(--danger);
+}
+
+
+/* Primary CTA button */
+.projects-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
+    white-space: nowrap;
+    box-shadow: var(--shadow-1);
+}
+
+
+/* Card grid */
+.projects-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: var(--space-4);
+}
+
+
+/* Project card */
+.project-card {
+    position: relative;
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    transition: box-shadow var(--duration-base) var(--ease-standard),
+                border-color var(--duration-base) var(--ease-standard),
+                transform var(--duration-base) var(--ease-standard);
+}
+
+.project-card:hover {
+    box-shadow: var(--shadow-2);
+    border-color: var(--border-default);
+    transform: translateY(-2px);
+}
+
+.project-card:focus-within {
+    border-color: var(--kmila-accent);
+    box-shadow: var(--shadow-focus);
+}
+
+.project-card__link {
+    display: grid;
+    grid-template-areas:
+        "avatar body"
+        "meta meta";
+    grid-template-columns: auto 1fr;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    color: inherit;
+    text-decoration: none;
+}
+
+.project-card__link:hover {
+    color: inherit;
+    text-decoration: none;
+}
+
+.project-card__avatar {
+    grid-area: avatar;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    background-color: var(--kmila-accent-soft);
+    color: var(--kmila-accent);
+    border-radius: var(--radius-md);
+    font-size: 1.3rem;
+    flex-shrink: 0;
+}
+
+.project-card__body {
+    grid-area: body;
+    min-width: 0;
+}
+
+.project-card__name {
+    margin: 0 0 var(--space-1);
+    font-size: var(--fs-md);
+    font-weight: var(--fw-semibold);
+    color: var(--text-strong);
+    line-height: var(--lh-snug);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+    -webkit-box-orient: vertical;
+}
+
+.project-card__description {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+    line-height: var(--lh-snug);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    min-height: calc(var(--lh-snug) * var(--fs-sm) * 2);
+}
+
+.project-card__description--muted {
+    font-style: italic;
+    color: var(--text-subtle);
+}
+
+.project-card__meta {
+    grid-area: meta;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border-subtle);
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
+    font-family: var(--font-mono);
+}
+
+.project-card__date {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+
+/* Action rail — absolute top-right, revealed on hover (always on touch) */
+.project-card__actions {
+    position: absolute;
+    top: var(--space-3);
+    right: var(--space-3);
+    display: flex;
+    gap: 2px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--duration-fast) var(--ease-standard);
+}
+
+[dir="rtl"] .project-card__actions {
+    right: auto;
+    left: var(--space-3);
+}
+
+.project-card:hover .project-card__actions,
+.project-card:focus-within .project-card__actions {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+@media (hover: none) {
+    /* Touch devices — always show actions; hover transitions don't fire reliably */
+    .project-card__actions {
+        opacity: 1;
+        pointer-events: auto;
+    }
+}
+
+.project-card__action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--border-subtle);
+    background-color: var(--surface-2);
+    color: var(--text-muted);
+    border-radius: var(--radius-sm);
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color var(--duration-fast) var(--ease-standard),
+                color var(--duration-fast) var(--ease-standard),
+                border-color var(--duration-fast) var(--ease-standard);
+}
+
+.project-card__action:hover {
+    background-color: var(--surface-3);
+    color: var(--text-strong);
+    text-decoration: none;
+}
+
+.project-card__action--danger:hover {
+    background-color: var(--danger-soft);
+    color: var(--danger);
+    border-color: var(--danger);
+}
+
+
+/* --- Skeleton loading cards --- */
+
+.project-card--skeleton {
+    padding: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.skeleton {
+    background: linear-gradient(
+        90deg,
+        var(--surface-3) 0%,
+        var(--surface-1) 50%,
+        var(--surface-3) 100%
+    );
+    background-size: 200% 100%;
+    animation: kmilaShimmer 1.6s linear infinite;
+    border-radius: var(--radius-xs);
+}
+
+.skeleton--avatar { width: 44px; height: 44px; border-radius: var(--radius-md); }
+.skeleton--title  { height: 16px; width: 65%; }
+.skeleton--line   { height: 12px; width: 100%; }
+.skeleton--short  { width: 40%; }
+
+@keyframes kmilaShimmer {
+    from { background-position: 200% 0; }
+    to   { background-position: -200% 0; }
+}
+
+
+/* --- Empty states --- */
+
+.projects-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    padding: var(--space-8) var(--space-5);
+    background-color: var(--surface-2);
+    border: 1px dashed var(--border-default);
+    border-radius: var(--radius-xl);
+    text-align: center;
+}
+
+.projects-empty--compact {
+    padding: var(--space-6) var(--space-4);
+}
+
+.projects-empty__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 72px;
+    height: 72px;
+    background-color: var(--kmila-accent-soft);
+    color: var(--kmila-accent);
+    border-radius: var(--radius-pill);
+    font-size: 2rem;
+    margin-bottom: var(--space-2);
+}
+
+.projects-empty h2 {
+    margin: 0;
+    font-size: var(--fs-lg);
+    color: var(--text-strong);
+}
+
+.projects-empty p {
+    margin: 0;
+    max-width: 48ch;
+    color: var(--text-muted);
+    line-height: var(--lh-relaxed);
+}
+
+.projects-empty .btn {
+    margin-top: var(--space-2);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+/* Dual-action row (Create new + Try a sample) in the empty state */
+.projects-empty__actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    justify-content: center;
+    margin-top: var(--space-2);
+}
+
+/* Header "Try a sample" — ghost button, picks up accent tint on hover */
+.projects-sample {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    white-space: nowrap;
+    color: var(--kmila-accent);
+}
+
+.projects-sample:hover {
+    background-color: var(--kmila-accent-soft);
+    color: var(--kmila-accent);
+}
+
+
+/* ============================================================================
+   Settings page (/settings)
+   ============================================================================ */
+
+.settings-page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+}
+
+.settings-page__header {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding-bottom: var(--space-4);
+    border-bottom: 1px solid var(--border-subtle);
+    max-width: 760px;
+}
+
+.settings-page__header h1 {
+    margin: 0;
+    font-size: var(--fs-2xl);
+    letter-spacing: var(--tracking-tight);
+    color: var(--text-strong);
+}
+
+.settings-page__intro {
+    margin: 0;
+    color: var(--text-muted);
+    line-height: var(--lh-relaxed);
+}
+
+.settings-page__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: var(--space-4);
+}
+
+.settings-card {
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-1);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.settings-card__head {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    border-bottom: 1px solid var(--border-subtle);
+    background-color: var(--surface-1);
+}
+
+.settings-card__head h2 {
+    margin: 0 0 2px;
+    font-size: var(--fs-md);
+    font-weight: var(--fw-semibold);
+    color: var(--text-strong);
+}
+
+.settings-card__sub {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+    line-height: var(--lh-snug);
+}
+
+.settings-card__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-md);
+    font-size: 1.15rem;
+    flex-shrink: 0;
+}
+
+.settings-card__icon--accent  { background-color: var(--kmila-accent-soft); color: var(--kmila-accent); }
+.settings-card__icon--success { background-color: var(--success-soft); color: var(--success); }
+.settings-card__icon--info    { background-color: var(--info-soft); color: var(--kmila-accent); }
+.settings-card__icon--warning { background-color: var(--warning-soft); color: var(--warning); }
+
+.settings-card__body {
+    padding: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.settings-card__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.settings-card__hint {
+    margin: 0;
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+}
+
+.settings-card__placeholder {
+    margin: 0;
+    padding: var(--space-3);
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+    font-style: italic;
+    text-align: center;
+    border: 1px dashed var(--border-default);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface-1);
+}
+
+.settings-card__body .btn {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+
+/* Row inside a card: label on the left, control on the right */
+.settings-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: var(--space-4);
+}
+
+.settings-row__label {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.settings-row__label strong {
+    color: var(--text-strong);
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-semibold);
+}
+
+.settings-row__label small {
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
+    line-height: var(--lh-snug);
+}
+
+.settings-row__control {
+    min-width: 0;
+}
+
+
+/* ============================================================================
+   Logs page (/logs)
+   ============================================================================ */
+
+.logs-page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    height: calc(100dvh - var(--topbar-height) - 120px); /* viewport minus top + padding */
+    min-height: 480px;
+}
+
+.logs-page__header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    padding-bottom: var(--space-3);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.logs-page__titles {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+}
+
+.logs-page__title {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin: 0;
+    font-size: var(--fs-2xl);
+    letter-spacing: var(--tracking-tight);
+    color: var(--text-strong);
+}
+
+.logs-page__count {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 10px;
+    background-color: var(--surface-3);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-semibold);
+    border-radius: var(--radius-pill);
+}
+
+.logs-page__tools {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+}
+
+.logs-page__search {
+    width: clamp(200px, 32vw, 320px);
+}
+
+.logs-page__level {
+    width: auto;
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+}
+
+.logs-page__toggle {
+    padding: 6px 8px;
+}
+
+.logs-page__toggle.is-active {
+    background-color: var(--kmila-accent-soft);
+    color: var(--kmila-accent);
+}
+
+
+/* List reuses the Output row styles from the dock for visual consistency */
+.logs-page__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    background-color: var(--border-subtle);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    overflow-y: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.logs-page__list .output-row {
+    grid-template-columns: auto auto 1fr auto;
+    align-items: start;
+}
+
+.logs-row__report {
+    align-self: center;
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.logs-row__report:hover {
+    color: var(--danger);
+}
+
+.logs-row__body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.logs-row__category {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--fw-semibold);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.logs-row__exception {
+    margin: 4px 0 0;
+    padding: var(--space-2) var(--space-3);
+    background-color: var(--surface-3);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-xs);
+    font-size: var(--fs-xs);
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--danger);
+    max-height: 160px;
+    overflow-y: auto;
+}
+
+.logs-page__empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-7) var(--space-4);
+    text-align: center;
+    border: 1px dashed var(--border-default);
+    border-radius: var(--radius-md);
+    color: var(--text-muted);
+}
+
+.logs-page__empty h2 {
+    margin: 0;
+    font-size: var(--fs-lg);
+    color: var(--text-strong);
+}
+
+.logs-page__empty p {
+    margin: 0;
+    max-width: 48ch;
+    line-height: var(--lh-relaxed);
+}
+
+
+/* Responsive */
+@media (max-width: 640.98px) {
+    .projects-header {
+        grid-template-columns: 1fr;
+    }
+    .projects-header__tools {
+        width: 100%;
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--space-2);
+    }
+    .projects-search { width: 100%; }
+    .projects-cta { width: 100%; justify-content: center; }
+    .project-card__actions { opacity: 1; pointer-events: auto; }
+}
+
+
+/* ============================================================================
+   Project form (create modal body)
+   ============================================================================ */
+
+.project-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+.project-form__field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.project-form__label {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-semibold);
+    color: var(--text-strong);
+    margin: 0;
+}
+
+.project-form__required {
+    color: var(--danger);
+    font-weight: var(--fw-bold);
+}
+
+.project-form__optional {
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-regular);
+    color: var(--text-subtle);
+    text-transform: lowercase;
+    letter-spacing: 0;
+}
+
+.project-form__hint {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
+    font-family: var(--font-mono);
+    word-break: break-all;
+}
+
+.project-form__hint .bi {
+    color: var(--kmila-accent);
+    flex-shrink: 0;
+}
+
+.project-form__validation {
+    color: var(--danger);
+    font-size: var(--fs-xs);
+}
+
+.project-form__actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: var(--space-3);
+}
+
+.project-form__submit {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding-left: var(--space-5);
+    padding-right: var(--space-5);
+}
+
+.project-form__submit:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+
+/* ============================================================================
+   Editor (/editor/{id})
+   ============================================================================ */
+
+.editor-page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+    /* Same flex-shrink guard as the dock below — keeps the page from ever
+       reporting a larger intrinsic width than its container. */
+    min-width: 0;
+}
+
+
+/* --- Workbench: header + body with right rail --- */
+
+.editor-workbench {
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-1);
+    overflow: hidden;
+}
+
+.editor-workbench__header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-4);
+    background-color: var(--surface-1);
+    border-bottom: 1px solid var(--border-subtle);
+    min-height: 44px;
+}
+
+.editor-file-info {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.editor-file-icon {
+    color: var(--kmila-accent);
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.editor-file-name {
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-medium);
+    color: var(--text-strong);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.editor-unsaved {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--warning);
+    box-shadow: 0 0 0 4px var(--warning-soft);
+    flex-shrink: 0;
+}
+
+.editor-lang-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    color: var(--kmila-accent);
+    background-color: var(--kmila-accent-soft);
+    border-radius: var(--radius-pill);
+    flex-shrink: 0;
+}
+
+
+/* --- Status / shortcut hint on the right of the header --- */
+
+.editor-status {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-shrink: 0;
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
+}
+
+.editor-position {
+    font-family: var(--font-mono);
+    white-space: nowrap;
+}
+
+.editor-shortcut {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.editor-shortcut kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    padding: 1px 5px;
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-default);
+    border-bottom-width: 2px;
+    border-radius: var(--radius-xs);
+    color: var(--text-default);
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    line-height: 1;
+}
+
+@media (max-width: 575.98px) {
+    .editor-shortcut { display: none; }
+}
+
+
+/* --- Body: main editor area + right rail --- */
+
+.editor-workbench__body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 260px;
+    gap: 1px;                      /* hairline gap = a subtle divider via body bg */
+    background-color: var(--border-subtle);
+}
+
+.editor-workbench__main {
+    min-width: 0;
+    background-color: var(--surface-2);
+}
+
+.editor-workbench__rail {
+    background-color: var(--surface-1);
+    padding: var(--space-3);
+}
+
+/* Strip BB card chrome inside the rail so ButtonCollapse blends in */
+.editor-workbench__rail .card {
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+}
+
+.editor-workbench__rail .card-body {
+    padding: 0;
+}
+
+.editor-workbench__rail .card-title {
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    margin-bottom: var(--space-3);
+}
+
+
+/* Smart-hide the Monaco minimap on narrow desktops and mobile — it takes
+   ~160px of horizontal width that matters more on small viewports, and it's
+   not tappable anyway on touch so there's nothing lost by hiding it. */
+@media (max-width: 900px) {
+    .monaco-editor .minimap { display: none !important; }
+}
+
+
+/* --- Monaco editor sizing --- */
+
+.editor-monaco,
+.monaco-editor-container,
+#editor {
+    width: 100%;
+    height: 60dvh;
+    min-height: 400px;
+}
+
+@media (max-width: 768px) {
+    .editor-monaco,
+    .monaco-editor-container,
+    #editor {
+        height: 55dvh;
+        min-height: 320px;
+    }
+}
+
+@media (max-width: 768px) and (orientation: landscape) {
+    .editor-monaco,
+    .monaco-editor-container,
+    #editor {
+        height: 50dvh;
+        min-height: 240px;
+    }
+}
+
+
+/* --- Markdown split view --- */
+
+.editor-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    height: 60dvh;
+    min-height: 400px;
+}
+
+.editor-split__pane {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+    background-color: var(--surface-2);
+}
+
+.editor-split__pane + .editor-split__pane {
+    border-left: 1px solid var(--border-subtle);
+}
+
+.editor-split__header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background-color: var(--surface-1);
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    min-height: 36px;
+    flex-shrink: 0;
+}
+
+.editor-split__pane .editor-monaco {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+}
+
+.editor-markdown {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: var(--space-5);
+    color: var(--text-default);
+    line-height: var(--lh-relaxed);
+}
+
+.editor-markdown h1,
+.editor-markdown h2,
+.editor-markdown h3,
+.editor-markdown h4,
+.editor-markdown h5,
+.editor-markdown h6 { color: var(--text-strong); }
+
+.editor-markdown a { color: var(--kmila-accent); }
+
+.editor-markdown code {
+    background-color: var(--surface-3);
+    border: 1px solid var(--border-subtle);
+    padding: 0.15em 0.4em;
+    border-radius: var(--radius-xs);
+    font-size: 0.9em;
+    color: var(--text-strong);
+}
+
+.editor-markdown pre {
+    background-color: var(--surface-3);
+    border: 1px solid var(--border-subtle);
+    padding: var(--space-4);
+    border-radius: var(--radius-md);
+    overflow-x: auto;
+}
+
+.editor-markdown pre code {
+    background: transparent;
+    border: none;
+    padding: 0;
+}
+
+.editor-markdown blockquote {
+    border-left: 3px solid var(--kmila-accent);
+    padding: var(--space-1) var(--space-4);
+    margin: var(--space-3) 0;
+    color: var(--text-muted);
+    background-color: var(--surface-1);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.editor-markdown table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: var(--space-3) 0;
+}
+
+.editor-markdown th,
+.editor-markdown td {
+    border: 1px solid var(--border-subtle);
+    padding: var(--space-2) var(--space-3);
+}
+
+.editor-markdown th {
+    background-color: var(--surface-1);
+    color: var(--text-strong);
+    font-weight: var(--fw-semibold);
+}
+
+
+/* --- Bottom dock: waveforms / entities / files panels --- */
+
+.editor-panel {
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-1);
+}
+
+.editor-panel__header {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--border-subtle);
+    background-color: var(--surface-1);
+}
+
+.editor-panel__header h2 {
+    margin: 0;
+    font-size: var(--fs-md);
+    color: var(--text-strong);
+}
+
+.editor-panel__body {
+    padding: var(--space-4);
+}
+
+.editor-panel__body--flush { padding: 0; }
+
+/* Neutralise nested BB cards inside panels so the panel chrome is the single
+   visual container. Nested cards inside EntityView / FilesCard would otherwise
+   render card-in-card. */
+.editor-panel .card {
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+}
+.editor-panel .card > .card-body { padding: 0; }
+
+
+/* Two-column grid for entities + files */
+.editor-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: var(--space-4);
+}
+
+
+/* --- Responsive --- */
+
+@media (max-width: 991.98px) {
+    .editor-workbench__body {
+        grid-template-columns: 1fr;
+    }
+    .editor-workbench__rail {
+        border-top: 1px solid var(--border-subtle);
+    }
+}
+
+@media (max-width: 768px) {
+    .editor-split {
+        grid-template-columns: 1fr;
+        height: auto;
+        min-height: 0;
+    }
+    .editor-split__pane + .editor-split__pane {
+        border-left: none;
+        border-top: 1px solid var(--border-subtle);
+    }
+    .editor-split__pane .editor-monaco { min-height: 280px; }
+    .editor-markdown { min-height: 280px; max-height: 40dvh; }
+}
+
+
+/* ============================================================================
+   Simulation Parameters Modal
+   ============================================================================ */
+
+.kmila-simulation {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+
+/* --- Resource status strip --- */
+
+.kmila-simulation__status {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    font-size: var(--fs-sm);
+}
+
+.kmila-simulation__status > .bi {
+    font-size: 1.4rem;
+    flex-shrink: 0;
+}
+
+.kmila-simulation__status-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.kmila-simulation__status-title {
+    font-weight: var(--fw-semibold);
+}
+
+.kmila-simulation__status-fpga {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.kmila-simulation__status--success {
+    background-color: var(--success-soft);
+    border-color: var(--success);
+    color: var(--success);
+}
+
+.kmila-simulation__status--warning {
+    background-color: var(--warning-soft);
+    border-color: var(--warning);
+    color: var(--warning);
+}
+
+.kmila-simulation__status--danger {
+    background-color: var(--danger-soft);
+    border-color: var(--danger);
+    color: var(--danger);
+}
+
+/* The coloured title should be the only accent; reset the FPGA line's color
+   so the device name sits in the normal text color and stays readable. */
+.kmila-simulation__status .kmila-simulation__status-fpga {
+    color: inherit;
+    opacity: 0.8;
+}
+
+
+/* --- Tab strip as segmented-pill control --- */
+
+.kmila-simulation__tabs {
+    margin: 0;
+}
+
+.kmila-simulation__tabs .nav-pills {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    padding: var(--space-1);
+    background-color: var(--surface-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-pill);
+    margin-bottom: var(--space-4);
+}
+
+.kmila-simulation__tabs .nav-item {
+    margin: 0;
+}
+
+.kmila-simulation__tabs .nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
+    background-color: transparent;
+    border: none;
+    border-radius: var(--radius-pill);
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-semibold);
+    transition: background-color var(--duration-fast) var(--ease-standard),
+                color var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-simulation__tabs .nav-link:hover {
+    background-color: var(--surface-2);
+    color: var(--text-default);
+}
+
+.kmila-simulation__tabs .nav-link.active {
+    background-color: var(--surface-2);
+    color: var(--text-strong);
+    box-shadow: var(--shadow-1);
+}
+
+.kmila-simulation__tabs .nav-link .bi {
+    color: var(--text-muted);
+    transition: color var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-simulation__tabs .nav-link.active .bi {
+    color: var(--kmila-accent);
+}
+
+.kmila-simulation__tab {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    position: relative;
+}
+
+.kmila-simulation__tab-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--warning);
+    box-shadow: 0 0 0 3px var(--warning-soft);
+}
+
+/* Pulsing "LIVE" dot on the Run tab while simulation is running */
+.kmila-simulation__tab-live {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--danger);
+    box-shadow: 0 0 0 3px var(--danger-soft);
+    animation: kmilaPulse 1.3s var(--ease-standard) infinite;
+}
+
+@keyframes kmilaPulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50%      { transform: scale(1.4); opacity: 0.6; }
+}
+
+
+/* Tab panel body */
+.kmila-simulation__tabs .tab-content {
+    padding: 0;
+}
+
+.kmila-simulation__tabs .tab-pane {
+    padding: 0;
+}
+
+/* Strip any BB .card wrappers inside tab contents so we don't get card-in-card
+   inside a modal that already has its own chrome. */
+.kmila-simulation .card {
+    background-color: transparent;
+    box-shadow: none;
+}
+
+/* Bring back just a subtle border on inner cards (so port variables read as
+   distinct groups without looking nested) */
+.kmila-simulation .tab-content .card {
+    border: 1px solid var(--border-subtle);
+    background-color: var(--surface-2);
+}
+
+
+/* --- Responsive --- */
+
+@media (max-width: 575.98px) {
+    .kmila-simulation__tabs .nav-pills {
+        display: flex;
+        width: 100%;
+        border-radius: var(--radius-md);
+    }
+    .kmila-simulation__tabs .nav-item { flex: 1 1 0; }
+    .kmila-simulation__tabs .nav-link {
+        width: 100%;
+        justify-content: center;
+        padding-left: var(--space-2);
+        padding-right: var(--space-2);
+    }
+    .kmila-simulation__status {
+        flex-wrap: wrap;
+    }
+}
+
+
+/* ============================================================================
+   Resource view — metric cards, progress bars, and the usage wrapper
+   ---------------------------------------------------------------------------
+   Semantic variants map onto token colors. Each variant defines three vars:
+   --mx-fg (text color), --mx-bg (icon chip background), --mx-track (progress
+   fill). The CSS then references those from a single rule, so there's no
+   per-variant copy-paste.
+   ============================================================================ */
+
+/* --- Usage wrapper (rendered inside EntityView) --- */
+
+.resource-usage {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    margin-top: var(--space-4);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border-subtle);
+}
+
+.resource-usage__header {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.resource-usage__title {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0;
+    font-size: var(--fs-md);
+    font-weight: var(--fw-semibold);
+    color: var(--text-strong);
+}
+
+.resource-usage__title .bi {
+    color: var(--kmila-accent);
+}
+
+.resource-usage__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: var(--space-3);
+}
+
+.resource-usage__note {
+    display: flex;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    background-color: var(--info-soft);
+    border: 1px solid var(--kmila-accent);
+    border-radius: var(--radius-md);
+    color: var(--text-default);
+    font-size: var(--fs-sm);
+    line-height: var(--lh-relaxed);
+}
+
+.resource-usage__note .bi {
+    color: var(--kmila-accent);
+    font-size: 1.1rem;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.resource-usage__note p {
+    margin: 0;
+    min-width: 0;
+}
+
+.resource-usage__note strong {
+    color: var(--text-strong);
+}
+
+
+/* --- Metric card --- */
+
+.resource-metric {
+    --mx-fg: var(--kmila-accent);
+    --mx-bg: var(--kmila-accent-soft);
+
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-1);
+    min-width: 0;
+    transition: box-shadow var(--duration-base) var(--ease-standard),
+                border-color var(--duration-base) var(--ease-standard),
+                transform var(--duration-base) var(--ease-standard);
+}
+
+.resource-metric:hover {
+    box-shadow: var(--shadow-2);
+    border-color: var(--border-default);
+    transform: translateY(-1px);
+}
+
+.resource-metric--success { --mx-fg: var(--success); --mx-bg: var(--success-soft); }
+.resource-metric--info    { --mx-fg: var(--kmila-accent); --mx-bg: var(--kmila-accent-soft); }
+.resource-metric--warning { --mx-fg: var(--warning); --mx-bg: var(--warning-soft); }
+.resource-metric--danger  { --mx-fg: var(--danger);  --mx-bg: var(--danger-soft); }
+.resource-metric--neutral { --mx-fg: var(--text-muted); --mx-bg: var(--surface-3); }
+
+
+.resource-metric__head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+}
+
+.resource-metric__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background-color: var(--mx-bg);
+    color: var(--mx-fg);
+    border-radius: var(--radius-sm);
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.resource-metric__label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.resource-metric__title {
+    display: block;
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-semibold);
+    color: var(--text-strong);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    font-family: var(--font-mono);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.resource-metric__accuracy {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 8px;
+    background-color: var(--surface-3);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--fw-semibold);
+    letter-spacing: var(--tracking-wide);
+    border-radius: var(--radius-pill);
+    flex-shrink: 0;
+}
+
+
+.resource-metric__value {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    min-width: 0;
+    overflow: hidden;
+}
+
+.resource-metric__number {
+    font-family: var(--font-mono);
+    font-size: var(--fs-xl);
+    font-weight: var(--fw-bold);
+    color: var(--mx-fg);
+    line-height: 1;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    min-width: 0;
+}
+
+.resource-metric__unit {
+    font-size: var(--fs-xs);
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-wide);
+    flex-shrink: 0;
+}
+
+
+.resource-metric__extra {
+    min-width: 0;
+}
+
+/* Clock signal chips rendered via ChildContent on the Clock Domains card */
+.resource-metric__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: var(--space-2);
+}
+
+.resource-metric__chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    background-color: var(--surface-3);
+    color: var(--text-default);
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--border-subtle);
+}
+
+
+/* --- ResourceProgressBar --- */
+
+.resource-bar {
+    --bx-fg: var(--success);
+    --bx-bg: var(--success-soft);
+
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3) 0;
+}
+
+.resource-bar__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+}
+
+.resource-bar__title {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--text-strong);
+    font-size: var(--fs-sm);
+}
+
+.resource-bar__title .bi {
+    color: var(--text-muted);
+}
+
+.resource-bar__counts {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+}
+
+.resource-bar__used {
+    font-weight: var(--fw-bold);
+    padding: 1px 8px;
+    border-radius: var(--radius-xs);
+    background-color: var(--surface-3);
+    color: var(--text-strong);
+}
+
+.resource-bar__used--success { background-color: var(--success-soft); color: var(--success); }
+.resource-bar__used--info    { background-color: var(--kmila-accent-soft); color: var(--kmila-accent); }
+.resource-bar__used--warning { background-color: var(--warning-soft); color: var(--warning); }
+.resource-bar__used--danger  { background-color: var(--danger-soft);  color: var(--danger); }
+
+.resource-bar__sep {
+    color: var(--text-subtle);
+}
+
+.resource-bar__available {
+    color: var(--text-muted);
+}
+
+.resource-bar__percent {
+    margin-left: var(--space-1);
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
+}
+
+@media (max-width: 575.98px) {
+    .resource-bar__percent { display: none; }
+}
+
+
+/* Progress track */
+
+.resource-bar__track {
+    position: relative;
+    width: 100%;
+    height: 8px;
+    background-color: var(--surface-3);
+    border-radius: var(--radius-pill);
+    overflow: hidden;
+}
+
+.resource-bar__fill {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background-color: var(--success);
+    transition: width var(--duration-slow) var(--ease-standard),
+                background-color var(--duration-base) var(--ease-standard);
+}
+
+.resource-bar__fill--success { background-color: var(--success); }
+.resource-bar__fill--info    { background-color: var(--kmila-accent); }
+.resource-bar__fill--warning { background-color: var(--warning); }
+.resource-bar__fill--danger  {
+    background: repeating-linear-gradient(
+        45deg,
+        var(--danger) 0,
+        var(--danger) 8px,
+        color-mix(in srgb, var(--danger) 70%, transparent) 8px,
+        color-mix(in srgb, var(--danger) 70%, transparent) 16px
+    );
+    animation: kmilaPulseStripe 1.6s linear infinite;
+}
+
+@keyframes kmilaPulseStripe {
+    from { background-position: 0 0; }
+    to   { background-position: 32px 0; }
+}
+
+
+/* ============================================================================
+   Editor Dock — bottom panel with 5 tabs on the Editor page.
+   Chunk 1: tabs + content area + empty states. Drag-to-resize and collapsed
+   mode come in Chunk 2; Run bar + status bar come in Chunks 3–4.
+   ============================================================================ */
+
+.kmila-dock {
+    display: flex;
+    flex-direction: column;
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-1);
+    overflow: hidden;
+    /* `min-width: 0` keeps the dock from expanding past its parent when a
+       child (like the Waveforms tab's very wide SVG grid) reports a large
+       intrinsic size. Without this, the whole editor shifted off-screen at
+       high zoom levels. */
+    min-width: 0;
+    min-height: 280px;
+    transition: min-height var(--duration-base) var(--ease-standard);
+}
+
+/* When collapsed, shrink to just the tab strip. The panel below is already
+   hidden via the `hidden` HTML attribute; this just removes the empty space. */
+.kmila-dock--collapsed {
+    min-height: 0;
+}
+
+
+/* --- Tab strip --- */
+
+.kmila-dock__tabs {
+    display: flex;
+    flex-wrap: nowrap;
+    /* Tabs and the collapse chevron share one horizontal strip. `flex-shrink: 0`
+       keeps the strip's own height when the panel below grows with content
+       (Entities / Files etc.) — without it the flex column compressed the
+       strip and the tabs appeared "cut in half". */
+    flex-shrink: 0;
+    align-items: stretch;
+    gap: 2px;
+    padding: var(--space-2) var(--space-2) 0;
+    background-color: var(--surface-1);
+    border-bottom: 1px solid var(--border-subtle);
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.kmila-dock__tabs::-webkit-scrollbar {
+    display: none;
+}
+
+/* Collapse toggle lives at the far end of the tab strip. flex-push with
+   margin-left:auto (margin-inline-start would be cleaner but has spottier
+   support in older mobile WebViews). RTL override below. */
+.kmila-dock__collapse {
+    margin-left: auto;
+    /* Stick to the right edge of the scrolling tab strip so the chevron stays
+       reachable even when there are enough tabs to overflow horizontally.
+       Without this the button scrolls out of view on narrow viewports and
+       looks broken ("the burger at the end doesn't do anything"). */
+    position: sticky;
+    right: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    background-color: var(--surface-1);
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 1rem;
+    align-self: center;
+    box-shadow: -8px 0 8px -8px rgba(0, 0, 0, 0.15);
+    transition: background-color var(--duration-fast) var(--ease-standard),
+                color var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-dock__collapse:hover {
+    background-color: var(--surface-3);
+    color: var(--text-strong);
+}
+
+.kmila-dock__collapse:focus-visible {
+    outline: 2px solid var(--kmila-accent);
+    outline-offset: -2px;
+}
+
+[dir="rtl"] .kmila-dock__collapse {
+    margin-left: 0;
+    margin-right: auto;
+}
+
+.kmila-dock__tab {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-medium);
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background-color var(--duration-fast) var(--ease-standard),
+                color var(--duration-fast) var(--ease-standard),
+                border-color var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-dock__tab:hover {
+    color: var(--text-default);
+    background-color: var(--surface-3);
+}
+
+.kmila-dock__tab:focus-visible {
+    outline: 2px solid var(--kmila-accent);
+    outline-offset: -2px;
+}
+
+.kmila-dock__tab.is-active {
+    color: var(--text-strong);
+    background-color: var(--surface-2);
+    border-bottom-color: var(--kmila-accent);
+}
+
+.kmila-dock__tab.is-active .bi {
+    color: var(--kmila-accent);
+}
+
+
+.kmila-dock__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 18px;
+    padding: 0 6px;
+    background-color: var(--surface-3);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--fw-semibold);
+    border-radius: var(--radius-pill);
+}
+
+.kmila-dock__tab.is-active .kmila-dock__count {
+    background-color: var(--kmila-accent-soft);
+    color: var(--kmila-accent);
+}
+
+
+.kmila-dock__dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: var(--kmila-accent);
+    box-shadow: 0 0 0 3px var(--kmila-accent-soft);
+}
+
+
+/* Labels collapse to icon-only on very narrow viewports so the tab strip never
+   wraps — instead it scrolls horizontally (see .kmila-dock__tabs overflow-x).
+   Tooltip via the parent's aria-selected is sufficient. */
+@media (max-width: 480px) {
+    .kmila-dock__tab-label {
+        display: none;
+    }
+    .kmila-dock__tab {
+        padding: var(--space-2);
+        gap: var(--space-1);
+    }
+}
+
+
+/* --- Panel / tab content --- */
+
+.kmila-dock__panel {
+    flex: 1 1 auto;
+    /* Both min-* values must be 0 so the flex child can shrink below its
+       content's intrinsic size. Otherwise the inner WaveformViewer's wide
+       SVG grid grows this panel past the viewport and no amount of zoom-out
+       inside the viewer can undo it. */
+    min-width: 0;
+    min-height: 0;
+    /* Vertical overflow is legitimate (long outputs); horizontal is handled
+       by each tab's own scroll container (e.g. .waveform-viewer__body). */
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: var(--space-4);
+}
+
+
+/* --- Empty state (shown when a tab has no content yet) --- */
+
+.kmila-dock__empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    padding: var(--space-7) var(--space-4);
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.kmila-dock__empty-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    background-color: var(--surface-3);
+    color: var(--text-subtle);
+    border-radius: var(--radius-pill);
+    font-size: 1.6rem;
+}
+
+.kmila-dock__empty p {
+    margin: 0;
+    max-width: 44ch;
+    line-height: var(--lh-relaxed);
+}
+
+
+/* ============================================================================
+   Button — Ghost variant (minimal, for list-row actions and icon buttons)
+   ============================================================================ */
+
+.btn-ghost {
+    background-color: transparent;
+    border: 1px solid transparent;
+    color: var(--text-muted);
+    font-weight: var(--fw-medium);
+    padding: var(--space-1) var(--space-2);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    border-radius: var(--radius-sm);
+    transition: background-color var(--duration-fast) var(--ease-standard),
+                color var(--duration-fast) var(--ease-standard);
+}
+
+.btn-ghost:hover {
+    background-color: var(--surface-3);
+    color: var(--text-strong);
+    border-color: transparent;
+}
+
+.btn-ghost:focus-visible {
+    outline: 2px solid var(--kmila-accent);
+    outline-offset: 2px;
+}
+
+.btn-ghost.btn-sm {
+    padding: 4px 8px;
+    font-size: var(--fs-sm);
+    min-height: auto;
+}
+
+
+/* ============================================================================
+   Files list (Files dock tab)
+   ============================================================================ */
+
+.files-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.files-list__header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-strong);
+    font-size: var(--fs-md);
+    font-weight: var(--fw-semibold);
+}
+
+.files-list__header .bi { color: var(--kmila-accent); }
+
+.files-list__title { flex: 1 1 auto; }
+
+.files-list__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 20px;
+    padding: 0 8px;
+    background-color: var(--surface-3);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    border-radius: var(--radius-pill);
+}
+
+.files-list__items {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+
+/* Empty state */
+.files-list__empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-6) var(--space-4);
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.files-list__empty-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    background-color: var(--surface-3);
+    color: var(--text-subtle);
+    border-radius: var(--radius-pill);
+    font-size: 1.3rem;
+    margin-bottom: var(--space-1);
+}
+
+.files-list__empty p { margin: 0; }
+.files-list__empty-sub { font-size: var(--fs-sm); }
+
+
+/* --- File row --- */
+
+.file-row {
+    --fr-fg: var(--text-muted);
+    --fr-bg: var(--surface-3);
+
+    position: relative;
+    display: grid;
+    grid-template-columns: auto auto 1fr auto auto auto;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    padding-left: var(--space-3);
+    border-radius: var(--radius-sm);
+    transition: background-color var(--duration-fast) var(--ease-standard);
+}
+
+.file-row:hover {
+    background-color: var(--surface-1);
+}
+
+.file-row.is-active {
+    background-color: var(--kmila-accent-soft);
+}
+
+
+/* Variant tints */
+.file-row--vhdl     { --fr-fg: var(--kmila-accent); --fr-bg: var(--kmila-accent-soft); }
+.file-row--markdown { --fr-fg: var(--success);      --fr-bg: var(--success-soft); }
+.file-row--text     { --fr-fg: var(--text-default); --fr-bg: var(--surface-3); }
+.file-row--json     { --fr-fg: var(--warning);      --fr-bg: var(--warning-soft); }
+.file-row--xml      { --fr-fg: var(--warning);      --fr-bg: var(--warning-soft); }
+.file-row--other    { --fr-fg: var(--text-muted);   --fr-bg: var(--surface-3); }
+
+
+/* Left-edge indicator (only visible on active row) */
+.file-row__indicator {
+    position: absolute;
+    left: 0;
+    top: 6px;
+    bottom: 6px;
+    width: 3px;
+    border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+    background-color: transparent;
+    transition: background-color var(--duration-fast) var(--ease-standard);
+}
+
+[dir="rtl"] .file-row__indicator {
+    left: auto;
+    right: 0;
+    border-radius: var(--radius-xs) 0 0 var(--radius-xs);
+}
+
+.file-row.is-active .file-row__indicator {
+    background-color: var(--kmila-accent);
+}
+
+
+/* Icon tile */
+.file-row__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background-color: var(--fr-bg);
+    color: var(--fr-fg);
+    border-radius: var(--radius-sm);
+    flex-shrink: 0;
+}
+
+
+/* Filename (button so it's clickable to open) */
+.file-row__name {
+    grid-column: 3;
+    background: none;
+    border: none;
+    padding: 0;
+    text-align: left;
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-medium);
+    color: var(--text-default);
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    transition: color var(--duration-fast) var(--ease-standard);
+}
+
+.file-row__name:hover {
+    color: var(--kmila-accent);
+}
+
+.file-row.is-active .file-row__name {
+    color: var(--kmila-accent);
+    font-weight: var(--fw-semibold);
+}
+
+
+/* Rename input (replaces the name when editing) */
+.file-row__rename {
+    grid-column: 3;
+    width: 100%;
+    padding: 4px 8px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+    color: var(--text-strong);
+    background-color: var(--surface-2);
+    border: 1px solid var(--kmila-accent);
+    border-radius: var(--radius-xs);
+    box-shadow: var(--shadow-focus);
+}
+
+.file-row__rename:focus {
+    outline: none;
+}
+
+
+/* Extension chip */
+.file-row__chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 6px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--fw-semibold);
+    letter-spacing: var(--tracking-wide);
+    color: var(--fr-fg);
+    background-color: var(--fr-bg);
+    border-radius: var(--radius-xs);
+    flex-shrink: 0;
+}
+
+
+/* Inline "Open" action */
+.file-row__open {
+    flex-shrink: 0;
+}
+
+/* On very narrow screens, the Open button collapses to icon-only */
+@media (max-width: 480px) {
+    .file-row__open span { display: none; }
+}
+
+
+/* --- Kebab menu --- */
+
+.file-row__menu {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.file-row__menu-btn {
+    list-style: none;
+    cursor: pointer;
+    padding: 4px 6px;
+}
+
+.file-row__menu-btn::-webkit-details-marker { display: none; }
+.file-row__menu-btn::marker { display: none; content: ""; }
+
+.file-row__menu[open] .file-row__menu-btn {
+    background-color: var(--surface-3);
+    color: var(--text-strong);
+}
+
+.file-row__menu-panel {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    left: auto;
+    z-index: var(--z-dropdown);
+    min-width: 160px;
+    padding: 4px;
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-3);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    animation: kmilaPop var(--duration-fast) var(--ease-standard);
+}
+
+[dir="rtl"] .file-row__menu-panel {
+    right: auto;
+    left: 0;
+}
+
+.file-row__menu-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background: none;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-default);
+    font-size: var(--fs-sm);
+    text-align: left;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color var(--duration-fast) var(--ease-standard);
+}
+
+.file-row__menu-item:hover {
+    background-color: var(--surface-3);
+    color: var(--text-strong);
+}
+
+.file-row__menu-item--danger {
+    color: var(--danger);
+}
+
+.file-row__menu-item--danger:hover {
+    background-color: var(--danger-soft);
+    color: var(--danger);
+}
+
+
+/* ============================================================================
+   Entity panel (Entities dock tab)
+   ============================================================================ */
+
+.entity-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: 0;
+}
+
+.entity-panel + .entity-panel {
+    margin-top: var(--space-5);
+    padding-top: var(--space-5);
+    border-top: 1px solid var(--border-subtle);
+}
+
+
+/* Header — VHDL-flavored title */
+
+.entity-panel__header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+}
+
+.entity-panel__title {
+    margin: 0;
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    font-family: var(--font-mono);
+    font-size: var(--fs-lg);
+    font-weight: var(--fw-regular);
+    line-height: 1.2;
+    color: var(--text-default);
+    min-width: 0;
+}
+
+.entity-panel__kw {
+    color: var(--kmila-accent);
+    font-weight: var(--fw-semibold);
+}
+
+.entity-panel__name {
+    color: var(--text-strong);
+    font-weight: var(--fw-bold);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+
+/* Port-count chips next to the title */
+
+.entity-panel__meta {
+    display: inline-flex;
+    gap: var(--space-2);
+    flex-shrink: 0;
+}
+
+.entity-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    letter-spacing: var(--tracking-wide);
+    border-radius: var(--radius-pill);
+    border: 1px solid transparent;
+}
+
+.entity-chip--in  {
+    color: var(--success);
+    background-color: var(--success-soft);
+}
+
+.entity-chip--out {
+    color: var(--kmila-accent);
+    background-color: var(--kmila-accent-soft);
+}
+
+
+/* Empty-ports state */
+
+.entity-panel__empty {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0;
+    padding: var(--space-3) var(--space-4);
+    background-color: var(--surface-1);
+    border: 1px dashed var(--border-default);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+}
+
+
+/* ============================================================================
+   Signal list — port rows inside an entity
+   ============================================================================ */
+
+.signal-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    background-color: var(--border-subtle);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.signal-row {
+    --sr-fg: var(--success);
+
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    background-color: var(--surface-2);
+}
+
+/* When at least one port has a simulated value, expand the grid to make room */
+.signal-list--with-values .signal-row {
+    grid-template-columns: auto 1fr auto auto;
+}
+
+.signal-row--in  { --sr-fg: var(--success); }
+.signal-row--out { --sr-fg: var(--kmila-accent); }
+
+
+/* Direction icon */
+
+.signal-row__dir {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    color: var(--sr-fg);
+    flex-shrink: 0;
+}
+
+
+/* Port name */
+
+.signal-row__name {
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-semibold);
+    color: var(--text-strong);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+
+/* Data type chip */
+
+.signal-row__type {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 8px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    background-color: var(--surface-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-xs);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+
+/* Current value (only rendered when sim has populated values) */
+
+.signal-row__value {
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-bold);
+    color: var(--sr-fg);
+    padding: 2px 8px;
+    background-color: color-mix(in srgb, var(--sr-fg) 12%, transparent);
+    border-radius: var(--radius-xs);
+    text-align: right;
+    min-width: 3ch;
+}
+
+.signal-row__value.is-unset {
+    color: var(--text-subtle);
+    background-color: transparent;
+    font-weight: var(--fw-regular);
+}
+
+
+/* Responsive: stack type + value below name on narrow widths */
+
+@media (max-width: 520px) {
+    .signal-row,
+    .signal-list--with-values .signal-row {
+        grid-template-columns: auto 1fr;
+        grid-template-areas:
+            "dir name"
+            "dir meta";
+        row-gap: 2px;
+    }
+    .signal-row__dir  { grid-area: dir; align-self: start; padding-top: 3px; }
+    .signal-row__name { grid-area: name; }
+    .signal-row__type,
+    .signal-row__value {
+        grid-area: meta;
+        justify-self: start;
+    }
+    .signal-list--with-values .signal-row {
+        grid-template-areas:
+            "dir name"
+            "dir meta"
+            "dir value";
+    }
+    .signal-list--with-values .signal-row__value {
+        grid-area: value;
+        justify-self: start;
+        text-align: left;
+    }
+}
+
+
+/* File-row responsive — stack the Open button + kebab below on very narrow */
+
+@media (max-width: 480px) {
+    .file-row {
+        grid-template-columns: auto auto 1fr auto auto;
+    }
+    .file-row__chip { grid-row: 2; grid-column: 3 / -1; justify-self: start; }
+}
+
+
+/* ============================================================================
+   Editor workbench now stacks single-column (ButtonCollapse rail removed)
+   ============================================================================ */
+
+.editor-workbench__body {
+    display: block;
+}
+
+.editor-workbench__body > .editor-monaco,
+.editor-workbench__body > .editor-split {
+    width: 100%;
+}
+
+
+/* ============================================================================
+   RunBar — horizontal action strip between Monaco and the dock
+   ============================================================================ */
+
+.run-bar {
+    position: relative;
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-1);
+    overflow: hidden;
+}
+
+.run-bar__row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    flex-wrap: wrap;
+}
+
+.run-bar__spacer { flex: 1 1 auto; min-width: 0; }
+
+
+/* FPGA reference chip */
+.run-bar__fpga {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-3);
+    background-color: var(--surface-3);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-pill);
+    max-width: 220px;
+    min-width: 0;
+    color: var(--text-default);
+    font-size: var(--fs-sm);
+}
+
+.run-bar__fpga .bi { color: var(--kmila-accent); flex-shrink: 0; }
+
+.run-bar__fpga-model {
+    font-family: var(--font-mono);
+    font-weight: var(--fw-semibold);
+    color: var(--text-strong);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.run-bar__fpga-empty {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+
+/* Time input + scale select — share a single pill background */
+.run-bar__time {
+    display: inline-flex;
+    align-items: center;
+    background-color: var(--surface-3);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-pill);
+    overflow: hidden;
+    height: 36px;
+}
+
+.run-bar__time:focus-within {
+    border-color: var(--kmila-accent);
+    box-shadow: var(--shadow-focus);
+}
+
+.run-bar__time-icon {
+    padding: 0 8px 0 12px;
+    color: var(--text-muted);
+    font-size: 0.95rem;
+}
+
+.run-bar__time-input {
+    width: 80px;
+    border: none;
+    background: transparent;
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-semibold);
+    color: var(--text-strong);
+    padding: 0 8px;
+    outline: none;
+}
+
+/* Remove native number spinner chrome — looks sloppy inside the pill */
+.run-bar__time-input::-webkit-outer-spin-button,
+.run-bar__time-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.run-bar__time-input[type=number] { -moz-appearance: textfield; }
+
+.run-bar__scale {
+    border: none;
+    border-left: 1px solid var(--border-subtle);
+    background-color: transparent;
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-semibold);
+    color: var(--text-default);
+    padding: 0 var(--space-3);
+    height: 100%;
+    cursor: pointer;
+    outline: none;
+}
+
+[dir="rtl"] .run-bar__scale {
+    border-left: none;
+    border-right: 1px solid var(--border-subtle);
+}
+
+
+/* Build button (outline-secondary) */
+.run-bar__build {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* Run button (primary) */
+.run-bar__run {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    white-space: nowrap;
+    flex-shrink: 0;
+    min-width: 120px;
+    justify-content: center;
+}
+
+/* Stop button — compact square with a red hue */
+.run-bar__stop {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    color: var(--danger);
+    flex-shrink: 0;
+}
+
+.run-bar__stop:hover {
+    background-color: var(--danger-soft);
+    color: var(--danger);
+}
+
+
+/* Overflow menu */
+.run-bar__overflow {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.run-bar__overflow > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 6px 8px;
+}
+
+.run-bar__overflow > summary::-webkit-details-marker,
+.run-bar__overflow > summary::marker { display: none; content: ""; }
+
+.run-bar__overflow[open] > summary {
+    background-color: var(--surface-3);
+    color: var(--text-strong);
+}
+
+.run-bar__overflow-panel {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    left: auto;
+    z-index: var(--z-dropdown);
+    min-width: 220px;
+    padding: 4px;
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-3);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    animation: kmilaPop var(--duration-fast) var(--ease-standard);
+}
+
+[dir="rtl"] .run-bar__overflow-panel {
+    right: auto;
+    left: 0;
+}
+
+.run-bar__overflow-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background: none;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-default);
+    font-size: var(--fs-sm);
+    text-align: left;
+    cursor: pointer;
+    transition: background-color var(--duration-fast) var(--ease-standard);
+}
+
+.run-bar__overflow-item:hover {
+    background-color: var(--surface-3);
+    color: var(--text-strong);
+}
+
+.run-bar__overflow-item > span:first-of-type { flex: 1 1 auto; }
+
+.run-bar__shortcut {
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    background-color: var(--surface-3);
+    border: 1px solid var(--border-subtle);
+    padding: 1px 6px;
+    border-radius: var(--radius-xs);
+}
+
+
+/* Progress bar under the row — fills L→R during running */
+.run-bar__progress {
+    height: 3px;
+    background-color: var(--surface-3);
+}
+
+.run-bar__progress-fill {
+    display: block;
+    height: 100%;
+    background-color: var(--kmila-accent);
+    transition: width var(--duration-base) var(--ease-standard);
+}
+
+.run-bar--running .run-bar__progress-fill {
+    background: linear-gradient(
+        90deg,
+        var(--kmila-accent) 0%,
+        color-mix(in srgb, var(--kmila-accent) 60%, transparent) 50%,
+        var(--kmila-accent) 100%
+    );
+    background-size: 200% 100%;
+    animation: kmilaShimmerProgress 1.8s linear infinite;
+}
+
+@keyframes kmilaShimmerProgress {
+    from { background-position: 200% 0; }
+    to   { background-position: -200% 0; }
+}
+
+
+/* Responsive: on narrow viewports the row still wraps, and the Run button
+   goes full-width below the inputs so it's always thumb-reachable. */
+@media (max-width: 640.98px) {
+    .run-bar__fpga { max-width: 100%; }
+    .run-bar__build,
+    .run-bar__run {
+        flex: 1 1 40%;
+        justify-content: center;
+    }
+    .run-bar__spacer { display: none; }
+}
+
+
+/* ============================================================================
+   PortsPanel (Ports dock tab body)
+   ============================================================================ */
+
+.ports-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+}
+
+.ports-panel__entity + .ports-panel__entity {
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border-subtle);
+}
+
+.ports-panel__entity-head {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-semibold);
+    color: var(--kmila-accent);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+}
+
+.ports-panel__entity-name {
+    color: var(--text-strong);
+}
+
+.ports-panel__list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+
+/* ============================================================================
+   OutputPanel (Output dock tab body)
+   ============================================================================ */
+
+.output-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    height: 100%;
+    min-height: 0;
+}
+
+.output-panel__toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.output-panel__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 20px;
+    padding: 0 8px;
+    background-color: var(--surface-3);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    border-radius: var(--radius-pill);
+    margin-right: auto;
+}
+
+[dir="rtl"] .output-panel__count { margin-right: 0; margin-left: auto; }
+
+.output-panel__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    background-color: var(--border-subtle);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+
+/* Output row — three columns: timestamp · icon · message */
+.output-row {
+    --or-fg: var(--text-muted);
+    --or-bg: var(--surface-1);
+
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    gap: var(--space-3);
+    align-items: baseline;
+    padding: var(--space-2) var(--space-3);
+    background-color: var(--surface-2);
+    font-size: var(--fs-sm);
+}
+
+.output-row--info     { --or-fg: var(--kmila-accent); --or-bg: var(--kmila-accent-soft); }
+.output-row--success  { --or-fg: var(--success);      --or-bg: var(--success-soft); }
+.output-row--warning  { --or-fg: var(--warning);      --or-bg: var(--warning-soft); }
+.output-row--danger   { --or-fg: var(--danger);       --or-bg: var(--danger-soft); }
+
+.output-row__time {
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    min-width: 8ch;
+    text-align: right;
+}
+
+.output-row__icon {
+    color: var(--or-fg);
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.95rem;
+}
+
+.output-row__msg {
+    color: var(--text-default);
+    word-break: break-word;
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    line-height: var(--lh-relaxed);
+}
+
+
+/* ============================================================================
+   StatusBar — VS Code-style thin bar at the bottom of the Editor page
+   ============================================================================ */
+
+.kmila-status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: 4px var(--space-3);
+    background-color: var(--surface-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
+    min-height: 32px;
+}
+
+.kmila-status-bar__group {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+}
+
+.kmila-status-bar__group--start { flex-shrink: 1; min-width: 0; }
+.kmila-status-bar__group--end   { flex-shrink: 0; }
+
+
+/* Unsaved-changes dot — mirrors the editor header but smaller */
+.kmila-status-bar__dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: var(--warning);
+    box-shadow: 0 0 0 3px var(--warning-soft);
+    flex-shrink: 0;
+}
+
+
+/* File name & mono bits — ellipsize so long paths don't blow up the bar */
+.kmila-status-bar__file {
+    font-family: var(--font-mono);
+    color: var(--text-default);
+    font-weight: var(--fw-medium);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 30ch;
+    min-width: 0;
+}
+
+.kmila-status-bar__pos {
+    font-family: var(--font-mono);
+    white-space: nowrap;
+}
+
+.kmila-status-bar__lang {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--fw-semibold);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    color: var(--kmila-accent);
+    padding: 1px 6px;
+    background-color: var(--kmila-accent-soft);
+    border-radius: var(--radius-xs);
+}
+
+.kmila-status-bar__sep {
+    color: var(--text-subtle);
+    user-select: none;
+}
+
+
+/* --- Individual stat chip (Build / Resource / Sim) --- */
+
+.kmila-status-bar__stat {
+    --st-fg: var(--text-muted);
+
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-xs);
+    color: var(--st-fg);
+    font-size: var(--fs-xs);
+    cursor: pointer;
+    transition: background-color var(--duration-fast) var(--ease-standard),
+                color var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-status-bar__stat:hover:not(:disabled):not(.kmila-status-bar__stat--readonly) {
+    background-color: var(--surface-3);
+}
+
+.kmila-status-bar__stat:focus-visible {
+    outline: 2px solid var(--kmila-accent);
+    outline-offset: -2px;
+}
+
+.kmila-status-bar__stat:disabled,
+.kmila-status-bar__stat--readonly {
+    cursor: default;
+}
+
+.kmila-status-bar__stat--neutral { --st-fg: var(--text-muted); }
+.kmila-status-bar__stat--info    { --st-fg: var(--kmila-accent); }
+.kmila-status-bar__stat--success { --st-fg: var(--success); }
+.kmila-status-bar__stat--warning { --st-fg: var(--warning); }
+.kmila-status-bar__stat--danger  { --st-fg: var(--danger); }
+
+
+.kmila-status-bar__label {
+    color: var(--text-muted);
+    font-weight: var(--fw-medium);
+}
+
+.kmila-status-bar__value {
+    color: var(--st-fg);
+    font-weight: var(--fw-semibold);
+    font-family: var(--font-mono);
+}
+
+.kmila-status-bar__muted {
+    color: var(--text-subtle);
+    font-family: var(--font-mono);
+}
+
+.kmila-status-bar__mono {
+    color: var(--text-default);
+    font-family: var(--font-mono);
+    font-weight: var(--fw-medium);
+}
+
+
+/* --- Responsive --- */
+
+@media (max-width: 640.98px) {
+    /* Drop the fluff on the left and in the middle; keep the critical bits. */
+    .kmila-status-bar__pos,
+    .kmila-status-bar__lang,
+    .kmila-status-bar__sep,
+    .kmila-status-bar__muted {
+        display: none;
+    }
+    .kmila-status-bar__file { max-width: 18ch; }
+    .kmila-status-bar__label { display: none; }
+}
+
+
+/* ============================================================================
+   ConfigurationsPill (TopBar) — save/load named simulation configs
+   ============================================================================ */
+
+.kmila-config-pill {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.kmila-config-pill__summary {
+    list-style: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background-color: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: var(--radius-pill);
+    color: #ffffff;
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-medium);
+    max-width: 220px;
+    user-select: none;
+    transition: background-color var(--duration-fast) var(--ease-standard),
+                border-color var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-config-pill__summary::-webkit-details-marker { display: none; }
+.kmila-config-pill__summary::marker { display: none; content: ""; }
+
+.kmila-config-pill__summary:hover {
+    background-color: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.28);
+}
+
+.kmila-config-pill[open] > .kmila-config-pill__summary {
+    background-color: rgba(255, 255, 255, 0.18);
+    border-color: var(--kmila-accent);
+    box-shadow: var(--shadow-focus);
+}
+
+.kmila-config-pill__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    max-width: 140px;
+}
+
+.kmila-config-pill__dirty {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: var(--warning);
+    box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.3);
+    flex-shrink: 0;
+}
+
+.kmila-config-pill__chevron {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.85rem;
+    transition: transform var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-config-pill[open] .kmila-config-pill__chevron {
+    transform: rotate(180deg);
+}
+
+
+/* --- Panel --- */
+
+.kmila-config-pill__panel {
+    position: absolute;
+    top: calc(100% + var(--space-2));
+    right: 0;
+    left: auto;
+    z-index: var(--z-dropdown);
+    width: min(320px, 90vw);
+    max-height: 480px;
+    overflow-y: auto;
+    padding: var(--space-2);
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    animation: kmilaPop var(--duration-fast) var(--ease-standard);
+}
+
+[dir="rtl"] .kmila-config-pill__panel {
+    right: auto;
+    left: 0;
+}
+
+
+/* Sections within the popover */
+
+.kmila-config-pill__section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: var(--space-2) var(--space-1);
+}
+
+.kmila-config-pill__section + .kmila-config-pill__section {
+    border-top: 1px solid var(--border-subtle);
+    padding-top: var(--space-3);
+    margin-top: 2px;
+}
+
+.kmila-config-pill__label {
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 0 var(--space-2);
+}
+
+
+/* Current-config row */
+
+.kmila-config-pill__current {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background-color: var(--kmila-accent-soft);
+    color: var(--text-strong);
+    border-radius: var(--radius-sm);
+    font-size: var(--fs-sm);
+}
+
+.kmila-config-pill__current .bi:first-child {
+    color: var(--kmila-accent);
+}
+
+.kmila-config-pill__current-name {
+    flex: 1 1 auto;
+    font-weight: var(--fw-semibold);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.kmila-config-pill__modified {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--fw-semibold);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    color: var(--warning);
+    background-color: var(--warning-soft);
+    padding: 1px 6px;
+    border-radius: var(--radius-xs);
+}
+
+
+/* Saved-configs list */
+
+.kmila-config-pill__list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.kmila-config-pill__item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background: none;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-default);
+    font-size: var(--fs-sm);
+    text-align: left;
+    cursor: pointer;
+    transition: background-color var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-config-pill__item > span:first-of-type {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.kmila-config-pill__item:hover {
+    background-color: var(--surface-3);
+}
+
+.kmila-config-pill__item.is-current .bi:first-child {
+    color: var(--kmila-accent);
+}
+
+.kmila-config-pill__item.is-current {
+    color: var(--text-strong);
+    font-weight: var(--fw-medium);
+}
+
+.kmila-config-pill__item-delete {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    background: none;
+    border: none;
+    border-radius: var(--radius-xs);
+    color: var(--text-muted);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity var(--duration-fast) var(--ease-standard),
+                background-color var(--duration-fast) var(--ease-standard),
+                color var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-config-pill__item:hover .kmila-config-pill__item-delete {
+    opacity: 1;
+}
+
+.kmila-config-pill__item-delete:hover {
+    background-color: var(--danger-soft);
+    color: var(--danger);
+}
+
+
+/* Actions row (Save changes / Save as…) */
+
+.kmila-config-pill__actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-1) 0;
+    border-top: 1px solid var(--border-subtle);
+    margin-top: 2px;
+}
+
+.kmila-config-pill__actions > .btn {
+    width: 100%;
+    justify-content: center;
+}
+
+
+/* Inline save-as input */
+
+.kmila-config-pill__saveas {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.kmila-config-pill__saveas .form-control {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.kmila-config-pill__saveas .btn {
+    flex-shrink: 0;
+    width: auto !important;
+    padding: 4px 8px;
+}
+
+
+/* Responsive — on very narrow viewports the pill's name and chevron collapse */
+@media (max-width: 575.98px) {
+    .kmila-config-pill__name { max-width: 80px; }
+    .kmila-config-pill__chevron { display: none; }
+}
+
+
+/* ============================================================================
+   PortMomentInput — timeline + moments list
+   ============================================================================ */
+
+.port-moment {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+}
+
+.port-moment + .port-moment { margin-top: var(--space-3); }
+
+.port-moment--running {
+    opacity: 0.72;
+    pointer-events: none;
+}
+
+
+/* --- Header row --- */
+
+.port-moment__head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+}
+
+.port-moment__dir {
+    display: inline-flex;
+    align-items: center;
+    color: var(--success);
+    font-size: 1.1rem;
+    flex-shrink: 0;
+}
+
+.port-moment__name {
+    font-family: var(--font-mono);
+    font-weight: var(--fw-bold);
+    color: var(--text-strong);
+    font-size: var(--fs-sm);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.port-moment__type {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 8px;
+    background-color: var(--surface-3);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--fw-semibold);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    border-radius: var(--radius-xs);
+}
+
+.port-moment__clock {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-left: auto;
+    padding: 4px 10px;
+    background-color: var(--surface-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-pill);
+    color: var(--text-default);
+    font-size: var(--fs-xs);
+    cursor: pointer;
+    user-select: none;
+}
+
+[dir="rtl"] .port-moment__clock {
+    margin-left: 0;
+    margin-right: auto;
+}
+
+.port-moment__clock input { margin: 0; flex-shrink: 0; }
+.port-moment__clock .bi   { color: var(--kmila-accent); }
+
+.port-moment--clock .port-moment__clock {
+    background-color: var(--kmila-accent-soft);
+    border-color: var(--kmila-accent);
+    color: var(--kmila-accent);
+}
+
+
+/* --- Clock-mode note --- */
+
+.port-moment__clock-note {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    background-color: var(--kmila-accent-soft);
+    border: 1px dashed var(--kmila-accent);
+    border-radius: var(--radius-sm);
+    color: var(--text-default);
+    font-size: var(--fs-sm);
+}
+
+.port-moment__clock-note .bi {
+    color: var(--kmila-accent);
+    font-size: 1.1rem;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.port-moment__clock-note p { margin: 0; }
+
+
+/* --- Read-only timeline strip (SVG) --- */
+
+.port-moment__timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.port-moment__timeline-svg {
+    width: 100%;
+    height: 36px;
+    display: block;
+    overflow: visible;
+}
+
+.port-moment__timeline-axis {
+    stroke: var(--border-default);
+    stroke-width: 1;
+    shape-rendering: crispEdges;
+}
+
+.port-moment__timeline-tick {
+    stroke: var(--border-default);
+    stroke-width: 1;
+    shape-rendering: crispEdges;
+}
+
+.port-moment__timeline-marker line {
+    stroke: var(--kmila-accent);
+    stroke-width: 2;
+}
+
+.port-moment__timeline-marker circle {
+    fill: var(--kmila-accent);
+    stroke: var(--surface-2);
+    stroke-width: 2;
+}
+
+.port-moment__timeline-bounds {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-subtle);
+    letter-spacing: var(--tracking-wide);
+}
+
+
+/* --- Moments list grid --- */
+
+.port-moment__moments {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.port-moment__grid {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.port-moment__grid-head,
+.port-moment__row {
+    display: grid;
+    grid-template-columns: 90px 80px 1fr 32px;
+    gap: var(--space-2);
+    align-items: center;
+}
+
+.port-moment__grid-head {
+    padding: 0 var(--space-2);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--fw-semibold);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.port-moment__row {
+    padding: 2px;
+    border-radius: var(--radius-sm);
+}
+
+.port-moment__row:hover {
+    background-color: var(--surface-1);
+}
+
+.port-moment__time,
+.port-moment__scale,
+.port-moment__value {
+    font-family: var(--font-mono);
+}
+
+
+/* Value input + optional N/M counter live together */
+.port-moment__value-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+
+.port-moment__value-wrap .port-moment__value {
+    width: 100%;
+    padding-right: 2.8rem; /* room for the counter pill on the right */
+}
+
+.port-moment__value.is-invalid {
+    border-color: var(--danger) !important;
+    background-color: var(--danger-soft);
+    color: var(--danger);
+}
+
+.port-moment__counter {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--fw-semibold);
+    color: var(--text-muted);
+    background-color: var(--surface-3);
+    padding: 1px 6px;
+    border-radius: var(--radius-xs);
+    pointer-events: none;
+    letter-spacing: 0;
+}
+
+[dir="rtl"] .port-moment__counter {
+    right: auto;
+    left: 6px;
+}
+
+[dir="rtl"] .port-moment__value-wrap .port-moment__value {
+    padding-right: var(--space-3);
+    padding-left: 2.8rem;
+}
+
+.port-moment__counter.is-invalid {
+    color: var(--danger);
+    background-color: var(--danger-soft);
+}
+
+.port-moment__time::-webkit-outer-spin-button,
+.port-moment__time::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.port-moment__time[type=number] { -moz-appearance: textfield; }
+
+.port-moment__remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    padding: 4px;
+    border-radius: var(--radius-xs);
+}
+
+.port-moment__remove:hover {
+    background-color: var(--danger-soft);
+    color: var(--danger);
+}
+
+
+/* --- Empty state + add button --- */
+
+.port-moment__empty {
+    margin: 0;
+    padding: var(--space-3);
+    text-align: center;
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+    font-style: italic;
+    border: 1px dashed var(--border-default);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface-1);
+}
+
+.port-moment__add {
+    align-self: flex-start;
+    margin-top: var(--space-1);
+    color: var(--kmila-accent);
+    font-weight: var(--fw-medium);
+}
+
+.port-moment__add:hover {
+    background-color: var(--kmila-accent-soft);
+    color: var(--kmila-accent);
+}
+
+
+/* --- Responsive — stack the grid into labeled rows on very narrow viewports --- */
+
+@media (max-width: 520px) {
+    .port-moment__grid-head {
+        display: none;
+    }
+    .port-moment__row {
+        grid-template-columns: 1fr 80px 32px;
+        grid-template-areas:
+            "value scale remove"
+            "time  time  time";
+        row-gap: 4px;
+    }
+    .port-moment__value  { grid-area: value; }
+    .port-moment__scale  { grid-area: scale; }
+    .port-moment__remove { grid-area: remove; }
+    .port-moment__time   { grid-area: time; }
+}
+
+
+/* ============================================================================
+   Home (/)
+   ============================================================================ */
+
+.home-hero {
+    position: relative;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-xl);
+    background:
+        radial-gradient(ellipse at top left, var(--kmila-accent-soft) 0%, transparent 55%),
+        linear-gradient(180deg, var(--surface-1) 0%, var(--surface-2) 100%);
+    padding: var(--space-6) var(--space-5);
+    margin-bottom: var(--space-7);
+    overflow: hidden;
+    box-shadow: var(--shadow-1);
+}
+
+.home-hero__grid {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    align-items: center;
+    gap: var(--space-6);
+}
+
+.home-hero__copy {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    min-width: 0;
+}
+
+.home-hero__eyebrow,
+.home-section__eyebrow {
+    display: inline-block;
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    color: var(--kmila-accent);
+    font-family: var(--font-mono);
+}
+
+.home-hero__title {
+    font-size: var(--fs-2xl);
+    font-weight: var(--fw-bold);
+    line-height: var(--lh-tight);
+    letter-spacing: var(--tracking-tight);
+    color: var(--text-strong);
+    margin: 0;
+    max-width: 22ch;
+}
+
+.home-hero__subtitle {
+    font-size: var(--fs-md);
+    line-height: var(--lh-relaxed);
+    color: var(--text-muted);
+    margin: 0;
+    max-width: 52ch;
+}
+
+.home-hero__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    align-items: center;
+    margin-top: var(--space-3);
+}
+
+.home-hero__primary {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-5);
+    font-weight: var(--fw-semibold);
+    box-shadow: var(--shadow-2);
+}
+
+.home-hero__secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    color: var(--text-default);
+    font-weight: var(--fw-medium);
+    border-radius: var(--radius-sm);
+    text-decoration: none;
+}
+
+.home-hero__secondary:hover {
+    background-color: var(--surface-3);
+    color: var(--text-strong);
+    text-decoration: none;
+}
+
+.home-hero__art {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 220px;
+}
+
+.home-hero__logo {
+    position: relative;
+    z-index: 1;
+    max-width: 220px;
+    width: 100%;
+    height: auto;
+    filter: drop-shadow(0 20px 40px rgba(15, 23, 42, 0.18));
+}
+
+[data-bs-theme="dark"] .home-hero__logo {
+    filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.5));
+}
+
+
+/* Section shell */
+.home-overview,
+.home-features {
+    margin-bottom: var(--space-7);
+}
+
+.home-overview__header,
+.home-features__header {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-bottom: var(--space-5);
+    max-width: 720px;
+}
+
+.home-overview__header h2,
+.home-features__header h2 {
+    margin: 0;
+}
+
+.home-overview__body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-5);
+    font-size: var(--fs-base);
+    line-height: var(--lh-relaxed);
+    color: var(--text-default);
+}
+
+.home-overview__body p { margin: 0; }
+
+
+/* Features bento */
+.home-bento {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: var(--space-4);
+}
+
+.home-bento__card {
+    grid-column: span 4;
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    box-shadow: var(--shadow-1);
+    transition: box-shadow var(--duration-base) var(--ease-standard),
+                border-color var(--duration-base) var(--ease-standard),
+                transform var(--duration-base) var(--ease-standard);
+}
+
+.home-bento__card:hover {
+    box-shadow: var(--shadow-2);
+    border-color: var(--border-default);
+    transform: translateY(-2px);
+}
+
+.home-bento__card--wide {
+    grid-column: span 8;
+    background: linear-gradient(135deg, var(--kmila-primary-dark) 0%, var(--kmila-primary) 100%);
+    color: #ffffff;
+    border-color: transparent;
+}
+
+.home-bento__card--wide h3 { color: #ffffff; }
+.home-bento__card--wide p  { color: rgba(255, 255, 255, 0.85); }
+
+.home-bento__card--highlight {
+    grid-column: span 12;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: var(--space-5);
+    align-items: center;
+}
+
+.home-bento__card h3 {
+    font-size: var(--fs-md);
+    font-weight: var(--fw-semibold);
+    color: var(--text-strong);
+    margin: 0;
+    line-height: var(--lh-snug);
+}
+
+.home-bento__card p {
+    margin: 0;
+    color: var(--text-muted);
+    line-height: var(--lh-relaxed);
+    font-size: var(--fs-sm);
+}
+
+.home-bento__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-md);
+    font-size: 1.4rem;
+    margin-bottom: var(--space-2);
+}
+
+.home-bento__icon--accent  { background-color: var(--kmila-accent-soft); color: var(--kmila-accent); }
+.home-bento__icon--primary { background-color: rgba(255, 255, 255, 0.15); color: #ffffff; }
+.home-bento__icon--success { background-color: var(--success-soft);      color: var(--success); }
+.home-bento__icon--warning { background-color: var(--warning-soft);      color: var(--warning); }
+
+.home-bento__card--highlight .home-bento__icon--primary {
+    background-color: var(--kmila-accent-soft);
+    color: var(--kmila-accent);
+    width: 56px;
+    height: 56px;
+    font-size: 1.8rem;
+    margin-bottom: 0;
+}
+
+.home-bento__card--highlight h3 { font-size: var(--fs-lg); }
+
+
+/* Closing CTA */
+.home-cta {
+    margin-top: var(--space-7);
+    padding: var(--space-6) var(--space-5);
+    background: linear-gradient(135deg, var(--kmila-primary-dark) 0%, var(--kmila-primary) 100%);
+    color: #ffffff;
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-2);
+}
+
+.home-cta__inner {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: var(--space-5);
+    align-items: center;
+}
+
+.home-cta__text h2 {
+    color: #ffffff;
+    margin: 0 0 var(--space-2);
+    font-size: var(--fs-xl);
+    letter-spacing: var(--tracking-tight);
+}
+
+.home-cta__text p {
+    color: rgba(255, 255, 255, 0.85);
+    margin: 0;
+    font-size: var(--fs-base);
+    line-height: var(--lh-relaxed);
+}
+
+.home-cta__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    justify-content: flex-end;
+    align-items: center;
+}
+
+.home-cta__github {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    color: rgba(255, 255, 255, 0.9);
+    font-weight: var(--fw-medium);
+    text-decoration: none;
+    border-radius: var(--radius-sm);
+}
+
+.home-cta__github:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+    text-decoration: none;
+}
+
+
+/* Home responsive */
+@media (max-width: 991.98px) {
+    .home-hero__grid {
+        grid-template-columns: 1fr;
+        gap: var(--space-4);
+        text-align: center;
+    }
+    .home-hero__title,
+    .home-hero__subtitle { max-width: none; }
+    .home-hero__actions { justify-content: center; }
+    .home-hero__art { order: -1; min-height: 180px; }
+    .home-hero__logo { max-width: 160px; }
+
+    .home-overview__body { grid-template-columns: 1fr; }
+
+    .home-bento__card,
+    .home-bento__card--wide,
+    .home-bento__card--highlight { grid-column: span 6; }
+
+    .home-bento__card--highlight { grid-template-columns: auto 1fr; }
+
+    .home-cta__inner { grid-template-columns: 1fr; text-align: center; }
+    .home-cta__actions { justify-content: center; }
+}
+
+@media (max-width: 575.98px) {
+    .home-hero { padding: var(--space-5) var(--space-4); }
+    .home-hero__logo { max-width: 130px; }
+
+    .home-bento__card,
+    .home-bento__card--wide,
+    .home-bento__card--highlight { grid-column: span 12; }
+
+    .home-bento__card--highlight { grid-template-columns: 1fr; text-align: center; }
+    .home-bento__card--highlight .home-bento__icon--primary { margin: 0 auto var(--space-2); }
+
+    .home-hero__primary { width: 100%; justify-content: center; }
+}
+
+
+/* ============================================================================
+   Learn (/learn) — curriculum catalog
+   ============================================================================ */
+
+.learn-hero {
+    display: grid;
+    gap: var(--space-4);
+    padding: var(--space-5) var(--space-6);
+    margin-bottom: var(--space-5);
+    background:
+        radial-gradient(1200px 200px at 90% -10%, rgba(60, 130, 246, 0.15), transparent 60%),
+        linear-gradient(135deg, var(--surface-1) 0%, var(--surface-2) 100%);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-1);
+}
+
+.learn-hero__title {
+    font-size: clamp(1.6rem, 1.3rem + 1.6vw, 2.6rem);
+    font-weight: var(--fw-bold);
+    letter-spacing: var(--tracking-tight);
+    color: var(--text-strong);
+    margin: 0 0 var(--space-2);
+}
+
+.learn-hero__subtitle {
+    color: var(--text-muted);
+    font-size: var(--fs-md);
+    max-width: 68ch;
+    margin: 0;
+}
+
+.learn-hero__progress {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+    max-width: 520px;
+}
+
+.learn-hero__progress-track {
+    position: relative;
+    width: 100%;
+    height: 10px;
+    background-color: var(--surface-0);
+    border-radius: 999px;
+    overflow: hidden;
+    border: 1px solid var(--border-subtle);
+}
+
+.learn-hero__progress-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    background: linear-gradient(90deg, var(--success) 0%, var(--kmila-accent) 100%);
+    border-radius: 999px;
+    transition: width var(--duration-slow) var(--ease-standard);
+}
+
+.learn-hero__progress-meta {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    font-size: var(--fs-sm);
+}
+
+.learn-hero__progress-count {
+    font-family: var(--font-mono);
+    font-weight: var(--fw-bold);
+    color: var(--text-strong);
+}
+
+.learn-hero__progress-label {
+    color: var(--text-muted);
+}
+
+.learn-track {
+    margin-bottom: var(--space-6);
+}
+
+.learn-track__header {
+    margin-bottom: var(--space-4);
+}
+
+.learn-track__header h2 {
+    font-size: var(--fs-xl);
+    font-weight: var(--fw-bold);
+    color: var(--text-strong);
+    margin: var(--space-1) 0;
+}
+
+.learn-track__header p {
+    color: var(--text-muted);
+    margin: 0;
+    max-width: 72ch;
+}
+
+.learn-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: var(--space-4);
+}
+
+.learn-card {
+    position: relative;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    background-color: var(--surface-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    text-decoration: none;
+    color: inherit;
+    overflow: hidden;
+    transition: transform var(--duration-fast) var(--ease-standard),
+                box-shadow var(--duration-fast) var(--ease-standard),
+                border-color var(--duration-fast) var(--ease-standard);
+}
+
+.learn-card:hover,
+.learn-card:focus-visible {
+    transform: translateY(-2px);
+    border-color: var(--kmila-accent);
+    box-shadow: var(--shadow-2);
+    text-decoration: none;
+    color: inherit;
+}
+
+.learn-card__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    border-radius: var(--radius-md);
+    font-size: 1.25rem;
+}
+
+.learn-card__icon--success { background-color: rgba(16, 185, 129, 0.12); color: var(--success); }
+.learn-card__icon--primary { background-color: rgba(60, 130, 246, 0.12); color: var(--kmila-accent); }
+.learn-card__icon--info    { background-color: rgba(14, 165, 233, 0.12); color: var(--info); }
+.learn-card__icon--warning { background-color: rgba(245, 158, 11, 0.14); color: var(--warning); }
+.learn-card__icon--danger  { background-color: rgba(239, 68, 68, 0.12);  color: var(--danger); }
+
+.learn-card__title {
+    font-size: var(--fs-md);
+    font-weight: var(--fw-bold);
+    color: var(--text-strong);
+    margin: 0 0 var(--space-1);
+    line-height: 1.3;
+}
+
+.learn-card__summary {
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+    line-height: 1.5;
+    margin: 0;
+}
+
+.learn-card__meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+}
+
+.learn-card__count {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-family: var(--font-mono);
+}
+
+.learn-card__chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px var(--space-2);
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-2xs);
+    font-weight: var(--fw-bold);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+}
+
+.learn-card__chip--beginner     { background: rgba(16, 185, 129, 0.15); color: var(--success); }
+.learn-card__chip--easy         { background: rgba(60, 130, 246, 0.15); color: var(--kmila-accent); }
+.learn-card__chip--intermediate { background: rgba(14, 165, 233, 0.15); color: var(--info); }
+.learn-card__chip--advanced     { background: rgba(245, 158, 11, 0.15); color: var(--warning); }
+.learn-card__chip--expert       { background: rgba(239, 68, 68, 0.15);  color: var(--danger); }
+
+.learn-card__progress-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 2px var(--space-2);
+    border-radius: 999px;
+    background-color: rgba(16, 185, 129, 0.12);
+    color: var(--success);
+    font-family: var(--font-mono);
+    font-size: var(--fs-2xs);
+    font-weight: var(--fw-bold);
+}
+
+.learn-card__bar {
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 3px;
+    background-color: var(--surface-0);
+}
+.learn-card__bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--success) 0%, var(--kmila-accent) 100%);
+    transition: width var(--duration-slow) var(--ease-standard);
+}
+
+.learn-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    padding: var(--space-6);
+    text-align: center;
+    background-color: var(--surface-1);
+    border: 1px dashed var(--border-subtle);
+    border-radius: var(--radius-lg);
+    color: var(--text-muted);
+}
+
+.learn-empty__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background-color: rgba(60, 130, 246, 0.12);
+    color: var(--kmila-accent);
+    font-size: 1.5rem;
+}
+
+
+/* ============================================================================
+   Lesson (/learn/{module}/{lesson}) — single lesson view
+   ============================================================================ */
+
+.lesson-page {
+    display: grid;
+    gap: var(--space-5);
+    max-width: 880px;
+    margin: 0 auto;
+}
+
+.lesson-page__chrome {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.lesson-crumb {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+    text-decoration: none;
+    width: fit-content;
+}
+
+.lesson-crumb:hover {
+    color: var(--kmila-accent);
+    text-decoration: none;
+}
+
+.lesson-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.lesson-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 3px var(--space-2);
+    border-radius: 999px;
+    font-size: var(--fs-2xs);
+    font-family: var(--font-mono);
+    font-weight: var(--fw-semibold);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    background-color: var(--surface-1);
+    color: var(--text-muted);
+    border: 1px solid var(--border-subtle);
+}
+
+.lesson-chip--kind { color: var(--kmila-accent); border-color: rgba(60, 130, 246, 0.3); }
+.lesson-chip--time { color: var(--text-muted); }
+.lesson-chip--done {
+    color: var(--success);
+    border-color: rgba(16, 185, 129, 0.3);
+    background-color: rgba(16, 185, 129, 0.10);
+}
+
+.lesson-body {
+    display: grid;
+    gap: var(--space-4);
+}
+
+.lesson-markdown {
+    color: var(--text-body);
+    line-height: 1.7;
+}
+.lesson-markdown h1 {
+    font-size: clamp(1.6rem, 1.3rem + 1.2vw, 2.2rem);
+    font-weight: var(--fw-bold);
+    color: var(--text-strong);
+    margin: 0 0 var(--space-4);
+    letter-spacing: var(--tracking-tight);
+    border-bottom: 1px solid var(--border-subtle);
+    padding-bottom: var(--space-3);
+}
+.lesson-markdown h2 {
+    font-size: var(--fs-xl);
+    font-weight: var(--fw-bold);
+    color: var(--text-strong);
+    margin: var(--space-5) 0 var(--space-2);
+}
+.lesson-markdown h3 {
+    font-size: var(--fs-lg);
+    font-weight: var(--fw-semibold);
+    color: var(--text-strong);
+    margin: var(--space-4) 0 var(--space-2);
+}
+.lesson-markdown p, .lesson-markdown ul, .lesson-markdown ol {
+    margin: 0 0 var(--space-3);
+}
+.lesson-markdown ul, .lesson-markdown ol {
+    padding-left: 1.4rem;
+}
+.lesson-markdown li {
+    margin-bottom: var(--space-1);
+}
+.lesson-markdown code {
+    font-family: var(--font-mono);
+    font-size: 0.92em;
+    padding: 2px 6px;
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--kmila-accent);
+}
+.lesson-markdown pre {
+    padding: var(--space-3);
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    overflow-x: auto;
+    margin: var(--space-3) 0;
+    /* Preserve tabs, spaces, and line breaks exactly — critical for
+       ASCII-art diagrams (box-drawing, truth tables, pipelined-CPU
+       schematics) that rely on column alignment. */
+    white-space: pre;
+    tab-size: 4;
+}
+.lesson-markdown pre code {
+    background: transparent;
+    border: none;
+    padding: 0;
+    color: var(--text-body);
+    font-size: var(--fs-sm);
+    line-height: 1.55;
+    font-family: var(--font-mono);
+    /* Turn off stylistic ligatures/contextual alternates — they break the
+       apparent width of box-drawing characters in JetBrains Mono. */
+    font-variant-ligatures: none;
+    font-feature-settings: "liga" 0, "calt" 0;
+}
+.lesson-markdown blockquote {
+    margin: var(--space-3) 0;
+    padding: var(--space-2) var(--space-3);
+    background-color: var(--surface-1);
+    border-left: 3px solid var(--kmila-accent);
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    color: var(--text-muted);
+}
+.lesson-markdown table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin: var(--space-4) 0;
+    font-size: var(--fs-sm);
+    background-color: var(--surface-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    box-shadow: var(--shadow-1);
+}
+.lesson-markdown th, .lesson-markdown td {
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--border-subtle);
+    text-align: left;
+    vertical-align: top;
+}
+.lesson-markdown tr:last-child td { border-bottom: none; }
+.lesson-markdown tbody tr:nth-child(even) td {
+    background-color: var(--surface-2);
+}
+.lesson-markdown td code,
+.lesson-markdown th code {
+    /* Table cells usually contain opcodes, hex literals, or signal names —
+       emphasise monospace and keep the colour consistent with surrounding. */
+    font-size: 0.95em;
+}
+.lesson-markdown th {
+    background-color: var(--surface-2);
+    font-weight: var(--fw-semibold);
+    color: var(--text-strong);
+}
+
+.lesson-sample-cta {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    background: linear-gradient(135deg, rgba(60, 130, 246, 0.08) 0%, var(--surface-1) 100%);
+    border: 1px solid rgba(60, 130, 246, 0.28);
+    border-radius: var(--radius-lg);
+}
+
+.lesson-sample-cta__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-md);
+    background-color: rgba(60, 130, 246, 0.15);
+    color: var(--kmila-accent);
+    font-size: 1.25rem;
+}
+
+.lesson-sample-cta__body h3 {
+    font-size: var(--fs-md);
+    font-weight: var(--fw-bold);
+    color: var(--text-strong);
+    margin: 0 0 var(--space-1);
+}
+
+.lesson-sample-cta__body p {
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+    margin: 0;
+}
+
+.lesson-sample-cta__btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    white-space: nowrap;
+}
+
+.lesson-missing {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    background-color: rgba(245, 158, 11, 0.1);
+    color: var(--warning);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: var(--radius-md);
+    font-size: var(--fs-sm);
+}
+
+.lesson-fallback-banner {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-bottom: var(--space-4);
+    padding: var(--space-2) var(--space-3);
+    background-color: var(--kmila-accent-soft);
+    color: var(--kmila-accent);
+    border: 1px solid var(--kmila-accent);
+    border-radius: var(--radius-md);
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-medium);
+}
+
+.lesson-footer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border-subtle);
+}
+
+.lesson-footer__nav {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3);
+}
+
+.lesson-nav-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    background-color: var(--surface-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    color: inherit;
+    text-decoration: none;
+    transition: border-color var(--duration-fast) var(--ease-standard);
+}
+
+.lesson-nav-btn:hover {
+    border-color: var(--kmila-accent);
+    color: inherit;
+    text-decoration: none;
+}
+
+.lesson-nav-btn small {
+    display: block;
+    color: var(--text-muted);
+    font-size: var(--fs-2xs);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-wide);
+}
+
+.lesson-nav-btn span {
+    font-weight: var(--fw-semibold);
+    color: var(--text-strong);
+    font-size: var(--fs-sm);
+}
+
+.lesson-nav-btn--next { justify-content: flex-end; text-align: right; }
+.lesson-nav-btn--disabled { visibility: hidden; }
+
+@media (max-width: 640px) {
+    .lesson-sample-cta {
+        grid-template-columns: 1fr;
+        text-align: center;
+    }
+    .lesson-sample-cta__icon { margin: 0 auto; }
+    .lesson-sample-cta__btn { justify-self: stretch; justify-content: center; }
+
+    .lesson-footer__nav { grid-template-columns: 1fr; }
+}
+
+
+/* Run-bar: always-visible Save / New-file actions next to the overflow dots.
+   Hidden on narrow viewports to keep Build + Run reachable — users still have
+   the overflow menu and the Ctrl+S / Cmd+S shortcut. */
+.run-bar__file-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 0 var(--space-3);
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.run-bar__file-btn:hover {
+    color: var(--text-strong);
+    background-color: var(--surface-2);
+}
+
+.run-bar__file-btn-label {
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-medium);
+}
+
+@media (max-width: 900px) {
+    .run-bar__file-btn-label { display: none; }
+}
+
+@media (max-width: 640px) {
+    /* Keep only Build + Run visible; rely on overflow for Save / New-file. */
+    .run-bar__file-btn { display: none; }
+}
+
+
+/* Run-bar: flagged FPGA chip when nothing is selected. Uses the danger tone
+   so the "this is why Build/Run are disabled" signal is unmistakable. */
+.run-bar__fpga--missing {
+    color: var(--danger);
+    background-color: rgba(239, 68, 68, 0.08);
+    border-color: rgba(239, 68, 68, 0.4);
+}
+
+.run-bar__fpga--missing .run-bar__fpga-empty {
+    color: var(--danger);
+    font-weight: var(--fw-semibold);
+}
+
+
+/* Settings: custom FPGA + language cards */
+.settings-card--wide { grid-column: 1 / -1; }
+
+.settings-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+}
+
+/* InputFile is invisible; its <label> is styled as the actual button and
+   receives the click that opens the OS file picker. */
+.settings-import-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    cursor: pointer;
+    margin: 0;
+}
+.settings-import-btn .d-none { display: none !important; }
+
+.settings-list {
+    list-style: none;
+    margin: var(--space-3) 0 0;
+    padding: 0;
+    display: grid;
+    gap: var(--space-1);
+}
+
+.settings-list__item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    background-color: var(--surface-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+}
+
+.settings-list__info {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+}
+
+.settings-list__name {
+    font-weight: var(--fw-semibold);
+    color: var(--text-strong);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.settings-list__code {
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    background-color: var(--surface-2);
+    padding: 1px var(--space-2);
+    border-radius: 999px;
+}
+
+.settings-card__note {
+    display: flex;
+    gap: var(--space-2);
+    align-items: flex-start;
+    margin: var(--space-3) 0 0;
+    padding: var(--space-2) var(--space-3);
+    background-color: rgba(60, 130, 246, 0.06);
+    border: 1px dashed rgba(60, 130, 246, 0.3);
+    border-radius: var(--radius-md);
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+}
+
+
+/* ----------------------------------------------------------------------------
+   Sidebar project rows — hover actions + "view all" link
+   ---------------------------------------------------------------------------- */
+
+/* The project row is now a wrapper div that contains the nav link AND an
+   action strip on the right. The existing .kmila-nav-item styles still apply
+   to the wrapper; we just pad/flex the inner parts. */
+.kmila-nav-item--project {
+    padding: 0;             /* the link below owns its padding */
+    position: relative;
+}
+
+.kmila-nav-item__main {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-1) var(--space-4);
+    min-height: 36px;
+    color: inherit;
+    text-decoration: none;
+    min-width: 0;
+    border-radius: var(--radius-sm);
+}
+
+.kmila-nav-item__main:hover,
+.kmila-nav-item__main:focus-visible {
+    color: inherit;
+    text-decoration: none;
+}
+
+.kmila-nav-item__actions {
+    position: absolute;
+    right: var(--space-2);
+    top: 50%;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--duration-fast) var(--ease-standard);
+}
+
+[dir="rtl"] .kmila-nav-item__actions {
+    right: auto;
+    left: var(--space-2);
+}
+
+.kmila-nav-item--project:hover .kmila-nav-item__actions,
+.kmila-nav-item--project:focus-within .kmila-nav-item__actions {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.kmila-nav-item__action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-xs);
+    background-color: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.85);
+    cursor: pointer;
+    transition: background-color var(--duration-fast) var(--ease-standard),
+                color var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-nav-item__action:hover {
+    background-color: rgba(239, 68, 68, 0.35);
+    color: #ffffff;
+}
+
+.kmila-nav-item__action:focus-visible {
+    outline: 2px solid var(--kmila-accent);
+    outline-offset: 1px;
+}
+
+/* Hide hover actions in collapsed (rail) mode — no room, no point. */
+.kmila-sidebar--collapsed .kmila-nav-item__actions { display: none; }
+
+/* "View all 42 projects" link at the bottom of the sidebar project section. */
+.kmila-sidebar__view-all {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: var(--space-2) var(--space-3) 0;
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius-sm);
+    color: rgba(255, 255, 255, 0.6);
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-medium);
+    text-decoration: none;
+    border: 1px dashed rgba(255, 255, 255, 0.15);
+    transition: color var(--duration-fast) var(--ease-standard),
+                border-color var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-sidebar__view-all:hover {
+    color: #ffffff;
+    text-decoration: none;
+    border-color: rgba(255, 255, 255, 0.35);
+}
+
+.kmila-sidebar--collapsed .kmila-sidebar__view-all span { display: none; }
+
+
+/* Learn hero: "continue where you left off" CTA banner */
+.learn-hero__continue {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin-top: var(--space-4);
+    padding: var(--space-2) var(--space-4);
+    background: linear-gradient(135deg, rgba(60, 130, 246, 0.12) 0%, var(--surface-2) 100%);
+    border: 1px solid rgba(60, 130, 246, 0.3);
+    border-radius: var(--radius-lg);
+    color: inherit;
+    text-decoration: none;
+    box-shadow: var(--shadow-1);
+    transition: transform var(--duration-fast) var(--ease-standard),
+                border-color var(--duration-fast) var(--ease-standard);
+}
+
+.learn-hero__continue:hover {
+    transform: translateY(-1px);
+    border-color: var(--kmila-accent);
+    color: inherit;
+    text-decoration: none;
+}
+
+.learn-hero__continue-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--kmila-accent);
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
+
+.learn-hero__continue-body {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.learn-hero__continue-body small {
+    color: var(--text-muted);
+    font-size: var(--fs-2xs);
+    font-weight: var(--fw-semibold);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-wide);
+}
+
+.learn-hero__continue-body strong {
+    color: var(--text-strong);
+    font-size: var(--fs-md);
+    font-weight: var(--fw-bold);
+    line-height: 1.3;
+}
+
+.learn-hero__continue-module {
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.learn-hero__continue-chevron {
+    color: var(--kmila-accent);
+    margin-left: var(--space-3);
+    flex-shrink: 0;
+}
+
+[dir="rtl"] .learn-hero__continue-chevron {
+    margin-left: 0;
+    margin-right: var(--space-3);
+    transform: scaleX(-1);
+}
+
+
+/* ----------------------------------------------------------------------------
+   Toasts — token-aligned reskin of Bootstrap's .toast
+   ----------------------------------------------------------------------------
+   BlazorBootstrap's Toasts component ships the default Bootstrap chrome, which
+   looks dated next to the rest of the redesigned UI. Reskinning rather than
+   rewriting keeps the component's ARIA + auto-hide + placement logic intact.
+*/
+
+.toast-container {
+    padding: var(--space-3);
+    pointer-events: none;               /* container doesn't intercept clicks */
+    z-index: var(--z-toast, 1200);
+}
+.toast-container .toast {
+    pointer-events: auto;               /* but individual toasts do */
+}
+
+.toast {
+    min-width: 300px;
+    max-width: 420px;
+    background-color: var(--surface-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-2);
+    color: var(--text-body);
+    font-size: var(--fs-sm);
+    overflow: hidden;
+    backdrop-filter: saturate(1.2);
+}
+
+.toast-header {
+    background-color: transparent;
+    border-bottom: 1px solid var(--border-subtle);
+    padding: var(--space-2) var(--space-3);
+    color: var(--text-strong);
+    font-weight: var(--fw-semibold);
+}
+
+.toast-header strong { letter-spacing: var(--tracking-tight); }
+
+.toast-body {
+    padding: var(--space-3);
+    color: var(--text-body);
+    line-height: 1.45;
+}
+
+/* Variant left-accent bar keyed off the Bootstrap text-* / bg-* classes that
+   BlazorBootstrap stamps on based on ToastType. Matches the output-row colours
+   in the editor dock so the visual language is consistent. */
+.toast.text-bg-success,
+.toast.bg-success { border-left: 3px solid var(--success); }
+.toast.text-bg-danger,
+.toast.bg-danger  { border-left: 3px solid var(--danger); }
+.toast.text-bg-warning,
+.toast.bg-warning { border-left: 3px solid var(--warning); }
+.toast.text-bg-info,
+.toast.bg-info,
+.toast.text-bg-primary,
+.toast.bg-primary { border-left: 3px solid var(--kmila-accent); }
+
+/* Bootstrap sets text-bg-* with a coloured background; strip it so we keep
+   our surface-1 tone and rely on the left accent + header icon for variant. */
+.toast.text-bg-success,
+.toast.text-bg-danger,
+.toast.text-bg-warning,
+.toast.text-bg-info,
+.toast.text-bg-primary,
+.toast.text-bg-secondary {
+    background-color: var(--surface-1) !important;
+    color: var(--text-body) !important;
+}
+
+.toast .btn-close {
+    filter: invert(0.5);
+    opacity: 0.7;
+    transition: opacity var(--duration-fast) var(--ease-standard);
+}
+.toast .btn-close:hover { opacity: 1; }
+
+[data-bs-theme="dark"] .toast .btn-close { filter: invert(0.85); }
+
+/* RTL: accent bar flips to the right edge. */
+[dir="rtl"] .toast.text-bg-success,
+[dir="rtl"] .toast.bg-success,
+[dir="rtl"] .toast.text-bg-danger,
+[dir="rtl"] .toast.bg-danger,
+[dir="rtl"] .toast.text-bg-warning,
+[dir="rtl"] .toast.bg-warning,
+[dir="rtl"] .toast.text-bg-info,
+[dir="rtl"] .toast.bg-info,
+[dir="rtl"] .toast.text-bg-primary,
+[dir="rtl"] .toast.bg-primary {
+    border-left: none;
+    border-right: 3px solid;
+    /* Same colours, just mirrored — re-apply per variant so the current hue
+       still wins: */
+}
+[dir="rtl"] .toast.text-bg-success,
+[dir="rtl"] .toast.bg-success  { border-right-color: var(--success); }
+[dir="rtl"] .toast.text-bg-danger,
+[dir="rtl"] .toast.bg-danger   { border-right-color: var(--danger); }
+[dir="rtl"] .toast.text-bg-warning,
+[dir="rtl"] .toast.bg-warning  { border-right-color: var(--warning); }
+[dir="rtl"] .toast.text-bg-info,
+[dir="rtl"] .toast.bg-info,
+[dir="rtl"] .toast.text-bg-primary,
+[dir="rtl"] .toast.bg-primary  { border-right-color: var(--kmila-accent); }
+
+
+/* Learn hero: search field and clear button */
+.learn-hero__search {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+    max-width: 420px;
+    background-color: var(--surface-0);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 0 var(--space-2) 0 var(--space-3);
+    color: var(--text-muted);
+}
+
+.learn-hero__search:focus-within {
+    border-color: var(--kmila-accent);
+    box-shadow: 0 0 0 3px rgba(60, 130, 246, 0.15);
+}
+
+.learn-hero__search input[type="search"] {
+    flex: 1 1 auto;
+    border: none;
+    background: transparent;
+    color: var(--text-strong);
+    font-size: var(--fs-sm);
+    padding: var(--space-2) 0;
+}
+.learn-hero__search input[type="search"]:focus { outline: none; box-shadow: none; }
+
+/* Hide the native clear cross — we render our own when needed. */
+.learn-hero__search input[type="search"]::-webkit-search-cancel-button { display: none; }
+.learn-hero__search input[type="search"]::-webkit-search-decoration { display: none; }
+
+.learn-hero__search-clear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: var(--radius-xs);
+}
+.learn-hero__search-clear:hover { background-color: var(--surface-2); color: var(--text-strong); }
+
+
+/* Sidebar nav item: progress badge (used for Learn "3/27") */
+.kmila-nav-item__badge {
+    margin-left: auto;
+    padding: 1px var(--space-2);
+    border-radius: 999px;
+    background-color: rgba(60, 130, 246, 0.2);
+    color: #ffffff;
+    font-family: var(--font-mono);
+    font-size: var(--fs-2xs);
+    font-weight: var(--fw-bold);
+    letter-spacing: var(--tracking-tight);
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+[dir="rtl"] .kmila-nav-item__badge { margin-left: 0; margin-right: auto; }
+
+.kmila-sidebar--collapsed .kmila-nav-item__badge { display: none; }
+
+
+/* Home hero: progress chip on the Learn CTA */
+.home-hero__progress-chip {
+    display: inline-flex;
+    align-items: center;
+    margin-left: var(--space-2);
+    padding: 1px var(--space-2);
+    border-radius: 999px;
+    background-color: rgba(60, 130, 246, 0.15);
+    color: var(--kmila-accent);
+    font-family: var(--font-mono);
+    font-size: var(--fs-2xs);
+    font-weight: var(--fw-bold);
+    line-height: 1.4;
+}
+[dir="rtl"] .home-hero__progress-chip { margin-left: 0; margin-right: var(--space-2); }
+
+
+/* ----------------------------------------------------------------------------
+   WaveformViewer — tokenized chrome matching the Editor dock
+   ---------------------------------------------------------------------------- */
+
+.waveform-viewer {
+    display: flex;
+    flex-direction: column;
+    background-color: var(--surface-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-1);
+}
+
+.waveform-viewer__toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    background-color: var(--surface-2);
+    border-bottom: 1px solid var(--border-subtle);
+    min-height: 44px;
+}
+
+.waveform-viewer__title {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--text-strong);
+    font-weight: var(--fw-semibold);
+}
+
+.waveform-viewer__chip {
+    padding: 1px var(--space-2);
+    border-radius: 999px;
+    background-color: rgba(60, 130, 246, 0.15);
+    color: var(--kmila-accent);
+    font-family: var(--font-mono);
+    font-size: var(--fs-2xs);
+    font-weight: var(--fw-bold);
+}
+
+.waveform-viewer__actions {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+}
+
+.waveform-viewer__body {
+    padding: var(--space-2);
+    overflow-x: auto;
+}
+
+.waveform-signal-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px var(--space-2);
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-2xs);
+    font-weight: var(--fw-bold);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+}
+.waveform-signal-chip--in       { background: rgba(60, 130, 246, 0.15); color: var(--kmila-accent); }
+.waveform-signal-chip--out      { background: rgba(245, 158, 11, 0.15); color: var(--warning); }
+.waveform-signal-chip--inout    { background: rgba(168, 85, 247, 0.15); color: #c084fc; }
+.waveform-signal-chip--internal { background: var(--surface-0);         color: var(--text-muted); }
+
+.waveform-signal-name {
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-semibold);
+    color: var(--text-strong);
+}
+
+.waveform-signal-width {
+    font-family: var(--font-mono);
+    font-size: var(--fs-2xs);
+    color: var(--text-muted);
+}
+
+
+/* ----------------------------------------------------------------------------
+   Accessibility
+   ---------------------------------------------------------------------------- */
+
+/* Skip-to-content link — visually hidden until focused. Parks above the
+   sidebar so keyboard users can bypass navigation on every page load. */
+.kmila-skip-link {
+    position: absolute;
+    top: var(--space-2);
+    left: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background-color: var(--kmila-accent);
+    color: #ffffff;
+    font-weight: var(--fw-semibold);
+    text-decoration: none;
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-2);
+    transform: translateY(-150%);
+    opacity: 0;
+    transition: transform var(--duration-fast) var(--ease-standard),
+                opacity var(--duration-fast) var(--ease-standard);
+    z-index: 10000;
+}
+
+.kmila-skip-link:focus-visible,
+.kmila-skip-link:focus {
+    transform: translateY(0);
+    opacity: 1;
+    outline: 2px solid #ffffff;
+    outline-offset: 2px;
+}
+
+[dir="rtl"] .kmila-skip-link { left: auto; right: var(--space-2); }
+
+/* Baseline focus ring for every keyboard-reachable control that doesn't
+   already define one. Uses the brand accent at 2px — visible against every
+   surface token without being obnoxious. */
+:is(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--kmila-accent);
+    outline-offset: 2px;
+    border-radius: var(--radius-xs);
+}
+
+/* Respect the user's motion preference. Kills all non-essential transitions
+   + animations when they've asked the OS to reduce motion. */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+
+/* ----------------------------------------------------------------------------
+   WaveformViewer v2 — inline-SVG grid
+   ----------------------------------------------------------------------------
+   Critical containment rules. We push the inline SVG as wide as 24 000 px at
+   max zoom — without proper clipping, a flex ancestor would expand to fit
+   and shove the whole editor (Run bar, FPGA picker, TopBar) off screen.
+   The recipe:
+     .waveform-viewer        → min-width: 0 + overflow: hidden  (never grow parents)
+     .waveform-viewer__body  → the ONLY scroll container (horizontal)
+     .waveform-grid          → width: max-content, contained by the body above
+*/
+
+/* `contain: inline-size` is the CSS-spec way to tell the layout engine
+   "this element's width is independent of its content". Every zoom attempt
+   before this was chasing max-content leaks at different ancestors — this
+   cuts the whole chain at the viewer in one line. Width is 100 % of the
+   dock panel; a 24 000 px inner grid scrolls within the body, period. */
+.waveform-viewer {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    contain: inline-size;
+}
+.waveform-viewer__body {
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    contain: inline-size;
+}
+
+.waveform-grid {
+    display: flex;
+    flex-direction: column;
+    background-color: var(--surface-0);
+    border-radius: var(--radius-md);
+    width: max-content;
+    max-height: 70vh;
+}
+
+.waveform-row {
+    display: flex;
+    align-items: stretch;
+    min-height: 44px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+.waveform-row:last-child { border-bottom: none; }
+
+.waveform-row--ruler { min-height: 26px; }
+
+.waveform-row__label {
+    flex: 0 0 160px;
+    min-width: 160px;
+    padding: var(--space-1) var(--space-2);
+    background-color: var(--surface-1);
+    border-right: 1px solid var(--border-subtle);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-size: var(--fs-xs);
+    flex-wrap: wrap;
+    /* Sticks to the left edge of the scrollable body — signal name stays
+       readable even after scrolling 24 k pixels of trace. */
+    position: sticky;
+    left: 0;
+    z-index: 2;
+}
+
+.waveform-row__track {
+    position: relative;
+    background-color: var(--surface-1);
+    flex-shrink: 0;
+    /* width set inline from _zoomWidth */
+}
+
+.waveform-svg          { display: block; height: 40px; width: 100%; }
+.waveform-svg--ruler   { height: 22px; }
+
+
+/* Sidebar project row: "simulation is running" pulse. Drives from
+   SimulationParameters.RunningProjectId — stays on even when the user
+   navigates away from /editor/{id}, which is the whole point of
+   background sims. */
+.kmila-nav-item__pulse {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-left: auto;
+    border-radius: 50%;
+    background-color: var(--success);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6);
+    animation: kmilaRunPulse 1.6s ease-out infinite;
+    flex-shrink: 0;
+}
+[dir="rtl"] .kmila-nav-item__pulse { margin-left: 0; margin-right: auto; }
+
+@keyframes kmilaRunPulse {
+    0%   { box-shadow: 0 0 0 0   rgba(16, 185, 129, 0.6); }
+    70%  { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);   }
+    100% { box-shadow: 0 0 0 0   rgba(16, 185, 129, 0);   }
+}
+
+.kmila-sidebar--collapsed .kmila-nav-item__pulse {
+    position: absolute;
+    top: 8px; right: 8px;
+    margin: 0;
+}
+
+
+/* ----------------------------------------------------------------------------
+   Waveform compare mode
+   ---------------------------------------------------------------------------- */
+
+.waveform-viewer__legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background-color: var(--surface-2);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.waveform-legend-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 2px var(--space-2);
+    background-color: var(--surface-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: 999px;
+    font-size: var(--fs-xs);
+    font-family: var(--font-mono);
+    color: var(--text-strong);
+}
+
+.waveform-legend-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+
+/* Runs dock tab — snapshot list */
+.runs-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.runs-panel__compare-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background-color: rgba(60, 130, 246, 0.08);
+    border: 1px solid rgba(60, 130, 246, 0.3);
+    border-radius: var(--radius-md);
+    color: var(--text-strong);
+    font-size: var(--fs-sm);
+}
+
+.runs-panel__compare-bar button:last-child { margin-left: auto; }
+
+.runs-panel__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: var(--space-2);
+}
+
+.runs-panel__item {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background-color: var(--surface-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    transition: border-color var(--duration-fast) var(--ease-standard);
+}
+.runs-panel__item:hover { border-color: var(--kmila-accent); }
+.runs-panel__item.is-selected {
+    border-color: var(--kmila-accent);
+    background-color: rgba(60, 130, 246, 0.06);
+}
+.runs-panel__item.is-pinned { border-left: 3px solid var(--warning); }
+
+.runs-panel__select {
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.runs-panel__main {
+    background: transparent;
+    border: none;
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+    cursor: pointer;
+    color: inherit;
+    padding: 0;
+}
+
+.runs-panel__head { display: flex; align-items: center; gap: var(--space-2); }
+.runs-panel__label { font-weight: var(--fw-semibold); color: var(--text-strong); }
+.runs-panel__pin-chip { color: var(--warning); font-size: 0.85em; }
+
+.runs-panel__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+}
+
+.runs-panel__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-family: var(--font-mono);
+}
+.runs-panel__chip--muted { color: var(--text-muted); opacity: 0.8; }
+
+.runs-panel__actions {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    opacity: 0;
+    transition: opacity var(--duration-fast) var(--ease-standard);
+}
+.runs-panel__item:hover .runs-panel__actions,
+.runs-panel__item:focus-within .runs-panel__actions { opacity: 1; }
+
+
+/* Run-bar clock — FPGA-sourced default with visible override chip. */
+.run-bar__clock {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 0 var(--space-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background-color: var(--surface-1);
+}
+.run-bar__clock .run-bar__time-input { max-width: 68px; }
+.run-bar__clock-unit {
+    font-family: var(--font-mono);
+    font-size: var(--fs-2xs);
+    color: var(--text-muted);
+    letter-spacing: var(--tracking-tight);
+}
+.run-bar__clock-reset {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-left: var(--space-1);
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    border-radius: var(--radius-xs);
+    cursor: pointer;
+}
+.run-bar__clock-reset:hover { background-color: var(--surface-2); color: var(--text-strong); }
+
+/* Customized clock: warning-tinted border + amber input text so the student
+   notices they're off the FPGA's default. Hover tooltip explains the risk. */
+.run-bar__clock--custom {
+    border-color: rgba(245, 158, 11, 0.5);
+    background-color: rgba(245, 158, 11, 0.08);
+}
+.run-bar__clock--custom .run-bar__time-input { color: var(--warning); font-weight: var(--fw-semibold); }
+
+/* Port moments: "system clock" auto-badge on clk/clock ports. */
+.port-moment__syslclk-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 2px var(--space-2);
+    border-radius: 999px;
+    background-color: rgba(60, 130, 246, 0.12);
+    color: var(--kmila-accent);
+    font-family: var(--font-mono);
+    font-size: var(--fs-2xs);
+    font-weight: var(--fw-bold);
+    letter-spacing: var(--tracking-wide);
+}
+
+
+/* FPGA picker: manufacturer filter chips + 2-line option rows. */
+.kmila-fpga-picker__filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--border-subtle);
+}
+.kmila-fpga-picker__chip {
+    padding: 2px var(--space-2);
+    background-color: var(--surface-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: 999px;
+    font-size: var(--fs-2xs);
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    cursor: pointer;
+}
+.kmila-fpga-picker__chip:hover { border-color: var(--kmila-accent); color: var(--text-strong); }
+.kmila-fpga-picker__chip.is-active {
+    background-color: rgba(60, 130, 246, 0.15);
+    color: var(--kmila-accent);
+    border-color: var(--kmila-accent);
+    font-weight: var(--fw-semibold);
+}
+
+.kmila-fpga-picker__option-main {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    min-width: 0;
+}
+.kmila-fpga-picker__option-meta {
+    font-size: var(--fs-2xs);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+}
+
+
+/* Editor dock: custom height via --kmila-dock-height CSS variable set by
+   the Razor side. Grabber sits on the top edge and provides a north-south
+   cursor; its :hover + :active pull out a subtle accent bar so the affordance
+   is obvious. */
+.kmila-dock {
+    min-height: var(--kmila-dock-height, 320px);
+    height: var(--kmila-dock-height, 320px);
+}
+
+.kmila-dock__grabber {
+    position: relative;
+    height: 6px;
+    margin-top: -3px;
+    cursor: ns-resize;
+    background-color: transparent;
+    touch-action: none;
+    z-index: 3;
+}
+.kmila-dock__grabber::after {
+    content: "";
+    position: absolute;
+    inset: 2px 0 2px 0;
+    background-color: transparent;
+    border-radius: 999px;
+    transition: background-color var(--duration-fast) var(--ease-standard);
+}
+.kmila-dock__grabber:hover::after,
+.kmila-dock__grabber:active::after {
+    background-color: rgba(60, 130, 246, 0.4);
+}
+.kmila-dock--collapsed .kmila-dock__grabber { display: none; }
+
+
+/* ----------------------------------------------------------------------------
+   Execution view polish (Run bar · Waveforms chrome · StatusBar)
+   ---------------------------------------------------------------------------- */
+
+/* Run-bar row: tighter vertical rhythm, consistent chip heights, aligned
+   divider between inputs and actions. */
+.run-bar__row {
+    align-items: stretch;
+    min-height: 44px;
+    gap: var(--space-2);
+}
+.run-bar__fpga,
+.run-bar__time,
+.run-bar__clock {
+    height: 36px;
+    align-self: center;
+}
+
+/* Disabled-state contrast upgrade — previously looked active-ish in dark mode. */
+.run-bar button:disabled,
+.run-bar__time-input:disabled,
+.run-bar__scale:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+/* StatusBar chips align on the same baseline and share a subtle divider. */
+.status-bar {
+    padding: 4px var(--space-3);
+    gap: var(--space-3);
+}
+.status-bar__section {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+.status-bar__section + .status-bar__section {
+    border-left: 1px solid var(--border-subtle);
+    padding-left: var(--space-3);
+}
+[dir="rtl"] .status-bar__section + .status-bar__section {
+    border-left: none;
+    border-right: 1px solid var(--border-subtle);
+    padding-left: 0;
+    padding-right: var(--space-3);
+}
+
+/* Waveform compare legend: wrap cleanly on narrow viewports instead of
+   bleeding off the right edge. */
+@media (max-width: 720px) {
+    .waveform-viewer__legend { padding: var(--space-1) var(--space-2); }
+    .waveform-legend-pill { font-size: var(--fs-2xs); }
+}
+
+/* Progress line under the Run bar while running — subtle gradient so it's
+   felt, not shouted. */
+.run-bar__progress { background-color: var(--surface-0); }
+.run-bar__progress-fill {
+    background: linear-gradient(90deg, var(--kmila-accent) 0%, var(--success) 100%);
+}
+
+/* ==========================================================================
+   Reconnect modal — shown when the SignalR circuit drops.
+   Element id `components-reconnect-modal` is what Blazor's framework JS
+   targets; the framework toggles the state classes below on it.
+   Hidden by default — visible only when one of the state classes is set.
+   ========================================================================== */
+.kmila-reconnect {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483640;             /* above everything app-level, below devtools */
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-4);
+    /* opacity transition is handled per-state below so the show animation
+       is driven by class changes, not by a JS-controlled style attribute */
+}
+.kmila-reconnect.components-reconnect-show,
+.kmila-reconnect.components-reconnect-failed,
+.kmila-reconnect.components-reconnect-rejected { display: flex; }
+
+.kmila-reconnect__backdrop {
+    position: absolute;
+    inset: 0;
+    background-color: rgba(15, 23, 42, 0.55);   /* slate-900 @ 55% */
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    animation: kmila-reconnect-fade 220ms ease-out both;
+}
+
+.kmila-reconnect__card {
+    position: relative;
+    max-width: 420px;
+    width: 100%;
+    background-color: var(--surface-2);
+    color: var(--text-default);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-3);
+    overflow: hidden;
+    animation: kmila-reconnect-rise 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes kmila-reconnect-fade {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+@keyframes kmila-reconnect-rise {
+    from { opacity: 0; transform: translateY(8px) scale(0.985); }
+    to   { opacity: 1; transform: none; }
+}
+
+.kmila-reconnect__head {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    background-color: var(--surface-1);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.kmila-reconnect__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-md);
+    flex-shrink: 0;
+    /* Default — actively reconnecting: warning tone */
+    background-color: var(--warning-soft);
+    color: var(--warning);
+}
+.kmila-reconnect.components-reconnect-failed .kmila-reconnect__icon,
+.kmila-reconnect.components-reconnect-rejected .kmila-reconnect__icon {
+    background-color: var(--danger-soft);
+    color: var(--danger);
+}
+
+.kmila-reconnect__head h2 {
+    margin: 0 0 2px;
+    font-size: var(--fs-md);
+    font-weight: var(--fw-semibold);
+    color: var(--text-strong);
+    line-height: var(--lh-snug);
+}
+.kmila-reconnect__subtitle {
+    margin: 0;
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
+    line-height: var(--lh-snug);
+}
+
+.kmila-reconnect__body {
+    padding: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.kmila-reconnect__msg {
+    margin: 0;
+    font-size: var(--fs-sm);
+    color: var(--text-default);
+    line-height: var(--lh-normal);
+    /* Hide all state messages by default; reveal the right one based on which
+       state class the framework set on the parent. */
+    display: none;
+}
+.kmila-reconnect.components-reconnect-show     .kmila-reconnect__msg--show     { display: block; }
+.kmila-reconnect.components-reconnect-failed   .kmila-reconnect__msg--failed   { display: block; }
+.kmila-reconnect.components-reconnect-rejected .kmila-reconnect__msg--rejected { display: block; }
+
+/* Three-dot pulsing spinner — only while actively retrying. */
+.kmila-reconnect__spinner {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    padding-top: var(--space-1);
+}
+.kmila-reconnect.components-reconnect-show .kmila-reconnect__spinner { display: flex; }
+.kmila-reconnect__spinner span {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background-color: var(--warning);
+    opacity: 0.35;
+    animation: kmila-reconnect-pulse 1.2s ease-in-out infinite;
+}
+.kmila-reconnect__spinner span:nth-child(2) { animation-delay: 0.2s; }
+.kmila-reconnect__spinner span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes kmila-reconnect-pulse {
+    0%, 60%, 100% { opacity: 0.35; transform: scale(1); }
+    30%           { opacity: 1;    transform: scale(1.2); }
+}
+
+.kmila-reconnect__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4) var(--space-4);
+    justify-content: flex-end;
+    border-top: 1px solid var(--border-subtle);
+    background-color: var(--surface-1);
+}
+
+.kmila-reconnect__btn {
+    appearance: none;
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    padding: 0.45rem 0.9rem;
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-medium);
+    line-height: 1.2;
+    cursor: pointer;
+    transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+}
+.kmila-reconnect__btn:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+}
+.kmila-reconnect__btn--primary {
+    background-color: var(--kmila-accent);
+    color: var(--text-on-accent);
+    border-color: var(--kmila-accent);
+}
+.kmila-reconnect__btn--primary:hover  { filter: brightness(1.05); }
+.kmila-reconnect__btn--primary:active { filter: brightness(0.95); }
+.kmila-reconnect__btn--ghost {
+    background-color: transparent;
+    color: var(--text-default);
+    border-color: var(--border-default);
+}
+.kmila-reconnect__btn--ghost:hover  { background-color: var(--surface-3); }
+.kmila-reconnect__btn--ghost:active { background-color: var(--border-subtle); }
+
+/* While actively retrying, the "Try again" button is redundant — Blazor is
+   already attempting reconnects on its own backoff schedule. Hide it so the
+   user only sees actionable controls when reconnect has actually given up. */
+.kmila-reconnect.components-reconnect-show #components-reconnect-button { display: none; }
+
+/* Mobile: tighter padding, full-width buttons stacked. */
+@media (max-width: 480px) {
+    .kmila-reconnect__actions { flex-direction: column-reverse; }
+    .kmila-reconnect__btn     { width: 100%; }
+}
+
+/* RTL: action row flips so primary button stays on the trailing edge. */
+[dir="rtl"] .kmila-reconnect__actions { justify-content: flex-start; }

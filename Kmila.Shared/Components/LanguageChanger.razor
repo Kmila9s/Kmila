@@ -1,72 +1,80 @@
 @*
-    LanguageChanger Component
+    LanguageChanger — custom <details> popover. Matches the FPGA picker style.
 
-    A dropdown component for selecting the application's display language.
-    Uses Blazor Bootstrap Dropdown with a translate icon for a clean, mobile-friendly UI.
+    • Pill trigger shows a globe icon + the current language *code* in uppercase
+      (so the trigger stays narrow even for long native names like "日本語").
+    • Popover panel lists all 7 languages with native name + code badge,
+      check mark next to the current one.
+    • RTL-aware (Arabic language flips the popover alignment via [dir=rtl]).
 
-    Reactive Architecture:
-    - When the user selects a language, only DbContext.SetSettingAsync is called
-    - ApplicationDbContext fires StaticOnValueChanged event after saving
-    - Traductor service catches the event and reloads translations automatically
-    - MainLayout catches Traductor.StaticOnLangChanged and refreshes the UI
-
-    This reactive pattern ensures instant, smooth language switching without
-    the component needing to directly interact with the Traductor service.
-
-    Supported Languages:
-    - English (en) - Default
-    - Spanish (es)
-    - French (fr)
-    - German (de)
-    - Chinese (ch)
-    - Japanese (jp)
-    - Arabic (ar) - RTL support
-
-    Dependencies:
-    - ApplicationDbContext (injected via _Imports.razor as DbContext)
-    - AppSettings.KEY_LANGUAGE - The storage key for language setting
+    Reactive flow unchanged:
+    DbContext.SetSettingAsync(KEY_LANGUAGE) → StaticOnValueChanged →
+    Traductor reloads → StaticOnLangChanged → MainLayout re-renders.
 *@
-<div class="mx-3">
-    <Dropdown Color="DropdownColor.Info">
-        <DropdownToggleButton>
-            <Icon Name="IconName.Translate" />
-            @_selectedLanguage
-        </DropdownToggleButton>
-        <DropdownMenu>
-            @foreach(var key in _languages.Keys){
-                <DropdownItem @onclick="async () => await SetNewLanguage(key)" Type="DropdownItemType.Button">@key</DropdownItem>
-            }
-        </DropdownMenu>
-    </Dropdown>
-</div>
+@implements IDisposable
 
-@code{
-    /// <summary>
-    /// Available languages with their display names as keys and language codes as values.
-    /// </summary>
-    private static Dictionary<string, string> _languages = new(){
-        { "English", "en"},
-        { "Español", "es"},
-        { "Français", "fr"},
-        { "Deutsch", "de"},
-        { "中文", "ch"},
-        { "日本語", "jp"},
-        { "عربي", "ar"}
+<details class="kmila-lang-picker">
+    <summary class="kmila-lang-picker__summary" aria-label="Language">
+        <Icon Name="IconName.Translate" />
+        <span class="kmila-lang-picker__code">@CurrentCode</span>
+        <Icon Name="IconName.ChevronDown" Class="kmila-lang-picker__chevron" />
+    </summary>
+
+    <div class="kmila-lang-picker__panel" role="menu">
+        @foreach (var lang in _languages)
+        {
+            var isActive = lang.Code == Traductor.Lang;
+            <button type="button"
+                    role="menuitem"
+                    class="kmila-lang-picker__option @(isActive ? "is-selected" : "")"
+                    @onclick="() => SetLanguageAsync(lang.Code)">
+                <span class="kmila-lang-picker__badge">@lang.Code.ToUpperInvariant()</span>
+                <span class="kmila-lang-picker__name">@lang.NativeName</span>
+                @if (isActive)
+                {
+                    <Icon Name="IconName.CheckLg" Class="kmila-lang-picker__check" />
+                }
+            </button>
+        }
+    </div>
+</details>
+
+@code {
+    private record LangOption(string Code, string NativeName);
+
+    private static readonly LangOption[] _languages = new[]
+    {
+        new LangOption("en", "English"),
+        new LangOption("es", "Español"),
+        new LangOption("fr", "Français"),
+        new LangOption("de", "Deutsch"),
+        new LangOption("ch", "中文"),
+        new LangOption("jp", "日本語"),
+        new LangOption("ar", "عربي")
     };
 
-    /// <summary>
-    /// The currently selected language display name shown in the dropdown button.
-    /// </summary>
-    private string _selectedLanguage = "English";
+    private string CurrentCode => Traductor.Lang?.ToUpperInvariant() ?? "EN";
 
-    /// <summary>
-    /// Sets a new language by saving it to the database.
-    /// The reactive event chain handles the rest:
-    /// DbContext.SetSettingAsync -> StaticOnValueChanged -> Traductor reloads -> UI refreshes
-    /// </summary>
-    /// <param name="key">The display name of the language (e.g., "English", "Español").</param>
-    private async Task SetNewLanguage(string key){
-        _selectedLanguage = key;
-        await DbContext.SetSettingAsync(AppSettings.KEY_LANGUAGE, _languages[key]);
+    protected override void OnInitialized()
+    {
+        Traductor.StaticOnLangChanged += OnLangChanged;
+    }
+
+    private void OnLangChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task SetLanguageAsync(string code)
+    {
+        // Blazor side: reactive Traductor reload + UI re-render via the DB event chain.
+        await DbContext.SetSettingAsync(AppSettings.KEY_LANGUAGE, code);
+        // JS side: update the VHDL doc-language pointer so Monaco hover/completion
+        // picks up the new translations immediately — providers re-invoke on every
+        // user action, so no Monaco re-register is needed.
+        try { await JS.InvokeVoidAsync("kmilaSetDocsLang", code); }
+        catch { /* helper is in the inline <head> script — should always exist */ }
+    }
+
+    public void Dispose()
+    {
+        Traductor.StaticOnLangChanged -= OnLangChanged;
     }
 }

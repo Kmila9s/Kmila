@@ -1,31 +1,46 @@
 @*
-    ResourceMetricBox Component
+    ResourceMetricBox — tokenized metric card for a single FPGA resource.
 
-    Reusable metric box for displaying a single FPGA resource metric.
-    Shows a title with icon, value with badge, and optional child content.
+    Layout:
+      ┌────────────────────────────────────────┐
+      │  [icon]  Flip-Flops         ~95%       │
+      │                                        │
+      │  128   FFs                             │
+      │                                        │
+      │  [optional child content]              │
+      └────────────────────────────────────────┘
 
-    Usage:
-    <ResourceMetricBox Title="Flip-Flops" Icon="IconName.ToggleOn" IconColor="text-primary"
-                       Value="128" Unit="FFs" BadgeColor="BadgeColor.Primary" AccuracyLabel="~95%" />
+    Styling is driven by a semantic "variant" derived from the legacy BadgeColor
+    parameter so callers don't need to change. All colors flow through tokens so
+    dark mode swaps without extra rules.
 *@
 
-<div class="col-md-6 col-lg-4">
-    <div class="border rounded p-3 h-100 resource-box">
-        <div class="d-flex align-items-center mb-2">
-            <Icon Name="@Icon" Class="@($"me-2 {IconColor}")" />
-            <strong>@Title</strong>
-            <Badge Color="BadgeColor.Secondary" Class="ms-2" Pill="true">
-                <small>@AccuracyLabel</small>
-            </Badge>
+<div class="resource-metric resource-metric--@Variant">
+    <div class="resource-metric__head">
+        <span class="resource-metric__icon">
+            <Icon Name="@Icon" />
+        </span>
+        <div class="resource-metric__label">
+            <span class="resource-metric__title">@Title</span>
         </div>
-        <div class="d-flex align-items-center">
-            <Badge Color="@BadgeColor" Class="font-monospace fs-5">
-                @Value
-            </Badge>
-            <small class="text-muted ms-2">@Unit</small>
-        </div>
-        @ChildContent
+        @if (!string.IsNullOrWhiteSpace(AccuracyLabel))
+        {
+            <span class="resource-metric__accuracy">@AccuracyLabel</span>
+        }
     </div>
+
+    <div class="resource-metric__value">
+        <span class="resource-metric__number">@Value</span>
+        @if (!string.IsNullOrWhiteSpace(Unit))
+        {
+            <span class="resource-metric__unit">@Unit</span>
+        }
+    </div>
+
+    @if (ChildContent != null)
+    {
+        <div class="resource-metric__extra">@ChildContent</div>
+    }
 </div>
 
 @code {
@@ -37,4 +52,21 @@
     [Parameter] public BadgeColor BadgeColor { get; set; } = BadgeColor.Primary;
     [Parameter] public string AccuracyLabel { get; set; } = string.Empty;
     [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>
+    /// Maps the legacy <see cref="BadgeColor"/> param onto our semantic variant
+    /// class so existing callers don't break. IconColor is kept but ignored —
+    /// variant drives the whole color treatment so everything stays in tokens.
+    /// </summary>
+    private string Variant => BadgeColor switch
+    {
+        BadgeColor.Success   => "success",
+        BadgeColor.Info      => "info",
+        BadgeColor.Warning   => "warning",
+        BadgeColor.Danger    => "danger",
+        BadgeColor.Secondary => "neutral",
+        BadgeColor.Light     => "neutral",
+        BadgeColor.Dark      => "neutral",
+        _                    => "primary"
+    };
 }

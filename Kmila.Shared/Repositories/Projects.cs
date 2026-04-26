@@ -19,6 +19,13 @@ public class Projects : IRepository<Project>
     /// Gets the last error message that occurred.
     /// </summary>
     public string LastError { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// Fires after any successful Create / Remove / Update. Any UI surface
+    /// that displays the project list (e.g. the NavMenu sidebar) subscribes
+    /// to this to stay in sync without polling.
+    /// </summary>
+    public event Action? OnListChanged;
     /// <summary>
     /// Initializes a new instance of the <see cref="Projects"/> class.
     /// </summary>
@@ -52,6 +59,7 @@ public class Projects : IRepository<Project>
             // Create the project directory on disk and register in the database
             Directory.CreateDirectory(project.BasePath);
             await _applicationDbContext.InsertAsync(project);
+            OnListChanged?.Invoke();
             return true;
         }
         catch (Exception ex)
@@ -98,6 +106,7 @@ public class Projects : IRepository<Project>
             oldProject.Description = project.Description;
             oldProject.BasePath = project.BasePath;
             await _applicationDbContext.UpdateAsync(project);
+            OnListChanged?.Invoke();
             return true;
         }
         catch (Exception ex)
@@ -123,11 +132,25 @@ public class Projects : IRepository<Project>
                 LastError = "Project not found";
                 return false;
             }
-            // Delete the project directory and all its contents from disk if it exists
-            if(Directory.Exists(oldProject.BasePath))
-                Directory.Delete(oldProject.BasePath, true);
+            // Delete the project directory and all its contents from disk — but
+            // only if no other project record still points at the same folder.
+            // Legacy rows (the Learn sample flow used to reuse a single folder
+            // per lesson) can share a BasePath; wiping it out here would
+            // destroy the other project's files.
+            if (Directory.Exists(oldProject.BasePath))
+            {
+                var otherReferences = await _applicationDbContext.Projects
+                    .Where(p => p.Id != oldProject.Id &&
+                                p.BasePath.ToLower() == oldProject.BasePath.ToLower())
+                    .ToListAsync();
+                if (otherReferences.Count == 0)
+                {
+                    Directory.Delete(oldProject.BasePath, true);
+                }
+            }
             // Remove the project record from the database
             await _applicationDbContext.DeleteAsync(project);
+            OnListChanged?.Invoke();
             return true;
         }
         catch (Exception ex)

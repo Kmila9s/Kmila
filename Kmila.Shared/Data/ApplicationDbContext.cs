@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Kmila.Shared.Models;
 using SQLite;
 
@@ -15,11 +16,22 @@ public class ApplicationDbContext : SQLiteAsyncConnection
     public static event Action<string>? StaticOnValueChanged;
 
     /// <summary>
+    /// Logger — flows to the in-app Logs page via InMemoryLoggerProvider.
+    /// Optional at construction time so the MAUI/Web DI factories that don't
+    /// inject one fall back to a no-op.
+    /// </summary>
+    private readonly Microsoft.Extensions.Logging.ILogger _logger;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ApplicationDbContext"/> class.
     /// </summary>
     /// <param name="path">The database file path.</param>
-    public ApplicationDbContext(string path) : base(path)
+    /// <param name="logger">Optional logger (NullLogger fallback when omitted).</param>
+    public ApplicationDbContext(string path, Microsoft.Extensions.Logging.ILogger<ApplicationDbContext>? logger = null)
+        : base(path)
     {
+        _logger = (Microsoft.Extensions.Logging.ILogger?)logger
+               ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<ApplicationDbContext>.Instance;
     }
     /// <summary>
     /// Initializes the database asynchronously by creating the necessary tables if they don't exist.
@@ -34,7 +46,7 @@ public class ApplicationDbContext : SQLiteAsyncConnection
         }
         catch (Exception ex)
         {
-            Console.WriteLine(ex.Message);
+            _logger.LogInformation(ex.Message);
         }
         try
         {
@@ -43,7 +55,7 @@ public class ApplicationDbContext : SQLiteAsyncConnection
         }
         catch (Exception ex)
         {
-            Console.WriteLine(ex.Message);
+            _logger.LogInformation(ex.Message);
         }
         try
         {
@@ -52,13 +64,27 @@ public class ApplicationDbContext : SQLiteAsyncConnection
         }
         catch (Exception ex)
         {
-            Console.WriteLine(ex.Message);
+            _logger.LogInformation(ex.Message);
+        }
+        try
+        {
+            // Simulation snapshots — one row per captured run so the Runs
+            // dock tab can list + replay past executions.
+            var result = await CreateTableAsync<SimulationSnapshot>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogInformation(ex.Message);
         }
     }
     /// <summary>
     /// Gets the queryable collection of projects.
     /// </summary>
     public AsyncTableQuery<Project> Projects => Table<Project>();
+    /// <summary>
+    /// Gets the queryable collection of captured simulation runs.
+    /// </summary>
+    public AsyncTableQuery<SimulationSnapshot> SimulationSnapshots => Table<SimulationSnapshot>();
     /// <summary>
     /// Gets the queryable collection of project files.
     /// </summary>
@@ -84,7 +110,7 @@ public class ApplicationDbContext : SQLiteAsyncConnection
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[DB] Error getting setting {key}: {ex.Message}");
+            _logger.LogError($"[DB] Error getting setting {key}: {ex.Message}");
             return null;
         }
     }
@@ -123,7 +149,7 @@ public class ApplicationDbContext : SQLiteAsyncConnection
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[DB] Error setting {key}: {ex.Message}");
+            _logger.LogError($"[DB] Error setting {key}: {ex.Message}");
         }
     }
 

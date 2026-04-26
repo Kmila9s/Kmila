@@ -1,100 +1,86 @@
 @*
-    EntityResourceUsage Component
+    EntityResourceUsage — section shown inside EntityView for each parsed entity.
 
-    Displays the resource usage section for an entity, using ResourceMetricBox
-    to show individual resource metrics in a grid layout.
-
-    Usage:
-    <EntityResourceUsage ResourceUsage="Entity.ResourceUsage" />
+    Renders six ResourceMetricBox cards in a responsive bento grid, plus a
+    tokenized info note explaining the accuracy caveat. All user-visible strings
+    are localized; variants are passed via the legacy BadgeColor so the metric
+    card picks up the right token color.
 *@
 @using Interpreter.Services
 
 @if (ResourceUsage != null)
 {
-    <hr class="my-3" />
+    <section class="resource-usage">
+        <header class="resource-usage__header">
+            <span class="home-section__eyebrow">@Traductor.T("RESOURCE_ESTIMATED")</span>
+            <h3 class="resource-usage__title">
+                <Icon Name="IconName.CpuFill" />
+                <span>@Traductor.T("RESOURCE_USAGE_TITLE")</span>
+            </h3>
+        </header>
 
-    <div class="mb-3">
-        <div class="d-flex align-items-center mb-3">
-            <Icon Name="IconName.Cpu" Class="me-2 text-warning" />
-            <h6 class="mb-0">Estimated Resource Usage</h6>
-        </div>
-
-        <div class="row g-3">
-            <!-- Flip-Flops -->
-            <ResourceMetricBox Title="Flip-Flops"
+        <div class="resource-usage__grid">
+            <ResourceMetricBox Title="@(Traductor.T("RESOURCE_FLIPFLOPS"))"
                                Icon="IconName.ToggleOn"
-                               IconColor="text-primary"
                                Value="@ResourceUsage.FlipFlops.ToString()"
-                               Unit="FFs"
+                               Unit="@(Traductor.T("RESOURCE_UNIT_FFS"))"
                                BadgeColor="BadgeColor.Primary"
                                AccuracyLabel="~95%" />
 
-            <!-- LUTs -->
-            <ResourceMetricBox Title="LUTs"
+            <ResourceMetricBox Title="@(Traductor.T("RESOURCE_LUTS"))"
                                Icon="IconName.Grid"
-                               IconColor="text-success"
                                Value="@ResourceUsage.LUTs.ToString()"
-                               Unit="LUTs"
+                               Unit="@(Traductor.T("RESOURCE_UNIT_LUTS"))"
                                BadgeColor="BadgeColor.Success"
                                AccuracyLabel="~70%" />
 
-            <!-- DSP Slices -->
-            <ResourceMetricBox Title="DSP Slices"
+            <ResourceMetricBox Title="@(Traductor.T("RESOURCE_DSP_SLICES"))"
                                Icon="IconName.Calculator"
-                               IconColor="text-info"
                                Value="@ResourceUsage.DSPSlices.ToString()"
-                               Unit="Slices"
+                               Unit="@(Traductor.T("RESOURCE_UNIT_SLICES"))"
                                BadgeColor="BadgeColor.Info"
                                AccuracyLabel="~85%" />
 
-            <!-- BRAM Blocks -->
-            <ResourceMetricBox Title="BRAM Blocks"
+            <ResourceMetricBox Title="@(Traductor.T("RESOURCE_BRAM"))"
                                Icon="IconName.Memory"
-                               IconColor="text-warning"
                                Value="@ResourceUsage.BRAMBlocks.ToString("F1")"
-                               Unit="Blocks"
+                               Unit="@(Traductor.T("RESOURCE_UNIT_BLOCKS"))"
                                BadgeColor="BadgeColor.Warning"
                                AccuracyLabel="~85%" />
 
-            <!-- I/O Pins -->
-            <ResourceMetricBox Title="I/O Pins"
+            <ResourceMetricBox Title="@(Traductor.T("RESOURCE_IO_PINS"))"
                                Icon="IconName.Plugin"
-                               IconColor="text-danger"
                                Value="@ResourceUsage.IOPins.ToString()"
-                               Unit="Pins"
+                               Unit="@(Traductor.T("RESOURCE_UNIT_PINS"))"
                                BadgeColor="BadgeColor.Danger"
-                               AccuracyLabel="Exact" />
+                               AccuracyLabel="@(Traductor.T("RESOURCE_ACCURACY_EXACT"))" />
 
-            <!-- Clock Domains -->
-            <ResourceMetricBox Title="Clock Domains"
+            <ResourceMetricBox Title="@(Traductor.T("RESOURCE_CLOCK_DOMAINS"))"
                                Icon="IconName.Clock"
-                               IconColor="text-secondary"
                                Value="@ResourceUsage.ClockDomains.ToString()"
-                               Unit="Domains"
+                               Unit="@(Traductor.T("RESOURCE_UNIT_DOMAINS"))"
                                BadgeColor="BadgeColor.Secondary"
-                               AccuracyLabel="Exact">
+                               AccuracyLabel="@(Traductor.T("RESOURCE_ACCURACY_EXACT"))">
                 @if (ResourceUsage.ClockSignals.Any())
                 {
-                    <div class="mt-2">
+                    <div class="resource-metric__chips">
                         @foreach (var clk in ResourceUsage.ClockSignals)
                         {
-                            <Badge Color="BadgeColor.Light" Class="me-1 font-monospace">
-                                @clk
-                            </Badge>
+                            <span class="resource-metric__chip">@clk</span>
                         }
                     </div>
                 }
             </ResourceMetricBox>
         </div>
 
-        <Alert Color="AlertColor.Info" Class="mt-3 mb-0">
-            <Icon Name="IconName.InfoCircle" Class="me-2" />
-            <small>
-                <strong>Note:</strong> Resource estimates are based on typical synthesis patterns.
-                Actual usage may vary ±20% depending on synthesis tool optimizations and target FPGA architecture.
-            </small>
-        </Alert>
-    </div>
+        <div class="resource-usage__note" role="note">
+            <Icon Name="IconName.InfoCircleFill" />
+            <p>
+                <strong>@Traductor.T("RESOURCE_NOTE_HEADING"):</strong>
+                @Traductor.T("RESOURCE_NOTE_BODY")
+            </p>
+        </div>
+    </section>
 }
 
 @code {

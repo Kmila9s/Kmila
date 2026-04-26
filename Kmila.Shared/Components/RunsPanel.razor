@@ -1,0 +1,247 @@
+@*
+    RunsPanel — content for the Runs dock tab.
+
+    Lists every captured snapshot for the current project, newest first.
+    Clicking a card replays that run into the Waveforms tab. Checkboxes
+    select multiple runs for compare mode — when two or more are selected,
+    a banner appears with a "Compare in Waveforms" CTA that hands the
+    selection off to the parent Editor.
+
+    Per-row actions (reachable via hover): rename, pin (exempt from LRU
+    eviction), export JSON, delete.
+*@
+
+@using Kmila.Shared.Models
+@using Kmila.Shared.Services
+@implements IDisposable
+@inject SimulationSnapshotStore Snapshots
+
+@if (_snapshots == null)
+{
+    <div class="kmila-dock__empty">
+        <Spinner Type="SpinnerType.Border" Color="SpinnerColor.Primary" />
+    </div>
+}
+else if (_snapshots.Count == 0)
+{
+    <div class="kmila-dock__empty">
+        <div class="kmila-dock__empty-icon"><Icon Name="IconName.ClockHistory" /></div>
+        <p>@Traductor.T("RUNS_EMPTY")</p>
+        <small class="text-muted">@Traductor.T("RUNS_EMPTY_HINT")</small>
+    </div>
+}
+else
+{
+    <div class="runs-panel">
+        @if (_selected.Count >= 2)
+        {
+            <div class="runs-panel__compare-bar" role="status">
+                <Icon Name="IconName.LayersHalf" />
+                <span>@string.Format(Traductor.T("RUNS_COMPARE_READY"), _selected.Count)</span>
+                <button type="button" class="btn btn-primary btn-sm"
+                        @onclick="StartCompare">
+                    <Icon Name="IconName.GraphUp" />
+                    <span>@Traductor.T("RUNS_COMPARE_OPEN")</span>
+                </button>
+                <button type="button" class="btn btn-ghost btn-sm"
+                        @onclick="ClearSelection">
+                    <Icon Name="IconName.XLg" />
+                </button>
+            </div>
+        }
+
+        <ul class="runs-panel__list">
+            @foreach (var snap in _snapshots)
+            {
+                var isSelected = _selected.Contains(snap.Id);
+                <li class="runs-panel__item @(isSelected ? "is-selected" : "") @(snap.Pinned ? "is-pinned" : "")">
+                    <label class="runs-panel__select" title="@Traductor.T("RUNS_SELECT")">
+                        <input type="checkbox" checked="@isSelected"
+                               @onchange="() => ToggleSelected(snap.Id)" />
+                    </label>
+
+                    <button type="button" class="runs-panel__main"
+                            @onclick="() => LoadSingleAsync(snap)">
+                        <div class="runs-panel__head">
+                            <span class="runs-panel__label">@snap.Label</span>
+                            @if (snap.Pinned)
+                            {
+                                <span class="runs-panel__pin-chip" title="@Traductor.T("RUNS_PINNED")">
+                                    <Icon Name="IconName.PinAngleFill" />
+                                </span>
+                            }
+                        </div>
+                        <div class="runs-panel__meta">
+                            <span class="runs-panel__chip">
+                                <Icon Name="IconName.Clock" />
+                                @snap.Time @snap.Scale
+                            </span>
+                            @if (!string.IsNullOrEmpty(snap.FpgaModel))
+                            {
+                                <span class="runs-panel__chip">
+                                    <Icon Name="IconName.CpuFill" />
+                                    @snap.FpgaModel
+                                </span>
+                            }
+                            <span class="runs-panel__chip">
+                                <Icon Name="IconName.GraphUp" />
+                                @snap.SignalCount
+                            </span>
+                            <span class="runs-panel__chip runs-panel__chip--muted">
+                                @FormatAge(snap.CreatedAt)
+                            </span>
+                        </div>
+                    </button>
+
+                    <div class="runs-panel__actions">
+                        <button type="button" class="btn btn-ghost btn-sm"
+                                @onclick="() => TogglePinAsync(snap)"
+                                title="@Traductor.T(snap.Pinned ? "RUNS_UNPIN" : "RUNS_PIN")">
+                            <Icon Name="@(snap.Pinned ? IconName.PinAngleFill : IconName.PinAngle)" />
+                        </button>
+                        <button type="button" class="btn btn-ghost btn-sm"
+                                @onclick="() => RenameAsync(snap)"
+                                title="@Traductor.T("RUNS_RENAME")">
+                            <Icon Name="IconName.Pencil" />
+                        </button>
+                        <button type="button" class="btn btn-ghost btn-sm"
+                                @onclick="() => ExportAsync(snap)"
+                                title="@Traductor.T("RUNS_EXPORT")">
+                            <Icon Name="IconName.Download" />
+                        </button>
+                        <button type="button" class="btn btn-ghost btn-sm"
+                                @onclick="() => DeleteAsync(snap)"
+                                title="@Traductor.T("COMMON_DELETE")">
+                            <Icon Name="IconName.Trash" />
+                        </button>
+                    </div>
+                </li>
+            }
+        </ul>
+    </div>
+}
+
+@code {
+    /// <summary>Project whose runs we're listing. Editor passes this in.</summary>
+    [Parameter] public int ProjectId { get; set; }
+
+    /// <summary>Single-run load: replay this snapshot in the Waveforms tab.</summary>
+    [Parameter] public EventCallback<SimulationSnapshot> OnLoadSnapshot { get; set; }
+
+    /// <summary>Multi-run compare: Editor overlays all selected in Waveforms.</summary>
+    [Parameter] public EventCallback<List<SimulationSnapshot>> OnCompareSnapshots { get; set; }
+
+    private List<SimulationSnapshot>? _snapshots;
+    private readonly HashSet<int> _selected = new();
+
+    protected override void OnInitialized()
+    {
+        Snapshots.OnChange += OnSnapshotsChanged;
+        Traductor.StaticOnLangChanged += OnLangChanged;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (ProjectId <= 0) { _snapshots = new(); return; }
+        _snapshots = await Snapshots.ListForProjectAsync(ProjectId);
+        // Drop stale selection ids so the count stays honest after deletes.
+        _selected.IntersectWith(_snapshots.Select(s => s.Id));
+    }
+
+    private async void OnSnapshotsChanged(int projectId)
+    {
+        if (projectId != ProjectId) return;
+        await ReloadAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void OnLangChanged() => InvokeAsync(StateHasChanged);
+
+    private void ToggleSelected(int id)
+    {
+        if (!_selected.Add(id)) _selected.Remove(id);
+    }
+
+    private void ClearSelection() => _selected.Clear();
+
+    private async Task LoadSingleAsync(SimulationSnapshot snap)
+    {
+        _selected.Clear();
+        if (OnLoadSnapshot.HasDelegate)
+            await OnLoadSnapshot.InvokeAsync(snap);
+    }
+
+    private async Task StartCompare()
+    {
+        var picks = _snapshots?.Where(s => _selected.Contains(s.Id)).ToList() ?? new();
+        if (picks.Count < 2) return;
+        if (OnCompareSnapshots.HasDelegate)
+            await OnCompareSnapshots.InvokeAsync(picks);
+    }
+
+    private async Task TogglePinAsync(SimulationSnapshot snap)
+        => await Snapshots.SetPinnedAsync(snap.Id, !snap.Pinned);
+
+    private async Task RenameAsync(SimulationSnapshot snap)
+    {
+        var next = await JS.InvokeAsync<string?>("prompt",
+            Traductor.T("RUNS_RENAME_PROMPT"), snap.Label);
+        if (string.IsNullOrWhiteSpace(next)) return;
+        await Snapshots.RenameAsync(snap.Id, next.Trim());
+    }
+
+    private async Task ExportAsync(SimulationSnapshot snap)
+    {
+        // Ship the full row as a JSON download via the shared
+        // kmilaDownloadText helper registered on the host pages.
+        var payload = System.Text.Json.JsonSerializer.Serialize(snap,
+            new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        var safe = SanitizeFile(snap.Label);
+        try
+        {
+            await JS.InvokeVoidAsync("kmilaDownloadText",
+                $"kmila-run-{snap.Id}-{safe}.json", "application/json", payload);
+        }
+        catch
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                Traductor.T("RUNS_EXPORT_FAILED"), ToastType.Danger));
+        }
+    }
+
+    private async Task DeleteAsync(SimulationSnapshot snap)
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm",
+            string.Format(Traductor.T("RUNS_DELETE_CONFIRM"), snap.Label));
+        if (!ok) return;
+        await Snapshots.DeleteAsync(snap.Id);
+    }
+
+    private static string FormatAge(DateTime createdUtc)
+    {
+        var diff = DateTime.UtcNow - createdUtc;
+        if (diff.TotalMinutes < 1) return "just now";
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours  < 24) return $"{(int)diff.TotalHours}h ago";
+        return createdUtc.ToLocalTime().ToString("MMM d · HH:mm");
+    }
+
+    private static string SanitizeFile(string s)
+    {
+        var buf = new System.Text.StringBuilder();
+        foreach (var c in s)
+            buf.Append(char.IsLetterOrDigit(c) ? c : '_');
+        return buf.ToString();
+    }
+
+    public void Dispose()
+    {
+        Snapshots.OnChange -= OnSnapshotsChanged;
+        Traductor.StaticOnLangChanged -= OnLangChanged;
+    }
+}

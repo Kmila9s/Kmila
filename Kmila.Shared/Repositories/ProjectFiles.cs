@@ -47,8 +47,14 @@ public class ProjectFiles : IRepository<ProjectFile>
                 LastError = "Project not found";
                 return false;
             }
-            // Ensure no duplicate file name exists (case-insensitive)
-            var oldFile = await _applicationDbContext.ProjectFiles.FirstOrDefaultAsync(p => p.FileName.ToLower().Equals(file.FileName.ToLower()));
+            // Ensure no duplicate file name exists *within this project*.
+            // The old check was global, which silently rejected every second
+            // lesson-sample open ("gates.vhd" already in another project →
+            // nothing written → student opens an empty project with no main
+            // file). Scope it to the right project.
+            var oldFile = await _applicationDbContext.ProjectFiles.FirstOrDefaultAsync(p =>
+                p.ProjectId == oldProject.Id &&
+                p.FileName.ToLower().Equals(file.FileName.ToLower()));
             if (oldFile != null)
             {
                 LastError = "File exists in db";
@@ -152,9 +158,111 @@ public class ProjectFiles : IRepository<ProjectFile>
         return false;
     }
     /// <summary>
-    /// This method is not implemented and will throw a <see cref="NotImplementedException"/>.
+    /// Removes a project file from the database and the filesystem.
+    /// Missing-on-disk is logged but does not fail the DB removal — the DB row
+    /// is the authoritative reference; a stale file on disk is less bad than a
+    /// zombie row the user can't get rid of.
     /// </summary>
-    public async Task<bool> RemoveAsync(ProjectFile item) => throw new NotImplementedException();
+    public async Task<bool> RemoveAsync(ProjectFile item)
+    {
+        LastError = string.Empty;
+        try
+        {
+            var existing = await _applicationDbContext.ProjectFiles.FirstOrDefaultAsync(p => p.Id == item.Id);
+            if (existing == null)
+            {
+                LastError = "File not found in database";
+                return false;
+            }
+
+            if (item.Project != null && !string.IsNullOrEmpty(item.Project.BasePath))
+            {
+                try
+                {
+                    var diskPath = Path.Combine(item.Project.BasePath, existing.FileName);
+                    if (File.Exists(diskPath))
+                        File.Delete(diskPath);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning($"[ProjectFiles] Failed to delete file from disk (continuing with DB removal): {ex.Message}");
+                }
+            }
+
+            await _applicationDbContext.DeleteAsync(existing);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            LastError = ex.Message;
+            _logger.LogError(LastError);
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Renames a project file on disk and updates the database row.
+    /// Rejects empty names, no-op when the name is unchanged (case-insensitive),
+    /// and refuses to overwrite an existing sibling file.
+    /// </summary>
+    public async Task<bool> RenameAsync(ProjectFile item, string newFileName)
+    {
+        LastError = string.Empty;
+        try
+        {
+            if (string.IsNullOrWhiteSpace(newFileName))
+            {
+                LastError = "File name is empty";
+                return false;
+            }
+            newFileName = newFileName.Trim();
+
+            var existing = await _applicationDbContext.ProjectFiles.FirstOrDefaultAsync(p => p.Id == item.Id);
+            if (existing == null)
+            {
+                LastError = "File not found in database";
+                return false;
+            }
+
+            if (string.Equals(existing.FileName, newFileName, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            var conflict = await _applicationDbContext.ProjectFiles.FirstOrDefaultAsync(p =>
+                p.ProjectId == existing.ProjectId &&
+                p.Id != existing.Id &&
+                p.FileName.ToLower().Equals(newFileName.ToLower()));
+            if (conflict != null)
+            {
+                LastError = "A file with that name already exists";
+                return false;
+            }
+
+            if (item.Project != null && !string.IsNullOrEmpty(item.Project.BasePath))
+            {
+                var oldPath = Path.Combine(item.Project.BasePath, existing.FileName);
+                var newPath = Path.Combine(item.Project.BasePath, newFileName);
+                if (File.Exists(oldPath))
+                {
+                    if (File.Exists(newPath))
+                    {
+                        LastError = "Target file already exists on disk";
+                        return false;
+                    }
+                    File.Move(oldPath, newPath);
+                }
+            }
+
+            existing.FileName = newFileName;
+            await _applicationDbContext.UpdateAsync(existing);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            LastError = ex.Message;
+            _logger.LogError(LastError);
+        }
+        return false;
+    }
     /// <summary>
     /// Gets a list of all project files for a given project asynchronously.
     /// </summary>

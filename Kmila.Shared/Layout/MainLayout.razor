@@ -23,16 +23,32 @@
 *@
 @inherits LayoutComponentBase
 @implements IDisposable
+@inject NavigationManager NavigationManager
 
 @if (!_isLoading)
 {
-    <div class="page bb-page" dir="@(Traductor.IsRtl ? "rtl" : "ltr")">
+    <div class="kmila-shell" dir="@(Traductor.IsRtl ? "rtl" : "ltr")">
+
+        @* A11y skip-link — hidden until focused. Lets keyboard users bypass
+           the sidebar + TopBar on every page load. *@
+        <a class="kmila-skip-link" href="#kmila-main-content">
+            @Traductor.T("A11Y_SKIP_TO_CONTENT")
+        </a>
+
         <NavMenu />
 
-        <main>
+        <main class="kmila-shell__main" id="kmila-main-content" tabindex="-1">
             <TopBar />
 
-            <article class="content px-4">
+            @*
+                The Editor route wants the article to fill the full viewport,
+                not the 1440px reading cap. We compute a conditional class from
+                the current URI instead of relying on `:has(.editor-page)` —
+                `:has()` is evaluated live but Blazor's rendering timing and
+                some WebView engines can miss the update on route-change /
+                project-load, producing the layout jump the user reported.
+            *@
+            <article class="content @(IsEditorRoute ? "content--wide" : "px-4")">
                 @Body
             </article>
         </main>
@@ -60,6 +76,29 @@ else
     private bool _isLoading = true;
 
     /// <summary>
+    /// True when the current route is the Editor (matches `/editor/...`).
+    /// Used to swap the article between the 1440px reading cap and the
+    /// full-viewport editor layout.
+    /// </summary>
+    /// <remarks>
+    /// Check both the relative path and the absolute URI because MAUI Blazor
+    /// Hybrid bases the navigation at <c>0.0.0.0/</c>, which can leave a stray
+    /// leading slash in some versions and cause <c>StartsWith("editor/")</c>
+    /// to miss. The second branch is a safety net.
+    /// </remarks>
+    private bool IsEditorRoute
+    {
+        get
+        {
+            var rel = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+            if (rel.StartsWith("editor/", StringComparison.OrdinalIgnoreCase) ||
+                rel.StartsWith("/editor/", StringComparison.OrdinalIgnoreCase))
+                return true;
+            return NavigationManager.Uri.Contains("/editor/", StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    /// <summary>
     /// Initializes the layout component asynchronously.
     /// Sets up the database, loads language preferences, and initializes the translation service.
     /// </summary>
@@ -75,6 +114,10 @@ else
         // Subscribe to language changes to refresh the layout when user switches language
         Traductor.StaticOnLangChanged += OnLanguageChanged;
 
+        // Re-evaluate IsEditorRoute on every navigation so the article class
+        // flips immediately when the user enters / leaves the Editor route.
+        NavigationManager.LocationChanged += OnLocationChanged;
+
         // Load saved language preference from SQLite and initialize the translation service
         // Pass the settings reader callback for reactive language changes
         var savedLanguage = await DbContext.GetSettingAsync(AppSettings.KEY_LANGUAGE);
@@ -85,11 +128,17 @@ else
         _isLoading = false;
     }
 
+
     /// <summary>
     /// Handles language change events from the Traductor service.
     /// Triggers a re-render of the layout to update RTL direction and refresh child components.
     /// </summary>
     private void OnLanguageChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
     {
         InvokeAsync(StateHasChanged);
     }
@@ -100,5 +149,6 @@ else
     public void Dispose()
     {
         Traductor.StaticOnLangChanged -= OnLanguageChanged;
+        NavigationManager.LocationChanged -= OnLocationChanged;
     }
 }

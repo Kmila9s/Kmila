@@ -46,4 +46,42 @@ public class FPGAClocking
     /// </remarks>
     [JsonPropertyName("max_pll_output_mhz")]
     public int? MaxPllOutputMhz { get; set; }
+
+    /// <summary>
+    /// Optional override for the default simulation system clock in MHz.
+    /// When present, Kmila uses this directly as the simulator's tick rate.
+    /// When absent, the app derives a sensible default from
+    /// <see cref="MaxPllOutputMhz"/> (see <see cref="GetDefaultSimClockMhz"/>).
+    /// Kept optional so existing bundled JSON files don't need migration —
+    /// curriculum authors can opt-in per device.
+    /// </summary>
+    [JsonPropertyName("system_clock_mhz")]
+    public int? SystemClockMhz { get; set; }
+
+    /// <summary>
+    /// Effective default system-clock frequency (MHz) used by the simulator
+    /// when the student hasn't set a per-project override.
+    /// </summary>
+    /// <remarks>
+    /// Priority: explicit <see cref="SystemClockMhz"/> &gt; <see cref="MaxPllOutputMhz"/>
+    /// heuristic &gt; fallback 50 MHz. The PLL-based heuristic caps the clock
+    /// at 100 MHz so a device advertising 1300 MHz PLL output doesn't push
+    /// the simulator into millions-of-ticks territory for a 1 µs run.
+    /// </remarks>
+    public int GetDefaultSimClockMhz()
+    {
+        if (SystemClockMhz.HasValue && SystemClockMhz.Value > 0)
+            return SystemClockMhz.Value;
+        if (MaxPllOutputMhz.HasValue && MaxPllOutputMhz.Value > 0)
+        {
+            var m = MaxPllOutputMhz.Value;
+            // Boards commonly expose a 50–100 MHz oscillator even when the
+            // PLL can synthesize much higher internally. Cap the default so
+            // the sim tick count stays tractable; the Run bar's override
+            // still lets students push past this ceiling when they need it.
+            if (m <= 100) return m;
+            return 100;
+        }
+        return 50;
+    }
 }

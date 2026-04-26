@@ -1,226 +1,176 @@
-<!-- Enhanced Project Files Card -->
+@*
+    FilesCard — project files list.
+
+    Rebuilt without Blazor Bootstrap's Grid/Card so the visual treatment is
+    fully token-driven and matches the rest of the app. Each row has a hybrid
+    action pattern: the primary action (Open) is inline as a ghost button, the
+    rest (Rename, Delete) live in a kebab menu that's a native <details>
+    popover — no JS.
+
+    Rename happens inline: the filename text is replaced with an <input>.
+    Enter commits, Esc cancels, blur commits too. The repository refuses
+    duplicates and rolls back on failure (toast + stays in edit mode).
+*@
 @implements IDisposable
-<Card Class="h-100">
-    <CardHeader>
-        <div class="d-flex justify-content-between align-items-center">
-            <div>
-                <Icon Name="IconName.Folder" Class="me-2" />
-                <strong>@Traductor.T("FILES_PROJECT_FILES")</strong>
-            </div>
-            @if(_projectFiles.Any())
-            {
-                <Badge Color="BadgeColor.Primary" Pill="true">
-                    @_projectFiles.Count @(_projectFiles.Count == 1 ? Traductor.T("FILES_FILE") : Traductor.T("FILES_FILES"))
-                </Badge>
-            }
+
+<div class="files-list">
+    <header class="files-list__header">
+        <Icon Name="IconName.Folder2Open" />
+        <span class="files-list__title">@Traductor.T("FILES_PROJECT_FILES")</span>
+        @if (_projectFiles.Any())
+        {
+            <span class="files-list__count">@_projectFiles.Count</span>
+        }
+    </header>
+
+    @if (!_projectFiles.Any())
+    {
+        <div class="files-list__empty">
+            <div class="files-list__empty-icon"><Icon Name="IconName.FileEarmarkPlus" /></div>
+            <p><strong>@Traductor.T("FILES_NO_FILES")</strong></p>
+            <p class="files-list__empty-sub">@Traductor.T("FILES_CREATE_FIRST")</p>
         </div>
-    </CardHeader>
-    <CardBody>
-        @if(!_projectFiles.Any())
-        {
-            <!-- Empty State -->
-            <Alert Color="AlertColor.Info" Class="mb-0 text-center">
-                <Icon Name="IconName.InfoCircle" Size="IconSize.x3" Class="d-block mx-auto mb-2" />
-                <strong>@Traductor.T("FILES_NO_FILES")</strong>
-                <p class="mb-0 small text-muted mt-1">@Traductor.T("FILES_CREATE_FIRST")</p>
-            </Alert>
-        }
-        else
-        {
-            <!-- File Statistics Bar -->
-            <div class="row g-2 mb-3">
-                @{
-                    var vhdlCount = _projectFiles.Count(f => f.FileName.EndsWith(".vhdl") || f.FileName.EndsWith(".vhd"));
-                    var txtCount = _projectFiles.Count(f => f.FileName.EndsWith(".txt"));
-                    var mdCount = _projectFiles.Count(f => f.FileName.EndsWith(".md"));
-                    var otherCount = _projectFiles.Count - vhdlCount - txtCount - mdCount;
-                }
+    }
+    else
+    {
+        <ul class="files-list__items" role="list">
+            @foreach (var file in _projectFiles)
+            {
+                var info = GetFileInfo(file.FileName);
+                var isActive = _selectedFile?.Id == file.Id;
+                var isEditing = _editingFile?.Id == file.Id;
 
-                @if(vhdlCount > 0)
-                {
-                    <div class="col-6 col-md-3">
-                        <div class="border rounded p-2 text-center">
-                            <Icon Name="IconName.FileCode" Class="text-primary" />
-                            <div class="small text-muted">VHDL</div>
-                            <strong>@vhdlCount</strong>
-                        </div>
-                    </div>
-                }
-                @if(txtCount > 0)
-                {
-                    <div class="col-6 col-md-3">
-                        <div class="border rounded p-2 text-center">
-                            <Icon Name="IconName.FileTypeTxt" Class="text-info" />
-                            <div class="small text-muted">@Traductor.T("FILES_TEXT")</div>
-                            <strong>@txtCount</strong>
-                        </div>
-                    </div>
-                }
-                @if(mdCount > 0)
-                {
-                    <div class="col-6 col-md-3">
-                        <div class="border rounded p-2 text-center">
-                            <Icon Name="IconName.FileTypeMd" Class="text-success" />
-                            <div class="small text-muted">Markdown</div>
-                            <strong>@mdCount</strong>
-                        </div>
-                    </div>
-                }
-                @if(otherCount > 0)
-                {
-                    <div class="col-6 col-md-3">
-                        <div class="border rounded p-2 text-center">
-                            <Icon Name="IconName.FileEarmark" Class="text-secondary" />
-                            <div class="small text-muted">@Traductor.T("FILES_OTHER")</div>
-                            <strong>@otherCount</strong>
-                        </div>
-                    </div>
-                }
-            </div>
+                <li class="file-row file-row--@info.Variant @(isActive ? "is-active" : "")">
+                    <span class="file-row__indicator" aria-hidden="true"></span>
 
-            <!-- Files Grid -->
-            <Grid TItem="ProjectFile"
-                AllowFiltering="true"
-                AllowPaging="true"
-                AllowSorting="true"
-                Class="table table-hover table-bordered"
-                Data="_projectFiles"
-                PageSize="15"
-                Responsive="true">
+                    <span class="file-row__icon" aria-hidden="true">
+                        <Icon Name="@info.Icon" />
+                    </span>
 
-                <GridColumns>
-                    <GridColumn TItem="ProjectFile" HeaderText="@Traductor.T("FILES_FILE")" PropertyName="FileName" SortKeySelector="item => item.FileName">
-                        <div class="d-flex align-items-center">
-                            @{
-                                var (iconName, badgeColor, fileExt) = GetFileInfo(context.FileName);
-                                var isSelected = _selectedFile?.Id == context.Id;
-                            }
+                    @if (isEditing)
+                    {
+                        <input type="text"
+                               class="file-row__rename"
+                               @bind="_editingName"
+                               @bind:event="oninput"
+                               @onkeydown="OnRenameKeyDownAsync"
+                               @onblur="() => CommitRenameAsync(file)"
+                               placeholder="@Traductor.T("FILES_RENAME_PLACEHOLDER")"
+                               aria-label="@Traductor.T("FILES_RENAME")"
+                               autofocus />
+                    }
+                    else
+                    {
+                        <button type="button"
+                                class="file-row__name"
+                                @onclick="() => OpenFileAsync(file)"
+                                title="@file.FileName">
+                            @file.FileName
+                        </button>
+                    }
 
-                            <Icon Name="@iconName" Class="me-2" Size="IconSize.x5" />
+                    <span class="file-row__chip">@info.Ext</span>
 
-                            <div class="flex-grow-1">
-                                <div class="d-flex align-items-center">
-                                    <strong class="@(isSelected ? "text-success" : "")">
-                                        @context.FileName.Substring(0, context.FileName.LastIndexOf("."))
-                                    </strong>
-                                    @if(isSelected)
-                                    {
-                                        <Badge Color="BadgeColor.Success" Class="ms-2">
-                                            <Icon Name="IconName.CheckCircleFill" Class="me-1" />
-                                            @Traductor.T("FILES_ACTIVE")
-                                        </Badge>
-                                    }
-                                </div>
-                                <small class="text-muted">
-                                    <Badge Color="@badgeColor" Class="mt-1">
-                                        @fileExt.ToUpper()
-                                    </Badge>
-                                </small>
+                    @if (!isEditing)
+                    {
+                        <button type="button"
+                                class="btn btn-ghost btn-sm file-row__open"
+                                @onclick="() => OpenFileAsync(file)">
+                            <Icon Name="IconName.BoxArrowUpRight" />
+                            <span>@Traductor.T("FILES_OPEN")</span>
+                        </button>
+
+                        <details class="file-row__menu">
+                            <summary class="btn btn-ghost btn-sm file-row__menu-btn"
+                                     aria-label="@Traductor.T("FILES_MORE_ACTIONS")"
+                                     title="@Traductor.T("FILES_MORE_ACTIONS")">
+                                <Icon Name="IconName.ThreeDotsVertical" />
+                            </summary>
+                            <div class="file-row__menu-panel" role="menu">
+                                <button type="button" role="menuitem"
+                                        class="file-row__menu-item"
+                                        @onclick="() => StartRename(file)">
+                                    <Icon Name="IconName.Pencil" />
+                                    <span>@Traductor.T("FILES_RENAME")</span>
+                                </button>
+                                <button type="button" role="menuitem"
+                                        class="file-row__menu-item file-row__menu-item--danger"
+                                        @onclick="() => RemoveFileAsync(file)">
+                                    <Icon Name="IconName.Trash" />
+                                    <span>@Traductor.T("FILES_DELETE")</span>
+                                </button>
                             </div>
-                        </div>
-                    </GridColumn>
+                        </details>
+                    }
+                </li>
+            }
+        </ul>
+    }
+</div>
 
-                    <GridColumn TItem="ProjectFile" HeaderText="@Traductor.T("FILES_ACTIONS")" Sortable=false Filterable=false>
-                        <div class="btn-group" role="group">
-                            <Button
-                                Size="ButtonSize.Small"
-                                Outline=true
-                                Color="ButtonColor.Primary"
-                                TooltipTitle="@Traductor.T("FILES_OPEN")"
-                                Type="ButtonType.Button"
-                                @onclick="@(async () => await OpenFileAsync(context))"
-                            >
-                                <Icon Name="IconName.BoxArrowUpRight" Class="me-1" />
-                                @Traductor.T("FILES_OPEN")
-                            </Button>
-                            <Button
-                                Size="ButtonSize.Small"
-                                Outline=true
-                                Color="ButtonColor.Danger"
-                                TooltipTitle="@Traductor.T("FILES_DELETE")"
-                                Type="ButtonType.Button"
-                                @onclick="@(async () => await RemoveFileAsync(context))"
-                            >
-                                <Icon Name="IconName.Trash" />
-                            </Button>
-                        </div>
-                    </GridColumn>
-                </GridColumns>
-            </Grid>
-        }
-    </CardBody>
-</Card>
-<ConfirmDialog @ref=_removeFileDialog/>
-@code{
-    /// <summary>
-    /// Gets or sets the project.
-    /// </summary>
-    [Parameter]
-    public Project Project { get; set; } = null!;
-    /// <summary>
-    /// Gets or sets the event callback for when a project file is clicked.
-    /// </summary>
-    [Parameter]
-    public EventCallback<ProjectFile> OnProjectFileClicked { get; set; } = new();
-    /// <summary>
-    /// Gets or sets the event callback for when a project file is removed.
-    /// </summary>
-    [Parameter]
-    public EventCallback<ProjectFile> OnProjectFileRemoved { get; set; } = new();
+<ConfirmDialog @ref="_removeFileDialog" />
+
+@code {
+    [Parameter] public Project Project { get; set; } = null!;
+    [Parameter] public EventCallback<ProjectFile> OnProjectFileClicked { get; set; } = new();
+    [Parameter] public EventCallback<ProjectFile> OnProjectFileRemoved { get; set; } = new();
+
     private List<ProjectFile> _projectFiles { get; set; } = new();
     private ConfirmDialog _removeFileDialog = new();
-    private ProjectFile? _selectedFile = null;
+    private ProjectFile? _selectedFile;
+    private ProjectFile? _editingFile;
+    private string _editingName = string.Empty;
 
     protected override void OnInitialized()
     {
         Traductor.StaticOnLangChanged += OnLanguageChanged;
     }
 
-    private void OnLanguageChanged()
-    {
-        InvokeAsync(StateHasChanged);
-    }
+    private void OnLanguageChanged() => InvokeAsync(StateHasChanged);
 
     public void Dispose()
     {
         Traductor.StaticOnLangChanged -= OnLanguageChanged;
     }
 
-    /// <summary>
-    /// Method invoked when the component is initialized.
-    /// </summary>
-    protected override async Task OnInitializedAsync(){
-        if(Project != null){
+    protected override async Task OnInitializedAsync()
+    {
+        if (Project != null)
+        {
             _projectFiles = await ProjectFiles.GetProjectFilesAsync(Project);
-            if(_projectFiles.Count > 0){
+            if (_projectFiles.Count > 0)
                 _selectedFile = _projectFiles.First();
-            }
         }
     }
+
     /// <summary>
-    /// Sets the default file.
+    /// Marks <paramref name="file"/> as the active selection. Safe to call
+    /// before this component has been rendered — FilesCard now lives inside
+    /// a dock tab that may not be visible on the first pass, so the parent
+    /// Editor calls this while our render handle still doesn't exist.
+    /// When that happens we just set the field; the component will render
+    /// with the correct selection whenever the Files tab is first shown.
     /// </summary>
-    /// <param name="file">The file to set as default.</param>
-    public void SetDefaultFile(ProjectFile file){
-        try{
-            _selectedFile = _projectFiles.FirstOrDefault(p => p.Id == file.Id);
-        }finally{
+    public void SetDefaultFile(ProjectFile file)
+    {
+        _selectedFile = _projectFiles.FirstOrDefault(p => p.Id == file.Id);
+        try
+        {
             InvokeAsync(StateHasChanged);
         }
-        
-    }
-    /// <summary>
-    /// Reloads the files for the project.
-    /// </summary>
-    public async Task ReloadFiles(){
-        if(Project != null){
-            _projectFiles = await ProjectFiles.GetProjectFilesAsync(Project);
+        catch (InvalidOperationException)
+        {
+            // Not yet rendered — no handle assigned. The current _selectedFile
+            // will be picked up on first render, no action needed.
         }
     }
-    /// <summary>
-    /// Opens a file in the editor.
-    /// </summary>
-    /// <param name="file">The file to open.</param>
+
+    public async Task ReloadFiles()
+    {
+        if (Project != null)
+            _projectFiles = await ProjectFiles.GetProjectFilesAsync(Project);
+    }
+
     private async Task OpenFileAsync(ProjectFile file)
     {
         _selectedFile = file;
@@ -228,60 +178,130 @@
     }
 
     /// <summary>
-    /// Removes a file asynchronously.
+    /// Enters inline-edit mode for <paramref name="file"/>. The kebab menu auto-closes
+    /// because moving focus out of the &lt;details&gt; collapses it natively.
     /// </summary>
-    /// <param name="file">The file to remove.</param>
-    private async Task RemoveFileAsync(ProjectFile file){
-        ConfirmDialogOptions options = new(){
+    private void StartRename(ProjectFile file)
+    {
+        _editingFile = file;
+        _editingName = file.FileName;
+    }
+
+    private async Task OnRenameKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (_editingFile == null) return;
+        if (e.Key == "Enter")
+        {
+            await CommitRenameAsync(_editingFile);
+        }
+        else if (e.Key == "Escape")
+        {
+            CancelRename();
+        }
+    }
+
+    private async Task CommitRenameAsync(ProjectFile file)
+    {
+        if (_editingFile == null) return;
+
+        var newName = _editingName?.Trim() ?? string.Empty;
+
+        // No-op if empty or unchanged — exit edit mode quietly
+        if (string.IsNullOrWhiteSpace(newName) ||
+            string.Equals(newName, file.FileName, StringComparison.Ordinal))
+        {
+            CancelRename();
+            return;
+        }
+
+        file.Project = Project;
+        var ok = await ProjectFiles.RenameAsync(file, newName);
+
+        if (ok)
+        {
+            file.FileName = newName;
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), Traductor.T("FILES_RENAMED_SUCCESS"), ToastType.Success));
+            _editingFile = null;
+            _editingName = string.Empty;
+        }
+        else
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                $"{Traductor.T("FILES_RENAMED_ERROR")}: {ProjectFiles.LastError}", ToastType.Danger));
+            // Stay in edit mode so the user can correct and retry
+        }
+        StateHasChanged();
+    }
+
+    private void CancelRename()
+    {
+        _editingFile = null;
+        _editingName = string.Empty;
+    }
+
+    private async Task RemoveFileAsync(ProjectFile file)
+    {
+        var options = new ConfirmDialogOptions
+        {
             YesButtonColor = ButtonColor.Danger,
-            NoButtonColor = ButtonColor.Success,
+            NoButtonColor = ButtonColor.Secondary,
             AutoFocusYesButton = false,
             YesButtonText = Traductor.T("FILES_DELETE"),
             NoButtonText = Traductor.T("COMMON_GO_BACK")
         };
-        var confirmation = await _removeFileDialog.ShowAsync(
+        var confirmed = await _removeFileDialog.ShowAsync(
             Traductor.T("FILES_REMOVE_TITLE"),
             Traductor.T("FILES_REMOVE_MSG1"),
             Traductor.T("FILES_REMOVE_MSG2"),
-            options
-        );
-        if(confirmation){
-            await OnProjectFileRemoved.InvokeAsync(file);
-        }else{
+            options);
+
+        if (!confirmed)
+        {
             ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), Traductor.T("FILES_NOT_REMOVED"), ToastType.Info));
-        }
-    }
-
-    /// <summary>
-    /// Gets file information including icon, badge color, and extension.
-    /// </summary>
-    /// <param name="fileName">The file name to analyze.</param>
-    /// <returns>A tuple containing the icon name, badge color, and file extension.</returns>
-    private (IconName iconName, BadgeColor badgeColor, string extension) GetFileInfo(string fileName)
-    {
-        if (!fileName.Contains("."))
-        {
-            return (IconName.FileEarmark, BadgeColor.Secondary, "");
+            return;
         }
 
-        var extension = fileName.Substring(fileName.LastIndexOf("."));
-        var lowerExt = extension.ToLower();
+        file.Project = Project;
+        var ok = await ProjectFiles.RemoveAsync(file);
 
-        if (lowerExt == ".vhdl" || lowerExt == ".vhd")
+        if (ok)
         {
-            return (IconName.FileCode, BadgeColor.Primary, extension);
-        }
-        else if (lowerExt == ".txt")
-        {
-            return (IconName.FileTypeTxt, BadgeColor.Info, extension);
-        }
-        else if (lowerExt == ".md")
-        {
-            return (IconName.FileTypeMd, BadgeColor.Success, extension);
+            _projectFiles.RemoveAll(f => f.Id == file.Id);
+            if (_selectedFile?.Id == file.Id)
+                _selectedFile = _projectFiles.FirstOrDefault();
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), Traductor.T("FILES_REMOVED_SUCCESS"), ToastType.Success));
+            await OnProjectFileRemoved.InvokeAsync(file);
         }
         else
         {
-            return (IconName.FileEarmark, BadgeColor.Secondary, extension);
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                $"{Traductor.T("FILES_REMOVED_ERROR")}: {ProjectFiles.LastError}", ToastType.Danger));
         }
+        StateHasChanged();
+    }
+
+    private record FileInfo(IconName Icon, string Variant, string Ext);
+
+    /// <summary>
+    /// Maps a file extension to icon + variant + uppercase extension label.
+    /// Variant drives the CSS color treatment (tinted icon + chip accent).
+    /// </summary>
+    private FileInfo GetFileInfo(string fileName)
+    {
+        if (!fileName.Contains('.'))
+            return new FileInfo(IconName.FileEarmark, "other", "");
+
+        var ext = fileName.Substring(fileName.LastIndexOf('.')).ToLowerInvariant();
+        var label = ext.TrimStart('.').ToUpperInvariant();
+
+        return ext switch
+        {
+            ".vhd" or ".vhdl" => new FileInfo(IconName.FileCode,    "vhdl",     label),
+            ".md"              => new FileInfo(IconName.FileTypeMd,  "markdown", label),
+            ".txt"             => new FileInfo(IconName.FileTypeTxt, "text",     label),
+            ".json"            => new FileInfo(IconName.Braces,      "json",     label),
+            ".xml"             => new FileInfo(IconName.Code,        "xml",      label),
+            _                  => new FileInfo(IconName.FileEarmark, "other",    label),
+        };
     }
 }

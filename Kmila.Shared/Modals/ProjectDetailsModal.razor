@@ -1,98 +1,144 @@
+@*
+    ProjectDetailsModal — create-project form rendered inside a BB Modal.
+
+    The modal chrome (header/footer/close) is owned by the parent that opens it;
+    this component only renders the body. We stick to our token styles and use
+    vanilla inputs (no BB form wrappers) so the look matches the rest of the app.
+
+    On submit:
+      • name is validated via DataAnnotations
+      • BasePath is derived from the platform app-data dir + sanitized name
+      • project is written to SQLite via Projects repository
+      • toast fires + OnProjectCreated is invoked for the parent to close us
+*@
 @implements IDisposable
 
-<PageTitle>@Traductor.T("PROJECT_DETAILS_TITLE")</PageTitle>
-<EditForm class="row" EditContext="_context" OnValidSubmit="CreateProjectAsync">
+<EditForm class="project-form" EditContext="_context" OnValidSubmit="CreateProjectAsync">
     <DataAnnotationsValidator />
-    <div class="col-sm-12 col-md-6 my-3">
-        <div class="form-floating mb-3">
-            <input type="text" class="form-control" id="InputProjectName" placeholder="@Traductor.T("PROJECT_NAME_PLACEHOLDER")" @bind=_project.Name>
-            <label for="InputProjectName">@Traductor.T("PROJECT_NAME_LABEL")</label>
-            <ValidationMessage For="@(() => _project.Name)" />
-        </div>
+
+    <div class="project-form__field">
+        <label for="InputProjectName" class="project-form__label">
+            @Traductor.T("PROJECT_NAME_LABEL")
+            <span class="project-form__required" aria-hidden="true">*</span>
+        </label>
+        <input id="InputProjectName"
+               type="text"
+               class="form-control"
+               autocomplete="off"
+               placeholder="@Traductor.T("PROJECT_NAME_PLACEHOLDER")"
+               @bind="_project.Name"
+               @bind:event="oninput" />
+        <ValidationMessage For="@(() => _project.Name)" class="project-form__validation" />
+        <small class="project-form__hint">
+            <Icon Name="IconName.FolderFill" />
+            <span>@string.Format(Traductor.T("PROJECT_NAME_HINT"), SanitizedFolder)</span>
+        </small>
     </div>
-    <div class="col-sm-12 col-md-6 my-3">
-        <div class="form-floating mb-3">
-            <input type="text" class="form-control" id="InputProjectDescription" placeholder="@Traductor.T("PROJECT_DESCRIPTION_PLACEHOLDER")" @bind="_project.Description">
-            <label for="InputProjectDescription">@Traductor.T("PROJECT_DESCRIPTION_LABEL")</label>
-        </div>
+
+    <div class="project-form__field">
+        <label for="InputProjectDescription" class="project-form__label">
+            @Traductor.T("PROJECT_DESCRIPTION_LABEL")
+            <span class="project-form__optional">@Traductor.T("COMMON_OPTIONAL")</span>
+        </label>
+        <textarea id="InputProjectDescription"
+                  class="form-control"
+                  rows="3"
+                  placeholder="@Traductor.T("PROJECT_DESCRIPTION_PLACEHOLDER")"
+                  @bind="_project.Description"
+                  @bind:event="oninput"></textarea>
     </div>
-    <Button
-        Outline=true
-        TooltipTitle="@Traductor.T("PROJECT_CREATE_TOOLTIP")"
-        Color="ButtonColor.Success"
-        Type="ButtonType.Submit"
-        Disabled="_creatingProject"
-        Loading="_creatingProject"
-    >
-        @Traductor.T("PROJECT_CREATE_BUTTON")
-    </Button>
+
+    <div class="project-form__actions">
+        <button type="submit"
+                class="btn btn-primary btn-lg project-form__submit"
+                disabled="@(_creatingProject || string.IsNullOrWhiteSpace(_project.Name))">
+            @if (_creatingProject)
+            {
+                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                <span>@Traductor.T("PROJECT_CREATING")</span>
+            }
+            else
+            {
+                <Icon Name="IconName.CheckLg" />
+                <span>@Traductor.T("PROJECT_CREATE_BUTTON")</span>
+            }
+        </button>
+    </div>
 </EditForm>
 
-@code{
-    /// <summary>
-    /// Gets or sets the event callback for when a project is created.
-    /// </summary>
-    [Parameter]
-    public EventCallback<bool> OnProjectCreated { get; set; }
+@code {
+    [Parameter] public EventCallback<bool> OnProjectCreated { get; set; }
+
     private Project _project = new();
     private EditContext _context = default!;
     private bool _creatingProject = false;
 
     /// <summary>
-    /// Method invoked when the component is initialized.
+    /// Live preview of the folder-safe form of the entered project name.
+    /// Same sanitization logic as CreateProjectAsync so the hint stays truthful.
     /// </summary>
-    protected override async Task OnInitializedAsync()
+    private string SanitizedFolder =>
+        string.IsNullOrWhiteSpace(_project.Name)
+            ? "—"
+            : _project.Name.Trim().Replace(" ", "").Replace('/', '_').Replace('-', '_');
+
+    protected override void OnInitialized()
     {
         Traductor.StaticOnLangChanged += OnLanguageChanged;
         _context = new(_project);
     }
 
-    private void OnLanguageChanged()
-    {
-        InvokeAsync(StateHasChanged);
-    }
+    private void OnLanguageChanged() => InvokeAsync(StateHasChanged);
 
     public void Dispose()
     {
         Traductor.StaticOnLangChanged -= OnLanguageChanged;
     }
-    /// <summary>
-    /// Method invoked when the component parameters are set.
-    /// </summary>
-    protected override void OnParametersSet(){
+
+    protected override void OnParametersSet()
+    {
         _project = new();
         _context = new(_project);
     }
-    /// <summary>
-    /// Creates a new project asynchronously.
-    /// </summary>
-    private async Task CreateProjectAsync(){
+
+    private async Task CreateProjectAsync()
+    {
         _creatingProject = true;
         StateHasChanged();
-        try{
-            if(_context.Validate()){
-                string basePath = string.Empty;
-                #if WINDOWS || MACCATALYST || ANDROID || IOS
-                    basePath = FileSystem.AppDataDirectory;
-                #else
-                    basePath = Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData), "KmilaData");
-                #endif
-                string fullPath = Path.Join(basePath, "Projects", _project.Name.Trim().Replace(" ", "").Replace('/', '_').Replace('-', '_'));
-                _project.BasePath = fullPath;
-                var result = await Projects.CreateAsync(_project);
-                ToastService.Notify(Message(
-                    result ? Traductor.T("PROJECT_CREATED_SUCCESS") : Traductor.T("COMMON_ERROR"),
-                    result ? $"{Traductor.T("PROJECT_CREATED_SUCCESS_MSG").Replace("{0}", _project.BasePath)}" : $"{Traductor.T("PROJECT_CREATED_ERROR_MSG").Replace("{0}", Projects.LastError)}",
-                    result ? ToastType.Success : ToastType.Danger
-                ));
-                if(result) await OnProjectCreated.InvokeAsync();
-                _project = new();
-            }else{
+        try
+        {
+            if (!_context.Validate())
+            {
                 ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), Traductor.T("PROJECT_VALIDATION_ERROR"), ToastType.Danger));
+                return;
             }
-        }catch(Exception ex){
+
+            string basePath;
+#if WINDOWS || MACCATALYST || ANDROID || IOS
+            basePath = FileSystem.AppDataDirectory;
+#else
+            basePath = Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData), "KmilaData");
+#endif
+            _project.BasePath = Path.Join(basePath, "Projects", SanitizedFolder);
+
+            var result = await Projects.CreateAsync(_project);
+            ToastService.Notify(Message(
+                result ? Traductor.T("PROJECT_CREATED_SUCCESS") : Traductor.T("COMMON_ERROR"),
+                result
+                    ? Traductor.T("PROJECT_CREATED_SUCCESS_MSG").Replace("{0}", _project.BasePath)
+                    : Traductor.T("PROJECT_CREATED_ERROR_MSG").Replace("{0}", Projects.LastError),
+                result ? ToastType.Success : ToastType.Danger
+            ));
+            if (result) await OnProjectCreated.InvokeAsync(true);
+            _project = new();
+            _context = new(_project);
+        }
+        catch (Exception ex)
+        {
             ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
-        }finally{
+        }
+        finally
+        {
             _creatingProject = false;
             StateHasChanged();
         }
