@@ -37,10 +37,25 @@ public class Program
             options.UseSqlite($"Data Source={dbPath}");
         });*/
         // Register the SQLite database context using a scoped lifetime.
-        // The database file is stored in the application's current working directory.
+        //
+        // We anchor the DB in the user's ApplicationData folder (KmilaData/)
+        // rather than Directory.GetCurrentDirectory() so launches from
+        // different shells / IDE roots always open the *same* DB. The old
+        // "cwd-relative" path meant starting `dotnet run` from a different
+        // directory effectively handed the app a fresh empty database and
+        // every project the user had saved appeared to have vanished.
+        //
+        // Paths:
+        //   macOS   →  ~/Library/Application Support/KmilaData/kmila.db
+        //   Linux   →  ~/.config/KmilaData/kmila.db        (XDG default)
+        //   Windows →  %APPDATA%\KmilaData\kmila.db
         builder.Services.AddScoped<ApplicationDbContext>(sp =>
         {
-            string dbPath = Path.Combine(Directory.GetCurrentDirectory(), "kmila.db");
+            var root = Path.Combine(
+                System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData),
+                "KmilaData");
+            Directory.CreateDirectory(root);
+            var dbPath = Path.Combine(root, "kmila.db");
             return new(dbPath);
         });
 
@@ -48,9 +63,17 @@ public class Program
         builder.Services.AddScoped<Projects>();
         builder.Services.AddScoped<ProjectFiles>();
 
-        // JSONFileReader needs IWebHostEnvironment to find the Devices folder
+        // User-imported FPGA / language assets — a writable companion to the
+        // bundled wwwroot/Devices and wwwroot/Dictionaries folders.
+        builder.Services.AddSingleton<UserAssetStore>();
+
+        // JSONFileReader needs IWebHostEnvironment to find the Devices folder.
+        // Merge in the user asset store so imported FPGAs show up in the picker.
         builder.Services.AddSingleton<JSONFileReader>(provider =>
-            new JSONFileReader(provider.GetRequiredService<IWebHostEnvironment>()));
+            new JSONFileReader(
+                provider.GetRequiredService<IWebHostEnvironment>(),
+                logger: provider.GetService<ILogger<JSONFileReader>>(),
+                userAssets: provider.GetRequiredService<UserAssetStore>()));
 
         // ProgramBuilder handles compiling/building FPGA programs from user projects
         builder.Services.AddSingleton<ProgramBuilder>();
@@ -61,15 +84,52 @@ public class Program
         // Configuration service for saving/loading simulation configurations
         builder.Services.AddScoped<ConfigurationService>();
 
-        // Translation service for Web - reads from wwwroot/Dictionaries
-        // Tries multiple paths to support both development and production environments
+        // Shared UI state for the custom sidebar (collapse / mobile drawer)
+        builder.Services.AddScoped<SidebarState>();
+
+        // Shared state for the Editor bottom dock (active tab + collapse)
+        builder.Services.AddScoped<EditorDockState>();
+
+        // Run-bar state (time/scale/run-state/progress/port moments) + build log
+        builder.Services.AddScoped<SimulationParameters>();
+        builder.Services.AddScoped<BuildLog>();
+
+        // In-app logs (/logs page). Construct the store eagerly so we can hand
+        // the same instance to the logger provider and to the DI container —
+        // .NET's logging pipeline doesn't hand out IServiceProvider at the
+        // moment providers are registered.
+        var appLog = new AppLogStore();
+        builder.Services.AddSingleton(appLog);
+        builder.Logging.AddProvider(new InMemoryLoggerProvider(appLog));
+
+        // Translation service for Web - reads from wwwroot/Dictionaries and,
+        // before falling back to the bundled copies, from the user's
+        // UserAssets/Dictionaries directory so imported language packs win.
         builder.Services.AddSingleton<Traductor>(provider =>
         {
-            var env = provider.GetRequiredService<IWebHostEnvironment>();
+            var env        = provider.GetRequiredService<IWebHostEnvironment>();
+            var userAssets = provider.GetRequiredService<UserAssetStore>();
+            var logger     = provider.GetRequiredService<ILoggerFactory>()
+                                     .CreateLogger("Kmila.Shared.Services.Traductor");
+
+            // Register every user-supplied language pack so the picker lists
+            // them before the first Traductor instance is used.
+            foreach (var userLang in userAssets.ListUserLanguagePaths())
+            {
+                var code = Path.GetFileNameWithoutExtension(userLang);
+                var display = UserAssetStore.ReadLanguageDisplayName(userLang);
+                Traductor.AddUserLanguage(display, code);
+            }
+
             return new Traductor(async path =>
             {
                 // path comes as "Dictionaries/{lang}.json"
                 var pathsToTry = new List<string>();
+
+                // Highest priority: user-imported language pack (only the
+                // filename matters — Dictionaries/ prefix is stripped).
+                var fileName = Path.GetFileName(path);
+                pathsToTry.Add(Path.Combine(userAssets.UserDictionariesDir, fileName));
 
                 // Development: Direct path to Kmila.Shared project (most reliable during development)
                 pathsToTry.Add(Path.Combine(env.ContentRootPath, "..", "Kmila.Shared", "wwwroot", path));
@@ -84,25 +144,25 @@ public class Program
                     pathsToTry.Add(Path.Combine(env.WebRootPath, path));
                 }
 
-                Console.WriteLine($"[Traductor-Web] Looking for: {path}");
-                Console.WriteLine($"[Traductor-Web] ContentRootPath: {env.ContentRootPath}");
-                Console.WriteLine($"[Traductor-Web] WebRootPath: {env.WebRootPath ?? "(null)"}");
+                logger.LogDebug("[Traductor-Web] Looking for: {Path}", path);
+                logger.LogDebug("[Traductor-Web] ContentRootPath: {Root}", env.ContentRootPath);
+                logger.LogDebug("[Traductor-Web] WebRootPath: {WebRoot}", env.WebRootPath ?? "(null)");
 
                 foreach (var fullPath in pathsToTry)
                 {
                     try
                     {
                         var normalizedPath = Path.GetFullPath(fullPath);
-                        Console.WriteLine($"[Traductor-Web] Checking: {normalizedPath}");
+                        logger.LogDebug("[Traductor-Web] Checking: {Path}", normalizedPath);
                         if (File.Exists(normalizedPath))
                         {
-                            Console.WriteLine($"[Traductor-Web] Found dictionary at: {normalizedPath}");
+                            logger.LogInformation("[Traductor-Web] Found dictionary at: {Path}", normalizedPath);
                             return File.OpenRead(normalizedPath);
                         }
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"[Traductor-Web] Error checking path {fullPath}: {ex.Message}");
+                        logger.LogWarning(ex, "[Traductor-Web] Error checking path {Path}", fullPath);
                     }
                 }
 
@@ -114,10 +174,69 @@ public class Program
             });
         });
 
+        // Learn / curriculum catalog — reuses the same "try a handful of paths"
+        // approach Traductor uses for Dictionaries, so manifest.json + lesson
+        // bodies load in both dev and production Web deployments.
+        builder.Services.AddSingleton<LessonCatalog>(provider =>
+        {
+            var env = provider.GetRequiredService<IWebHostEnvironment>();
+            var logger = provider.GetRequiredService<ILoggerFactory>()
+                                 .CreateLogger<LessonCatalog>();
+            return new LessonCatalog(async path =>
+            {
+                var pathsToTry = new List<string>
+                {
+                    Path.Combine(env.ContentRootPath, "..", "Kmila.Shared", "wwwroot", path),
+                    Path.Combine(Directory.GetCurrentDirectory(), "..", "Kmila.Shared", "wwwroot", path)
+                };
+                if (!string.IsNullOrEmpty(env.WebRootPath) && Directory.Exists(env.WebRootPath))
+                {
+                    pathsToTry.Add(Path.Combine(env.WebRootPath, "_content", "Kmila.Shared", path));
+                    pathsToTry.Add(Path.Combine(env.WebRootPath, path));
+                }
+                foreach (var candidate in pathsToTry)
+                {
+                    try
+                    {
+                        var normalized = Path.GetFullPath(candidate);
+                        if (File.Exists(normalized)) return File.OpenRead(normalized);
+                    }
+                    catch { /* try next */ }
+                }
+                throw new FileNotFoundException($"Lesson asset not found: {path}");
+            }, logger);
+        });
+
+        // Progress tracker for lessons — scoped so each circuit gets its own
+        // in-memory cache layered over the shared AppSettings table.
+        builder.Services.AddScoped<LessonProgressStore>();
+
+        // Sidebar MRU — scoped so it reads from the same per-circuit
+        // ApplicationDbContext the rest of the UI is using.
+        builder.Services.AddScoped<RecentProjectsTracker>();
+
+        // Captured-run history store — hybrid SQLite metadata + inline
+        // WaveformData JSON. Reads by Runs tab, writes after every sim.
+        builder.Services.AddScoped<SimulationSnapshotStore>();
+
+        // .kmila project bundle export / import. Scoped so the inner
+        // repositories resolve to the current circuit's DB context.
+        builder.Services.AddScoped<ProjectBundleService>();
+
         // BlazorBootstrap provides Bootstrap-based Blazor UI components
         builder.Services.AddBlazorBootstrap();
 
         var app = builder.Build();
+
+        // Redirect Console.Out into an ILogger so that Console.WriteLine calls
+        // from the referenced Parser / Interpreter / TimeMachine projects (e.g.
+        // "[VariableSyntetizer] …", "[Resources.IO] …") land in the in-app
+        // /logs viewer at Debug level instead of spamming the terminal.
+        // Keep Console.Error untouched — real errors should still surface loudly.
+        var consoleLogger = app.Services.GetRequiredService<ILoggerFactory>()
+            .CreateLogger("Console");
+        Console.SetOut(new Kmila.Shared.Services.ConsoleToLoggerWriter(
+            consoleLogger, LogLevel.Debug));
 
         // Configure the HTTP request pipeline.
         if (!app.Environment.IsDevelopment())
