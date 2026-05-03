@@ -1,0 +1,223 @@
+@page "/practice"
+@using Kmila.Shared.Models.Practice
+@using Kmila.Shared.Services.Practice
+@inject PracticeCatalog Catalog
+@inject PracticeAttemptStore Attempts
+@implements IDisposable
+<PageTitle>@Traductor.T("PRACTICE_TITLE")</PageTitle>
+
+@*
+    Practice — exercise catalog (Phase 0).
+
+    Shows the three modalities (FromZero / FixBug / FillGap) as columns and
+    cards inside grouped by difficulty. Click a card → /practice/{id}.
+*@
+
+<section class="learn-page practice-page">
+    <header class="learn-hero" aria-labelledby="practice-hero-title">
+        <div class="learn-hero__copy">
+            <span class="home-section__eyebrow">@Traductor.T("PRACTICE_EYEBROW")</span>
+            <h1 id="practice-hero-title" class="learn-hero__title">@Traductor.T("PRACTICE_TITLE")</h1>
+            <p class="learn-hero__subtitle">@Traductor.T("PRACTICE_SUBTITLE")</p>
+        </div>
+    </header>
+
+    @foreach (var modality in _modalities)
+    {
+        var bucket = _byModality.TryGetValue(modality, out var lst) ? lst : new List<PracticeExerciseMeta>();
+        <section class="learn-track">
+            <header class="learn-track__header">
+                <span class="home-section__eyebrow">@ModalityNumber(modality) &middot; @ModalityLabel(modality)</span>
+                <h2>@ModalityTitle(modality)</h2>
+                <p>@ModalityBlurb(modality)</p>
+            </header>
+
+            @if (bucket.Count == 0)
+            {
+                <div class="learn-empty">
+                    <div class="learn-empty__icon"><Icon Name="IconName.Hourglass" /></div>
+                    <p>@Traductor.T("PRACTICE_BUCKET_EMPTY")</p>
+                </div>
+            }
+            else
+            {
+                <div class="learn-grid">
+                    @foreach (var ex in bucket)
+                    {
+                        var title = PracticeCatalog.Localize(ex.Titles, _lang, ex.Id);
+                        var summary = PracticeCatalog.Localize(ex.Summaries, _lang, string.Empty);
+                        var href = $"/practice/{ex.Id}";
+
+                        <a class="learn-card" href="@href">
+                            <div class="learn-card__icon learn-card__icon--@DifficultyVariant(ex.Difficulty)">
+                                <Icon Name="@ModalityIcon(ex.Modality)" />
+                            </div>
+                            <div class="learn-card__body">
+                                <h3 class="learn-card__title">@title</h3>
+                                <p class="learn-card__summary">@summary</p>
+                                <div class="learn-card__meta">
+                                    <span class="learn-card__chip learn-card__chip--@DifficultyClass(ex.Difficulty)">
+                                        @DifficultyLabel(ex.Difficulty)
+                                    </span>
+                                    @{
+                                        var status = _progressById.TryGetValue(ex.Id, out var p) ? p.Status : PracticeStatus.NotStarted;
+                                    }
+                                    @if (status != PracticeStatus.NotStarted)
+                                    {
+                                        <span class="practice-status-chip practice-status-chip--@StatusClass(status)">
+                                            <Icon Name="@StatusIcon(status)" />
+                                            @StatusLabel(status)
+                                        </span>
+                                    }
+                                    @if (ex.TestCaseCount > 0)
+                                    {
+                                        <span class="learn-card__count">
+                                            <Icon Name="IconName.CheckSquare" />
+                                            @ex.TestCaseCount @Traductor.T("PRACTICE_TESTS_LABEL")
+                                        </span>
+                                    }
+                                </div>
+                            </div>
+                        </a>
+                    }
+                </div>
+            }
+        </section>
+    }
+</section>
+
+@code {
+    private readonly PracticeModality[] _modalities = new[]
+    {
+        PracticeModality.FromZero, PracticeModality.FixBug, PracticeModality.FillGap
+    };
+
+    private string _lang = "en";
+    private Dictionary<PracticeModality, List<PracticeExerciseMeta>> _byModality = new();
+    private Dictionary<string, PracticeProgress> _progressById = new(StringComparer.OrdinalIgnoreCase);
+
+    protected override async Task OnInitializedAsync()
+    {
+        Traductor.StaticOnLangChanged += OnLangChanged;
+        Attempts.OnChange += OnAttemptsChanged;
+        _lang = Traductor.Lang ?? "en";
+        await BuildAsync();
+    }
+
+    private async Task BuildAsync()
+    {
+        var all = await Catalog.ListAsync();
+        _byModality = all
+            .OrderBy(e => (int)e.Difficulty)
+            .ThenBy(e => e.Id, StringComparer.Ordinal)
+            .GroupBy(e => e.Modality)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var progress = await Attempts.GetAllProgressAsync();
+        _progressById = progress.ToDictionary(p => p.ExerciseId, p => p, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private void OnAttemptsChanged(string exerciseId)
+    {
+        InvokeAsync(async () =>
+        {
+            // Refresh just the progress map; the manifest hasn't changed.
+            var progress = await Attempts.GetAllProgressAsync();
+            _progressById = progress.ToDictionary(p => p.ExerciseId, p => p, StringComparer.OrdinalIgnoreCase);
+            StateHasChanged();
+        });
+    }
+
+    private void OnLangChanged()
+    {
+        _lang = Traductor.Lang ?? "en";
+        InvokeAsync(StateHasChanged);
+    }
+
+    private string ModalityNumber(PracticeModality m) => ((int)m + 1).ToString("D2");
+
+    private string ModalityLabel(PracticeModality m) => m switch
+    {
+        PracticeModality.FromZero => Traductor.T("PRACTICE_MOD_FROM_ZERO"),
+        PracticeModality.FixBug   => Traductor.T("PRACTICE_MOD_FIX_BUG"),
+        PracticeModality.FillGap  => Traductor.T("PRACTICE_MOD_FILL_GAP"),
+        _ => m.ToString()
+    };
+
+    private string ModalityTitle(PracticeModality m) => m switch
+    {
+        PracticeModality.FromZero => Traductor.T("PRACTICE_MOD_FROM_ZERO_TITLE"),
+        PracticeModality.FixBug   => Traductor.T("PRACTICE_MOD_FIX_BUG_TITLE"),
+        PracticeModality.FillGap  => Traductor.T("PRACTICE_MOD_FILL_GAP_TITLE"),
+        _ => m.ToString()
+    };
+
+    private string ModalityBlurb(PracticeModality m) => m switch
+    {
+        PracticeModality.FromZero => Traductor.T("PRACTICE_MOD_FROM_ZERO_BLURB"),
+        PracticeModality.FixBug   => Traductor.T("PRACTICE_MOD_FIX_BUG_BLURB"),
+        PracticeModality.FillGap  => Traductor.T("PRACTICE_MOD_FILL_GAP_BLURB"),
+        _ => string.Empty
+    };
+
+    private IconName ModalityIcon(PracticeModality m) => m switch
+    {
+        PracticeModality.FromZero => IconName.PencilSquare,
+        PracticeModality.FixBug   => IconName.Wrench,
+        PracticeModality.FillGap  => IconName.PuzzleFill,
+        _ => IconName.PuzzleFill
+    };
+
+    private string DifficultyLabel(PracticeDifficulty d) => d switch
+    {
+        PracticeDifficulty.Easy   => Traductor.T("PRACTICE_DIFF_EASY"),
+        PracticeDifficulty.Medium => Traductor.T("PRACTICE_DIFF_MEDIUM"),
+        PracticeDifficulty.Hard   => Traductor.T("PRACTICE_DIFF_HARD"),
+        _ => d.ToString()
+    };
+
+    private string DifficultyClass(PracticeDifficulty d) => d switch
+    {
+        PracticeDifficulty.Easy   => "easy",
+        PracticeDifficulty.Medium => "intermediate",
+        PracticeDifficulty.Hard   => "expert",
+        _ => "easy"
+    };
+
+    private string DifficultyVariant(PracticeDifficulty d) => d switch
+    {
+        PracticeDifficulty.Easy   => "primary",
+        PracticeDifficulty.Medium => "warning",
+        PracticeDifficulty.Hard   => "danger",
+        _ => "primary"
+    };
+
+    private string StatusLabel(PracticeStatus s) => s switch
+    {
+        PracticeStatus.NotStarted => Traductor.T("PRACTICE_STATUS_NOT_STARTED"),
+        PracticeStatus.InProgress => Traductor.T("PRACTICE_STATUS_IN_PROGRESS"),
+        PracticeStatus.Solved     => Traductor.T("PRACTICE_STATUS_SOLVED"),
+        _ => s.ToString()
+    };
+
+    private string StatusClass(PracticeStatus s) => s switch
+    {
+        PracticeStatus.NotStarted => "todo",
+        PracticeStatus.InProgress => "wip",
+        PracticeStatus.Solved     => "ok",
+        _ => "todo"
+    };
+
+    private IconName StatusIcon(PracticeStatus s) => s switch
+    {
+        PracticeStatus.InProgress => IconName.Hourglass,
+        PracticeStatus.Solved     => IconName.PatchCheckFill,
+        _                         => IconName.Circle
+    };
+
+    public void Dispose()
+    {
+        Traductor.StaticOnLangChanged -= OnLangChanged;
+        Attempts.OnChange -= OnAttemptsChanged;
+    }
+}

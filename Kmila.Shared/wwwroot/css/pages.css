@@ -1063,15 +1063,15 @@
 .projects-page {
     display: flex;
     flex-direction: column;
-    gap: var(--space-5);
+    gap: var(--space-4);
 }
 
 .projects-header {
     display: grid;
     grid-template-columns: 1fr auto;
     align-items: end;
-    gap: var(--space-4);
-    padding-bottom: var(--space-4);
+    gap: var(--space-3);
+    padding-bottom: var(--space-3);
     border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -1476,16 +1476,15 @@
 .settings-page {
     display: flex;
     flex-direction: column;
-    gap: var(--space-5);
+    gap: var(--space-4);
 }
 
 .settings-page__header {
     display: flex;
     flex-direction: column;
-    gap: var(--space-2);
-    padding-bottom: var(--space-4);
+    gap: var(--space-1);
+    padding-bottom: var(--space-3);
     border-bottom: 1px solid var(--border-subtle);
-    max-width: 760px;
 }
 
 .settings-page__header h1 {
@@ -1515,13 +1514,27 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    /* Container query target. Lets each card decide row stacking based
+       on its OWN width — the surrounding grid puts cards at ~360 px on
+       2-up desktop, where viewport-based media queries can't tell us
+       things are cramped because the viewport itself is wide. */
+    container-type: inline-size;
+    /* Force the card to participate in grid track sizing without its
+       content driving a higher floor. Without this, a single long
+       unbreakable word in any localized string (German compound nouns,
+       URLs, untranslated technical terms, etc.) bumps the card's
+       min-content above the 360 px grid track and the auto-fill grid
+       collapses to a single column. Combined with overflow: hidden
+       above, content that doesn't fit wraps or clips instead of
+       breaking the parent layout. */
+    min-width: 0;
 }
 
 .settings-card__head {
     display: flex;
     align-items: flex-start;
     gap: var(--space-3);
-    padding: var(--space-4);
+    padding: var(--space-3) var(--space-4);
     border-bottom: 1px solid var(--border-subtle);
     background-color: var(--surface-1);
 }
@@ -1538,6 +1551,10 @@
     color: var(--text-muted);
     font-size: var(--fs-sm);
     line-height: var(--lh-snug);
+    /* Cap reading width so the subtitle doesn't run as a single line
+       on wide --wide cards, where labels look stretched and unbalanced
+       next to the icon. */
+    max-width: 60ch;
 }
 
 .settings-card__icon {
@@ -1557,22 +1574,42 @@
 .settings-card__icon--warning { background-color: var(--warning-soft); color: var(--warning); }
 
 .settings-card__body {
-    padding: var(--space-4);
+    padding: var(--space-3) var(--space-4);
     display: flex;
     flex-direction: column;
-    gap: var(--space-3);
+    gap: var(--space-2);
 }
 
+/* The single canonical actions row. Used by every card that has a
+   button strip (Feedback, Bundle, FPGA, Languages). Keeps `align-items:
+   center` so the InputFile-as-label button aligns with sibling buttons
+   even when their internal text heights differ slightly. */
 .settings-card__actions {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: var(--space-2);
+    /* Bound width so a wide card doesn't stretch the actions row into
+       a horizon-line of buttons. */
+    min-width: 0;
+}
+
+/* Defensive: lets long-text buttons / wide selects shrink to fit
+   their slot in the row instead of forcing the row to overflow the
+   card horizontally. Without min-width: 0 a flex child clamps to its
+   intrinsic min-content (the longest unbreakable word inside) and a
+   neighbor button gets pushed off-screen. */
+.settings-card__actions > * {
+    min-width: 0;
+    max-width: 100%;
 }
 
 .settings-card__hint {
     margin: 0;
     font-size: var(--fs-xs);
     color: var(--text-muted);
+    /* Same readability cap as .settings-card__sub. */
+    max-width: 60ch;
 }
 
 .settings-card__placeholder {
@@ -1587,18 +1624,42 @@
     background-color: var(--surface-1);
 }
 
-.settings-card__body .btn {
+/* Direct-child only — without the `>` this rule used to bleed into buttons
+   nested inside .settings-row__control, jamming them flex-start on the row's
+   right column instead of letting the row grid place them. */
+.settings-card__body > .btn {
     align-self: flex-start;
     display: inline-flex;
     align-items: center;
     gap: var(--space-2);
 }
 
+/* Inner text container of every .settings-card__head — title + sub. Without
+   `min-width: 0` long localized titles can refuse to wrap inside their grid
+   cell; `flex: 1` lets the block consume the remaining row space next to the
+   icon so the sub paragraph lays out predictably. */
+.settings-card__head-text {
+    min-width: 0;
+    flex: 1 1 auto;
+}
 
-/* Row inside a card: label on the left, control on the right */
+/* Form-control cap inside cards — applies to the bundle picker, the
+   simulation tick-resolution select, and any future <select>/<input> sized
+   to content. Replaces inline `style="max-width: …"` sprinkled in markup. */
+.settings-card__select {
+    max-width: 260px;
+}
+
+
+/* Row inside a card: label on the left, capped control on the right.
+   `minmax(0, 320px)` keeps the control column from ballooning past 320 px
+   even when the inner control would otherwise grow to fit (e.g. native
+   <select> rendering long translated option text). The 0 lower bound lets
+   the column shrink below its content's natural min, working around the
+   default `auto` minimum. */
 .settings-row {
     display: grid;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr minmax(0, 320px);
     align-items: center;
     gap: var(--space-4);
 }
@@ -1624,6 +1685,61 @@
 
 .settings-row__control {
     min-width: 0;
+    justify-self: end;
+    width: 100%;
+}
+
+/* Native <select>/<input> inside a row should fill the capped column so
+   the control's right edge aligns with the card's right padding. */
+.settings-row__control > .form-select,
+.settings-row__control > .form-control,
+.settings-row__control > select,
+.settings-row__control > input {
+    width: 100%;
+}
+
+/* Empty-state placeholder centred when it's the only thing in the body —
+   keeps "Coming soon" cards visually balanced next to data-rich siblings
+   in the same grid row instead of hugging the top. :has() is widely
+   supported in modern Chromium / WebKit (Safari 15.4+, Chrome 105+) which
+   covers the MAUI BlazorWebView and our Web target. */
+.settings-card__body:has(> .settings-card__placeholder:only-child) {
+    flex: 1 1 auto;
+    justify-content: center;
+}
+
+/* Narrow-CARD stacking — a container query so each card decides
+   layout based on its own width, independent of viewport.
+   The Settings grid often parks cards at ~360 px even on a 1280 px
+   desktop (2-up layout), where a viewport-based media query can't see
+   that things are cramped. Below 520 container px the label gets
+   overrun by the 320 px-capped control; stacking gives the label its
+   full row width, which fixes both the "text wraps too aggressively"
+   and "buttons overlap text" symptoms in the same pass.
+*/
+@container (max-width: 520px) {
+    .settings-row {
+        grid-template-columns: 1fr;
+        gap: var(--space-2);
+    }
+    .settings-row__control {
+        justify-self: stretch;
+        max-width: none;
+    }
+}
+
+/* Viewport fallback for very small screens (phone portrait) — a
+   safety net in case container queries are unavailable on the host
+   browser. Same shape as the @container rule above. */
+@media (max-width: 520px) {
+    .settings-row {
+        grid-template-columns: 1fr;
+        gap: var(--space-2);
+    }
+    .settings-row__control {
+        justify-self: stretch;
+        max-width: none;
+    }
 }
 
 
@@ -3023,6 +3139,350 @@
     padding: var(--space-4);
 }
 
+/* Schematic tab owns its own scrolling on both axes. The default panel
+   rules above (overflow-y: auto, padding) would otherwise let the
+   schematic's natural canvas push the entire dock — and the editor
+   page above it — past the viewport. Drop padding too so the schematic
+   gets the full panel rect to scroll inside. */
+.kmila-dock__panel--schematic {
+    overflow: hidden;
+    padding: 0;
+}
+
+
+/* ──────────────────────────────────────────────────────────────────
+   Schematic export modal — global so the rules survive the Bootstrap
+   modal's DOM teleport (scoped CSS on the modal component would not
+   reach the rendered nodes outside its parent). Layout breakdown:
+     • Form root                .kmila-export-form  → vertical sections
+     • Section header           .kmila-export-section__title
+     • Output-options grid      .kmila-export-grid  → 2-up auto-fit
+     • Scope radio list         .kmila-export-scope → 1 column always
+     • Checkbox group           .kmila-export-checks
+     • Footer (cancel/submit)   .kmila-export-footer
+   Mobile (≤ 600 px): grid collapses to 1 column, footer stacks.
+   ────────────────────────────────────────────────────────────────── */
+.kmila-export-form {
+    padding: var(--space-3) var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.kmila-export-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.kmila-export-section__title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin: 0;
+}
+
+.kmila-export-form .form-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-strong);
+    margin-bottom: 4px;
+}
+
+/* Output-options grid: pairs of (label, control). Auto-fit with a
+   220px min so we end up with 2 columns on a wide modal and a
+   single column on phones — without ever truncating a label. */
+.kmila-export-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: var(--space-3);
+}
+
+.kmila-export-field {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.kmila-export-field--inline {
+    margin-top: var(--space-2);
+    max-width: 280px;
+}
+
+/* Compact selects + inputs that match the rest of the app. */
+.kmila-export-form .form-select,
+.kmila-export-form .form-control {
+    border-radius: var(--radius-md);
+    border-color: var(--border-subtle);
+    background-color: var(--surface-1);
+    color: var(--text-strong);
+    font-size: 0.85rem;
+    line-height: 1.3;
+    padding: 4px 28px 4px 10px;
+    height: auto;
+}
+
+.kmila-export-form .form-select:focus,
+.kmila-export-form .form-control:focus {
+    border-color: var(--brand-accent);
+    box-shadow: 0 0 0 3px rgba(60, 130, 246, 0.18);
+}
+
+/* Scope picker — single column, full width. Each card is one
+   horizontal row: radio dot · title above hint. The hint is
+   line-clamped to 2 so even very long descriptions never push the
+   card height past ~64px. */
+.kmila-export-scope {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--space-2);
+}
+
+.kmila-export-scope__opt {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    margin: 0;
+    background: var(--surface-1);
+    transition:
+        border-color var(--duration-fast) var(--ease-standard),
+        background-color var(--duration-fast) var(--ease-standard),
+        box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-export-scope__opt:hover:not(.is-disabled) {
+    border-color: var(--brand-accent);
+    background: var(--surface-2);
+}
+
+.kmila-export-scope__opt input[type="radio"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--border-strong, rgba(148, 163, 184, 0.6));
+    border-radius: 50%;
+    margin: 3px 0 0 0;
+    flex-shrink: 0;
+    position: relative;
+    cursor: inherit;
+    background: transparent;
+}
+
+.kmila-export-scope__opt input[type="radio"]:checked {
+    border-color: var(--brand-accent);
+}
+
+.kmila-export-scope__opt input[type="radio"]:checked::after {
+    content: "";
+    position: absolute;
+    inset: 2px;
+    border-radius: 50%;
+    background: var(--brand-accent);
+}
+
+.kmila-export-scope__opt:has(input:checked) {
+    border-color: var(--brand-accent);
+    background: rgba(60, 130, 246, 0.06);
+    box-shadow: 0 0 0 2px rgba(60, 130, 246, 0.18);
+}
+
+.kmila-export-scope__opt.is-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.kmila-export-scope__body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+}
+
+.kmila-export-scope__body strong {
+    font-size: 0.85rem;
+    color: var(--text-strong);
+    font-weight: 600;
+    line-height: 1.25;
+}
+
+.kmila-export-scope__body small {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    line-height: 1.35;
+    /* Two-line clamp so very long hints never bloat the modal. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Segmented Color/Mono pill. */
+.kmila-export-pill {
+    display: inline-flex;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    background: var(--surface-1);
+    width: fit-content;
+}
+
+.kmila-export-pill__opt {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition:
+        background-color var(--duration-fast) var(--ease-standard),
+        color var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-export-pill__opt + .kmila-export-pill__opt {
+    border-left: 1px solid var(--border-subtle);
+}
+
+.kmila-export-pill__opt:hover {
+    background: var(--surface-2);
+    color: var(--text-strong);
+}
+
+.kmila-export-pill__opt.is-active {
+    background: var(--brand-accent);
+    color: #fff;
+}
+
+.kmila-export-pill__opt:focus-visible {
+    outline: 2px solid var(--brand-accent);
+    outline-offset: 2px;
+}
+
+/* Checkbox cards — same visual idiom as the scope cards but with
+   a checkbox instead of a radio. Inline children stack on mobile. */
+.kmila-export-checks {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.kmila-export-check {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    margin: 0;
+    background: var(--surface-1);
+    transition:
+        border-color var(--duration-fast) var(--ease-standard),
+        background-color var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-export-check:hover {
+    border-color: var(--brand-accent);
+    background: var(--surface-2);
+}
+
+.kmila-export-check input[type="checkbox"] {
+    margin: 3px 0 0 0;
+    flex-shrink: 0;
+}
+
+.kmila-export-check__body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+}
+
+.kmila-export-check__body strong {
+    font-size: 0.85rem;
+    color: var(--text-strong);
+    font-weight: 600;
+    line-height: 1.25;
+}
+
+.kmila-export-check__body small {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    line-height: 1.35;
+}
+
+.kmila-export-form .form-check-input {
+    border-color: var(--border-strong, rgba(148, 163, 184, 0.6));
+    cursor: pointer;
+}
+
+.kmila-export-form .form-check-input:checked {
+    background-color: var(--brand-accent);
+    border-color: var(--brand-accent);
+}
+
+.kmila-export-form .form-check-input:focus {
+    box-shadow: 0 0 0 3px rgba(60, 130, 246, 0.18);
+    border-color: var(--brand-accent);
+}
+
+/* Footer — buttons right-aligned on desktop, full-width stacked on
+   phones. */
+.kmila-export-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    padding-top: var(--space-2);
+    border-top: 1px solid var(--border-subtle);
+}
+
+.kmila-export-footer .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+@media (max-width: 600px) {
+    .kmila-export-form {
+        padding: var(--space-3);
+        max-height: 75vh;
+    }
+    .kmila-export-grid {
+        grid-template-columns: 1fr;
+        gap: var(--space-2);
+    }
+    .kmila-export-footer {
+        flex-direction: column-reverse;
+        align-items: stretch;
+    }
+    .kmila-export-footer .btn {
+        justify-content: center;
+    }
+    .kmila-export-pill {
+        width: 100%;
+    }
+    .kmila-export-pill__opt {
+        flex: 1;
+        justify-content: center;
+    }
+    .kmila-export-scope__body small {
+        -webkit-line-clamp: 3;
+    }
+}
+
 
 /* --- Empty state (shown when a tab has no content yet) --- */
 
@@ -3239,6 +3699,38 @@
     color: var(--fr-fg);
     border-radius: var(--radius-sm);
     flex-shrink: 0;
+    /* Anchor for the entry-point marker (absolute child) so the star badge
+       hugs the icon's corner regardless of viewport / list zoom. */
+    position: relative;
+}
+
+/* Entry-point marker — small gold star badge overlapping the file icon's
+   top-right corner. Pure visual; semantics live on the parent `.is-entry`
+   class and the kebab menu's "Set/Clear entry point" action. */
+.file-row__entry-marker {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    width: 14px;
+    height: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--warning);
+    background-color: var(--surface-1);
+    border-radius: 50%;
+    font-size: 10px;
+    /* Subtle ring so the badge reads as detached even on dark/coloured
+       icon backgrounds. Surface-1 matches the row hover surface, keeping
+       the badge legible in both states. */
+    box-shadow: 0 0 0 2px var(--surface-1);
+}
+
+.file-row.is-entry .file-row__name {
+    /* Entry-point file gets a slight visual emphasis so it's findable at a
+       glance in long file lists. Not bold (already medium) — just nudges
+       the colour to the strong text token. */
+    color: var(--text-strong);
 }
 
 
@@ -3319,32 +3811,34 @@
 
 /* --- Kebab menu --- */
 
-.file-row__menu {
-    position: relative;
-    flex-shrink: 0;
-}
-
 .file-row__menu-btn {
-    list-style: none;
+    flex-shrink: 0;
     cursor: pointer;
     padding: 4px 6px;
 }
 
-.file-row__menu-btn::-webkit-details-marker { display: none; }
-.file-row__menu-btn::marker { display: none; content: ""; }
-
-.file-row__menu[open] .file-row__menu-btn {
+.file-row__menu-btn.is-open {
     background-color: var(--surface-3);
     color: var(--text-strong);
 }
 
+/* Backdrop — invisible click-catcher behind the open panel. Closes the menu
+   when the user clicks outside it. Sits below --z-popover so the panel above
+   keeps interactivity. */
+.file-row__menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--z-popover) - 1);
+    background: transparent;
+}
+
 .file-row__menu-panel {
-    position: absolute;
-    top: calc(100% + 4px);
-    right: 0;
-    left: auto;
-    z-index: var(--z-dropdown);
-    min-width: 160px;
+    /* Position is set inline via Blazor — top/left come from JS interop after
+       the user clicks a trigger. Fixed positioning lets the panel escape any
+       ancestor with overflow:hidden (dock card, scroll container, etc.). */
+    position: fixed;
+    z-index: var(--z-popover);
+    min-width: 180px;
     padding: 4px;
     background-color: var(--surface-2);
     border: 1px solid var(--border-subtle);
@@ -3354,11 +3848,6 @@
     flex-direction: column;
     gap: 2px;
     animation: kmilaPop var(--duration-fast) var(--ease-standard);
-}
-
-[dir="rtl"] .file-row__menu-panel {
-    right: auto;
-    left: 0;
 }
 
 .file-row__menu-item {
@@ -3389,6 +3878,131 @@
 .file-row__menu-item--danger:hover {
     background-color: var(--danger-soft);
     color: var(--danger);
+}
+
+/* ---- Tree extras (folders, drag-and-drop, toolbar) -------------------------- */
+
+.files-list__toolbar {
+    display: inline-flex;
+    gap: var(--space-1);
+    margin-left: auto;
+}
+
+.files-list__toolbar .btn {
+    padding: var(--space-1) var(--space-2);
+}
+
+[dir="rtl"] .files-list__toolbar { margin-left: 0; margin-right: auto; }
+
+.files-tree { padding-inline-start: 0; }
+
+.file-row--folder {
+    --fr-fg: var(--text-strong);
+    --fr-bg: var(--surface-3);
+    font-weight: 500;
+}
+
+.file-row--folder.is-drop {
+    outline: 2px dashed var(--kmila-accent);
+    outline-offset: -2px;
+    background: var(--kmila-accent-soft);
+}
+
+.file-row--folder.is-editing {
+    background: var(--surface-2);
+}
+
+.file-row__chevron {
+    flex: 0 0 auto;
+    width: 1.25rem;
+    height: 1.25rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0;
+    transition: background-color var(--duration-fast) var(--ease-standard);
+}
+
+.file-row__chevron:hover {
+    background-color: var(--surface-3);
+    color: var(--text-strong);
+}
+
+[draggable="true"]:active {
+    cursor: grabbing;
+}
+
+/* ---- Flow diagram dock tab -------------------------------------------------
+   Styled to match the schematic dock surface; mermaid handles the inner SVG
+   colors via its own theme + our classDef overrides. The body scrolls so a
+   tall flowchart doesn't push the dock off-screen. */
+
+.flow-diagram {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+}
+
+.flow-diagram__head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--surface-2);
+    font-weight: 500;
+}
+
+.flow-diagram__head .bi {
+    color: var(--kmila-accent);
+}
+
+.flow-diagram__count {
+    background: var(--surface-3);
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
+}
+
+.flow-diagram__head .btn {
+    margin-left: auto;
+}
+
+.flow-diagram__body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    padding: var(--space-3);
+}
+
+.flow-diagram__body pre.mermaid {
+    margin: 0;
+    background: transparent;
+    border: 0;
+}
+
+.flow-diagram__empty {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    color: var(--text-muted);
+    padding: var(--space-5);
+    text-align: center;
+}
+
+.flow-diagram__empty .bi {
+    font-size: 2rem;
+    opacity: 0.6;
 }
 
 
@@ -3649,6 +4263,99 @@
 .editor-workbench__body > .editor-monaco,
 .editor-workbench__body > .editor-split {
     width: 100%;
+}
+
+/* ─── Multi-pane workbench (Phase 2) ──────────────────────────────────
+   The body owns the height for both single- and split-pane modes, so
+   each pane is bounded by the parent rather than imposing its own
+   60dvh from the global .editor-monaco rule. Without this constraint a
+   split adds a second 60dvh editor next to the first and the workbench
+   grows below the viewport, pushing the run bar / dock out of sight.
+*/
+.editor-workbench__body--panes {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    gap: 0;
+    min-width: 0;
+    /* Same height contract that the global .editor-monaco rule used to
+       impose by itself. Now applied to the container so panes share it
+       and Monaco below stretches to fit. */
+    height: 60dvh;
+    min-height: 400px;
+}
+
+@media (max-width: 768px) {
+    .editor-workbench__body--panes {
+        height: 55dvh;
+        min-height: 320px;
+    }
+}
+
+.editor-pane {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 0;       /* lets Monaco shrink within the body height */
+    height: 100%;        /* fill the body — important for the unsplit
+                            case so a single pane occupies all the
+                            space pane B left behind */
+    /* When focused (clicked into), draw a 1-pixel accent line on the
+       left edge so the user can tell where new files will land. Subtle
+       enough to not compete with the actual editor content. */
+    border-left: 2px solid transparent;
+    transition: border-color var(--duration-fast) var(--ease-standard);
+}
+
+/* Tab strip is fixed-height; Monaco fills the rest. */
+.editor-pane > .editor-tabs { flex: 0 0 auto; }
+
+/* Override the global `.editor-monaco { height: 60dvh; min-height: 400px }`
+   rule when the editor is inside a pane — the pane already owns the
+   height contract via the body. */
+.editor-pane > .editor-monaco,
+.editor-pane > .editor-split {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+}
+
+/* Only highlight focus when there's more than one pane — a single
+   pane is always focused, so the accent would just be visual noise. */
+.editor-workbench__body--panes.is-split .editor-pane.is-focused {
+    border-left-color: var(--kmila-accent);
+}
+
+/* Vertical separator between the two panes — just a 1px border so the
+   layout reads as "two columns" instead of "one weird wide editor". */
+.editor-workbench__body--panes.is-split > .editor-pane + .editor-pane {
+    border-left-color: var(--border-subtle);
+}
+
+.editor-workbench__body--panes.is-split > .editor-pane + .editor-pane.is-focused {
+    border-left-color: var(--kmila-accent);
+}
+
+/* Inside each pane, Monaco / the markdown split fills the remaining
+   height below the tab strip. */
+.editor-pane > .editor-monaco,
+.editor-pane > .editor-split {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/* ─── Split-toggle button (lives in the workbench header) ───────── */
+.editor-split-toggle {
+    /* Compact ghost button matching the rest of the header chrome.
+       Hidden below 900 px viewport widths because the split layout
+       isn't usable on phone-portrait — the user falls back to a
+       single pane and accumulated tabs render in one strip. */
+    margin-right: var(--space-2);
+}
+
+@media (max-width: 900px) {
+    .editor-split-toggle { display: none; }
 }
 
 
@@ -4012,7 +4719,13 @@
     background-color: var(--border-subtle);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-md);
-    overflow: hidden;
+    /* The list grows as more entries arrive; we let it consume the remaining
+       dock space (flex: 1) and scroll its own contents instead of overflowing
+       the dock body. min-height:0 is mandatory inside a flex column for the
+       child to actually shrink — without it overflow:auto never engages. */
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
 }
 
 
@@ -5161,25 +5874,29 @@
    Learn (/learn) — curriculum catalog
    ============================================================================ */
 
+.learn-page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+/* Header pattern matches Logs / Projects / Settings — plain block with a
+   border-bottom underline. The old gradient + bordered card framing put the
+   hero content 32 px further inset than every other route's header, which is
+   why the page looked "padded differently" from the others. */
 .learn-hero {
     display: grid;
-    gap: var(--space-4);
-    padding: var(--space-5) var(--space-6);
-    margin-bottom: var(--space-5);
-    background:
-        radial-gradient(1200px 200px at 90% -10%, rgba(60, 130, 246, 0.15), transparent 60%),
-        linear-gradient(135deg, var(--surface-1) 0%, var(--surface-2) 100%);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-xl);
-    box-shadow: var(--shadow-1);
+    gap: var(--space-3);
+    padding-bottom: var(--space-3);
+    border-bottom: 1px solid var(--border-subtle);
 }
 
 .learn-hero__title {
-    font-size: clamp(1.6rem, 1.3rem + 1.6vw, 2.6rem);
+    font-size: var(--fs-2xl);
     font-weight: var(--fw-bold);
     letter-spacing: var(--tracking-tight);
     color: var(--text-strong);
-    margin: 0 0 var(--space-2);
+    margin: 0;
 }
 
 .learn-hero__subtitle {
@@ -5233,7 +5950,8 @@
 }
 
 .learn-track {
-    margin-bottom: var(--space-6);
+    /* margin-bottom intentionally absent — `.learn-page` uses flex `gap` to
+       space sibling tracks. */
 }
 
 .learn-track__header {
@@ -5744,6 +6462,65 @@
 }
 
 
+/* Make the FPGA chip behave like a button — pointer cursor + hover surface
+   shift — now that clicking it opens the TopBar FPGA picker. */
+.run-bar__fpga {
+    cursor: pointer;
+    border: 1px solid var(--border-subtle);
+    background: var(--surface-2);
+    transition: background-color var(--duration-fast) var(--ease-standard),
+                border-color var(--duration-fast) var(--ease-standard);
+}
+
+.run-bar__fpga:hover {
+    background: var(--surface-3);
+    border-color: var(--border-strong, var(--border-subtle));
+}
+
+.run-bar__fpga-chevron {
+    margin-left: 4px;
+    opacity: 0.6;
+    font-size: 0.75em;
+}
+
+/* Runs panel toolbar — sits above the list, hosts the Import action. */
+.runs-panel__toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.runs-panel__toolbar-spacer { flex: 1 1 auto; }
+
+.runs-panel__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 20px;
+    padding: 0 8px;
+    background-color: var(--surface-3);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    border-radius: var(--radius-pill);
+}
+
+/* The Import "button" is actually a label wrapping a hidden InputFile so the
+   browser's native picker opens on click. We re-style it to look identical to
+   a Bootstrap btn-ghost btn-sm. */
+.runs-panel__import {
+    cursor: pointer;
+    margin: 0;
+}
+
+.runs-panel__import:hover {
+    background-color: var(--surface-2);
+}
+
 /* Run-bar: flagged FPGA chip when nothing is selected. Uses the danger tone
    so the "this is why Build/Run are disabled" signal is unmistakable. */
 .run-bar__fpga--missing {
@@ -5760,14 +6537,6 @@
 
 /* Settings: custom FPGA + language cards */
 .settings-card--wide { grid-column: 1 / -1; }
-
-.settings-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-    margin-bottom: var(--space-3);
-}
 
 /* InputFile is invisible; its <label> is styled as the actual button and
    receives the click that opens the OS file picker. */
@@ -5822,6 +6591,631 @@
     padding: 1px var(--space-2);
     border-radius: 999px;
 }
+
+/* ─── Account / GitHub login (Settings) ─────────────────────────────
+   Almost everything in the Account card is now expressed in the
+   page's existing primitives — .settings-list__item for the profile
+   row, .settings-row for the toggle / form input pair,
+   .settings-card__actions for the buttons, .settings-card__note for
+   the privacy declaration. The styles below are the small additions
+   that don't fit those primitives.
+*/
+
+.settings-account__avatar {
+    border-radius: 50%;
+    flex-shrink: 0;
+    object-fit: cover;
+}
+
+/* Numbered setup steps. Same font / colour / spacing as a regular
+   .settings-card__hint paragraph — the <ol> just adds the visible
+   numbering. */
+.settings-account__setup-steps {
+    margin: 0 0 var(--space-2);
+    padding-left: var(--space-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    color: var(--text-default);
+    font-size: var(--fs-sm);
+}
+
+.settings-account__setup-steps a {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin-left: var(--space-1);
+    color: var(--kmila-accent);
+    font-family: var(--font-mono);
+    text-decoration: none;
+}
+
+.settings-account__setup-steps a:hover { text-decoration: underline; }
+
+/* Inline <details> disclosure for the "Change OAuth Client ID"
+   secondary action. Mirrors the .kmila-fpga-picker pattern — same
+   ChevronDown rotation on [open], same hidden ::marker, same
+   muted-summary visual rest state. */
+.settings-card__details {
+    margin-top: var(--space-3);
+    padding-top: var(--space-3);
+    border-top: 1px dashed var(--border-subtle);
+}
+
+.settings-card__details > summary {
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-medium);
+}
+
+.settings-card__details > summary::-webkit-details-marker { display: none; }
+.settings-card__details > summary::marker             { display: none; content: ""; }
+
+.settings-card__details > summary:hover {
+    color: var(--text-default);
+}
+
+.settings-card__details-chevron {
+    margin-left: var(--space-1);
+    transition: transform var(--duration-fast) var(--ease-standard);
+}
+
+.settings-card__details[open] .settings-card__details-chevron {
+    transform: rotate(180deg);
+}
+
+.settings-card__details > .settings-row,
+.settings-card__details > .settings-card__actions {
+    margin-top: var(--space-3);
+}
+
+/* TopBar account pill — small persistent chip mirroring the FPGA picker style.
+   Uses the [open]-gated panel pattern from .kmila-fpga-picker so the popover
+   stays hidden until the user clicks; otherwise the panel can render visibly
+   below the summary even with <details> closed (Safari is particularly lax).
+*/
+.kmila-account-pill {
+    position: relative;
+}
+
+.kmila-account-pill[open] > .kmila-account-pill__panel {
+    display: flex;
+}
+
+.kmila-account-pill__summary {
+    list-style: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background-color: var(--surface-3);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-pill);
+    color: var(--text-default);
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-medium);
+    line-height: 1.2;
+    max-width: 220px;
+    user-select: none;
+    transition: background-color var(--duration-fast) var(--ease-standard),
+                border-color var(--duration-fast) var(--ease-standard);
+}
+
+/* Hide the native disclosure triangle in every engine: WebKit-prefixed
+   marker for Safari, generic ::marker for Firefox + Chromium. */
+.kmila-account-pill__summary::-webkit-details-marker { display: none; }
+.kmila-account-pill__summary::marker             { display: none; content: ""; }
+
+.kmila-account-pill__summary:hover {
+    background-color: var(--surface-2);
+    border-color: var(--border-default);
+}
+
+.kmila-account-pill[open] .kmila-account-pill__summary {
+    border-color: var(--kmila-accent);
+    box-shadow: var(--shadow-focus);
+}
+
+.kmila-account-pill__avatar {
+    border-radius: 50%;
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    object-fit: cover;
+}
+
+.kmila-account-pill__avatar--large {
+    width: 40px;
+    height: 40px;
+    border: 2px solid var(--border-subtle);
+}
+
+.kmila-account-pill__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 140px;
+    font-weight: var(--fw-semibold);
+}
+
+/* Panel — hidden by default; [open] flips it to flex above. */
+.kmila-account-pill__panel {
+    display: none;
+    position: absolute;
+    top: calc(100% + var(--space-2));
+    right: 0;
+    left: auto;
+    z-index: 100;
+    width: min(320px, 90vw);
+    padding: var(--space-3);
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-2);
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+[dir="rtl"] .kmila-account-pill__panel {
+    right: auto;
+    left: 0;
+}
+
+.kmila-account-pill__head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.kmila-account-pill__head-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.kmila-account-pill__head-text strong { color: var(--text-strong); }
+
+.kmila-account-pill__head-text small {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+}
+
+.kmila-account-pill__action {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--text-default);
+    font-size: var(--fs-sm);
+    cursor: pointer;
+    text-align: left;
+}
+
+.kmila-account-pill__action:hover { background-color: var(--surface-1); }
+
+.kmila-account-pill__action--primary {
+    background-color: var(--kmila-accent);
+    border-color: var(--kmila-accent);
+    color: #ffffff;
+}
+
+.kmila-account-pill__action--primary:hover {
+    background-color: var(--kmila-accent);
+    filter: brightness(1.05);
+}
+
+.kmila-account-pill__action--danger {
+    color: var(--danger);
+}
+
+.kmila-account-pill__hint,
+.kmila-account-pill__privacy {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
+    line-height: var(--lh-snug);
+}
+
+.kmila-account-pill__privacy {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-1);
+    padding-top: var(--space-2);
+    border-top: 1px solid var(--border-subtle);
+}
+
+/* ============================================================================
+   ProfileMenu — consolidated TopBar dropdown that replaced the four separate
+   pills (account, FPGA, language, theme). Inherits the visual language of
+   .kmila-account-pill but with a wider panel that hosts grouped sections.
+   ============================================================================ */
+
+.kmila-profile-menu {
+    position: relative;
+}
+
+.kmila-profile-menu[open] > .kmila-profile-menu__panel {
+    display: flex;
+}
+
+.kmila-profile-menu__summary {
+    list-style: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 4px 8px 4px 4px;
+    background-color: var(--surface-3);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-pill);
+    color: var(--text-default);
+    font-size: var(--fs-sm);
+    line-height: 1.2;
+    user-select: none;
+    transition: background-color var(--duration-fast) var(--ease-standard),
+                border-color var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-profile-menu__summary::-webkit-details-marker { display: none; }
+.kmila-profile-menu__summary::marker             { display: none; content: ""; }
+
+.kmila-profile-menu__summary:hover {
+    background-color: var(--surface-2);
+    border-color: var(--border-default);
+}
+
+.kmila-profile-menu[open] > .kmila-profile-menu__summary {
+    border-color: var(--kmila-accent);
+    box-shadow: var(--shadow-focus);
+}
+
+.kmila-profile-menu__avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    object-fit: cover;
+}
+
+.kmila-profile-menu__avatar--large {
+    width: 44px;
+    height: 44px;
+    border: 2px solid var(--border-subtle);
+}
+
+/* Generic-person fallback when there's no GitHub avatar. */
+.kmila-profile-menu__avatar--placeholder {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--surface-3);
+    color: var(--text-muted);
+    border: 1px solid var(--border-subtle);
+}
+
+.kmila-profile-menu__chevron {
+    color: var(--text-muted);
+    font-size: 0.75em;
+}
+
+/* Panel — hidden by default; [open] flips it to flex above. Wider than the
+   old account-pill panel since it hosts FPGA + language + theme + actions. */
+.kmila-profile-menu__panel {
+    display: none;
+    position: absolute;
+    top: calc(100% + var(--space-2));
+    right: 0;
+    left: auto;
+    z-index: 100;
+    width: min(360px, 92vw);
+    padding: var(--space-3);
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-2);
+    flex-direction: column;
+    gap: var(--space-3);
+    max-height: min(80vh, 720px);
+    overflow-y: auto;
+}
+
+[dir="rtl"] .kmila-profile-menu__panel {
+    right: auto;
+    left: 0;
+}
+
+.kmila-profile-menu__head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding-bottom: var(--space-3);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.kmila-profile-menu__head-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.kmila-profile-menu__head-text strong { color: var(--text-strong); }
+
+.kmila-profile-menu__head-text small {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+}
+
+/* Section block — shared by FPGA / language / theme / actions. */
+.kmila-profile-menu__section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding-top: var(--space-2);
+    border-top: 1px solid transparent;
+}
+
+.kmila-profile-menu__section + .kmila-profile-menu__section {
+    border-top-color: var(--border-subtle);
+}
+
+.kmila-profile-menu__section--actions {
+    gap: 4px;
+}
+
+.kmila-profile-menu__section-head {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* Inline FPGA picker — same .kmila-fpga-picker rules apply but the inline
+   variant fits inside the profile panel (no fixed positioning). */
+.kmila-fpga-picker--inline { position: relative; }
+
+.kmila-fpga-picker__panel--inline {
+    position: static;
+    width: 100%;
+    margin-top: var(--space-2);
+    box-shadow: none;
+    border: 1px solid var(--border-subtle);
+}
+
+/* Language grid — 3-or-4 column layout depending on width. */
+.kmila-profile-menu__lang-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+    gap: 4px;
+}
+
+.kmila-profile-menu__lang-chip {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 4px;
+    background: var(--surface-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: var(--fs-xs);
+    color: var(--text-default);
+    transition: background-color var(--duration-fast) var(--ease-standard),
+                border-color var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-profile-menu__lang-chip:hover {
+    background: var(--surface-3);
+    border-color: var(--border-default);
+}
+
+.kmila-profile-menu__lang-chip.is-active {
+    border-color: var(--kmila-accent);
+    background: var(--kmila-accent-soft);
+    color: var(--text-strong);
+}
+
+.kmila-profile-menu__lang-code {
+    font-family: var(--font-mono);
+    font-weight: var(--fw-bold);
+    font-size: var(--fs-xs);
+    letter-spacing: 0.04em;
+}
+
+.kmila-profile-menu__lang-native {
+    color: var(--text-muted);
+    font-size: 11px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.kmila-profile-menu__lang-chip.is-active .kmila-profile-menu__lang-native {
+    color: var(--text-default);
+}
+
+/* Theme — 3 buttons in a row, evenly spaced. */
+.kmila-profile-menu__theme-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+}
+
+.kmila-profile-menu__theme-btn {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 4px;
+    background: var(--surface-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: var(--fs-xs);
+    color: var(--text-default);
+    transition: background-color var(--duration-fast) var(--ease-standard),
+                border-color var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-profile-menu__theme-btn:hover {
+    background: var(--surface-3);
+    border-color: var(--border-default);
+}
+
+.kmila-profile-menu__theme-btn.is-active {
+    border-color: var(--kmila-accent);
+    background: var(--kmila-accent-soft);
+    color: var(--text-strong);
+}
+
+/* Action rows — Settings, Sign in, Sign out. */
+.kmila-profile-menu__action {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--text-default);
+    font-size: var(--fs-sm);
+    cursor: pointer;
+    text-align: left;
+}
+
+.kmila-profile-menu__action:hover { background-color: var(--surface-1); }
+
+.kmila-profile-menu__action--primary {
+    background-color: var(--kmila-accent);
+    border-color: var(--kmila-accent);
+    color: #ffffff;
+}
+
+.kmila-profile-menu__action--primary:hover {
+    background-color: var(--kmila-accent);
+    filter: brightness(1.05);
+}
+
+.kmila-profile-menu__action--danger { color: var(--danger); }
+
+
+/* Device-flow modal layout. */
+.github-login__intro {
+    margin: 0 0 var(--space-3);
+    color: var(--text-muted);
+}
+
+.github-login__steps {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.github-login__step {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    background-color: var(--surface-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+}
+
+.github-login__step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    background-color: var(--kmila-accent);
+    color: #ffffff;
+    border-radius: 50%;
+    font-weight: var(--fw-bold);
+}
+
+.github-login__step-title {
+    font-weight: var(--fw-semibold);
+    color: var(--text-strong);
+    margin-bottom: var(--space-1);
+}
+
+.github-login__verification-link {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+    color: var(--kmila-accent);
+}
+
+.github-login__code-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.github-login__code {
+    font-family: var(--font-mono);
+    font-size: var(--fs-xl);
+    font-weight: var(--fw-bold);
+    letter-spacing: var(--tracking-wide);
+    padding: var(--space-1) var(--space-3);
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--text-strong);
+    user-select: all;
+}
+
+.github-login__waiting {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+}
+
+.github-login__loading {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-4);
+    color: var(--text-muted);
+}
+
+.github-login__privacy {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    margin: var(--space-3) 0 0;
+    padding: var(--space-2) var(--space-3);
+    background-color: rgba(60, 130, 246, 0.06);
+    border: 1px dashed rgba(60, 130, 246, 0.3);
+    border-radius: var(--radius-md);
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
+}
+
 
 .settings-card__note {
     display: flex;
@@ -6238,6 +7632,16 @@
     background-color: var(--surface-2);
     border-bottom: 1px solid var(--border-subtle);
     min-height: 44px;
+    /* Pin to the top of the dock panel's scroll viewport so the zoom /
+       compare / export controls stay reachable when the signal list is
+       long enough to require scrolling. The panel (.kmila-dock__panel)
+       is the actual vertical-scroll container; the toolbar's surface
+       colour is already opaque, so signal rows scrolling underneath it
+       remain hidden. z-index keeps it above the SVG strokes that would
+       otherwise paint over its bottom border on some browsers. */
+    position: sticky;
+    top: 0;
+    z-index: 2;
 }
 
 .waveform-viewer__title {
@@ -6692,6 +8096,167 @@
 }
 
 
+/* ----------------------------------------------------------------------------
+   EditorTabStrip — VS Code style tab bar above Monaco
+   ----------------------------------------------------------------------------
+   Colour-treatment matches FilesCard (same per-extension variants) so a tab
+   reads as the same "thing" as its file-list row. Active tab has the dock-
+   accent underline; dirty tabs swap the close × for a filled dot until you
+   hover, mirroring the VS Code "don't lose work to a stray click" pattern.
+*/
+
+.editor-tabs {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    background-color: var(--surface-2);
+    border-bottom: 1px solid var(--border-subtle);
+    /* Hide the scrollbar by default; reveal on hover so wide tab strips
+       don't add a permanent grey bar at the top of the editor. */
+    scrollbar-width: thin;
+}
+
+.editor-tab {
+    --et-fg: var(--text-muted);
+    --et-bg: transparent;
+    --et-bg-hover: var(--surface-1);
+    --et-bg-active: var(--surface-0);
+    --et-accent: var(--text-muted);
+
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-shrink: 0;
+    padding: var(--space-2) var(--space-3);
+    background: var(--et-bg);
+    border: none;
+    border-right: 1px solid var(--border-subtle);
+    color: var(--et-fg);
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+    cursor: pointer;
+    transition: background-color var(--duration-fast) var(--ease-standard),
+                color var(--duration-fast) var(--ease-standard);
+    /* Drag preview shadow stays subtle; we already get a translucent ghost
+       from the browser. */
+    user-select: none;
+}
+
+.editor-tab:hover {
+    background-color: var(--et-bg-hover);
+    color: var(--text-strong);
+}
+
+.editor-tab.is-active {
+    background-color: var(--et-bg-active);
+    color: var(--text-strong);
+}
+
+/* Accent underline on the active tab — uses the same accent the variant
+   classes pick. Sits at the bottom edge so it doesn't shift the row. */
+.editor-tab.is-active::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2px;
+    background-color: var(--et-accent);
+}
+
+/* Drop-target highlight while a drag is over a sibling tab. Subtle inset
+   ring keeps it visible without the busy "ghost insertion bar" some other
+   editors use. */
+.editor-tab.is-drop-target {
+    box-shadow: inset 0 0 0 2px var(--kmila-accent);
+}
+
+/* Variant tints — matching FilesCard's file-row variants by mapping the
+   same accent token to --et-accent. */
+.editor-tab--vhdl     { --et-accent: var(--kmila-accent); }
+.editor-tab--markdown { --et-accent: #06b6d4; }
+.editor-tab--text     { --et-accent: var(--text-muted); }
+.editor-tab--json     { --et-accent: var(--warning); }
+.editor-tab--xml      { --et-accent: #a855f7; }
+.editor-tab--other    { --et-accent: var(--text-muted); }
+
+.editor-tab__icon {
+    display: inline-flex;
+    align-items: center;
+    color: var(--et-accent);
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.editor-tab__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 220px;
+}
+
+/* Dirty dot — replaces the close button until the user hovers. */
+.editor-tab__dirty-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--warning);
+    flex-shrink: 0;
+}
+
+/* The close × shares its slot with the dirty dot. We always render the
+   wrapper; visibility flips based on hover + dirty state. */
+.editor-tab__close-wrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+}
+
+.editor-tab__close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity var(--duration-fast) var(--ease-standard),
+                background-color var(--duration-fast) var(--ease-standard);
+}
+
+.editor-tab__close:hover {
+    background-color: var(--surface-3);
+    color: var(--text-strong);
+}
+
+/* Reveal × on tab hover. For dirty tabs we keep the dot until the user
+   moves over the tab — then the × overlays the dot to give them an
+   intentional close target. */
+.editor-tab:hover .editor-tab__close,
+.editor-tab.is-active .editor-tab__close {
+    opacity: 1;
+}
+
+.editor-tab.is-dirty:not(:hover) .editor-tab__close {
+    opacity: 0;
+}
+
+.editor-tab.is-dirty:hover .editor-tab__dirty-dot,
+.editor-tab.is-dirty.is-active .editor-tab__dirty-dot {
+    display: none;
+}
+
+
 /* Editor dock: custom height via --kmila-dock-height CSS variable set by
    the Razor side. Grabber sits on the top edge and provides a north-south
    cursor; its :hover + :active pull out a subtle accent bar so the affordance
@@ -6975,3 +8540,885 @@
 
 /* RTL: action row flips so primary button stays on the trailing edge. */
 [dir="rtl"] .kmila-reconnect__actions { justify-content: flex-start; }
+
+
+/* ============================================================================
+   MOBILE UX OVERHAUL  —  appended block
+   ============================================================================
+   Single consolidated section that addresses the mobile audit findings:
+     • Touch targets ≥44px globally (within tap-target media)
+     • Editor tab strip: scroll snap + gradient overflow indicators
+     • Pointer-drag tab visuals: ghost + drop target highlight
+     • Dock grabber: enlarged hit zone + touch-action
+     • Dock as bottom-sheet on mobile (peek/half/full snap classes)
+     • Schematic + Waveform: pan/zoom cursor cues + responsive info panel
+     • Modals: full-bleed + sticky footer below 640px
+     • PortMomentInput: card-stack layout under 480px
+     • TopBar: condensed two-row layout option below 640px
+     • Settings rows: stacked controls below 640px
+     • Markdown / Lesson code blocks: horizontal scroll containment
+     • Logs: ellipsis on entries
+     • Focus mode: hide chrome when data-kmila-focus is set
+     • Hover-only effects: gated behind @media (hover: hover) where critical
+   ============================================================================ */
+
+
+/* ── Pointer-drag ghost (rendered into <body>) ───────────────────────────── */
+.kmila-tab-ghost {
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-select: none;
+    will-change: transform;
+}
+
+/* The tab actively being dragged loses its visual presence in the strip
+   (the ghost takes over). Keeping width prevents reflow during the drag. */
+.editor-tab.is-being-dragged {
+    opacity: 0.35;
+    filter: grayscale(0.5);
+}
+
+/* Drop-target ring lives in JS via DOM class mutation; we declare it here. */
+.editor-tab.is-drop-target {
+    outline: 2px dashed var(--kmila-accent);
+    outline-offset: -2px;
+    background-color: var(--kmila-accent-soft);
+}
+
+
+/* ── Editor tabs: scroll snap + overflow gradients ───────────────────────── */
+.editor-tabs {
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x proximity;
+    /* On touch we want the strip to scroll horizontally, not the page. */
+    touch-action: pan-x;
+    /* Subtle gradient masks at the strip edges hint at off-screen tabs. */
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 16px, #000 calc(100% - 16px), transparent 100%);
+            mask-image: linear-gradient(to right, transparent 0, #000 16px, #000 calc(100% - 16px), transparent 100%);
+}
+.editor-tab {
+    scroll-snap-align: start;
+    /* A drag must be a drag, not a scroll start. */
+    touch-action: none;
+}
+.editor-tab__close {
+    /* Touch target ≥44px. Keep visual square smaller via the inner icon. */
+    min-width: 44px;
+    min-height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+@media (max-width: 768px) {
+    .editor-tab__close { min-height: 44px; }
+}
+
+
+/* ── Dock grabber: bigger hit zone + drag affordance ─────────────────────── */
+.kmila-dock__grabber {
+    /* Visual handle stays slim, but the hit area is doubled via padding. */
+    position: relative;
+    height: 6px;
+    cursor: ns-resize;
+    touch-action: none;
+    background: transparent;
+    flex-shrink: 0;
+}
+.kmila-dock__grabber::before {
+    /* Invisible enlarged tap target — vertical, full-width, +14px each side. */
+    content: "";
+    position: absolute;
+    inset: -14px 0;
+    z-index: 1;
+}
+.kmila-dock__grabber::after {
+    /* The visible drag pill — sized for thumbs on mobile. */
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 44px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--border-strong);
+    transition: background-color var(--duration-fast) var(--ease-standard),
+                width var(--duration-fast) var(--ease-standard);
+}
+.kmila-dock__grabber:hover::after,
+.kmila-dock__grabber:active::after {
+    background: var(--kmila-accent);
+    width: 56px;
+}
+
+
+/* ── Dock as bottom-sheet on mobile ──────────────────────────────────────── */
+@media (max-width: 768px) {
+    .kmila-dock {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: var(--z-drawer);
+        box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.18);
+        border-top-left-radius: var(--radius-lg);
+        border-top-right-radius: var(--radius-lg);
+        max-height: 90dvh;
+        transition: height var(--duration-base) var(--ease-standard);
+    }
+    .kmila-dock--snap-peek    { height: 18dvh !important; }
+    .kmila-dock--snap-peek .kmila-dock__panel { display: none; }
+    .kmila-dock--snap-half    { height: 50dvh !important; }
+    .kmila-dock--snap-full    { height: 88dvh !important; }
+    .kmila-dock--collapsed    { height: 64px !important; }
+
+    /* Make room at the bottom of the editor area so the dock doesn't cover
+       the last lines of code when the bottom-sheet is in peek/half. The
+       editor handles its own padding-bottom via this CSS variable. */
+    .kmila-shell__main {
+        --kmila-dock-spacer: 18dvh;
+        padding-bottom: var(--kmila-dock-spacer);
+    }
+    .kmila-dock--snap-half ~ .kmila-shell__main,
+    body:has(.kmila-dock--snap-half) .kmila-shell__main { --kmila-dock-spacer: 50dvh; }
+    body:has(.kmila-dock--snap-full) .kmila-shell__main { --kmila-dock-spacer: 88dvh; }
+    body:has(.kmila-dock--collapsed) .kmila-shell__main { --kmila-dock-spacer: 64px; }
+}
+
+/* Beefier dock tab icons + tap targets on mobile */
+@media (max-width: 640.98px) {
+    .kmila-dock__tab {
+        min-width: 56px;
+        min-height: 48px;
+        padding: var(--space-2);
+    }
+    .kmila-dock__tabs {
+        scroll-snap-type: x proximity;
+        scrollbar-width: thin; /* re-enable on mobile to hint at overflow */
+    }
+    .kmila-dock__tabs::-webkit-scrollbar { display: block; height: 3px; }
+    .kmila-dock__tabs::-webkit-scrollbar-thumb {
+        background: var(--border-strong);
+        border-radius: 999px;
+    }
+    .kmila-dock__collapse {
+        min-width: 44px;
+        min-height: 44px;
+    }
+}
+
+
+/* ── Schematic / Waveform: gesture cues + responsive info ────────────────── */
+.schematic-viewer__body,
+.waveform-viewer__body {
+    /* Pointer events handle the drag; native scroll competes otherwise. */
+    touch-action: none;
+    cursor: grab;
+}
+.schematic-viewer__body:active,
+.waveform-viewer__body:active { cursor: grabbing; }
+
+/* Hover-only feedback in the schematic stays for desktop, but on touch we
+   move it to the active state so taps still get visual confirmation. */
+@media (hover: none) {
+    .schematic-cell:hover > path:first-child,
+    .schematic-wire:hover {
+        stroke: inherit;
+    }
+    .schematic-cell:active > path:first-child {
+        stroke: var(--schematic-select);
+    }
+    .schematic-wire:active {
+        stroke: var(--schematic-select);
+    }
+}
+
+/* Info panel reflows to a bottom sheet style on phones so it doesn't fight
+   the gesture surface for the upper-right corner. */
+@media (max-width: 640.98px) {
+    .schematic-info {
+        position: absolute;
+        top: auto !important;
+        right: 0 !important;
+        left: 0 !important;
+        bottom: 0 !important;
+        width: auto !important;
+        max-height: 50dvh;
+        border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+        box-shadow: 0 -6px 18px rgba(15, 23, 42, 0.25);
+    }
+    .schematic-basket {
+        bottom: 56dvh;
+    }
+    /* Toolbar wraps generously and chip groups shrink fonts. */
+    .schematic-viewer__toolbar { gap: var(--space-2); }
+    .schematic-viewer__modes { margin-left: 0; flex-wrap: wrap; }
+    .schematic-mode { padding: 0.4rem 0.6rem; }
+    .schematic-mode span { display: none; } /* icons-only on phones */
+    .waveform-viewer__actions { flex-wrap: wrap; gap: 0.25rem; }
+}
+
+
+/* ── PortMomentInput: card-stack layout on phones ─────────────────────────── */
+@media (max-width: 520px) {
+    .port-moment__grid-head { display: none !important; }
+    .port-moment__row {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr auto !important;
+        grid-template-areas:
+            "time scale remove"
+            "value value remove";
+        gap: var(--space-2);
+        padding: var(--space-3);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        background-color: var(--surface-2);
+    }
+    .port-moment__time      { grid-area: time; }
+    .port-moment__scale     { grid-area: scale; }
+    .port-moment__value-wrap { grid-area: value; }
+    .port-moment__remove {
+        grid-area: remove;
+        align-self: start;
+        min-width: 44px !important;
+        min-height: 44px !important;
+    }
+    .port-moment__moments { gap: var(--space-3); display: flex; flex-direction: column; }
+}
+
+
+/* ── Tap targets ≥44px globally on phones ─────────────────────────────────── */
+@media (max-width: 640.98px) {
+    .btn-sm,
+    .btn-group-sm > .btn,
+    .form-control-sm,
+    .form-select-sm {
+        min-height: 40px;
+        font-size: var(--fs-sm);
+    }
+    /* Trash / icon-only ghost buttons keep a comfortable tap area. */
+    .btn-ghost.btn-sm,
+    .btn.btn-sm.kmila-icon-only,
+    .kmila-nav-item__action {
+        min-width: 44px;
+        min-height: 44px;
+        padding: 0.4rem 0.6rem;
+    }
+    /* Custom radios/checkboxes used in export modals get a wrapping label
+       with a roomier tap area without changing the visual indicator size. */
+    .kmila-export-scope__opt,
+    .kmila-export-check {
+        padding-block: 0.5rem;
+    }
+    .kmila-export-scope__opt input[type="radio"],
+    .kmila-export-check input[type="checkbox"] {
+        width: 22px;
+        height: 22px;
+    }
+}
+
+
+/* ── TopBar: condensed two-row option on narrow viewports ─────────────────── */
+@media (max-width: 640.98px) {
+    .kmila-topbar__inner {
+        flex-wrap: wrap;
+        row-gap: var(--space-2);
+        padding: var(--space-2) var(--space-3);
+    }
+    .kmila-topbar__start {
+        flex: 1 1 100%;
+        order: 1;
+    }
+    .kmila-topbar__end {
+        flex: 1 1 100%;
+        order: 2;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+    }
+    /* Account pill collapses to icon-only on the narrowest viewports. */
+    .kmila-account-pill__name { display: none; }
+    .kmila-fpga-picker__summary { padding: 0.4rem 0.6rem; }
+}
+@media (max-width: 480px) {
+    /* Hide secondary controls on the narrowest phones; they remain reachable
+       through the main menu / settings page. */
+    .kmila-topbar__end > .kmila-account-pill { display: none; }
+}
+
+
+/* ── Modals: full-bleed + sticky footer on phones ─────────────────────────── */
+@media (max-width: 640.98px) {
+    .modal-dialog {
+        margin: 0 !important;
+        max-width: 100% !important;
+        height: 100dvh !important;
+    }
+    .modal-content {
+        height: 100% !important;
+        border-radius: 0 !important;
+        border: none !important;
+    }
+    .modal-body {
+        overflow-y: auto;
+        flex: 1 1 auto;
+        padding: var(--space-4) !important;
+    }
+    .modal-footer {
+        position: sticky;
+        bottom: 0;
+        background-color: var(--surface-2);
+        z-index: 1;
+        flex-direction: column-reverse !important;
+        align-items: stretch !important;
+        gap: var(--space-2);
+        padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+    }
+    .modal-footer .btn {
+        width: 100%;
+        min-height: 44px;
+    }
+    /* The export modal already stacks; this just reinforces. */
+    .kmila-export-form { max-height: none !important; }
+}
+
+
+/* ── Settings rows: stacked controls on phones ────────────────────────────── */
+@media (max-width: 640.98px) {
+    .settings-row {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: var(--space-2);
+    }
+    .settings-row__control {
+        width: 100% !important;
+    }
+    .settings-row__control > .form-select,
+    .settings-row__control > .form-control {
+        width: 100% !important;
+        min-height: 44px;
+    }
+    .settings-card {
+        padding: var(--space-4);
+    }
+}
+
+
+/* ── Markdown / Lesson: horizontal-scroll containment ─────────────────────── */
+.lesson-markdown pre,
+.markdown-content pre {
+    overflow-x: auto;
+    max-width: 100%;
+    -webkit-overflow-scrolling: touch;
+}
+.lesson-markdown table,
+.markdown-content table {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+.lesson-markdown img,
+.markdown-content img {
+    max-width: 100%;
+    height: auto;
+}
+@media (max-width: 575.98px) {
+    .lesson-markdown { font-size: var(--fs-sm); }
+    .lesson-markdown pre,
+    .markdown-content pre {
+        font-size: 0.8rem;
+        padding: var(--space-3);
+    }
+    .lesson-crumb {
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .lesson-chip-row {
+        flex-wrap: wrap;
+        gap: var(--space-1);
+    }
+}
+
+
+/* ── Logs: ellipsis on long entries ───────────────────────────────────────── */
+@media (max-width: 640.98px) {
+    .logs-page__list .output-row {
+        align-items: flex-start;
+    }
+    .logs-page__list .output-row > * {
+        min-width: 0;
+    }
+    .logs-page__list .output-row .output-row__msg,
+    .logs-row__category {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    /* Tap a row to expand it (the row uses `.is-expanded` toggled by JS or
+       a future :has-based interaction; the rule sets the expanded state). */
+    .logs-page__list .output-row.is-expanded .output-row__msg {
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+    .logs-page__search,
+    .logs-page__level {
+        flex: 1 1 100%;
+        max-width: 100%;
+    }
+}
+
+
+/* ── Focus mode (mobile) — hides chrome to give Monaco the screen ─────────── */
+html[data-kmila-focus="1"] .kmila-topbar,
+html[data-kmila-focus="1"] .kmila-sidebar,
+html[data-kmila-focus="1"] .kmila-sidebar__backdrop,
+html[data-kmila-focus="1"] .kmila-dock {
+    display: none !important;
+}
+html[data-kmila-focus="1"] .kmila-shell {
+    grid-template-columns: 1fr !important;
+}
+html[data-kmila-focus="1"] .content {
+    padding: 0 !important;
+    max-width: none !important;
+}
+html[data-kmila-focus="1"] .monaco-editor-container,
+html[data-kmila-focus="1"] #editor {
+    height: 100dvh !important;
+    border-radius: 0 !important;
+}
+
+.kmila-focus-toggle {
+    position: fixed;
+    bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+    right: calc(var(--space-3) + env(safe-area-inset-right, 0px));
+    z-index: var(--z-popover);
+    width: 48px;
+    height: 48px;
+    border-radius: 999px;
+    border: 1px solid var(--border-default);
+    background-color: var(--surface-2);
+    color: var(--text-strong);
+    box-shadow: var(--shadow-2);
+    display: none; /* opt-in via JS / Editor.razor when on mobile */
+}
+@media (max-width: 768px) {
+    .kmila-focus-toggle.is-available { display: inline-flex; align-items: center; justify-content: center; }
+}
+
+
+/* ── ConfigurationsPill list: roomier delete button ───────────────────────── */
+@media (max-width: 640.98px) {
+    .kmila-config-pill__panel {
+        width: min(360px, 92vw);
+        max-width: 92vw;
+    }
+    .kmila-config-pill__panel .btn-group-sm > .btn {
+        min-width: 44px;
+        min-height: 44px;
+    }
+}
+
+
+/* ── Disable hover-only transforms on touch ───────────────────────────────── */
+@media (hover: none) {
+    .card.card-interactive:hover,
+    .card.card-hoverable:hover,
+    .project-card:hover,
+    .learn-card:hover {
+        transform: none !important;
+    }
+}
+
+
+/* ── Honor safe-area-inset on bottom drawer / sticky footers ──────────────── */
+.kmila-dock {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+
+/* ============================================================================
+   Practice (/practice and /practice/{id})
+   ----------------------------------------------------------------------------
+   The catalog (/practice) keeps the standard `.lesson-page` reading-column
+   width — it's a cards grid like `/learn`. The exercise workbench
+   (/practice/{id}) instead mirrors the Editor: full content width, flex
+   column, no narrow cap, so the two-pane layout (statement | editor) has
+   room to breathe on wide viewports.
+   ============================================================================ */
+
+.practice-view {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+    min-width: 0;
+}
+
+.practice-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    gap: var(--space-5);
+    align-items: stretch;
+}
+
+@media (max-width: 1024px) {
+    .practice-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+.practice-pane {
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-1);
+    padding: var(--space-4);
+    min-width: 0;
+}
+
+.practice-pane--brief {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+.practice-pane--editor {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: 0;
+    overflow: hidden;
+}
+
+.practice-editor-frame {
+    flex: 1 1 auto;
+    min-height: 420px;
+    height: 60vh;
+    max-height: 720px;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+}
+
+.practice-monaco {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.practice-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    background-color: var(--surface-1);
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.practice-actions__submit {
+    margin-left: auto;
+}
+
+.practice-section-title {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--fs-base);
+    font-weight: var(--fw-semibold);
+    color: var(--text-strong);
+    margin: var(--space-3) 0 var(--space-2) 0;
+}
+
+.practice-testcase {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    background-color: var(--surface-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+}
+
+.practice-testcase__desc {
+    color: var(--text-muted);
+    margin: 0;
+}
+
+.practice-testcase__hidden {
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+    font-style: italic;
+    margin: 0;
+}
+
+.practice-test-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--fs-sm);
+}
+
+.practice-test-table th,
+.practice-test-table td {
+    padding: var(--space-1) var(--space-2);
+    border-bottom: 1px solid var(--border-subtle);
+    text-align: left;
+}
+
+.practice-test-table th {
+    color: var(--text-muted);
+    font-weight: var(--fw-semibold);
+    font-size: var(--fs-2xs);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+}
+
+.practice-test-table tr:last-child td {
+    border-bottom: 0;
+}
+
+.practice-verdict {
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-subtle);
+    padding: var(--space-3);
+    background-color: var(--surface-1);
+}
+
+.practice-verdict--ok    { border-color: var(--success); }
+.practice-verdict--wa    { border-color: var(--warning); }
+.practice-verdict--build { border-color: var(--danger); }
+.practice-verdict--rt    { border-color: var(--danger); }
+.practice-verdict--to    { border-color: var(--warning); }
+
+.practice-verdict__head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-bottom: var(--space-2);
+}
+
+.practice-verdict__time {
+    margin-left: auto;
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+    font-family: var(--font-mono);
+}
+
+.practice-verdict__build-error {
+    margin: var(--space-2) 0;
+    padding: var(--space-2);
+    background-color: var(--surface-2);
+    border-radius: var(--radius-sm);
+}
+
+.practice-verdict__build-error pre {
+    margin: var(--space-2) 0 0 0;
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.practice-verdict__tests {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.practice-verdict__tests li {
+    display: grid;
+    grid-template-columns: auto auto 1fr auto;
+    gap: var(--space-2);
+    align-items: center;
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface-2);
+    font-size: var(--fs-sm);
+}
+
+.practice-verdict__tests li.ok    { border-left: 3px solid var(--success); }
+.practice-verdict__tests li.ko    { border-left: 3px solid var(--danger); }
+
+.practice-verdict__tests .t-name { font-family: var(--font-mono); }
+.practice-verdict__tests .t-desc {
+    margin-left: var(--space-1);
+    color: var(--text-muted);
+    font-family: var(--font-sans);
+}
+.practice-verdict__tests .t-detail {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.practice-verdict__tests .t-arrow {
+    margin: 0 var(--space-1);
+    color: var(--danger);
+}
+.practice-verdict__tests .t-actual { color: var(--danger); }
+.practice-verdict__tests .t-expected { color: var(--success); }
+.practice-verdict__tests .t-time {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--fs-2xs);
+}
+
+.practice-reveal {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.practice-test-reveal {
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background-color: var(--surface-1);
+    padding: var(--space-2) var(--space-3);
+}
+
+.practice-test-reveal summary {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    cursor: pointer;
+    font-weight: var(--fw-semibold);
+    list-style: none;
+}
+
+.practice-test-reveal[open] summary {
+    margin-bottom: var(--space-2);
+}
+
+/* ── Monaco region lock for M3 (FillGap) ───────────────────────────────────
+   Only the BEGIN_EDIT/END_EDIT block is graded — see PracticeEvaluator.
+   These classes are applied as Monaco line decorations from
+   window.kmilaPracticeApplyLock. The look is purely a hint: server-side
+   the splicing always wins regardless of what the user types.            */
+
+.practice-monaco--locked {
+    background-color: color-mix(in srgb, var(--surface-3, #888) 18%, transparent);
+    opacity: 0.78;
+}
+
+.practice-monaco--editable {
+    background-color: color-mix(in srgb, var(--kmila-accent, #4f8cff) 12%, transparent);
+    box-shadow: inset 3px 0 0 var(--kmila-accent, #4f8cff);
+}
+
+/* ── Past-attempts viewer ───────────────────────────────────────────────── */
+
+.practice-history {
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background-color: var(--surface-1);
+    padding: var(--space-2) var(--space-3);
+}
+
+.practice-history > summary {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+    list-style: none;
+}
+
+.practice-history[open] > summary {
+    margin-bottom: var(--space-2);
+    color: var(--text-strong);
+}
+
+.practice-history__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.practice-history__item {
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    gap: var(--space-2);
+    align-items: center;
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface-2);
+    font-size: var(--fs-sm);
+}
+
+.practice-history__item--ok    { border-left: 3px solid var(--success); }
+.practice-history__item--wa    { border-left: 3px solid var(--warning); }
+.practice-history__item--build { border-left: 3px solid var(--danger); }
+.practice-history__item--rt    { border-left: 3px solid var(--danger); }
+.practice-history__item--to    { border-left: 3px solid var(--warning); }
+
+.practice-history__when {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+}
+
+.practice-history__verdict {
+    font-weight: var(--fw-semibold);
+}
+
+.practice-history__time {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+}
+
+.practice-history__load {
+    --bs-btn-padding-x: var(--space-2);
+    --bs-btn-padding-y: 2px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* ── Catalog status chips ──────────────────────────────────────────────── */
+
+.practice-status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px var(--space-2);
+    border-radius: 999px;
+    font-size: var(--fs-2xs);
+    font-weight: var(--fw-semibold);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    border: 1px solid transparent;
+}
+
+.practice-status-chip--ok {
+    background-color: color-mix(in srgb, var(--success) 15%, transparent);
+    color: var(--success);
+    border-color: color-mix(in srgb, var(--success) 35%, transparent);
+}
+
+.practice-status-chip--wip {
+    background-color: color-mix(in srgb, var(--warning) 15%, transparent);
+    color: var(--warning);
+    border-color: color-mix(in srgb, var(--warning) 35%, transparent);
+}
+
+.practice-status-chip--todo {
+    background-color: var(--surface-2);
+    color: var(--text-muted);
+    border-color: var(--border-subtle);
+}

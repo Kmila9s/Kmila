@@ -21,10 +21,19 @@ public class BuildLog
     private readonly List<LogEntry> _entries = new();
     private const int MaxEntries = 500;
 
+    /// <summary>Read-only view of the captured entries, oldest first.</summary>
     public IReadOnlyList<LogEntry> Entries => _entries;
 
+    /// <summary>Fires after every <see cref="Add"/> or <see cref="Clear"/> so the Output dock can re-render.</summary>
     public event Action? OnChange;
 
+    /// <summary>
+    /// Appends a new entry timestamped at <see cref="DateTime.Now"/>. The buffer is
+    /// bounded — once it exceeds 500 entries the oldest 50 are dropped in one
+    /// shift so reallocation is rare.
+    /// </summary>
+    /// <param name="level">Severity bucket used by the Output tab to colour the row.</param>
+    /// <param name="message">Human-readable message body.</param>
     public void Add(BuildLogLevel level, string message)
     {
         _entries.Add(new LogEntry(DateTime.Now, level, message));
@@ -35,11 +44,19 @@ public class BuildLog
         OnChange?.Invoke();
     }
 
+    /// <summary>Convenience wrapper that calls <see cref="Add"/> with <see cref="BuildLogLevel.Info"/>.</summary>
     public void Info(string message)    => Add(BuildLogLevel.Info, message);
+    /// <summary>Convenience wrapper that calls <see cref="Add"/> with <see cref="BuildLogLevel.Success"/>.</summary>
     public void Success(string message) => Add(BuildLogLevel.Success, message);
+    /// <summary>Convenience wrapper that calls <see cref="Add"/> with <see cref="BuildLogLevel.Warn"/>.</summary>
     public void Warn(string message)    => Add(BuildLogLevel.Warn, message);
+    /// <summary>Convenience wrapper that calls <see cref="Add"/> with <see cref="BuildLogLevel.Error"/>.</summary>
     public void Error(string message)   => Add(BuildLogLevel.Error, message);
 
+    /// <summary>
+    /// Empties the buffer and fires <see cref="OnChange"/>. No-op (and no event)
+    /// when the buffer is already empty so callers can invoke it idempotently.
+    /// </summary>
     public void Clear()
     {
         if (_entries.Count == 0) return;

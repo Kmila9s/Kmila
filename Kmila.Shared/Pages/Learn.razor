@@ -14,139 +14,141 @@
     the student has ticked off within the module.
 *@
 
-<section class="learn-hero" aria-labelledby="learn-hero-title">
-    <div class="learn-hero__copy">
-        <span class="home-section__eyebrow">@Traductor.T("LEARN_EYEBROW")</span>
-        <h1 id="learn-hero-title" class="learn-hero__title">@Traductor.T("LEARN_TITLE")</h1>
-        <p class="learn-hero__subtitle">@Traductor.T("LEARN_SUBTITLE")</p>
+<section class="learn-page">
+    <header class="learn-hero" aria-labelledby="learn-hero-title">
+        <div class="learn-hero__copy">
+            <span class="home-section__eyebrow">@Traductor.T("LEARN_EYEBROW")</span>
+            <h1 id="learn-hero-title" class="learn-hero__title">@Traductor.T("LEARN_TITLE")</h1>
+            <p class="learn-hero__subtitle">@Traductor.T("LEARN_SUBTITLE")</p>
 
-        <label class="learn-hero__search" aria-label="@Traductor.T("LEARN_SEARCH_LABEL")">
-            <Icon Name="IconName.Search" />
-            <input type="search"
-                   class="form-control"
-                   placeholder="@Traductor.T("LEARN_SEARCH_PLACEHOLDER")"
-                   value="@_filter"
-                   @oninput="OnFilterChanged" />
-            @if (!string.IsNullOrEmpty(_filter))
-            {
-                <button type="button" class="learn-hero__search-clear"
-                        @onclick="() => { _filter = string.Empty; ApplyFilter(); }"
-                        aria-label="@Traductor.T("COMMON_CLEAR")">
-                    <Icon Name="IconName.XLg" />
-                </button>
-            }
-        </label>
-
-        @if (_continueTarget != null)
-        {
-            <a class="learn-hero__continue"
-               href="@($"/learn/{_continueTarget.Value.ModuleId}/{_continueTarget.Value.LessonId}")"
-               aria-label="@Traductor.T("LEARN_CONTINUE_ARIA")">
-                <span class="learn-hero__continue-icon">
-                    <Icon Name="IconName.ArrowRightCircleFill" />
-                </span>
-                <span class="learn-hero__continue-body">
-                    <small>@Traductor.T("LEARN_CONTINUE_EYEBROW")</small>
-                    <strong>@_continueLessonTitle</strong>
-                    @if (!string.IsNullOrEmpty(_continueModuleTitle))
-                    {
-                        <span class="learn-hero__continue-module">@_continueModuleTitle</span>
-                    }
-                </span>
-                <Icon Name="IconName.ArrowRight" Class="learn-hero__continue-chevron" />
-            </a>
-        }
-
-        @if (_totalLessons > 0)
-        {
-            var pct = _totalLessons == 0 ? 0 : (int)Math.Round(100.0 * _totalDone / _totalLessons);
-            <div class="learn-hero__progress" role="group" aria-label="@Traductor.T("LEARN_YOUR_PROGRESS")">
-                <div class="learn-hero__progress-track">
-                    <div class="learn-hero__progress-fill" style="width: @(pct)%"></div>
-                </div>
-                <div class="learn-hero__progress-meta">
-                    <span class="learn-hero__progress-count">@_totalDone / @_totalLessons</span>
-                    <span class="learn-hero__progress-label">@Traductor.T("LEARN_LESSONS_DONE")</span>
-                </div>
-            </div>
-        }
-    </div>
-</section>
-
-@if (_loading)
-{
-    <div class="learn-empty">
-        <Spinner Type="SpinnerType.Border" Color="SpinnerColor.Primary" />
-    </div>
-}
-else if (!_manifest.Modules.Any())
-{
-    <div class="learn-empty">
-        <div class="learn-empty__icon"><Icon Name="IconName.BookFill" /></div>
-        <h2>@Traductor.T("LEARN_EMPTY_TITLE")</h2>
-        <p>@Traductor.T("LEARN_EMPTY_BODY")</p>
-    </div>
-}
-else if (!_grouped.Any() && !string.IsNullOrEmpty(_filter))
-{
-    <div class="learn-empty">
-        <div class="learn-empty__icon"><Icon Name="IconName.Search" /></div>
-        <h2>@Traductor.T("LEARN_NO_MATCH_TITLE")</h2>
-        <p>@string.Format(Traductor.T("LEARN_NO_MATCH_BODY"), _filter)</p>
-    </div>
-}
-else
-{
-    @foreach (var group in _grouped)
-    {
-        <section class="learn-track" aria-labelledby="@($"track-{group.Level}")">
-            <header class="learn-track__header">
-                <span class="home-section__eyebrow">@FormatTrackOrdinal(group.Level) &middot; @LevelLabel(group.Level)</span>
-                <h2 id="@($"track-{group.Level}")">@TrackTitle(group.Level)</h2>
-                <p>@TrackBlurb(group.Level)</p>
-            </header>
-
-            <div class="learn-grid">
-                @foreach (var module in group.Modules)
+            <label class="learn-hero__search" aria-label="@Traductor.T("LEARN_SEARCH_LABEL")">
+                <Icon Name="IconName.Search" />
+                <input type="search"
+                       class="form-control"
+                       placeholder="@Traductor.T("LEARN_SEARCH_PLACEHOLDER")"
+                       value="@_filter"
+                       @oninput="OnFilterChanged" />
+                @if (!string.IsNullOrEmpty(_filter))
                 {
-                    var title    = LessonCatalog.Localize(module.Titles, _lang, module.Id);
-                    var summary  = LessonCatalog.Localize(module.Summaries, _lang, string.Empty);
-                    var total    = module.Lessons.Count;
-                    var done     = _moduleCompletion.TryGetValue(module.Id, out var d) ? d : 0;
-                    var firstId  = module.Lessons.FirstOrDefault()?.Id;
-                    var href     = firstId == null ? "/learn" : $"/learn/{module.Id}/{firstId}";
-                    var pct      = total == 0 ? 0 : (int)Math.Round(100.0 * done / total);
-
-                    <a class="learn-card" href="@href">
-                        <div class="learn-card__icon learn-card__icon--@IconVariant(module.Level)">
-                            <Icon Name="@ResolveIcon(module.Icon)" />
-                        </div>
-                        <div class="learn-card__body">
-                            <h3 class="learn-card__title">@title</h3>
-                            <p class="learn-card__summary">@summary</p>
-                            <div class="learn-card__meta">
-                                <span class="learn-card__chip learn-card__chip--@LevelClass(module.Level)">@LevelLabel(module.Level)</span>
-                                <span class="learn-card__count">
-                                    <Icon Name="IconName.Book" />
-                                    @total @Traductor.T(total == 1 ? "LEARN_LESSONS_ONE" : "LEARN_LESSONS_MANY")
-                                </span>
-                                @if (done > 0)
-                                {
-                                    <span class="learn-card__progress-chip">
-                                        <Icon Name="IconName.CheckCircleFill" /> @done / @total
-                                    </span>
-                                }
-                            </div>
-                        </div>
-                        <div class="learn-card__bar" role="presentation">
-                            <div class="learn-card__bar-fill" style="width: @(pct)%"></div>
-                        </div>
-                    </a>
+                    <button type="button" class="learn-hero__search-clear"
+                            @onclick="() => { _filter = string.Empty; ApplyFilter(); }"
+                            aria-label="@Traductor.T("COMMON_CLEAR")">
+                        <Icon Name="IconName.XLg" />
+                    </button>
                 }
-            </div>
-        </section>
+            </label>
+
+            @if (_continueTarget != null)
+            {
+                <a class="learn-hero__continue"
+                   href="@($"/learn/{_continueTarget.Value.ModuleId}/{_continueTarget.Value.LessonId}")"
+                   aria-label="@Traductor.T("LEARN_CONTINUE_ARIA")">
+                    <span class="learn-hero__continue-icon">
+                        <Icon Name="IconName.ArrowRightCircleFill" />
+                    </span>
+                    <span class="learn-hero__continue-body">
+                        <small>@Traductor.T("LEARN_CONTINUE_EYEBROW")</small>
+                        <strong>@_continueLessonTitle</strong>
+                        @if (!string.IsNullOrEmpty(_continueModuleTitle))
+                        {
+                            <span class="learn-hero__continue-module">@_continueModuleTitle</span>
+                        }
+                    </span>
+                    <Icon Name="IconName.ArrowRight" Class="learn-hero__continue-chevron" />
+                </a>
+            }
+
+            @if (_totalLessons > 0)
+            {
+                var pct = _totalLessons == 0 ? 0 : (int)Math.Round(100.0 * _totalDone / _totalLessons);
+                <div class="learn-hero__progress" role="group" aria-label="@Traductor.T("LEARN_YOUR_PROGRESS")">
+                    <div class="learn-hero__progress-track">
+                        <div class="learn-hero__progress-fill" style="width: @(pct)%"></div>
+                    </div>
+                    <div class="learn-hero__progress-meta">
+                        <span class="learn-hero__progress-count">@_totalDone / @_totalLessons</span>
+                        <span class="learn-hero__progress-label">@Traductor.T("LEARN_LESSONS_DONE")</span>
+                    </div>
+                </div>
+            }
+        </div>
+    </header>
+
+    @if (_loading)
+    {
+        <div class="learn-empty">
+            <Spinner Type="SpinnerType.Border" Color="SpinnerColor.Primary" />
+        </div>
     }
-}
+    else if (!_manifest.Modules.Any())
+    {
+        <div class="learn-empty">
+            <div class="learn-empty__icon"><Icon Name="IconName.BookFill" /></div>
+            <h2>@Traductor.T("LEARN_EMPTY_TITLE")</h2>
+            <p>@Traductor.T("LEARN_EMPTY_BODY")</p>
+        </div>
+    }
+    else if (!_grouped.Any() && !string.IsNullOrEmpty(_filter))
+    {
+        <div class="learn-empty">
+            <div class="learn-empty__icon"><Icon Name="IconName.Search" /></div>
+            <h2>@Traductor.T("LEARN_NO_MATCH_TITLE")</h2>
+            <p>@string.Format(Traductor.T("LEARN_NO_MATCH_BODY"), _filter)</p>
+        </div>
+    }
+    else
+    {
+        @foreach (var group in _grouped)
+        {
+            <section class="learn-track" aria-labelledby="@($"track-{group.Level}")">
+                <header class="learn-track__header">
+                    <span class="home-section__eyebrow">@FormatTrackOrdinal(group.Level) &middot; @LevelLabel(group.Level)</span>
+                    <h2 id="@($"track-{group.Level}")">@TrackTitle(group.Level)</h2>
+                    <p>@TrackBlurb(group.Level)</p>
+                </header>
+
+                <div class="learn-grid">
+                    @foreach (var module in group.Modules)
+                    {
+                        var title    = LessonCatalog.Localize(module.Titles, _lang, module.Id);
+                        var summary  = LessonCatalog.Localize(module.Summaries, _lang, string.Empty);
+                        var total    = module.Lessons.Count;
+                        var done     = _moduleCompletion.TryGetValue(module.Id, out var d) ? d : 0;
+                        var firstId  = module.Lessons.FirstOrDefault()?.Id;
+                        var href     = firstId == null ? "/learn" : $"/learn/{module.Id}/{firstId}";
+                        var pct      = total == 0 ? 0 : (int)Math.Round(100.0 * done / total);
+
+                        <a class="learn-card" href="@href">
+                            <div class="learn-card__icon learn-card__icon--@IconVariant(module.Level)">
+                                <Icon Name="@ResolveIcon(module.Icon)" />
+                            </div>
+                            <div class="learn-card__body">
+                                <h3 class="learn-card__title">@title</h3>
+                                <p class="learn-card__summary">@summary</p>
+                                <div class="learn-card__meta">
+                                    <span class="learn-card__chip learn-card__chip--@LevelClass(module.Level)">@LevelLabel(module.Level)</span>
+                                    <span class="learn-card__count">
+                                        <Icon Name="IconName.Book" />
+                                        @total @Traductor.T(total == 1 ? "LEARN_LESSONS_ONE" : "LEARN_LESSONS_MANY")
+                                    </span>
+                                    @if (done > 0)
+                                    {
+                                        <span class="learn-card__progress-chip">
+                                            <Icon Name="IconName.CheckCircleFill" /> @done / @total
+                                        </span>
+                                    }
+                                </div>
+                            </div>
+                            <div class="learn-card__bar" role="presentation">
+                                <div class="learn-card__bar-fill" style="width: @(pct)%"></div>
+                            </div>
+                        </a>
+                    }
+                </div>
+            </section>
+        }
+    }
+</section>
 
 @code {
     private LessonManifest _manifest = new();

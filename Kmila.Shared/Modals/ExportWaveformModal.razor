@@ -1,0 +1,250 @@
+@*
+    ExportWaveformModal — collects format + range + optional multi-page split
+    for the Waveforms-tab export flow. Hands a structured WaveformExportRequest
+    back to the caller via OnSubmit; all rendering / downloading happens at
+    the call site (currently WaveformViewer).
+*@
+@implements IDisposable
+@using Kmila.Shared.Models
+
+<div class="kmila-export-form">
+    <div class="row g-3">
+
+        @* ── Format ─────────────────────────────────────────────── *@
+        <div class="col-12 col-md-6">
+            <label class="form-label" for="export-format">@Traductor.T("EXPORT_FORMAT_LABEL")</label>
+            <select id="export-format" class="form-select" @bind="_format">
+                <option value="@WaveformExportFormat.Svg">@Traductor.T("EXPORT_FORMAT_SVG_VECTOR")</option>
+                <option value="@WaveformExportFormat.Png">PNG</option>
+            </select>
+        </div>
+
+        @* PNG scale only matters for raster — hidden for SVG. *@
+        @if (_format == WaveformExportFormat.Png)
+        {
+            <div class="col-12 col-md-6">
+                <label class="form-label" for="export-scale">@Traductor.T("EXPORT_PNG_SCALE_LABEL")</label>
+                <select id="export-scale" class="form-select" @bind="_pngScale">
+                    <option value="1">@Traductor.T("EXPORT_PNG_SCALE_SCREEN")</option>
+                    <option value="2">@Traductor.T("EXPORT_PNG_SCALE_RETINA")</option>
+                    <option value="3">@Traductor.T("EXPORT_PNG_SCALE_PRINT")</option>
+                </select>
+            </div>
+        }
+
+        @* ── Range mode ────────────────────────────────────────── *@
+        <div class="col-12">
+            <label class="form-label">@Traductor.T("EXPORT_RANGE_LABEL")</label>
+            <div class="btn-group" role="group">
+                <input type="radio" class="btn-check" id="export-range-full"
+                       name="export-range" checked="@_rangeFull"
+                       @onchange="() => _rangeFull = true" />
+                <label class="btn btn-outline-secondary" for="export-range-full">
+                    @Traductor.T("EXPORT_RANGE_FULL")
+                </label>
+
+                <input type="radio" class="btn-check" id="export-range-custom"
+                       name="export-range" checked="@(!_rangeFull)"
+                       @onchange="() => _rangeFull = false" />
+                <label class="btn btn-outline-secondary" for="export-range-custom">
+                    @Traductor.T("EXPORT_RANGE_CUSTOM")
+                </label>
+            </div>
+        </div>
+
+        @if (!_rangeFull)
+        {
+            <div class="col-6 col-md-3">
+                <label class="form-label" for="export-from">@Traductor.T("EXPORT_FROM_LABEL")</label>
+                <input id="export-from" type="number" class="form-control" min="0"
+                       inputmode="decimal" enterkeyhint="next"
+                       @bind="_from" @bind:event="oninput" />
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label" for="export-from-scale">@Traductor.T("EXPORT_SCALE_LABEL")</label>
+                <select id="export-from-scale" class="form-select" @bind="_fromScale">
+                    <option value="@TimeScale.NS">ns</option>
+                    <option value="@TimeScale.US">µs</option>
+                    <option value="@TimeScale.MS">ms</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label" for="export-to">@Traductor.T("EXPORT_TO_LABEL")</label>
+                <input id="export-to" type="number" class="form-control" min="0"
+                       inputmode="decimal" enterkeyhint="next"
+                       @bind="_to" @bind:event="oninput" />
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label" for="export-to-scale">@Traductor.T("EXPORT_SCALE_LABEL")</label>
+                <select id="export-to-scale" class="form-select" @bind="_toScale">
+                    <option value="@TimeScale.NS">ns</option>
+                    <option value="@TimeScale.US">µs</option>
+                    <option value="@TimeScale.MS">ms</option>
+                </select>
+            </div>
+        }
+
+        @* ── Multi-page split (optional) ──────────────────────── *@
+        <div class="col-12">
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="export-split"
+                       checked="@_splitOn" @onchange="OnSplitToggled" />
+                <label class="form-check-label" for="export-split">
+                    @Traductor.T("EXPORT_SPLIT_LABEL")
+                </label>
+            </div>
+            <small class="form-text text-muted">@Traductor.T("EXPORT_SPLIT_HINT")</small>
+        </div>
+
+        @if (_splitOn)
+        {
+            <div class="col-6 col-md-3">
+                <label class="form-label" for="export-page">@Traductor.T("EXPORT_PAGE_SPAN_LABEL")</label>
+                <input id="export-page" type="number" class="form-control" min="1"
+                       inputmode="numeric" enterkeyhint="done"
+                       @bind="_pageSpan" @bind:event="oninput" />
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label" for="export-page-scale">@Traductor.T("EXPORT_SCALE_LABEL")</label>
+                <select id="export-page-scale" class="form-select" @bind="_pageScale">
+                    <option value="@TimeScale.NS">ns</option>
+                    <option value="@TimeScale.US">µs</option>
+                    <option value="@TimeScale.MS">ms</option>
+                </select>
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(_validation))
+        {
+            <div class="col-12">
+                <div class="alert alert-warning mb-0" role="alert">@_validation</div>
+            </div>
+        }
+
+        <div class="col-12 d-flex justify-content-end gap-2">
+            <button type="button" class="btn btn-secondary" @onclick="OnCancel">
+                @Traductor.T("COMMON_CANCEL")
+            </button>
+            <button type="button" class="btn btn-primary" @onclick="OnExportClicked">
+                <i class="bi bi-download me-1"></i>
+                @Traductor.T("EXPORT_BUTTON")
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    /// <summary>Total simulation duration in ns — used to default the
+    /// "Custom range" inputs and validate user-supplied ranges.</summary>
+    [Parameter] public long TotalNs { get; set; }
+
+    /// <summary>Hands the structured request to the caller. Cancel is
+    /// signalled by closing the modal without calling this.</summary>
+    [Parameter] public EventCallback<WaveformExportRequest> OnSubmit { get; set; }
+
+    /// <summary>Closes the modal without submitting.</summary>
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private WaveformExportFormat _format = WaveformExportFormat.Svg;
+    private int _pngScale = 2;
+
+    // Range — defaults to "Full sim" so a quick export needs zero typing.
+    private bool _rangeFull = true;
+    private int _from;
+    private int _to;
+    private TimeScale _fromScale = TimeScale.US;
+    private TimeScale _toScale   = TimeScale.US;
+
+    // Multi-page split (off by default).
+    private bool _splitOn;
+    private int _pageSpan = 5;
+    private TimeScale _pageScale = TimeScale.US;
+
+    private string? _validation;
+
+    protected override void OnInitialized()
+    {
+        Traductor.StaticOnLangChanged += OnLanguageChanged;
+
+        // Prefill custom-range inputs with sensible defaults — full range in
+        // µs since most sims sit in that order of magnitude. The user can
+        // change the scale dropdown without re-typing if their sim is much
+        // shorter or longer.
+        long us = Math.Max(1, TotalNs / 1_000);
+        _to = (int)Math.Min(int.MaxValue, us);
+    }
+
+    private void OnSplitToggled(ChangeEventArgs e)
+    {
+        _splitOn = e.Value is bool b && b;
+        _validation = null;
+    }
+
+    /// <summary>
+    /// Validates the form and bubbles a <see cref="WaveformExportRequest"/>
+    /// to the parent. All time inputs are normalised to ns here so the
+    /// renderer never has to think about scale conversions.
+    /// </summary>
+    private async Task OnExportClicked()
+    {
+        _validation = null;
+
+        long fromNs = 0;
+        long toNs   = TotalNs;
+        if (!_rangeFull)
+        {
+            fromNs = ToNs(_from, _fromScale);
+            toNs   = ToNs(_to,   _toScale);
+            if (fromNs < 0 || toNs <= fromNs)
+            {
+                _validation = Traductor.T("EXPORT_VALIDATION_RANGE");
+                return;
+            }
+            if (toNs > TotalNs && TotalNs > 0)
+            {
+                // Soft-cap the upper bound — clipping past the end is just
+                // empty trace, so let the user proceed instead of blocking.
+                toNs = TotalNs;
+            }
+        }
+
+        long? pageSpanNs = null;
+        if (_splitOn)
+        {
+            if (_pageSpan <= 0)
+            {
+                _validation = Traductor.T("EXPORT_VALIDATION_PAGE");
+                return;
+            }
+            pageSpanNs = ToNs(_pageSpan, _pageScale);
+        }
+
+        var req = new WaveformExportRequest(_format, _pngScale, fromNs, toNs, pageSpanNs);
+        if (OnSubmit.HasDelegate)
+            await OnSubmit.InvokeAsync(req);
+    }
+
+    /// <summary>Converts (value, scale) to nanoseconds. Caps at long.MaxValue
+    /// for the unrealistic-but-defensive "ms × 999999999" case.</summary>
+    private static long ToNs(int value, TimeScale scale)
+    {
+        if (value < 0) value = 0;
+        long mul = scale switch
+        {
+            TimeScale.NS => 1L,
+            TimeScale.US => 1_000L,
+            TimeScale.MS => 1_000_000L,
+            TimeScale.S  => 1_000_000_000L,
+            _            => 1L
+        };
+        try { return checked((long)value * mul); }
+        catch (OverflowException) { return long.MaxValue; }
+    }
+
+    private void OnLanguageChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Traductor.StaticOnLangChanged -= OnLanguageChanged;
+    }
+}

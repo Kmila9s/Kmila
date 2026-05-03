@@ -7,7 +7,8 @@
 @inject EditorDockState DockState
 @inject Kmila.Shared.Services.RecentProjectsTracker Recent
 @inject Kmila.Shared.Services.SimulationSnapshotStore Snapshots
-<PageTitle>Project: @_project?.Name</PageTitle>
+@inject Kmila.Shared.Services.EditorSessionStore Sessions
+<PageTitle>@string.Format(Traductor.T("EDITOR_PAGE_TITLE"), _project?.Name ?? string.Empty)</PageTitle>
 @*
     The outer `<section class="editor-page">` wraps the route unconditionally
     so the `.content:has(.editor-page)` CSS rule (in app.css) can activate
@@ -22,7 +23,10 @@
         @* ---------- Workbench: editor + action rail ---------- *@
         <div class="editor-workbench">
 
-            @* File info bar on top of the editor *@
+            @* File info bar on top of the editor — reflects the FOCUSED
+               pane's active tab via the compatibility shims. The Split
+               toggle lives at the right end of the status block; only
+               visible on wide-enough viewports (CSS-driven). *@
             <header class="editor-workbench__header">
                 <div class="editor-file-info">
                     @if (_hasUnsavedChanges)
@@ -40,50 +44,87 @@
                     <span class="editor-position">
                         @Traductor.T("EDITOR_LINE_ABBR") @_cursorLine · @Traductor.T("EDITOR_COL_ABBR") @_cursorColumn
                     </span>
+                    <button type="button"
+                            class="btn btn-ghost btn-sm editor-split-toggle"
+                            @onclick="ToggleSplitAsync"
+                            title="@Traductor.T(IsSplit ? "EDITOR_SPLIT_OFF" : "EDITOR_SPLIT_ON")"
+                            aria-label="@Traductor.T(IsSplit ? "EDITOR_SPLIT_OFF" : "EDITOR_SPLIT_ON")"
+                            aria-pressed="@IsSplit">
+                        <Icon Name="@(IsSplit ? IconName.Square : IconName.LayoutSplit)" />
+                    </button>
                     <span class="editor-shortcut" aria-hidden="true">
                         <kbd>Ctrl</kbd><kbd>S</kbd>
                     </span>
                 </div>
             </header>
 
-            @* Body: Monaco fills the full workbench width — no more right rail *@
-            <div class="editor-workbench__body">
-                @if (IsMarkdownFile)
+            @* Body: one or two side-by-side panes, each with its own tab
+               strip + Monaco. Each pane's frame catches click events to
+               update the focused-pane index — that's what decides where
+               new files open and which pane the workbench header reads
+               off. *@
+            <div class="editor-workbench__body editor-workbench__body--panes @(IsSplit ? "is-split" : "")">
+                @for (int p = 0; p < _panes.Count; p++)
                 {
-                    <div class="editor-split">
-                        <div class="editor-split__pane">
-                            <div class="editor-split__header">
-                                <Icon Name="IconName.Eye" />
-                                <span>@Traductor.T("EDITOR_MD_PREVIEW")</span>
+                    var paneIdx = p;
+                    var pane = _panes[paneIdx];
+                    var paneIsFocused = paneIdx == _focusedPaneIndex;
+                    var paneIsMarkdown = pane.ActiveTab?.IsMarkdown ?? false;
+
+                    @* @key keeps Blazor's diff anchored to the pane
+                       identity rather than position. Without it, when
+                       pane B is removed (unsplit), Blazor sometimes
+                       keeps the second <section> stale and pane A
+                       doesn't reclaim the space. *@
+                    <section @key="paneIdx"
+                             class="editor-pane @(paneIsFocused ? "is-focused" : "")"
+                             @onclick="() => SetFocusedPane(paneIdx)">
+
+                        <EditorTabStrip Tabs="pane.Tabs"
+                                        ActiveIndex="pane.ActiveIndex"
+                                        PaneIndex="paneIdx"
+                                        OnTabSelect="@((int idx) => ActivateTabAsync(idx, paneIdx))"
+                                        OnTabClose="@((int idx) => CloseTabAsync(idx, paneIdx))"
+                                        OnTabMove="HandleTabMoveAsync" />
+
+                        @if (paneIsMarkdown)
+                        {
+                            <div class="editor-split">
+                                <div class="editor-split__pane">
+                                    <div class="editor-split__header">
+                                        <Icon Name="IconName.Eye" />
+                                        <span>@Traductor.T("EDITOR_MD_PREVIEW")</span>
+                                    </div>
+                                    <div class="editor-markdown">
+                                        @Kmila.Shared.Services.MarkdownRenderer.Render(pane.ActiveTab?.MarkdownPreview ?? string.Empty)
+                                    </div>
+                                </div>
+                                <div class="editor-split__pane">
+                                    <div class="editor-split__header">
+                                        <Icon Name="IconName.Code" />
+                                        <span>@Traductor.T("EDITOR_MD_SOURCE")</span>
+                                    </div>
+                                    <StandaloneCodeEditor @ref="pane.Monaco"
+                                        CssClass="editor-monaco"
+                                        ConstructionOptions="EditorConstructionOptions"
+                                        OnDidInit="@(() => OnEditorInitAsync(paneIdx))"
+                                        OnDidChangeCursorPosition="OnCursorPositionChanged"
+                                        OnDidChangeModelContent="OnModelContentChanged"
+                                        OnKeyDown="OnEditorKeyDown" />
+                                </div>
                             </div>
-                            <div class="editor-markdown">
-                                @Kmila.Shared.Services.MarkdownRenderer.Render(_markdownPreview)
-                            </div>
-                        </div>
-                        <div class="editor-split__pane">
-                            <div class="editor-split__header">
-                                <Icon Name="IconName.Code" />
-                                <span>@Traductor.T("EDITOR_MD_SOURCE")</span>
-                            </div>
-                            <StandaloneCodeEditor @ref="_editor"
+                        }
+                        else
+                        {
+                            <StandaloneCodeEditor @ref="pane.Monaco"
                                 CssClass="editor-monaco"
                                 ConstructionOptions="EditorConstructionOptions"
-                                OnDidInit="OnEditorInitAsync"
+                                OnDidInit="@(() => OnEditorInitAsync(paneIdx))"
                                 OnDidChangeCursorPosition="OnCursorPositionChanged"
                                 OnDidChangeModelContent="OnModelContentChanged"
                                 OnKeyDown="OnEditorKeyDown" />
-                        </div>
-                    </div>
-                }
-                else
-                {
-                    <StandaloneCodeEditor @ref="_editor"
-                        CssClass="editor-monaco"
-                        ConstructionOptions="EditorConstructionOptions"
-                        OnDidInit="OnEditorInitAsync"
-                        OnDidChangeCursorPosition="OnCursorPositionChanged"
-                        OnDidChangeModelContent="OnModelContentChanged"
-                        OnKeyDown="OnEditorKeyDown" />
+                        }
+                    </section>
                 }
             </div>
         </div>
@@ -95,7 +136,8 @@
                 OnResumeClicked="OnContinueSimulation"
                 OnStopClicked="OnStopSimulation"
                 OnSaveClickedCallback="OnSaveFile"
-                OnNewFileClickedCallback="ShowCreateFileModalAsync" />
+                OnNewFileClickedCallback="ShowCreateFileModalAsync"
+                OnFpgaChipClickedCallback="OpenFpgaPickerAsync" />
 
         @* ---------- Editor Dock: Entities · Ports · Waveforms · Runs · Files · Output ---------- *@
         <EditorDock EntitiesCount="@(Builder.Parser?.Entities.Count() ?? 0)"
@@ -114,6 +156,21 @@
                 }
             </EntitiesContent>
 
+            <SchematicContent>
+                @* Renders the first entity with an architecture; deeper
+                   designs (multiple entities) are rare in TT1 and out of
+                   scope for this view. *@
+                <SchematicViewer Entity="@(Builder.Parser?.Entities.FirstOrDefault(e => e.Architecture != null))"
+                                 Waveform="_waveformData" />
+            </SchematicContent>
+
+            <FlowContent>
+                @* High-level control-flow view of the parsed design — one
+                   Mermaid flowchart per architecture. Refreshed after every
+                   build via _flowDiagram.RefreshAsync(). *@
+                <FlowDiagramViewer @ref="_flowDiagram" />
+            </FlowContent>
+
             <PortsContent>
                 <PortsPanel OnBuildRequested="OnBuildRequested" />
             </PortsContent>
@@ -127,7 +184,9 @@
                 }
                 else if (_waveformData != null && _waveformData.Signals.Count > 0)
                 {
-                    <WaveformViewer Data="_waveformData" OnExportVcd="HandleVcdExport" />
+                    <WaveformViewer Data="_waveformData"
+                                    IsLive="@(Sim.State == SimState.Running)"
+                                    OnExportVcd="HandleVcdExport" />
                 }
                 else if (Sim.State == SimState.Complete)
                 {
@@ -167,10 +226,37 @@
                    Line="_cursorLine"
                    Column="_cursorColumn"
                    Language="@_currentLanguage" />
+
+    @* Floating focus-mode toggle — only displayed on touch / phone-sized
+       viewports via the .is-available class + the @media rule in pages.css.
+       Hides every shell chrome element so Monaco gets the full screen. *@
+    <button type="button"
+            class="kmila-focus-toggle is-available"
+            @onclick="ToggleFocusModeAsync"
+            aria-pressed="@_focusMode"
+            aria-label="@Traductor.T(_focusMode ? "EDITOR_FOCUS_EXIT" : "EDITOR_FOCUS_ENTER")"
+            title="@Traductor.T(_focusMode ? "EDITOR_FOCUS_EXIT" : "EDITOR_FOCUS_ENTER")">
+        <Icon Name="@(_focusMode ? IconName.FullscreenExit : IconName.ArrowsFullscreen)" />
+    </button>
 }
 </section>
 <Modal @ref="_multiUseModal" />
 @code {
+    /// <summary>
+    /// Mobile focus-mode flag. Persisted to localStorage on the JS side via
+    /// kmilaSetFocusMode so a refresh keeps the same state. Mirrored to the
+    /// <html data-kmila-focus> attribute that drives the chrome-hiding CSS.
+    /// </summary>
+    private bool _focusMode;
+
+    /// <summary>Toggle the chrome-hiding focus mode; persists across reloads.</summary>
+    private async Task ToggleFocusModeAsync()
+    {
+        _focusMode = !_focusMode;
+        try { await JS.InvokeVoidAsync("kmilaSetFocusMode", _focusMode); }
+        catch { /* circuit gone or no JS — irrelevant */ }
+    }
+
     /// <summary>
     /// Gets or sets the project identifier.
     /// </summary>
@@ -179,20 +265,115 @@
     private int _projectId = -1;
     private Project _project = null!;
     private FilesCard _filesCard = new();
-    private StandaloneCodeEditor _editor = new();
+    private FlowDiagramViewer? _flowDiagram;
     private Modal _multiUseModal = new();
-    private ProjectFile _openedFile = null!;
     private List<ProjectFile> _projectFiles { get; set; } = new();
 
-    // Editor state tracking
-    private int _cursorLine = 1;
-    private int _cursorColumn = 1;
-    private bool _hasUnsavedChanges = false;
-    private bool _editorInitialized = false;
-    private bool _pendingFileLoad = false;
-    private string _currentLanguage = "vhdl";
-    private string _originalContent = string.Empty;
-    private string _markdownPreview = string.Empty;
+    /// <summary>
+    /// Editor panes — at most 2 in Phase 2. <c>_panes[0]</c> is always
+    /// present; <c>_panes[1]</c> exists only after the user clicks Split.
+    /// All "current file" / "cursor" / "unsaved changes" reads still flow
+    /// through the legacy field names (<c>_openedFile</c>,
+    /// <c>_hasUnsavedChanges</c>, etc.) — those are now compatibility
+    /// properties that delegate to the *focused* pane's active tab, so
+    /// build / save / sim flows keep working without per-call pane
+    /// parameters.
+    /// </summary>
+    private List<EditorPane> _panes = new() { new EditorPane() };
+
+    /// <summary>Index of the currently focused pane. Drives "open file
+    /// here" routing and the workbench header's cursor / dirty / name
+    /// indicators.</summary>
+    private int _focusedPaneIndex = 0;
+
+    /// <summary>True while the editor is split into two panes. Toggling
+    /// this happens through <see cref="ToggleSplitAsync"/>.</summary>
+    private bool IsSplit => _panes.Count > 1;
+
+    // _tabIdCounter was the monotonic counter we used to use for per-tab
+    // Monaco model URIs, but it reset on every Editor mount and collided
+    // with stale models still registered in Monaco's global table. We now
+    // generate a fresh GUID per tab in CreateModelForTabAsync — see the
+    // comment block there for the full reasoning.
+
+    /// <summary>Debounces the per-project session-save calls so a flurry
+    /// of tab mutations (e.g. a split that opens 5 tabs at once) writes
+    /// localStorage just once 500 ms later instead of five times.</summary>
+    private CancellationTokenSource? _sessionDebounce;
+    private const int SessionSaveDebounceMs = 500;
+
+    /// <summary>
+    /// Flips true on the first interactive render. Until then JS interop
+    /// (localStorage in particular) throws InvalidOperationException, so
+    /// we gate every session-related call. The first interactive render
+    /// also retries the session restore via <see cref="OnAfterRenderAsync"/>
+    /// because the static-prerender pass couldn't run it.
+    /// </summary>
+    private bool _isInteractive;
+
+    /// <summary>Focused pane shorthand. All the legacy single-pane
+    /// references (<c>_pane.Monaco</c>, <c>_pane.Tabs</c>,
+    /// <c>_pane.ActiveTab</c>, etc.) flow through here.</summary>
+    private EditorPane _pane =>
+        _focusedPaneIndex >= 0 && _focusedPaneIndex < _panes.Count
+            ? _panes[_focusedPaneIndex]
+            : _panes[0];
+
+    private EditorPane GetPane(int idx) =>
+        idx >= 0 && idx < _panes.Count ? _panes[idx] : _pane;
+
+    // ─── Compatibility shims over _pane.ActiveTab ──────────────────────
+    // Every reference to these names elsewhere in the file used to read /
+    // write a flat field. They now route through the active tab, returning
+    // safe defaults when no tab is open. Keeping the names lets the rest
+    // of the page (handlers, markup, build/sim flow) stay unchanged.
+
+    private ProjectFile? _openedFile => _pane.ActiveTab?.File;
+
+    private string _originalContent
+    {
+        get => _pane.ActiveTab?.OriginalContent ?? string.Empty;
+        set { if (_pane.ActiveTab != null) _pane.ActiveTab.OriginalContent = value; }
+    }
+
+    private bool _hasUnsavedChanges
+    {
+        get => _pane.ActiveTab?.HasUnsavedChanges ?? false;
+        set { if (_pane.ActiveTab != null) _pane.ActiveTab.HasUnsavedChanges = value; }
+    }
+
+    private string _currentLanguage
+    {
+        get => _pane.ActiveTab?.Language ?? "vhdl";
+        set { if (_pane.ActiveTab != null) _pane.ActiveTab.Language = value; }
+    }
+
+    private string _markdownPreview
+    {
+        get => _pane.ActiveTab?.MarkdownPreview ?? string.Empty;
+        set { if (_pane.ActiveTab != null) _pane.ActiveTab.MarkdownPreview = value; }
+    }
+
+    private int _cursorLine
+    {
+        get => _pane.ActiveTab?.CursorLine ?? 1;
+        set { if (_pane.ActiveTab != null) _pane.ActiveTab.CursorLine = value; }
+    }
+
+    private int _cursorColumn
+    {
+        get => _pane.ActiveTab?.CursorColumn ?? 1;
+        set { if (_pane.ActiveTab != null) _pane.ActiveTab.CursorColumn = value; }
+    }
+
+    /// <summary>True after Monaco has emitted OnDidInit. Tab-open requests
+    /// that arrive before this materialise their TextModels lazily once
+    /// the editor is ready.</summary>
+    private bool _editorInitialized
+    {
+        get => _pane.Initialized;
+        set => _pane.Initialized = value;
+    }
 
     // Waveform data from simulation
     private WaveformData? _waveformData;
@@ -208,11 +389,9 @@
     private List<Kmila.Shared.Models.SimulationSnapshot>? _compareSnapshots;
 
     /// <summary>
-    /// Gets whether the currently opened file is a Markdown file.
+    /// Gets whether the active tab is showing a Markdown file.
     /// </summary>
-    private bool IsMarkdownFile => _openedFile != null &&
-        (_openedFile.FileName.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ||
-         _openedFile.FileName.EndsWith(".markdown", StringComparison.OrdinalIgnoreCase));
+    private bool IsMarkdownFile => _pane.ActiveTab?.IsMarkdown ?? false;
     /// <summary>
     /// Event subscriptions live here — they only need to happen once per
     /// component mount. Per-project loading is handled by
@@ -230,13 +409,78 @@
     private int _lastBuiltTime;
     private TimeScale _lastBuiltScale;
 
+    /// <summary>
+    /// Debounce gate for Markdown live-preview. Markdig re-parses the entire
+    /// buffer on every call, which used to fire on every keystroke and pin
+    /// the CPU on large notes. We delay the preview refresh by ~300 ms; each
+    /// keystroke supersedes the previous pending refresh.
+    /// </summary>
+    private CancellationTokenSource? _markdownDebounce;
+    private const int MarkdownDebounceMs = 300;
+
     protected override void OnInitialized()
     {
-        Builder.OnSimulationCompleted += OnSimulationDataReady;
-        Builder.OnSimulationEnded     += OnSimulationEnded;
-        Builder.OnProgressAdvanced    += OnProgressAdvanced;
-        Sim.OnChange                  += OnSimParamsChanged;
-        Snapshots.OnChange            += OnSnapshotsChanged;
+        Builder.OnSimulationCompleted     += OnSimulationDataReady;
+        Builder.OnSimulationProgressUpdate += OnSimulationProgressUpdate;
+        Builder.OnSimulationEnded         += OnSimulationEnded;
+        Builder.OnProgressAdvanced        += OnProgressAdvanced;
+        Sim.OnChange                      += OnSimParamsChanged;
+        Snapshots.OnChange                += OnSnapshotsChanged;
+    }
+
+    /// <summary>
+    /// Re-entrancy guard for the live progress merge — the simulator's
+    /// 200 ms timer can fire faster than the UI thread can render on long
+    /// sims, so we drop overlapping fires. Idempotent watermarks make this
+    /// safe.
+    /// </summary>
+    private int _liveMergeInflight;
+
+    /// <summary>
+    /// Builder progress tick — runs on a thread-pool thread. Marshals back
+    /// to the Blazor sync context, lazy-creates the live WaveformData on
+    /// first arrival, then appends only the transitions added since the
+    /// last merge. Keeps the same instance reference so the WaveformViewer
+    /// re-renders by virtue of StateHasChanged.
+    /// </summary>
+    private void OnSimulationProgressUpdate(Interpreter.Services.SignalHistory history)
+    {
+        if (System.Threading.Interlocked.Exchange(ref _liveMergeInflight, 1) == 1) return;
+        InvokeAsync(() =>
+        {
+            try
+            {
+                bool firstFrame = _waveformData == null;
+                if (firstFrame)
+                {
+                    _waveformData = WaveformData.CreateEmpty(Builder.LastTickResNs);
+                    _lastBuiltTime  = Sim.Time;
+                    _lastBuiltScale = Sim.Scale;
+                }
+                bool appended = _waveformData!.MergeFrom(history);
+
+                // First batch: jump the dock to the Waveforms tab so the
+                // student watches it fill in. Skip if the user is in
+                // compare mode — they're inspecting other runs.
+                if (firstFrame && _compareSnapshots == null)
+                    DockState.SetActive(EditorTab.Waveforms);
+
+                // Only re-render when the merge actually advanced state,
+                // OR on the very first frame (so the viewer shows up even
+                // if no transitions arrived yet). Skips the render churn
+                // that used to lock out Resume / Stop clicks during pause.
+                if (firstFrame || appended)
+                    StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "[Editor] Live waveform merge failed");
+            }
+            finally
+            {
+                System.Threading.Interlocked.Exchange(ref _liveMergeInflight, 0);
+            }
+        });
     }
 
     /// <summary>
@@ -323,7 +567,31 @@
         }
         catch
         {
-            // JS not available (prerender) — fine, CSS fallback on .content--wide handles it.
+            // JS not available (prerender) — fine, the Ctrl+S suppression script in App.razor will simply no-op.
+        }
+
+        // Now we're in the interactive circuit and JS interop is safe.
+        // Open the gate so subsequent saves go through, then retry the
+        // session restore that couldn't run during OnParametersSetAsync
+        // (which fires before the circuit boots in the prerender pass).
+        // If no session exists for this project the call is a fast
+        // no-op and leaves the prerender's main-file tab untouched.
+        _isInteractive = true;
+        if (_projectId > 0 && _projectFiles.Count > 0)
+        {
+            try
+            {
+                bool restored = await TryRestoreSessionAsync();
+                if (restored)
+                {
+                    _filesCard?.SetDefaultFile(_pane.ActiveTab?.File ?? FindMainFile(_projectFiles));
+                    StateHasChanged();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "[Editor] Post-firstRender session restore failed");
+            }
         }
     }
 
@@ -336,7 +604,7 @@
     {
         if (string.IsNullOrEmpty(ProjectId))
         {
-            ToastService.Notify(Message("Project not set", "Error opening the project", ToastType.Danger));
+            ToastService.Notify(Message(Traductor.T("EDITOR_PROJECT_NOT_SET_TITLE"), Traductor.T("EDITOR_PROJECT_NOT_SET_BODY"), ToastType.Danger));
             return;
         }
         if (!int.TryParse(ProjectId, out var newId)) return;
@@ -364,44 +632,32 @@
         Sim.ClearPortMoments();
         Log.Clear();
         _waveformData = null;
-        _hasUnsavedChanges = false;
-        _cursorLine = 1;
-        _cursorColumn = 1;
-        _markdownPreview = string.Empty;
+
+        // Drop every tab from the previous project — never carry buffers
+        // across project switches. CloseAllTabsAsync handles model disposal
+        // and clears the editor surface when Monaco is initialised.
+        await CloseAllTabsAsync();
 
         if (_projectFiles.Count > 0)
         {
-            _openedFile = FindMainFile(_projectFiles);
-            _originalContent = _openedFile.Content ?? string.Empty;
-            _currentLanguage = GetLanguageFromExtension(_openedFile.FileName);
-            if (IsMarkdownFile)
-                _markdownPreview = _openedFile.Content ?? string.Empty;
-
-            if (_editorInitialized)
+            // First try to restore the saved session — open tabs +
+            // active indices + split state from the user's last visit
+            // to this project. Falls back to the project's main file
+            // when there's no session or every saved tab references a
+            // deleted file.
+            bool restored = await TryRestoreSessionAsync();
+            if (!restored)
             {
-                // Monaco already exists (project switch) — push the new content in directly.
-                await _editor.SetValue(_openedFile.Content ?? string.Empty);
-                var model = await _editor.GetModel();
-                if (model != null)
-                    await BlazorMonaco.Editor.Global.SetModelLanguage(JS, model, _currentLanguage);
+                var mainFile = FindMainFile(_projectFiles);
+                await OpenFileInTabAsync(mainFile);
+                _filesCard?.SetDefaultFile(mainFile);
             }
             else
             {
-                // First mount — Monaco hasn't initialised yet. Queue the load for
-                // OnEditorInitAsync to pick up.
-                _pendingFileLoad = true;
+                _filesCard?.SetDefaultFile(_pane.ActiveTab?.File ?? FindMainFile(_projectFiles));
             }
-
-            _filesCard?.SetDefaultFile(_openedFile);
         }
-        else
-        {
-            // Empty project — clear the editor so we don't display a stale buffer.
-            _openedFile = null!;
-            _originalContent = string.Empty;
-            if (_editorInitialized)
-                await _editor.SetValue(string.Empty);
-        }
+        // Empty-project branch: pane already clear from CloseAllTabsAsync.
 
         await RefreshRunsCountAsync();
 
@@ -457,7 +713,7 @@
                 catch { /* non-fatal */ }
             }
 
-            Sim.MarkLoaded(config.Name ?? "Sample config");
+            Sim.MarkLoaded(config.Name ?? Traductor.T("EDITOR_SAMPLE_CONFIG_FALLBACK"));
             Logger.LogInformation("[Editor] Applied pending payload — {Count} port moments",
                 config.PortMoments?.Count ?? 0);
         }
@@ -544,22 +800,33 @@
         InvokeAsync(() => Sim.SetProgress(progress));
     }
     /// <summary>
-    /// Loads the pending file content into the editor.
-    /// Called when the editor is initialized and a file is waiting to be loaded.
+    /// Materialises Monaco TextModels for any tab that was opened
+    /// before the corresponding pane's editor finished initialising —
+    /// most commonly the project's main file, opened during
+    /// <see cref="LoadProjectAsync"/> which runs in
+    /// <c>OnParametersSetAsync</c> (i.e. before first render). After
+    /// each model is created we point the pane's editor at the active
+    /// tab's model so the user sees the right buffer the moment Monaco
+    /// mounts.
     /// </summary>
-    private async Task LoadPendingFileAsync()
+    private async Task LoadPendingFileAsync(int paneIdx = -1)
     {
-        if (_pendingFileLoad && _openedFile != null)
+        if (paneIdx < 0 || paneIdx >= _panes.Count) paneIdx = _focusedPaneIndex;
+        var pane = _panes[paneIdx];
+        try
         {
-            _pendingFileLoad = false;
-            try
+            for (int i = 0; i < pane.Tabs.Count; i++)
             {
-                await _editor.SetValue(_openedFile.Content ?? string.Empty);
+                var t = pane.Tabs[i];
+                if (t.Model == null)
+                    t.Model = await CreateModelForTabAsync(t);
             }
-            catch (Exception ex)
-            {
-                Logger.LogError($"[Editor] Error loading file into editor: {ex.Message}");
-            }
+            if (pane.ActiveTab?.Model != null)
+                await pane.Monaco.SetModel(pane.ActiveTab.Model);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError($"[Editor] Error materialising tab models: {ex.Message}");
         }
     }
 
@@ -592,10 +859,21 @@
     /// <summary>
     /// Shows the create file modal asynchronously.
     /// </summary>
+    /// <summary>
+    /// Opens the TopBar's FPGA picker via JS interop so the RunBar's clickable
+    /// chip can change the active board without forcing the user to navigate
+    /// to Settings. No-op if the TopBar isn't mounted (e.g. embedded preview).
+    /// </summary>
+    private async Task OpenFpgaPickerAsync()
+    {
+        try { await JS.InvokeVoidAsync("kmilaOpenFpgaPicker"); }
+        catch { /* TopBar not present in current layout — silent */ }
+    }
+
     private async Task ShowCreateFileModalAsync(){
         Dictionary<string, object> parameters = new(){
             { "Project", _project },
-            { "EditorContent", await _editor.GetValue() },
+            { "EditorContent", await _pane.Monaco.GetValue() },
             { "OnProjectFileCreated", EventCallback.Factory.Create(this, OnFileCreatedAsync)}
 
         };
@@ -607,9 +885,58 @@
     /// a simulation. Updates <see cref="Sim.State"/>, appends to the log, and
     /// focuses the appropriate dock tab.
     /// </summary>
+    /// <summary>
+    /// Resolves the file to compile when Build is clicked. Project's saved
+    /// entry-point wins; the active editor file is the fallback. Returns
+    /// null only when neither exists (empty project + no active file).
+    /// Also surfaces a soft warning to the Output log when the project has
+    /// multiple VHDL files but no entry-point — that's the configuration
+    /// most likely to silently miss dependencies, so we nudge the user
+    /// towards the FilesCard kebab without blocking the build.
+    /// </summary>
+    private async Task<ProjectFile?> ResolveBuildTargetAsync()
+    {
+        ProjectFile? entry = null;
+        if (_projectId > 0)
+        {
+            var entryName = await DbContext.GetProjectMainFileAsync(_projectId);
+            if (!string.IsNullOrEmpty(entryName))
+            {
+                // Match by RelativePath first (correct for files in sub-folders)
+                // and fall back to FileName so legacy markers stored before the
+                // folder refactor still resolve at the project root.
+                entry = _projectFiles.FirstOrDefault(f =>
+                    string.Equals(f.RelativePath, entryName, StringComparison.Ordinal))
+                    ?? _projectFiles.FirstOrDefault(f =>
+                        string.Equals(f.FileName, entryName, StringComparison.Ordinal));
+                // entryName set but file no longer present → fall through to
+                // the active-tab fallback. We don't auto-clear the marker
+                // here; FilesCard's delete path already handles that case.
+            }
+        }
+
+        if (entry != null) return entry;
+
+        if (_openedFile != null)
+        {
+            // No explicit entry-point: warn once if the project clearly
+            // has more than one VHDL source — those projects need an
+            // explicit entry to avoid building a sub-component as if it
+            // were the top.
+            int vhdlCount = _projectFiles.Count(f =>
+                f.FileName.EndsWith(".vhd",  StringComparison.OrdinalIgnoreCase) ||
+                f.FileName.EndsWith(".vhdl", StringComparison.OrdinalIgnoreCase));
+            if (vhdlCount > 1)
+            {
+                Log.Warn(Traductor.T("BUILD_NO_ENTRY_MULTIVHD_HINT"));
+            }
+        }
+        return _openedFile;
+    }
+
     private async Task<bool> RunBuildAsync()
     {
-        if (_openedFile == null)
+        if (_openedFile == null && _projectFiles.Count == 0)
         {
             Log.Warn(Traductor.T("SIM_LOG_NO_ENTRY"));
             ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), Traductor.T("SIM_LOG_NO_ENTRY"), ToastType.Warning));
@@ -628,17 +955,30 @@
             return false;
         }
 
-        // Markdown "build" = preview modal, not a parse. Short-circuit.
-        if (Path.GetExtension(_openedFile.FileName) == ".md")
+        var buildTarget = await ResolveBuildTargetAsync();
+        if (buildTarget == null)
         {
-            var parameters = new Dictionary<string, object> { { "File", _openedFile } };
+            Log.Warn(Traductor.T("SIM_LOG_NO_ENTRY"));
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), Traductor.T("SIM_LOG_NO_ENTRY"), ToastType.Warning));
+            return false;
+        }
+
+        // Markdown "build" = preview modal, not a parse. Short-circuit only
+        // when the build target itself is markdown — if a `.vhd` entry
+        // point is set, Build always compiles it, regardless of which tab
+        // happens to be active.
+        if (Path.GetExtension(buildTarget.FileName) == ".md")
+        {
+            var parameters = new Dictionary<string, object> { { "File", buildTarget } };
             await _multiUseModal.ShowAsync<MarkdownModal>(Traductor.T("EDITOR_MD_PREVIEW"), null, parameters);
             return true;
         }
 
-        // Auto-save before building so the parser sees what's on screen, not
-        // what was last written to disk. Skip if there's nothing new; the
-        // on-disk copy is already current.
+        // Auto-save the *active* file before building so the parser sees
+        // what's on screen, not what was last written to disk. The build
+        // target may be a different file (entry-point ≠ active tab), but
+        // saving what the user's editing prevents accidental loss of
+        // unsaved keystrokes when they hit Build.
         if (_hasUnsavedChanges)
         {
             await OnSaveFile();
@@ -650,12 +990,12 @@
         _waveformData = null;
 
         Sim.SetState(SimState.Building);
-        Log.Info($"{Traductor.T("SIM_LOG_BUILDING")}: {_openedFile.FileName}");
+        Log.Info($"{Traductor.T("SIM_LOG_BUILDING")}: {buildTarget.FileName}");
         StateHasChanged();
 
         try
         {
-            var ok = Builder.Build(_openedFile);
+            var ok = Builder.Build(buildTarget);
             // Push the parser's structured diagnostics into Monaco so the
             // student sees squiggles + hover messages pointing at the
             // offending lines. Includes errors (from exceptions) and
@@ -693,14 +1033,27 @@
             // Still push a best-effort error diagnostic to Monaco — without
             // this, a student staring at a broken file sees nothing in the
             // gutter and has to read the Output log.
+            //
+            // Other parser modules (e.g. Parser.Repositories.StreamerException)
+            // expose Line/Column properties without subclassing ParserException.
+            // Duck-type via reflection so we capture the right coordinates
+            // without coupling Kmila.Shared to those types.
             try
             {
+                int? exLine = TryReadIntProp(ex, "Line");
+                int? exCol  = TryReadIntProp(ex, "Column") ?? TryReadIntProp(ex, "Col");
+                int line  = exLine.HasValue && exLine.Value > 0 ? exLine.Value : 1;
+                int sCol  = exCol.HasValue  && exCol.Value  > 0 ? exCol.Value  : 1;
+                // Monaco renders no squiggle for zero-width ranges. Default to
+                // a 6-column highlight when we can't infer the offending token's
+                // length — wide enough to see, narrow enough to not eat the line.
+                int eCol  = sCol + 6;
                 Builder.Parser?.Diagnostics.Add(new global::Parser.Models.Diagnostic
                 {
                     Severity    = global::Parser.Models.DiagnosticSeverity.Error,
-                    Line        = 1,
-                    StartColumn = 1,
-                    EndColumn   = 1,
+                    Line        = line,
+                    StartColumn = sCol,
+                    EndColumn   = eCol,
                     Code        = "BUILD-FAILED",
                     Message     = ex.Message
                 });
@@ -714,8 +1067,36 @@
         }
         finally
         {
+            // Refresh the Flow dock tab so the Mermaid flowchart reflects the
+            // most recently parsed AST (or clears when Build wiped it). Wrapped
+            // because reflection-based AST walking is fault-tolerant but the
+            // JS interop call could still fail in edge cases (CDN blocked).
+            try { if (_flowDiagram != null) await _flowDiagram.RefreshAsync(); }
+            catch { }
             StateHasChanged();
         }
+    }
+
+    /// <summary>
+    /// Reads an int-typed property by name off any object via reflection,
+    /// returning null when absent or non-int. Used to extract Line/Column
+    /// from third-party exceptions (e.g. StreamerException) without
+    /// taking a typed dependency on the throwing module.
+    /// </summary>
+    private static int? TryReadIntProp(object obj, string name)
+    {
+        if (obj == null) return null;
+        var p = obj.GetType().GetProperty(name,
+            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+        if (p == null) return null;
+        try
+        {
+            var v = p.GetValue(obj);
+            if (v is int i) return i;
+            if (v is long l) return (int)l;
+        }
+        catch { }
+        return null;
     }
 
     /// <summary>
@@ -912,10 +1293,10 @@
     private async Task OnSaveFile(){
         try{
             if(_openedFile == null){
-                ToastService.Notify(Message("Error", "File not selected, please create a new file, the current editor content will be saved.", ToastType.Warning));
+                ToastService.Notify(Message(Traductor.T("EDITOR_FILE_NOT_SELECTED_TITLE"), Traductor.T("EDITOR_FILE_NOT_SELECTED_BODY"), ToastType.Warning));
                 await ShowCreateFileModalAsync();
             }else{
-                _openedFile.Content = await _editor.GetValue();
+                _openedFile.Content = await _pane.Monaco.GetValue();
                 _openedFile.Project = _project;
                 var result = await ProjectFiles.UpdateAsync(_openedFile);
                 if(result){
@@ -923,14 +1304,14 @@
                     _hasUnsavedChanges = false;
                 }
                 ToastService.Notify(Message(
-                    result ? "Correct" : "Error",
-                    result ? "File saved correctly" : $"Something fail while saving file: {ProjectFiles.LastError}",
+                    result ? Traductor.T("COMMON_OK") : Traductor.T("COMMON_ERROR"),
+                    result ? Traductor.T("EDITOR_FILE_SAVED_BODY") : string.Format(Traductor.T("EDITOR_FILE_SAVE_FAILED_BODY"), ProjectFiles.LastError),
                     result ? ToastType.Success : ToastType.Danger
                 ));
                 StateHasChanged();
             }
         }catch(Exception ex){
-            ToastService.Notify(Message("Error", ex.Message, ToastType.Danger));
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
         }
     }
     /// <summary>
@@ -945,58 +1326,44 @@
 
             _projectFiles.RemoveAll(f => f.Id == file.Id);
 
-            if (_openedFile != null && _openedFile.Id == file.Id)
+            // Close any tab pointing at the removed file. We don't prompt
+            // for unsaved changes here — the file is already gone from the
+            // repo, so there's nothing to save back to.
+            var existingIdx = _pane.IndexOf(file.Id);
+            if (existingIdx >= 0)
+            {
+                var tab = _pane.Tabs[existingIdx];
+                tab.HasUnsavedChanges = false; // bypass the close-prompt
+                await CloseTabAsync(existingIdx);
+            }
+
+            // If the pane is now empty and the project still has files,
+            // surface a fallback so the user isn't staring at a blank
+            // editor by accident.
+            if (_pane.Tabs.Count == 0)
             {
                 var fallback = _projectFiles.FirstOrDefault();
                 if (fallback != null)
                 {
-                    await OnProjectFileOpened(fallback);
-                }
-                else
-                {
-                    // No files left — clear the editor
-                    _openedFile = null!;
-                    _originalContent = string.Empty;
-                    _hasUnsavedChanges = false;
-                    await _editor.SetValue(string.Empty);
-                    StateHasChanged();
+                    await OpenFileInTabAsync(fallback);
                 }
             }
-            return; // keep the existing catch block below from running the legacy code path
         }catch(Exception ex){
-            ToastService.Notify(Message("Error", ex.Message, ToastType.Danger));
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
         }
     }
     /// <summary>
-    /// Handles the project file opened event.
+    /// Handles the project file opened event — fired by the FilesCard
+    /// when the user clicks a row. Routes to the tab system: if the file
+    /// is already open we just focus its tab, otherwise we open a new
+    /// one. The Monaco model swap (and language / cursor restoration) is
+    /// handled inside <see cref="ActivateTabAsync"/>.
     /// </summary>
-    /// <param name="file">The file that was opened.</param>
     private async Task OnProjectFileOpened(ProjectFile file){
         try{
-            _openedFile = file;
-            _originalContent = file.Content ?? string.Empty;
-            _hasUnsavedChanges = false;
-            _currentLanguage = GetLanguageFromExtension(file.FileName);
-
-            // Set markdown preview if it's a markdown file
-            if (IsMarkdownFile)
-            {
-                _markdownPreview = file.Content ?? string.Empty;
-            }
-
-            await _editor.SetValue(file.Content);
-
-            // Update editor language model
-            var model = await _editor.GetModel();
-            if (model != null)
-            {
-                await BlazorMonaco.Editor.Global.SetModelLanguage(JS, model, _currentLanguage);
-            }
-
-            StateHasChanged();
+            await OpenFileInTabAsync(file);
         }catch(Exception ex){
-            ToastService.Notify(Message("Error", ex.Message, ToastType.Danger));
-            _openedFile = null!;
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
         }
     }
     /// <summary>
@@ -1066,10 +1433,12 @@ end architecture behavioral;",
     /// <summary>
     /// Called when the Monaco editor has finished initializing.
     /// </summary>
-    private async Task OnEditorInitAsync()
+    private async Task OnEditorInitAsync(int paneIdx = 0)
     {
-        // Mark editor as initialized
-        _editorInitialized = true;
+        if (paneIdx < 0 || paneIdx >= _panes.Count) paneIdx = 0;
+        var pane = _panes[paneIdx];
+        // Mark this pane's editor as initialised
+        pane.Initialized = true;
 
         // Align Monaco with the current app theme. Monaco defaults to "vs" (light),
         // so without this the editor stays light even when the page is in dark mode
@@ -1079,37 +1448,69 @@ end architecture behavioral;",
         var monacoTheme = bsTheme == "dark" ? "vs-dark" : "vs";
         await BlazorMonaco.Editor.Global.SetTheme(JS, monacoTheme);
 
-        // Register keyboard shortcuts inside Monaco so Ctrl+S / Ctrl+B /
-        // Ctrl+Enter work even when Monaco's own key handling would normally
-        // eat the event. Monaco's AddCommand takes (KeyMod | KeyCode) packed
-        // into a single int — same bitmask convention as the JS API.
+        // Register keyboard shortcuts on this pane's Monaco instance so
+        // Ctrl+S / Ctrl+B / Ctrl+Enter / Ctrl+W / Ctrl+Tab work even
+        // when Monaco's own key handling would otherwise eat them.
+        // Capturing `paneIdx` in the closures means the second pane's
+        // Ctrl+W closes the second pane's active tab, etc.
         try
         {
+            int p = paneIdx;
+
             // Ctrl+S / Cmd+S → Save
-            await _editor.AddCommand(
+            await pane.Monaco.AddCommand(
                 (int)BlazorMonaco.KeyMod.CtrlCmd | (int)BlazorMonaco.KeyCode.KeyS,
                 async (_, _) => await OnSaveFile());
 
             // Ctrl+B / Cmd+B → Build
-            await _editor.AddCommand(
+            await pane.Monaco.AddCommand(
                 (int)BlazorMonaco.KeyMod.CtrlCmd | (int)BlazorMonaco.KeyCode.KeyB,
                 async (_, _) => await OnBuildRequested());
 
             // Ctrl+Enter / Cmd+Enter → Run (auto-builds if stale)
-            await _editor.AddCommand(
+            await pane.Monaco.AddCommand(
                 (int)BlazorMonaco.KeyMod.CtrlCmd | (int)BlazorMonaco.KeyCode.Enter,
                 async (_, _) => await OnRunRequested());
+
+            // Ctrl+W / Cmd+W → Close active tab in *this* pane.
+            await pane.Monaco.AddCommand(
+                (int)BlazorMonaco.KeyMod.CtrlCmd | (int)BlazorMonaco.KeyCode.KeyW,
+                async (_, _) =>
+                {
+                    var pp = _panes[p];
+                    if (pp.ActiveIndex >= 0) await CloseTabAsync(pp.ActiveIndex, p);
+                });
+
+            // Ctrl+Tab → next tab in *this* pane.
+            await pane.Monaco.AddCommand(
+                (int)BlazorMonaco.KeyMod.CtrlCmd | (int)BlazorMonaco.KeyCode.Tab,
+                async (_, _) =>
+                {
+                    var pp = _panes[p];
+                    if (pp.Tabs.Count < 2) return;
+                    int next = (pp.ActiveIndex + 1) % pp.Tabs.Count;
+                    await ActivateTabAsync(next, p);
+                });
+
+            // Ctrl+Shift+Tab → previous tab.
+            await pane.Monaco.AddCommand(
+                (int)BlazorMonaco.KeyMod.CtrlCmd | (int)BlazorMonaco.KeyMod.Shift | (int)BlazorMonaco.KeyCode.Tab,
+                async (_, _) =>
+                {
+                    var pp = _panes[p];
+                    if (pp.Tabs.Count < 2) return;
+                    int prev = (pp.ActiveIndex - 1 + pp.Tabs.Count) % pp.Tabs.Count;
+                    await ActivateTabAsync(prev, p);
+                });
         }
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "[Editor] Failed to register Monaco keyboard shortcuts");
         }
 
-        // If there's a pending file load, do it now
-        if (_pendingFileLoad)
-        {
-            await LoadPendingFileAsync();
-        }
+        // Materialise Monaco models for any tabs opened before this
+        // pane's editor was ready.
+        await LoadPendingFileAsync(paneIdx);
     }
 
     /// <summary>
@@ -1118,20 +1519,39 @@ end architecture behavioral;",
     /// </summary>
     private async Task OnModelContentChanged(ModelContentChangedEvent e)
     {
-        var currentContent = await _editor.GetValue();
+        var currentContent = await _pane.Monaco.GetValue();
         _hasUnsavedChanges = currentContent != _originalContent;
-
-        // Update markdown preview in real-time
-        if (IsMarkdownFile)
-        {
-            _markdownPreview = currentContent;
-        }
 
         // Wipe any stale parser markers — the content has moved, the squiggle
         // coordinates can't be trusted until the next Build.
         try { await JS.InvokeVoidAsync("kmilaSetMonacoMarkers", new object[0]); }
         catch { /* Monaco not ready — fine */ }
 
+        if (IsMarkdownFile)
+        {
+            // Debounced preview refresh: cancel any pending refresh, schedule a
+            // new one. Markdig parsing dominates CPU on large markdown files.
+            _markdownDebounce?.Cancel();
+            _markdownDebounce?.Dispose();
+            var cts = _markdownDebounce = new CancellationTokenSource();
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(MarkdownDebounceMs, cts.Token);
+                    await InvokeAsync(() =>
+                    {
+                        _markdownPreview = currentContent;
+                        StateHasChanged();
+                    });
+                }
+                catch (TaskCanceledException) { /* superseded */ }
+            });
+        }
+
+        // The status bar (unsaved indicator, line/col) needs the unsaved flag
+        // refreshed regardless of file type; the preview itself updates on the
+        // debounced path above.
         await InvokeAsync(StateHasChanged);
     }
 
@@ -1168,8 +1588,22 @@ end architecture behavioral;",
     {
         try
         {
-            var wd = WaveformData.FromSignalHistory(history, Builder.LastTickResNs);
-            _waveformData = wd;
+            // Live progress ticks usually populated _waveformData already —
+            // do one final merge to flush whatever the simulator wrote
+            // between the last timer tick and the run's end. Only fall back
+            // to the full FromSignalHistory path when no progress fires
+            // landed (very short sims, or runs that errored out before the
+            // timer had a chance to tick).
+            WaveformData? wd = _waveformData;
+            if (wd != null)
+            {
+                wd.MergeFrom(history);
+            }
+            else
+            {
+                wd = WaveformData.FromSignalHistory(history, Builder.LastTickResNs);
+                _waveformData = wd;
+            }
             _lastBuiltTime  = Sim.Time;
             _lastBuiltScale = Sim.Scale;
 
@@ -1213,7 +1647,7 @@ end architecture behavioral;",
     {
         // For now, log to console - in the future, trigger file download via JS interop
         Logger.LogInformation($"[Editor] VCD export: {vcdContent.Length} characters");
-        ToastService.Notify(Message("VCD Export", $"VCD data generated ({vcdContent.Length} chars). Use browser download to save.", ToastType.Info));
+        ToastService.Notify(Message(Traductor.T("EDITOR_VCD_EXPORT_TITLE"), string.Format(Traductor.T("EDITOR_VCD_EXPORT_BODY"), vcdContent.Length), ToastType.Info));
     }
 
     #endregion
@@ -1259,17 +1693,466 @@ end architecture behavioral;",
 
     #endregion
 
+    #region Tabs
+
+    /// <summary>
+    /// Opens <paramref name="file"/> in <paramref name="paneIdx"/> (or
+    /// the focused pane if -1). If the file is already open in *that
+    /// pane*, focuses its tab instead of duplicating; the same file may
+    /// still appear in the other pane as an independent buffer (per the
+    /// confirmed Q1 design choice).
+    /// </summary>
+    private async Task OpenFileInTabAsync(ProjectFile file, int paneIdx = -1)
+    {
+        if (file == null) return;
+        if (paneIdx < 0 || paneIdx >= _panes.Count) paneIdx = _focusedPaneIndex;
+        var pane = _panes[paneIdx];
+
+        var existing = pane.IndexOf(file.Id);
+        if (existing >= 0)
+        {
+            await ActivateTabAsync(existing, paneIdx);
+            return;
+        }
+
+        var tab = new OpenFileTab
+        {
+            File = file,
+            OriginalContent = file.Content ?? string.Empty,
+            HasUnsavedChanges = false,
+            Language = GetLanguageFromExtension(file.FileName)
+        };
+        if (tab.IsMarkdown) tab.MarkdownPreview = file.Content ?? string.Empty;
+
+        if (pane.Initialized)
+            tab.Model = await CreateModelForTabAsync(tab);
+
+        pane.Tabs.Add(tab);
+        _focusedPaneIndex = paneIdx;
+        await ActivateTabAsync(pane.Tabs.Count - 1, paneIdx);
+        RequestSaveSession();
+    }
+
+    /// <summary>
+    /// Builds a Monaco TextModel for <paramref name="tab"/>. URI carries
+    /// a monotonic per-tab id so two tabs (in either pane) referencing
+    /// the same file never collide in Monaco's global model registry.
+    /// </summary>
+    private async Task<BlazorMonaco.Editor.TextModel> CreateModelForTabAsync(OpenFileTab tab)
+    {
+        // ALWAYS generate a fresh URI here. Two reasons we can't reuse
+        // tab.ModelUri even when it's already populated:
+        //
+        // 1. Monaco's model registry is GLOBAL and survives navigation
+        //    away from the Editor route. The previous monotonic counter
+        //    reset on every mount, so re-entering /editor would request
+        //    "tab1" again and Monaco throws "Cannot add model because it
+        //    already exists" if the URI is still registered.
+        // 2. Sessions persist tab.ModelUri to localStorage. On a page
+        //    reload Monaco starts empty BUT session restore writes back
+        //    the old URIs onto the tab list — same collision the next
+        //    time CreateModel runs from the same browser session if the
+        //    user backs out and in again.
+        //
+        // GUID per call sidesteps both. The old URI (if any) is leaked
+        // into Monaco's registry but the dispose path takes care of it
+        // when the tab actually closes.
+        tab.ModelUri = $"inmemory://kmila/tab-{Guid.NewGuid():N}/{tab.File.FileName}";
+        return await BlazorMonaco.Editor.Global.CreateModel(
+            JS, tab.File.Content ?? string.Empty, tab.Language, tab.ModelUri);
+    }
+
+    /// <summary>
+    /// Activates a tab in <paramref name="paneIdx"/> (or the focused
+    /// pane when -1). When Monaco is initialised this swaps the editor's
+    /// model — cursor / scroll / undo state are preserved per-tab for
+    /// free. Before init only the index changes; the model swap happens
+    /// in <see cref="OnEditorInitAsync"/>.
+    /// </summary>
+    private async Task ActivateTabAsync(int idx, int paneIdx = -1)
+    {
+        if (paneIdx < 0 || paneIdx >= _panes.Count) paneIdx = _focusedPaneIndex;
+        var pane = _panes[paneIdx];
+        if (idx < 0 || idx >= pane.Tabs.Count) return;
+        pane.ActiveIndex = idx;
+        _focusedPaneIndex = paneIdx;
+        var tab = pane.Tabs[idx];
+        if (pane.Initialized)
+        {
+            if (tab.Model == null)
+                tab.Model = await CreateModelForTabAsync(tab);
+            try { await pane.Monaco.SetModel(tab.Model); }
+            catch (Exception ex) { Logger.LogWarning(ex, "[Editor] SetModel failed on tab activate"); }
+        }
+        await InvokeAsync(StateHasChanged);
+        RequestSaveSession();
+    }
+
+    /// <summary>
+    /// Closes a tab. Prompts via browser confirm when the tab has
+    /// unsaved changes (VS Code parity). Disposes the Monaco TextModel
+    /// and clamps the pane's <see cref="EditorPane.ActiveIndex"/> onto
+    /// a sensible neighbour.
+    /// </summary>
+    private async Task CloseTabAsync(int idx, int paneIdx = -1)
+    {
+        if (paneIdx < 0 || paneIdx >= _panes.Count) paneIdx = _focusedPaneIndex;
+        var pane = _panes[paneIdx];
+        if (idx < 0 || idx >= pane.Tabs.Count) return;
+        var tab = pane.Tabs[idx];
+        if (tab.HasUnsavedChanges)
+        {
+            try
+            {
+                var ok = await JS.InvokeAsync<bool>("confirm",
+                    string.Format(Traductor.T("EDITOR_TAB_CLOSE_CONFIRM"), tab.File?.FileName ?? "?"));
+                if (!ok) return;
+            }
+            catch
+            {
+                // No JS confirm available (server prerender, sandboxed
+                // iframe). Fall through and close — losing one tab's
+                // dirty state is preferable to a permanently stuck UI.
+            }
+        }
+
+        await DisposeTabModelAsync(tab);
+        bool wasActive = idx == pane.ActiveIndex;
+        pane.Tabs.RemoveAt(idx);
+
+        if (pane.Tabs.Count == 0)
+        {
+            pane.ActiveIndex = -1;
+            if (pane.Initialized)
+            {
+                try { await pane.Monaco.SetValue(string.Empty); } catch { }
+            }
+        }
+        else if (wasActive || idx <= pane.ActiveIndex)
+        {
+            if (pane.ActiveIndex >= pane.Tabs.Count) pane.ActiveIndex = pane.Tabs.Count - 1;
+            await ActivateTabAsync(pane.ActiveIndex, paneIdx);
+        }
+        await InvokeAsync(StateHasChanged);
+        RequestSaveSession();
+    }
+
+    /// <summary>Closes every tab in every pane. Called on project switch
+    /// so the new project doesn't inherit buffers from the old one.</summary>
+    private async Task CloseAllTabsAsync()
+    {
+        foreach (var pane in _panes)
+        {
+            foreach (var tab in pane.Tabs.ToList())
+                await DisposeTabModelAsync(tab);
+            pane.Tabs.Clear();
+            pane.ActiveIndex = -1;
+            if (pane.Initialized)
+            {
+                try { await pane.Monaco.SetValue(string.Empty); } catch { }
+            }
+        }
+    }
+
+    /// <summary>Best-effort model disposal. BlazorMonaco's API surface
+    /// shifted across versions; we try the documented method and fall
+    /// back to the JS-side dispose if reflection-style invocation fails,
+    /// because leaking models accumulates inside Monaco's registry.</summary>
+    private async Task DisposeTabModelAsync(OpenFileTab tab)
+    {
+        if (tab.Model == null) return;
+        try { await tab.Model.DisposeModel(); }
+        catch
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(tab.ModelUri))
+                    await JS.InvokeVoidAsync("eval",
+                        $"monaco.editor.getModel(monaco.Uri.parse('{tab.ModelUri}'))?.dispose()");
+            }
+            catch { /* swallow — leaked model is the lesser evil */ }
+        }
+        tab.Model = null;
+    }
+
+    /// <summary>Sets the focused pane. Called when the user clicks
+    /// inside a pane's surface (focus follows clicks rather than mouse
+    /// movement). The focused pane decides where new files open and
+    /// what the workbench header reads off.</summary>
+    private void SetFocusedPane(int paneIdx)
+    {
+        if (paneIdx < 0 || paneIdx >= _panes.Count) return;
+        if (_focusedPaneIndex == paneIdx) return;
+        _focusedPaneIndex = paneIdx;
+        StateHasChanged();
+    }
+
+    // ─── Session persistence ─────────────────────────────────────────
+
+    /// <summary>
+    /// Restores the saved tab state for <see cref="_projectId"/>. Returns
+    /// true when at least one tab was opened from the session, false
+    /// when there is no session, the session is empty, or every saved
+    /// tab references a now-deleted file. The caller falls back to the
+    /// project's main file in the false case.
+    /// </summary>
+    private async Task<bool> TryRestoreSessionAsync()
+    {
+        if (_projectId <= 0) return false;
+        var session = await Sessions.LoadAsync(_projectId);
+        if (session == null || session.Panes == null || session.Panes.Count == 0)
+            return false;
+
+        // The post-firstRender retry path can land here with the
+        // prerender's "main file" tab still open, so wipe before
+        // applying the saved state — otherwise we'd duplicate the
+        // first tab.
+        await CloseAllTabsAsync();
+
+        // Materialise pane B if the session was split. We mirror what
+        // ToggleSplitAsync does so the rest of the restore path can
+        // treat both panes as "already there".
+        if (session.Panes.Count >= 2 && _panes.Count < 2)
+            _panes.Add(new EditorPane());
+
+        bool anyOpened = false;
+        for (int p = 0; p < session.Panes.Count && p < _panes.Count; p++)
+        {
+            var snap = session.Panes[p];
+            if (snap?.TabFileIds == null) continue;
+            foreach (var fileId in snap.TabFileIds)
+            {
+                var file = _projectFiles.FirstOrDefault(f => f.Id == fileId);
+                if (file == null) continue; // file was deleted between sessions
+                await OpenFileInTabAsync(file, p);
+                anyOpened = true;
+            }
+            // Active-index restore. Clamp into the actually-opened range
+            // because deleted files may have shifted positions.
+            var pane = _panes[p];
+            if (pane.Tabs.Count > 0)
+            {
+                int idx = snap.ActiveIndex;
+                if (idx < 0 || idx >= pane.Tabs.Count) idx = 0;
+                await ActivateTabAsync(idx, p);
+            }
+        }
+
+        if (!anyOpened) return false;
+
+        // Focused-pane restore last so OpenFileInTabAsync's own focus
+        // mutations during the loop above don't override the user's
+        // intent.
+        int focused = session.FocusedPaneIndex;
+        if (focused < 0 || focused >= _panes.Count) focused = 0;
+        _focusedPaneIndex = focused;
+        return true;
+    }
+
+    /// <summary>
+    /// Schedules a debounced session save. Multiple calls within the
+    /// debounce window collapse into one write. Idempotent in failure —
+    /// a localStorage hiccup logs a warning but never disturbs the UI.
+    /// Skipped entirely during prerender (JS unavailable); the post-
+    /// firstRender call to <see cref="ApplyPendingSessionRestoreAsync"/>
+    /// re-syncs storage with the in-memory state.
+    /// </summary>
+    private void RequestSaveSession()
+    {
+        if (!_isInteractive || _projectId <= 0) return;
+
+        _sessionDebounce?.Cancel();
+        _sessionDebounce?.Dispose();
+        var cts = _sessionDebounce = new CancellationTokenSource();
+        // Capture the Token *value* now, before any subsequent
+        // RequestSaveSession call disposes this CTS — accessing
+        // cts.Token after dispose throws ObjectDisposedException.
+        var token = cts.Token;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(SessionSaveDebounceMs, token);
+                await SaveSessionNowAsync();
+            }
+            catch (TaskCanceledException) { /* superseded */ }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "[Editor] Session save (debounced) failed");
+            }
+        });
+    }
+
+    /// <summary>Synchronous-ish flush of the current pane state. Used
+    /// directly from <see cref="Dispose"/> so the very last edit before
+    /// closing the project survives.</summary>
+    private async Task SaveSessionNowAsync()
+    {
+        if (_projectId <= 0) return;
+        var snapshot = new EditorSession
+        {
+            Panes = _panes.Select(p => new EditorPaneSnapshot
+            {
+                TabFileIds = p.Tabs.Select(t => t.File?.Id ?? 0).Where(id => id > 0).ToList(),
+                ActiveIndex = p.ActiveIndex
+            }).ToList(),
+            FocusedPaneIndex = _focusedPaneIndex
+        };
+        await Sessions.SaveAsync(_projectId, snapshot);
+    }
+
+    /// <summary>
+    /// Toggles split mode. Splitting clones the focused pane's active
+    /// file (if any) into a fresh second pane so the user starts with
+    /// a useful side-by-side view rather than an empty right pane.
+    /// Unsplitting moves any tabs from pane B back into pane A's tab
+    /// list (preserving their order and dirty state) so no buffer is
+    /// silently dropped.
+    /// </summary>
+    private async Task ToggleSplitAsync()
+    {
+        if (IsSplit)
+        {
+            // Merge pane B's tabs back into pane A and tear down pane B.
+            var srcPane = _panes[1];
+            var destPane = _panes[0];
+            foreach (var tab in srcPane.Tabs)
+                destPane.Tabs.Add(tab);
+            srcPane.Tabs.Clear();
+            srcPane.ActiveIndex = -1;
+            _panes.RemoveAt(1);
+            _focusedPaneIndex = 0;
+            // The Monaco models stay valid (their URIs are tab-scoped,
+            // not pane-scoped) but the active model needs re-binding to
+            // pane A's editor since the destination changed.
+            if (destPane.ActiveTab?.Model != null && destPane.Initialized)
+            {
+                try { await destPane.Monaco.SetModel(destPane.ActiveTab.Model); }
+                catch (Exception ex) { Logger.LogWarning(ex, "[Editor] SetModel failed during unsplit"); }
+            }
+        }
+        else
+        {
+            // Add an empty pane B. Auto-clone the focused tab so the
+            // user lands on a useful side-by-side rather than an empty
+            // right column screaming "drag a tab here".
+            _panes.Add(new EditorPane());
+            _focusedPaneIndex = 1;
+            var sourceTab = _panes[0].ActiveTab;
+            if (sourceTab?.File != null)
+            {
+                await OpenFileInTabAsync(sourceTab.File, 1);
+            }
+        }
+        StateHasChanged();
+        RequestSaveSession();
+    }
+
+    /// <summary>
+    /// Single entry-point for tab drag-drop. Handles both same-pane
+    /// reorder (src.PaneIndex == dest.PaneIndex) and cross-pane move
+    /// (different panes). Cross-pane moves transfer the OpenFileTab
+    /// (and its Monaco TextModel) to the destination pane's list so
+    /// the buffer state — language, dirty flag, cursor — survives the
+    /// move intact. The Monaco model itself isn't recreated; we just
+    /// swap which editor instance has it active.
+    /// </summary>
+    private async Task HandleTabMoveAsync(TabMoveRequest req)
+    {
+        if (req.SrcPaneIndex  < 0 || req.SrcPaneIndex  >= _panes.Count) return;
+        if (req.DestPaneIndex < 0 || req.DestPaneIndex >= _panes.Count) return;
+        var srcPane  = _panes[req.SrcPaneIndex];
+        var destPane = _panes[req.DestPaneIndex];
+        if (req.SrcTabIndex < 0 || req.SrcTabIndex >= srcPane.Tabs.Count) return;
+
+        bool sameList = ReferenceEquals(srcPane, destPane);
+        int destIdx = Math.Clamp(req.DestTabIndex, 0, sameList ? destPane.Tabs.Count - 1 : destPane.Tabs.Count);
+
+        if (sameList && req.SrcTabIndex == destIdx) return;
+
+        var moved = srcPane.Tabs[req.SrcTabIndex];
+
+        if (sameList)
+        {
+            // Reorder within the same list.
+            srcPane.Tabs.RemoveAt(req.SrcTabIndex);
+            int adjustedDest = destIdx;
+            if (req.SrcTabIndex < destIdx) adjustedDest--;
+            srcPane.Tabs.Insert(adjustedDest, moved);
+
+            // Track active index across the move.
+            if (srcPane.ActiveIndex == req.SrcTabIndex)
+                srcPane.ActiveIndex = adjustedDest;
+            else if (req.SrcTabIndex < srcPane.ActiveIndex && adjustedDest >= srcPane.ActiveIndex)
+                srcPane.ActiveIndex--;
+            else if (req.SrcTabIndex > srcPane.ActiveIndex && adjustedDest <= srcPane.ActiveIndex)
+                srcPane.ActiveIndex++;
+        }
+        else
+        {
+            // Cross-pane move (Phase 2c). Pull the tab out of source,
+            // adjust source's active index, push into destination at the
+            // requested slot, and activate it there so the user lands on
+            // the moved buffer in its new home.
+            srcPane.Tabs.RemoveAt(req.SrcTabIndex);
+            if (srcPane.Tabs.Count == 0)
+                srcPane.ActiveIndex = -1;
+            else if (srcPane.ActiveIndex >= srcPane.Tabs.Count)
+                srcPane.ActiveIndex = srcPane.Tabs.Count - 1;
+            else if (req.SrcTabIndex < srcPane.ActiveIndex)
+                srcPane.ActiveIndex--;
+
+            destPane.Tabs.Insert(destIdx, moved);
+            destPane.ActiveIndex = destIdx;
+
+            // Re-bind the moved tab's Monaco model to the destination
+            // editor. SetModel is idempotent if the model is already on
+            // the same editor (single-pane case) so this is safe even
+            // when src == dest.
+            if (destPane.Initialized && moved.Model != null)
+            {
+                try { await destPane.Monaco.SetModel(moved.Model); }
+                catch (Exception ex) { Logger.LogWarning(ex, "[Editor] SetModel failed during cross-pane move"); }
+            }
+        }
+
+        StateHasChanged();
+        RequestSaveSession();
+    }
+
+    #endregion
+
     /// <summary>
     /// Unsubscribe all Builder events when the Editor page is torn down so
     /// repeated navigations don't stack handlers.
     /// </summary>
     public void Dispose()
     {
-        Builder.OnSimulationCompleted -= OnSimulationDataReady;
-        Builder.OnSimulationEnded     -= OnSimulationEnded;
-        Builder.OnProgressAdvanced    -= OnProgressAdvanced;
-        Sim.OnChange                  -= OnSimParamsChanged;
-        Snapshots.OnChange            -= OnSnapshotsChanged;
+        Builder.OnSimulationCompleted     -= OnSimulationDataReady;
+        Builder.OnSimulationProgressUpdate -= OnSimulationProgressUpdate;
+        Builder.OnSimulationEnded         -= OnSimulationEnded;
+        Builder.OnProgressAdvanced        -= OnProgressAdvanced;
+        Sim.OnChange                      -= OnSimParamsChanged;
+        Snapshots.OnChange                -= OnSnapshotsChanged;
+
+        // Drop the heavy waveform payload eagerly. _waveformData carries every
+        // signal transition for the run (often multi-MB on long sims) and the
+        // compare list can hold N of them. Without this, navigation away from
+        // /editor keeps everything rooted until the next GC sweep notices.
+        _waveformData = null;
+        _compareSnapshots = null;
+
+        _markdownDebounce?.Cancel();
+        _markdownDebounce?.Dispose();
+        _markdownDebounce = null;
+
+        // Flush the session right before unmount so the very last edit
+        // before navigating away survives — the debounced timer would
+        // otherwise be cancelled along with the page.
+        _sessionDebounce?.Cancel();
+        _sessionDebounce?.Dispose();
+        _sessionDebounce = null;
+        _ = SaveSessionNowAsync();
 
         // Clear the editor-route attribute so non-editor pages get their normal
         // max-width back. Fire-and-forget: Dispose is sync, JS interop is async.

@@ -15,6 +15,8 @@
 @inject LessonProgressStore LearnProgress
 @inject ProjectBundleService Bundles
 @inject Projects ProjectsRepo
+@inject GitHubAuth GitHubAuth
+@inject LibraryCompiler.Services.LibraryCompiler LibCompiler
 @implements IDisposable
 
 <PageTitle>@Traductor.T("NAV_SETTINGS")</PageTitle>
@@ -34,7 +36,7 @@
                 <span class="settings-card__icon settings-card__icon--accent">
                     <Icon Name="IconName.PaletteFill" />
                 </span>
-                <div>
+                <div class="settings-card__head-text">
                     <h2>@Traductor.T("SETTINGS_APPEARANCE_TITLE")</h2>
                     <p class="settings-card__sub">@Traductor.T("SETTINGS_APPEARANCE_SUB")</p>
                 </div>
@@ -67,7 +69,7 @@
                 <span class="settings-card__icon settings-card__icon--info">
                     <Icon Name="IconName.CodeSquare" />
                 </span>
-                <div>
+                <div class="settings-card__head-text">
                     <h2>@Traductor.T("SETTINGS_EDITOR_TITLE")</h2>
                     <p class="settings-card__sub">@Traductor.T("SETTINGS_EDITOR_SUB")</p>
                 </div>
@@ -83,7 +85,7 @@
                 <span class="settings-card__icon settings-card__icon--success">
                     <Icon Name="IconName.CpuFill" />
                 </span>
-                <div>
+                <div class="settings-card__head-text">
                     <h2>@Traductor.T("SETTINGS_SIMULATION_TITLE")</h2>
                     <p class="settings-card__sub">@Traductor.T("SETTINGS_SIMULATION_SUB")</p>
                 </div>
@@ -112,19 +114,54 @@
             </div>
         </article>
 
+        @* --- Library compilation --- *@
+        <article class="settings-card">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--info">
+                    <Icon Name="IconName.Layers" />
+                </span>
+                <div class="settings-card__head-text">
+                    <h2>@Traductor.T("SETTINGS_LIB_BUILD_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("SETTINGS_LIB_BUILD_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                <div class="settings-row">
+                    <div class="settings-row__label">
+                        <strong>@Traductor.T("SETTINGS_LIB_BUILD_MODE_TITLE")</strong>
+                        <small>@Traductor.T("SETTINGS_LIB_BUILD_MODE_HINT")</small>
+                    </div>
+                    <div class="settings-row__control">
+                        <select class="form-select form-select-sm"
+                                value="@_libBuildMode.ToToken()"
+                                @onchange="OnLibBuildModeChanged">
+                            <option value="ondemand">@Traductor.T("SETTINGS_LIB_BUILD_ONDEMAND")</option>
+                            <option value="process">@Traductor.T("SETTINGS_LIB_BUILD_PROCESS")</option>
+                            <option value="persistent">@Traductor.T("SETTINGS_LIB_BUILD_PERSISTENT")</option>
+                        </select>
+                    </div>
+                </div>
+                <p class="settings-card__hint">@Traductor.T(_libBuildMode switch {
+                    LibraryCompiler.Services.LibraryBuildMode.OnDemand      => "SETTINGS_LIB_BUILD_ONDEMAND_DESC",
+                    LibraryCompiler.Services.LibraryBuildMode.ProcessCached => "SETTINGS_LIB_BUILD_PROCESS_DESC",
+                    _                                                       => "SETTINGS_LIB_BUILD_PERSISTENT_DESC"
+                })</p>
+            </div>
+        </article>
+
         @* --- User FPGAs --- *@
-        <article class="settings-card settings-card--wide">
+        <article class="settings-card">
             <header class="settings-card__head">
                 <span class="settings-card__icon settings-card__icon--success">
                     <Icon Name="IconName.CpuFill" />
                 </span>
-                <div>
+                <div class="settings-card__head-text">
                     <h2>@Traductor.T("SETTINGS_USER_FPGAS_TITLE")</h2>
                     <p class="settings-card__sub">@Traductor.T("SETTINGS_USER_FPGAS_SUB")</p>
                 </div>
             </header>
             <div class="settings-card__body">
-                <div class="settings-actions">
+                <div class="settings-card__actions">
                     <button type="button" class="btn btn-secondary"
                             @onclick="DownloadFpgaTemplate">
                         <Icon Name="IconName.Download" />
@@ -166,18 +203,18 @@
         </article>
 
         @* --- User languages --- *@
-        <article class="settings-card settings-card--wide">
+        <article class="settings-card">
             <header class="settings-card__head">
                 <span class="settings-card__icon settings-card__icon--info">
                     <Icon Name="IconName.Translate" />
                 </span>
-                <div>
+                <div class="settings-card__head-text">
                     <h2>@Traductor.T("SETTINGS_USER_LANGS_TITLE")</h2>
                     <p class="settings-card__sub">@Traductor.T("SETTINGS_USER_LANGS_SUB")</p>
                 </div>
             </header>
             <div class="settings-card__body">
-                <div class="settings-actions">
+                <div class="settings-card__actions">
                     <button type="button" class="btn btn-secondary"
                             @onclick="DownloadLanguageTemplate">
                         <Icon Name="IconName.Download" />
@@ -225,20 +262,80 @@
             </div>
         </article>
 
+        @* --- User VHDL libraries --- *@
+        <article class="settings-card">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--accent">
+                    <Icon Name="IconName.Stack" />
+                </span>
+                <div class="settings-card__head-text">
+                    <h2>@Traductor.T("SETTINGS_USER_LIBS_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("SETTINGS_USER_LIBS_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                <div class="settings-card__actions">
+                    <label class="btn btn-primary settings-import-btn">
+                        <Icon Name="IconName.FileEarmarkPlus" />
+                        <span>@Traductor.T("SETTINGS_IMPORT_LIB")</span>
+                        <InputFile OnChange="OnLibraryImportAsync" accept=".vhd,.vhdl" class="d-none" />
+                    </label>
+                </div>
+
+                @if (_userLibs.Count == 0)
+                {
+                    <p class="settings-card__placeholder">@Traductor.T("SETTINGS_NO_USER_LIB")</p>
+                }
+                else
+                {
+                    <ul class="settings-list">
+                        @foreach (var path in _userLibs)
+                        {
+                            var name     = System.IO.Path.GetFileName(path);
+                            var packages = UserAssetStore.ListPackagesInFile(path);
+                            <li class="settings-list__item">
+                                <div class="settings-list__info">
+                                    <Icon Name="IconName.FileEarmarkCode" />
+                                    <span class="settings-list__name">@name</span>
+                                    @if (packages.Count > 0)
+                                    {
+                                        <span class="settings-list__code">
+                                            @string.Join(", ", packages)
+                                        </span>
+                                    }
+                                </div>
+                                <button type="button" class="btn btn-ghost btn-sm"
+                                        @onclick="() => DeleteLibrary(name)"
+                                        aria-label="@Traductor.T("COMMON_DELETE")"
+                                        title="@Traductor.T("COMMON_DELETE")">
+                                    <Icon Name="IconName.Trash" />
+                                </button>
+                            </li>
+                        }
+                    </ul>
+                }
+
+                <p class="settings-card__note">
+                    <Icon Name="IconName.InfoCircle" />
+                    <span>@Traductor.T("SETTINGS_USER_LIBS_NOTE")</span>
+                </p>
+            </div>
+        </article>
+
         @* --- Project bundle export / import --- *@
-        <article class="settings-card settings-card--wide">
+        <article class="settings-card">
             <header class="settings-card__head">
                 <span class="settings-card__icon settings-card__icon--accent">
                     <Icon Name="IconName.BoxArrowUpRight" />
                 </span>
-                <div>
+                <div class="settings-card__head-text">
                     <h2>@Traductor.T("SETTINGS_BUNDLE_TITLE")</h2>
                     <p class="settings-card__sub">@Traductor.T("SETTINGS_BUNDLE_SUB")</p>
                 </div>
             </header>
             <div class="settings-card__body">
-                <div class="settings-actions">
-                    <select class="form-select" style="max-width: 260px;" @bind="_exportProjectId">
+                <div class="settings-card__actions">
+                    <select class="form-select settings-card__select" @bind="_exportProjectId">
                         <option value="0">@Traductor.T("SETTINGS_BUNDLE_PICK")</option>
                         @foreach (var p in _projects)
                         {
@@ -266,7 +363,7 @@
                 <span class="settings-card__icon settings-card__icon--accent">
                     <Icon Name="IconName.MortarboardFill" />
                 </span>
-                <div>
+                <div class="settings-card__head-text">
                     <h2>@Traductor.T("SETTINGS_LEARN_TITLE")</h2>
                     <p class="settings-card__sub">@Traductor.T("SETTINGS_LEARN_SUB")</p>
                 </div>
@@ -295,7 +392,7 @@
                 <span class="settings-card__icon settings-card__icon--warning">
                     <Icon Name="IconName.TerminalFill" />
                 </span>
-                <div>
+                <div class="settings-card__head-text">
                     <h2>@Traductor.T("SETTINGS_DIAGNOSTICS_TITLE")</h2>
                     <p class="settings-card__sub">@Traductor.T("SETTINGS_DIAGNOSTICS_SUB")</p>
                 </div>
@@ -308,17 +405,204 @@
             </div>
         </article>
 
+        @* --- Account (GitHub login, optional) ---
+            Login is OPTIONAL. The card surfaces sign-in / sign-out, the
+            auto-error-report preference, and the privacy declaration in
+            one place. Tier 1+2 fallbacks below stay available either
+            way; only "submit in-app" + auto-reports require auth. *@
+        <article class="settings-card">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--accent">
+                    <Icon Name="IconName.PersonCircle" />
+                </span>
+                <div class="settings-card__head-text">
+                    <h2>@Traductor.T("SETTINGS_ACCOUNT_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("SETTINGS_ACCOUNT_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                @if (GitHubAuth.IsLoggedIn && GitHubAuth.Account != null)
+                {
+                    @* Flat row mirroring .settings-list__item — same
+                       visual weight as the FPGA / Languages list rows
+                       elsewhere in this page. No card-within-card. *@
+                    <ul class="settings-list">
+                        <li class="settings-list__item">
+                            <div class="settings-list__info">
+                                @if (!string.IsNullOrEmpty(GitHubAuth.Account.AvatarUrl))
+                                {
+                                    <img src="@GitHubAuth.Account.AvatarUrl" alt=""
+                                         class="settings-account__avatar"
+                                         width="32" height="32" />
+                                }
+                                else
+                                {
+                                    <Icon Name="IconName.PersonCircle" />
+                                }
+                                <span class="settings-list__name">@(GitHubAuth.Account.Name ?? GitHubAuth.Account.Login)</span>
+                                <span class="settings-list__code">@GitHubAuth.Account.Login</span>
+                            </div>
+                            <button type="button" class="btn btn-ghost btn-sm"
+                                    @onclick="SignOutAsync"
+                                    aria-label="@Traductor.T("TOPBAR_SIGN_OUT")"
+                                    title="@Traductor.T("TOPBAR_SIGN_OUT")">
+                                <Icon Name="IconName.BoxArrowRight" />
+                            </button>
+                        </li>
+                    </ul>
+
+                    <div class="settings-row">
+                        <div class="settings-row__label">
+                            <strong>@Traductor.T("SETTINGS_AUTO_REPORT_TITLE")</strong>
+                            <small>@Traductor.T("SETTINGS_AUTO_REPORT_HINT")</small>
+                        </div>
+                        <div class="settings-row__control">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox"
+                                       id="auto-report"
+                                       checked="@_autoReportEnabled"
+                                       @onchange="OnAutoReportToggledAsync" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="settings-card__actions">
+                        <button type="button"
+                                class="btn btn-primary"
+                                @onclick="SubmitManualReportAsync"
+                                disabled="@_submitting">
+                            <Icon Name="IconName.Send" />
+                            <span>@Traductor.T("SETTINGS_ACCOUNT_SEND_REPORT")</span>
+                        </button>
+                    </div>
+                    @if (!string.IsNullOrEmpty(_lastReportUrl))
+                    {
+                        <p class="settings-card__note">
+                            <Icon Name="IconName.CheckCircle" />
+                            <span>
+                                @Traductor.T("SETTINGS_ACCOUNT_REPORT_SENT")
+                                <a href="@_lastReportUrl" target="_blank" rel="noopener noreferrer">@_lastReportUrl</a>
+                            </span>
+                        </p>
+                    }
+                }
+                else
+                {
+                    @* Logged-out state. When OAuth Client ID isn't yet
+                       configured, show a 3-step setup form so the
+                       deployer can paste the ID without recompiling. *@
+                    @if (!GitHubAuth.IsConfigured)
+                    {
+                        <p class="settings-card__hint">
+                            <strong>@Traductor.T("SETTINGS_ACCOUNT_SETUP_TITLE")</strong>
+                        </p>
+                        <ol class="settings-account__setup-steps">
+                            <li>
+                                @Traductor.T("SETTINGS_ACCOUNT_SETUP_STEP1_TEXT")
+                                <a href="https://github.com/settings/developers" target="_blank" rel="noopener noreferrer">
+                                    github.com/settings/developers
+                                    <Icon Name="IconName.BoxArrowUpRight" />
+                                </a>
+                            </li>
+                            <li>@Traductor.T("SETTINGS_ACCOUNT_SETUP_STEP2")</li>
+                            <li>@Traductor.T("SETTINGS_ACCOUNT_SETUP_STEP3")</li>
+                        </ol>
+
+                        <div class="settings-row">
+                            <div class="settings-row__label">
+                                <label for="kmila-client-id"><strong>@Traductor.T("SETTINGS_ACCOUNT_CLIENT_ID_LABEL")</strong></label>
+                                <small>@Traductor.T("SETTINGS_ACCOUNT_CLIENT_ID_HINT")</small>
+                            </div>
+                            <div class="settings-row__control">
+                                <input id="kmila-client-id" type="text"
+                                       class="form-control"
+                                       placeholder="Iv1.xxxxxxxxxxxxxxxx"
+                                       @bind="_clientIdInput" />
+                            </div>
+                        </div>
+
+                        <div class="settings-card__actions">
+                            <button type="button" class="btn btn-primary"
+                                    @onclick="SaveClientIdAsync"
+                                    disabled="@string.IsNullOrWhiteSpace(_clientIdInput)">
+                                <Icon Name="IconName.Save" />
+                                <span>@Traductor.T("COMMON_SAVE")</span>
+                            </button>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="settings-card__actions">
+                            <button type="button" class="btn btn-primary"
+                                    @onclick="OpenLoginAsync">
+                                <Icon Name="IconName.Github" />
+                                <span>@Traductor.T("TOPBAR_SIGN_IN_GITHUB")</span>
+                            </button>
+                        </div>
+                        <p class="settings-card__hint">@Traductor.T("SETTINGS_ACCOUNT_LOGIN_OPTIONAL")</p>
+
+                        @* Optional: change OAuth Client ID. Wrapped in
+                           a <details> using the codebase's standard
+                           rotated-chevron pattern (see .kmila-fpga-picker)
+                           so the disclosure feels native to the app. *@
+                        <details class="settings-card__details">
+                            <summary>
+                                <Icon Name="IconName.Tools" />
+                                <span>@Traductor.T("SETTINGS_ACCOUNT_CHANGE_CLIENT_ID")</span>
+                                <Icon Name="IconName.ChevronDown" Class="settings-card__details-chevron" />
+                            </summary>
+                            <div class="settings-row">
+                                <div class="settings-row__label">
+                                    <label for="kmila-client-id-change"><strong>@Traductor.T("SETTINGS_ACCOUNT_CLIENT_ID_LABEL")</strong></label>
+                                    <small>@Traductor.T("SETTINGS_ACCOUNT_CLIENT_ID_HINT")</small>
+                                </div>
+                                <div class="settings-row__control">
+                                    <input id="kmila-client-id-change" type="text"
+                                           class="form-control"
+                                           placeholder="@GitHubAuth.CurrentClientId"
+                                           @bind="_clientIdInput" />
+                                </div>
+                            </div>
+                            <div class="settings-card__actions">
+                                <button type="button" class="btn btn-primary"
+                                        @onclick="SaveClientIdAsync"
+                                        disabled="@string.IsNullOrWhiteSpace(_clientIdInput)">
+                                    <Icon Name="IconName.Save" />
+                                    <span>@Traductor.T("COMMON_SAVE")</span>
+                                </button>
+                                <button type="button" class="btn btn-outline-danger"
+                                        @onclick="ClearClientIdAsync">
+                                    <Icon Name="IconName.Trash" />
+                                    <span>@Traductor.T("COMMON_CLEAR")</span>
+                                </button>
+                            </div>
+                        </details>
+                    }
+                }
+
+                @* Privacy notice — always visible. Reuses the canonical
+                   .settings-card__note treatment so it reads as a
+                   sibling of every other note in the page (e.g. the
+                   user-languages note in the same section). *@
+                <p class="settings-card__note">
+                    <Icon Name="IconName.ShieldLock" />
+                    <span>@Traductor.T("SETTINGS_ACCOUNT_PRIVACY")</span>
+                </p>
+            </div>
+        </article>
+
         @* --- Feedback / Issue reporting ---
             Tier 1: copy diagnostics to clipboard (offline, no auth).
             Tier 2: open a pre-filled GitHub issue URL (new tab, no auth).
-            Tier 3 (Device Flow in-app submission) is parked — needs an OAuth
-            App Client ID before it can ship. *@
+            Tier 3 (Device Flow in-app submission) ships in the Account
+            card above — it requires an OAuth Client ID configured in
+            GitHubAuthConfig. *@
         <article class="settings-card">
             <header class="settings-card__head">
                 <span class="settings-card__icon settings-card__icon--accent">
                     <Icon Name="IconName.Github" />
                 </span>
-                <div>
+                <div class="settings-card__head-text">
                     <h2>@Traductor.T("SETTINGS_FEEDBACK_TITLE")</h2>
                     <p class="settings-card__sub">@Traductor.T("SETTINGS_FEEDBACK_SUB")</p>
                 </div>
@@ -345,10 +629,12 @@
 </section>
 
 <ConfirmDialog @ref="_confirmDialog" />
+<Modal @ref="_accountLoginModal" Title="@Traductor.T("TOPBAR_SIGN_IN_GITHUB")" />
 
 @code {
     private List<string> _userFpgas = new();
     private List<string> _userLangs = new();
+    private List<string> _userLibs  = new();
     private int _learnCompleted;
     private ConfirmDialog _confirmDialog = default!;
 
@@ -359,9 +645,25 @@
     /// </summary>
     private TickResolutionMode _tickMode = TickResolutionMode.Default;
 
+    /// <summary>
+    /// Current LibraryCompiler build-policy mode. Loaded from AppSettings,
+    /// written back on change, and applied directly to the singleton
+    /// LibraryCompiler so the next Build picks it up without restart.
+    /// </summary>
+    private LibraryCompiler.Services.LibraryBuildMode _libBuildMode =
+        LibraryCompiler.Services.LibraryBuildMode.Persistent;
+
     /// <summary>Projects available to export — loaded alongside user assets.</summary>
     private List<Kmila.Shared.Models.Project> _projects = new();
     private int _exportProjectId;
+
+    // ─── Account / GitHub login state ────────────────────────────
+    private const string AutoReportSettingKey = "KMILA_AUTO_REPORT_ENABLED";
+    private bool _autoReportEnabled;
+    private bool _submitting;
+    private string? _lastReportUrl;
+    private Modal _accountLoginModal = new();
+    private string _clientIdInput = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -377,6 +679,21 @@
         // load failure on the Settings page.
         var raw = await DbContext.GetSettingAsync(AppSettings.KEY_TICK_RESOLUTION_MODE);
         _tickMode = TickResolutionModeExtensions.ParseToken(raw);
+
+        // Same for the library-build mode. The startup hook in Program.cs
+        // already applied this to the singleton LibraryCompiler — we just
+        // mirror it here so the dropdown shows the right value.
+        var libRaw = await DbContext.GetSettingAsync(AppSettings.KEY_LIBRARY_BUILD_MODE);
+        _libBuildMode = LibraryBuildModeExtensions.ParseToken(libRaw);
+
+        // Account state — restore the cached account from the saved
+        // token (no-op if logged out), then subscribe to the auth
+        // service so sign-in / sign-out from elsewhere (TopBar pill)
+        // re-renders this card too.
+        GitHubAuth.OnChange += OnLang;
+        _ = GitHubAuth.RestoreAsync();
+        var autoRaw = await DbContext.GetSettingAsync(AutoReportSettingKey);
+        _autoReportEnabled = string.Equals(autoRaw, "true", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -391,6 +708,28 @@
         StateHasChanged();
     }
 
+    /// <summary>
+    /// Persists the new library-build mode AND applies it directly to the
+    /// singleton LibraryCompiler. The next build sees the new policy
+    /// without an app restart; already-cached artifacts stay valid.
+    /// </summary>
+    private async Task OnLibBuildModeChanged(ChangeEventArgs e)
+    {
+        _libBuildMode = LibraryBuildModeExtensions.ParseToken(e.Value?.ToString());
+        await DbContext.SetSettingAsync(AppSettings.KEY_LIBRARY_BUILD_MODE, _libBuildMode.ToToken());
+        try
+        {
+            LibCompiler.Orchestrator.Policy = LibraryBuildModeExtensions.ToPolicy(_libBuildMode);
+        }
+        catch (Exception ex)
+        {
+            // Apply errors are extremely unlikely (the property is just a
+            // setter on a singleton) but log so /logs picks it up.
+            Console.WriteLine($"[Settings] Failed to apply library build mode: {ex.Message}");
+        }
+        StateHasChanged();
+    }
+
     private void OnLang() => InvokeAsync(async () =>
     {
         RefreshLists();
@@ -402,6 +741,7 @@
     {
         _userFpgas = UserAssets.ListUserFpgaPaths();
         _userLangs = UserAssets.ListUserLanguagePaths();
+        _userLibs  = UserAssets.ListUserLibraryPaths();
     }
 
     /// <summary>
@@ -486,6 +826,50 @@
         if (UserAssets.DeleteLanguage(name))
         {
             ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), Traductor.T("SETTINGS_LANG_REMOVED"), ToastType.Info));
+        }
+    }
+
+    /// <summary>
+    /// Imports a user-supplied <c>.vhd</c> / <c>.vhdl</c> library pack. The
+    /// file lives under <see cref="UserAssetStore.UserLibrariesDir"/>; the
+    /// LibraryCompiler discovers it through
+    /// <see cref="UserAssetStore.ListUserLibrarySources"/> on the next build.
+    /// </summary>
+    private async Task OnLibraryImportAsync(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+        // 4 MB cap — VHDL packages are usually well under 100 KB even when
+        // extensively documented; anything bigger probably isn't a library.
+        using var src = file.OpenReadStream(maxAllowedSize: 4 * 1024 * 1024);
+        var saved = await UserAssets.ImportLibraryAsync(src, file.Name);
+        if (saved != null)
+        {
+            // Re-seed the LibraryCompiler's resolver so the new plugin is
+            // visible to the very next build — without this the user would
+            // have to restart the app between Import and Build.
+            try
+            {
+                foreach (var s in UserAssets.ListUserLibrarySources())
+                    LibCompiler.Resolver.Register(s);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Settings] Failed to register imported library: {ex.Message}");
+            }
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), Traductor.T("SETTINGS_LIB_IMPORTED"), ToastType.Success));
+        }
+        else
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), Traductor.T("SETTINGS_IMPORT_FAILED"), ToastType.Danger));
+        }
+    }
+
+    private void DeleteLibrary(string name)
+    {
+        if (UserAssets.DeleteLibrary(name))
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), Traductor.T("SETTINGS_LIB_REMOVED"), ToastType.Info));
         }
     }
 
@@ -596,10 +980,118 @@
         }
     }
 
+    // ─── Account handlers ────────────────────────────────────────
+
+    /// <summary>Opens the device-flow modal for sign-in. Routed to
+    /// the Editor's existing multi-use modal pattern through the
+    /// hosting layout's slot — we use the layout-level slot so the
+    /// modal stays visible if the user navigates away mid-flow.</summary>
+    private async Task OpenLoginAsync()
+    {
+        var parameters = new Dictionary<string, object>
+        {
+            { "OnSuccess", EventCallback.Factory.Create(this, () => _accountLoginModal.HideAsync()) },
+            { "OnCancel",  EventCallback.Factory.Create(this, () => _accountLoginModal.HideAsync()) }
+        };
+        await _accountLoginModal.ShowAsync<GitHubLoginModal>(
+            Traductor.T("TOPBAR_SIGN_IN_GITHUB"), null, parameters);
+    }
+
+    private async Task SignOutAsync()
+    {
+        await GitHubAuth.SignOutAsync();
+        _lastReportUrl = null;
+    }
+
+    /// <summary>Persists the user-entered Client ID into the settings
+    /// table. The auth service picks it up immediately so the next
+    /// sign-in attempt uses it.</summary>
+    private async Task SaveClientIdAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_clientIdInput)) return;
+        try
+        {
+            await GitHubAuth.SetClientIdAsync(_clientIdInput);
+            _clientIdInput = string.Empty;
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"),
+                Traductor.T("SETTINGS_ACCOUNT_CLIENT_ID_SAVED"), ToastType.Success));
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+    }
+
+    private async Task ClearClientIdAsync()
+    {
+        try
+        {
+            await GitHubAuth.SetClientIdAsync(null);
+            _clientIdInput = string.Empty;
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"),
+                Traductor.T("SETTINGS_ACCOUNT_CLIENT_ID_CLEARED"), ToastType.Info));
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+    }
+
+    /// <summary>Persists the auto-report toggle. Phase A only saves
+    /// the preference; the actual hook into the error-logging
+    /// pipeline lands in a follow-up so we can review the throttle /
+    /// dedup design separately.</summary>
+    private async Task OnAutoReportToggledAsync(ChangeEventArgs e)
+    {
+        _autoReportEnabled = e.Value is bool b && b;
+        await DbContext.SetSettingAsync(AutoReportSettingKey, _autoReportEnabled ? "true" : "false");
+    }
+
+    /// <summary>One-shot manual report. Posts the same diagnostics the
+    /// Tier 1 / Tier 2 buttons surface, but goes through the GitHub
+    /// API as the logged-in user so the issue is properly attributed.</summary>
+    private async Task SubmitManualReportAsync()
+    {
+        if (_submitting || !GitHubAuth.IsLoggedIn) return;
+        _submitting = true;
+        _lastReportUrl = null;
+        StateHasChanged();
+        try
+        {
+            var lang = await DbContext.GetSettingAsync(AppSettings.KEY_LANGUAGE) ?? "en";
+            var diag = FeedbackHelper.BuildDiagnostics(lang);
+            var url = await GitHubAuth.SubmitIssueAsync(
+                title: "[Kmila] Manual report",
+                body:  diag,
+                labels: new[] { "user-report" });
+            if (url != null)
+            {
+                _lastReportUrl = url;
+                ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"),
+                    Traductor.T("SETTINGS_ACCOUNT_REPORT_SENT"), ToastType.Success));
+            }
+            else
+            {
+                ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                    Traductor.T("SETTINGS_ACCOUNT_REPORT_FAILED"), ToastType.Danger));
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+        finally
+        {
+            _submitting = false;
+            StateHasChanged();
+        }
+    }
+
     public void Dispose()
     {
         Traductor.StaticOnLangChanged -= OnLang;
         UserAssets.OnChange -= OnLang;
         LearnProgress.OnChange -= OnLang;
+        GitHubAuth.OnChange -= OnLang;
     }
 }

@@ -1,0 +1,59 @@
+{
+  "tests": [
+    { "id": "t1", "visible": true,  "descriptions": { "en": "load=1 captures d=1010", "es": "load=1 captura d=1010" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "load", "values": [{ "time": 0, "scale": "NS", "value": "1" }] },
+      { "portName": "d",    "values": [{ "time": 0, "scale": "NS", "value": "1010" }] }
+    ]},
+    { "id": "t2", "visible": false, "descriptions": { "en": "load=0 — q stays at 0000", "es": "load=0 — q permanece en 0000" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "load", "values": [{ "time": 0, "scale": "NS", "value": "0" }] },
+      { "portName": "d",    "values": [{ "time": 0, "scale": "NS", "value": "1111" }] }
+    ]},
+    { "id": "t3", "visible": false, "descriptions": { "en": "Pulse load mid-run captures new d", "es": "Pulso de load a mitad captura el nuevo d" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "load", "values": [
+        { "time": 0,    "scale": "NS", "value": "0" },
+        { "time": 400,  "scale": "NS", "value": "1" },
+        { "time": 460,  "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "d", "values": [
+        { "time": 0,   "scale": "NS", "value": "0011" },
+        { "time": 400, "scale": "NS", "value": "0110" }
+      ]}
+    ]},
+    { "id": "t4", "visible": false, "descriptions": { "en": "Change d while load=0 — q must hold", "es": "Cambia d con load=0 — q debe mantenerse" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "load", "values": [
+        { "time": 0,    "scale": "NS", "value": "1" },
+        { "time": 200,  "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "d", "values": [
+        { "time": 0,   "scale": "NS", "value": "0101" },
+        { "time": 600, "scale": "NS", "value": "1100" }
+      ]}
+    ]},
+    { "id": "t5", "visible": false, "descriptions": { "en": "Reset clears even with load high", "es": "Reset limpia incluso con load alto" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,    "scale": "NS", "value": "1" },
+        { "time": 25,   "scale": "NS", "value": "0" },
+        { "time": 700,  "scale": "NS", "value": "1" },
+        { "time": 725,  "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "load", "values": [{ "time": 0, "scale": "NS", "value": "1" }] },
+      { "portName": "d",    "values": [{ "time": 0, "scale": "NS", "value": "1001" }] }
+    ]}
+  ]
+}

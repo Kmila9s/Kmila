@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Kmila.Shared.Models;
+using Kmila.Shared.Models.Practice;
 using SQLite;
 
 namespace Kmila.Shared.Data;
@@ -76,6 +77,38 @@ public class ApplicationDbContext : SQLiteAsyncConnection
         {
             _logger.LogInformation(ex.Message);
         }
+        try
+        {
+            // Practice attempts — one row per Submit click. Holds the code
+            // snapshot, verdict, and timing telemetry so the export feature
+            // can build a per-user activity log.
+            var result = await CreateTableAsync<PracticeAttempt>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogInformation(ex.Message);
+        }
+        try
+        {
+            // Per-test result rows linked to a PracticeAttempt by AttemptId.
+            // Keeps first-mismatch detail so the verdict UI can re-render
+            // without re-running the simulation.
+            var result = await CreateTableAsync<PracticeAttemptTestResult>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogInformation(ex.Message);
+        }
+        try
+        {
+            // Aggregate progress — one row per exercise. Powers the catalog
+            // status chips and the nav-bar "n / N solved" badge.
+            var result = await CreateTableAsync<PracticeProgress>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogInformation(ex.Message);
+        }
     }
     /// <summary>
     /// Gets the queryable collection of projects.
@@ -93,6 +126,12 @@ public class ApplicationDbContext : SQLiteAsyncConnection
     /// Gets the queryable collection of application settings.
     /// </summary>
     public AsyncTableQuery<AppSettings> Settings => Table<AppSettings>();
+    /// <summary>Gets the queryable collection of Practice submissions (one row per Submit click).</summary>
+    public AsyncTableQuery<PracticeAttempt> PracticeAttempts => Table<PracticeAttempt>();
+    /// <summary>Gets the queryable collection of per-test results inside Practice attempts.</summary>
+    public AsyncTableQuery<PracticeAttemptTestResult> PracticeAttemptTestResults => Table<PracticeAttemptTestResult>();
+    /// <summary>Gets the aggregate progress per exercise (status + counters).</summary>
+    public AsyncTableQuery<PracticeProgress> PracticeProgress => Table<PracticeProgress>();
 
     #region Settings Helper Methods
 
@@ -152,6 +191,65 @@ public class ApplicationDbContext : SQLiteAsyncConnection
             _logger.LogError($"[DB] Error setting {key}: {ex.Message}");
         }
     }
+
+    /// <summary>
+    /// Removes a setting row entirely. Used when the user clears a project's
+    /// entry-point marker — leaving an empty-string row would still satisfy
+    /// "key exists" lookups elsewhere, so we delete instead of overwriting.
+    /// Fires <see cref="StaticOnValueChanged"/> so reactive UI re-evaluates.
+    /// </summary>
+    public async Task DeleteSettingAsync(string key)
+    {
+        try
+        {
+            var existing = await Settings.Where(s => s.Key == key).FirstOrDefaultAsync();
+            if (existing == null) return;
+            await DeleteAsync(existing);
+            StaticOnValueChanged?.Invoke(key);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"[DB] Error deleting setting {key}: {ex.Message}");
+        }
+    }
+
+    #endregion
+
+    #region Project Entry Point
+
+    /// <summary>
+    /// Settings key prefix for the per-project entry-point marker. The full
+    /// key is <c>KMILA_PROJECT_MAIN_FILE_{projectId}</c>; the value is the
+    /// chosen file's <c>FileName</c> (project-scoped unique). Stored as a
+    /// settings row instead of a column on <c>Project</c> to avoid a schema
+    /// migration — the trade-off is one extra query per build / tab switch
+    /// in the editor, which is negligible.
+    /// </summary>
+    private const string MAIN_FILE_KEY_PREFIX = "KMILA_PROJECT_MAIN_FILE_";
+
+    private static string MainFileKey(int projectId) => $"{MAIN_FILE_KEY_PREFIX}{projectId}";
+
+    /// <summary>
+    /// Reads the file marked as the project's entry point. Returns null when
+    /// no explicit marker has been set — callers fall back to the active
+    /// editor tab in that case.
+    /// </summary>
+    public async Task<string?> GetProjectMainFileAsync(int projectId)
+    {
+        if (projectId <= 0) return null;
+        var name = await GetSettingAsync(MainFileKey(projectId));
+        return string.IsNullOrWhiteSpace(name) ? null : name;
+    }
+
+    /// <summary>Persists <paramref name="fileName"/> as the project's entry
+    /// point. Overwrites any prior selection.</summary>
+    public Task SetProjectMainFileAsync(int projectId, string fileName)
+        => SetSettingAsync(MainFileKey(projectId), fileName);
+
+    /// <summary>Clears the project's entry-point marker. Build then falls
+    /// back to the active editor tab.</summary>
+    public Task ClearProjectMainFileAsync(int projectId)
+        => DeleteSettingAsync(MainFileKey(projectId));
 
     #endregion
 }

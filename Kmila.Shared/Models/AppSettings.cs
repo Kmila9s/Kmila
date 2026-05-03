@@ -1,3 +1,4 @@
+using LibraryCompiler.Services;
 using SQLite;
 
 namespace Kmila.Shared.Models;
@@ -50,6 +51,13 @@ public class AppSettings
     /// (Nyquist: at least two ticks per period).
     /// </summary>
     public const string KEY_TICK_RESOLUTION_MODE = "KMILA_TICK_RESOLUTION_MODE";
+
+    /// <summary>
+    /// Key for the LibraryCompiler build-policy mode (OnDemand / ProcessCached
+    /// / Persistent). Controls how aggressively compiled IEEE + user library
+    /// artifacts are retained between builds and across sessions.
+    /// </summary>
+    public const string KEY_LIBRARY_BUILD_MODE = "KMILA_LIBRARY_BUILD_MODE";
 
     #endregion
 }
@@ -116,4 +124,38 @@ public static class TickResolutionModeExtensions
                 return 10;
         }
     }
+}
+
+/// <summary>
+/// Persistence helpers for the LibraryCompiler's <see cref="LibraryBuildMode"/>
+/// — stable string tokens (never the underlying int) so future enum
+/// additions don't break older databases. Mirrors the tick-resolution
+/// pattern above.
+/// </summary>
+public static class LibraryBuildModeExtensions
+{
+    /// <summary>Stable string token written to AppSettings.</summary>
+    public static string ToToken(this LibraryBuildMode mode) => mode switch
+    {
+        LibraryBuildMode.OnDemand      => "ondemand",
+        LibraryBuildMode.ProcessCached => "process",
+        LibraryBuildMode.Persistent    => "persistent",
+        _                              => "persistent"
+    };
+
+    /// <summary>Parse the token back. Falls back to <see cref="LibraryBuildMode.Persistent"/>.</summary>
+    public static LibraryBuildMode ParseToken(string? token) => (token ?? string.Empty).Trim().ToLowerInvariant() switch
+    {
+        "ondemand" => LibraryBuildMode.OnDemand,
+        "process"  => LibraryBuildMode.ProcessCached,
+        _          => LibraryBuildMode.Persistent
+    };
+
+    /// <summary>Wraps a single mode in a <see cref="LibraryBuildPolicy"/> with that default.</summary>
+    public static LibraryBuildPolicy ToPolicy(LibraryBuildMode mode) => mode switch
+    {
+        LibraryBuildMode.OnDemand      => LibraryBuildPolicy.AlwaysOnDemand,
+        LibraryBuildMode.ProcessCached => LibraryBuildPolicy.AlwaysProcessCached,
+        _                              => LibraryBuildPolicy.AlwaysPersistent
+    };
 }

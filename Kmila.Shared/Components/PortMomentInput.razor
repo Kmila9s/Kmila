@@ -106,6 +106,7 @@
                                    class="form-control form-control-sm port-moment__time"
                                    min="0" max="@LimitTime" step="1"
                                    value="@m.Time"
+                                   inputmode="numeric" enterkeyhint="next"
                                    disabled="@IsRunning"
                                    @onchange="@(e => OnTimeChangedAsync(idx, e))"
                                    aria-label="@Traductor.T("PORT_TIME")" />
@@ -131,6 +132,8 @@
                                                placeholder="@ValuePlaceholder"
                                                value="@m.Value"
                                                min="@(Variable!.Type == DATATYPES.NATURAL ? "0" : null)"
+                                               inputmode="@(Variable!.Type == DATATYPES.NATURAL ? "numeric" : "numeric")"
+                                               enterkeyhint="next"
                                                disabled="@IsRunning"
                                                @onchange="@(e => OnValueChangedAsync(idx, e))"
                                                aria-label="@Traductor.T("PORT_VALUE")" />

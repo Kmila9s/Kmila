@@ -28,7 +28,7 @@
             <div class="d-flex align-items-center gap-2">
                 <Icon Name="IconName.FileEarmarkText" Class="text-primary fs-5" />
                 <div>
-                    <strong class="fs-6">@(File?.FileName ?? "Markdown Viewer")</strong>
+                    <strong class="fs-6">@(File?.FileName ?? Traductor.T("MARKDOWN_VIEWER_FALLBACK_TITLE"))</strong>
                     @if(File?.Project != null)
                     {
                         <br/>
@@ -44,7 +44,7 @@
                 {
                     <Badge Color="BadgeColor.Success" Pill="true">
                         <Icon Name="IconName.CheckCircle" Class="me-1" />
-                        Loaded
+                        @Traductor.T("MARKDOWN_LOADED")
                     </Badge>
                 }
                 <Button Color="ButtonColor.Light"
@@ -52,7 +52,7 @@
                         Outline="true"
                         @onclick="RefreshContentAsync"
                         Disabled="_isLoading"
-                        TooltipTitle="Refresh content">
+                        TooltipTitle="@Traductor.T("MARKDOWN_REFRESH_TOOLTIP")">
                     <Icon Name="IconName.ArrowClockwise" />
                 </Button>
             </div>
@@ -64,7 +64,7 @@
             <!-- Loading State -->
             <div class="d-flex flex-column justify-content-center align-items-center py-5">
                 <Spinner Type="SpinnerType.Border" Color="SpinnerColor.Primary" Class="mb-3" />
-                <span class="text-muted">Loading markdown content...</span>
+                <span class="text-muted">@Traductor.T("MARKDOWN_LOADING")</span>
             </div>
         }
         else if(_hasError)
@@ -75,7 +75,7 @@
                     <div class="d-flex align-items-center">
                         <Icon Name="IconName.ExclamationTriangleFill" Class="me-2 fs-5" />
                         <div>
-                            <strong>Error loading content</strong>
+                            <strong>@Traductor.T("MARKDOWN_ERROR_LOADING")</strong>
                             <p class="mb-0 mt-1 small">@_errorMessage</p>
                         </div>
                     </div>
@@ -85,7 +85,7 @@
                             Size="ButtonSize.Small"
                             @onclick="RefreshContentAsync">
                         <Icon Name="IconName.ArrowClockwise" Class="me-1" />
-                        Try Again
+                        @Traductor.T("MARKDOWN_RETRY")
                     </Button>
                 </div>
             </div>
@@ -95,8 +95,8 @@
             <!-- Empty State -->
             <div class="d-flex flex-column justify-content-center align-items-center py-5 text-muted">
                 <Icon Name="IconName.FileEarmark" Class="fs-1 mb-2 opacity-50" />
-                <span>No content available</span>
-                <small>This file appears to be empty</small>
+                <span>@Traductor.T("MARKDOWN_EMPTY_TITLE")</span>
+                <small>@Traductor.T("MARKDOWN_EMPTY_SUBTITLE")</small>
             </div>
         }
         else

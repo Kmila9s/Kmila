@@ -1,15 +1,14 @@
 @*
-    FilesCard — project files list.
+    FilesCard — project files & folders tree.
 
-    Rebuilt without Blazor Bootstrap's Grid/Card so the visual treatment is
-    fully token-driven and matches the rest of the app. Each row has a hybrid
-    action pattern: the primary action (Open) is inline as a ghost button, the
-    rest (Rename, Delete) live in a kebab menu that's a native <details>
-    popover — no JS.
+    Now folder-aware: groups files by DirectoryPath into a collapsible tree, with
+    a toolbar exposing "New file" / "New folder", a kebab menu per row (rename,
+    move, delete, set entry, details for files; rename/new file/new folder/delete
+    for folders), and HTML5 drag-and-drop to move files between folders. The
+    repository handles disk + DB persistence — this component only orchestrates.
 
-    Rename happens inline: the filename text is replaced with an <input>.
-    Enter commits, Esc cancels, blur commits too. The repository refuses
-    duplicates and rolls back on failure (toast + stays in edit mode).
+    Tree is flattened into a single ordered list (DFS) so we don't need a
+    recursive sub-component; row indentation is driven by depth alone.
 *@
 @implements IDisposable
 
@@ -21,9 +20,23 @@
         {
             <span class="files-list__count">@_projectFiles.Count</span>
         }
+        <div class="files-list__toolbar">
+            <button type="button"
+                    class="btn btn-ghost btn-sm"
+                    title="@Traductor.T("FILES_NEW_FILE")"
+                    @onclick="() => RequestNewFile(string.Empty)">
+                <Icon Name="IconName.FileEarmarkPlus" />
+            </button>
+            <button type="button"
+                    class="btn btn-ghost btn-sm"
+                    title="@Traductor.T("FILES_NEW_FOLDER")"
+                    @onclick="() => StartNewFolder(string.Empty)">
+                <Icon Name="IconName.FolderPlus" />
+            </button>
+        </div>
     </header>
 
-    @if (!_projectFiles.Any())
+    @if (!_projectFiles.Any() && !_directories.Any() && _newFolderParent == null)
     {
         <div class="files-list__empty">
             <div class="files-list__empty-icon"><Icon Name="IconName.FileEarmarkPlus" /></div>
@@ -33,82 +46,267 @@
     }
     else
     {
-        <ul class="files-list__items" role="list">
-            @foreach (var file in _projectFiles)
+        var rows = BuildFlatTree();
+        <ul class="files-list__items files-tree" role="tree"
+            @ondragover:preventDefault="true"
+            @ondrop="() => OnDropOnFolderAsync(string.Empty)"
+            @ondrop:preventDefault="true">
+            @* Inline new-folder input at root *@
+            @if (_newFolderParent == string.Empty)
             {
-                var info = GetFileInfo(file.FileName);
-                var isActive = _selectedFile?.Id == file.Id;
-                var isEditing = _editingFile?.Id == file.Id;
-
-                <li class="file-row file-row--@info.Variant @(isActive ? "is-active" : "")">
-                    <span class="file-row__indicator" aria-hidden="true"></span>
-
-                    <span class="file-row__icon" aria-hidden="true">
-                        <Icon Name="@info.Icon" />
-                    </span>
-
-                    @if (isEditing)
-                    {
-                        <input type="text"
-                               class="file-row__rename"
-                               @bind="_editingName"
-                               @bind:event="oninput"
-                               @onkeydown="OnRenameKeyDownAsync"
-                               @onblur="() => CommitRenameAsync(file)"
-                               placeholder="@Traductor.T("FILES_RENAME_PLACEHOLDER")"
-                               aria-label="@Traductor.T("FILES_RENAME")"
-                               autofocus />
-                    }
-                    else
-                    {
-                        <button type="button"
-                                class="file-row__name"
-                                @onclick="() => OpenFileAsync(file)"
-                                title="@file.FileName">
-                            @file.FileName
-                        </button>
-                    }
-
-                    <span class="file-row__chip">@info.Ext</span>
-
-                    @if (!isEditing)
-                    {
-                        <button type="button"
-                                class="btn btn-ghost btn-sm file-row__open"
-                                @onclick="() => OpenFileAsync(file)">
-                            <Icon Name="IconName.BoxArrowUpRight" />
-                            <span>@Traductor.T("FILES_OPEN")</span>
-                        </button>
-
-                        <details class="file-row__menu">
-                            <summary class="btn btn-ghost btn-sm file-row__menu-btn"
-                                     aria-label="@Traductor.T("FILES_MORE_ACTIONS")"
-                                     title="@Traductor.T("FILES_MORE_ACTIONS")">
-                                <Icon Name="IconName.ThreeDotsVertical" />
-                            </summary>
-                            <div class="file-row__menu-panel" role="menu">
-                                <button type="button" role="menuitem"
-                                        class="file-row__menu-item"
-                                        @onclick="() => StartRename(file)">
-                                    <Icon Name="IconName.Pencil" />
-                                    <span>@Traductor.T("FILES_RENAME")</span>
-                                </button>
-                                <button type="button" role="menuitem"
-                                        class="file-row__menu-item file-row__menu-item--danger"
-                                        @onclick="() => RemoveFileAsync(file)">
-                                    <Icon Name="IconName.Trash" />
-                                    <span>@Traductor.T("FILES_DELETE")</span>
-                                </button>
-                            </div>
-                        </details>
-                    }
+                <li class="file-row file-row--folder is-editing" style="padding-left: 0">
+                    <span class="file-row__icon"><Icon Name="IconName.Folder2" /></span>
+                    <input type="text"
+                           class="file-row__rename"
+                           placeholder="@Traductor.T("FILES_FOLDER_NAME_PROMPT")"
+                           @bind="_newFolderName"
+                           @bind:event="oninput"
+                           @onkeydown="OnNewFolderKeyDownAsync"
+                           @onblur="CommitNewFolderAsync"
+                           autofocus />
                 </li>
+            }
+
+            @foreach (var row in rows)
+            {
+                if (row.IsFolder)
+                {
+                    var path = row.FolderPath!;
+                    var isExpanded = !_collapsedFolders.Contains(path);
+                    var isDropTarget = _dragOverFolder == path;
+                    var isRenaming = _renamingFolderPath == path;
+                    <li class="file-row file-row--folder @(isDropTarget ? "is-drop" : "")"
+                        style="padding-left: @(row.Depth * 16)px"
+                        @ondragover:preventDefault="true"
+                        @ondragover="() => OnFolderDragOver(path)"
+                        @ondragleave="() => OnFolderDragLeave(path)"
+                        @ondrop="() => OnDropOnFolderAsync(path)"
+                        @ondrop:preventDefault="true">
+                        <button type="button"
+                                class="file-row__chevron"
+                                @onclick="() => ToggleFolder(path)"
+                                aria-label="@Traductor.T(isExpanded ? "FILES_COLLAPSE" : "FILES_EXPAND")">
+                            <Icon Name="@(isExpanded ? IconName.ChevronDown : IconName.ChevronRight)" />
+                        </button>
+                        <span class="file-row__icon">
+                            <Icon Name="@(isExpanded ? IconName.Folder2Open : IconName.Folder2)" />
+                        </span>
+                        @if (isRenaming)
+                        {
+                            <input type="text"
+                                   class="file-row__rename"
+                                   @bind="_renamingFolderName"
+                                   @bind:event="oninput"
+                                   @onkeydown="OnFolderRenameKeyDownAsync"
+                                   @onblur="() => CommitFolderRenameAsync(path)"
+                                   autofocus />
+                        }
+                        else
+                        {
+                            <button type="button"
+                                    class="file-row__name"
+                                    @onclick="() => ToggleFolder(path)">
+                                @row.FolderName
+                            </button>
+                        }
+
+                        @if (!isRenaming)
+                        {
+                            var folderMenuKey = $"folder:{path}";
+                            <button type="button"
+                                    class="btn btn-ghost btn-sm file-row__menu-btn @(_openMenuKey == folderMenuKey ? "is-open" : "")"
+                                    data-kmila-menu-key="@folderMenuKey"
+                                    aria-label="@Traductor.T("FILES_MORE_ACTIONS")"
+                                    @onclick:stopPropagation="true"
+                                    @onclick="async (e) => await ToggleMenuAsync(folderMenuKey, e)">
+                                <Icon Name="IconName.ThreeDotsVertical" />
+                            </button>
+                        }
+                    </li>
+
+                    @* Inline new-folder input nested under a folder *@
+                    if (_newFolderParent == path)
+                    {
+                        <li class="file-row file-row--folder is-editing"
+                            style="padding-left: @((row.Depth + 1) * 16)px">
+                            <span class="file-row__icon"><Icon Name="IconName.Folder2" /></span>
+                            <input type="text"
+                                   class="file-row__rename"
+                                   placeholder="@Traductor.T("FILES_FOLDER_NAME_PROMPT")"
+                                   @bind="_newFolderName"
+                                   @bind:event="oninput"
+                                   @onkeydown="OnNewFolderKeyDownAsync"
+                                   @onblur="CommitNewFolderAsync"
+                                   autofocus />
+                        </li>
+                    }
+                }
+                else
+                {
+                    var file = row.File!;
+                    var info = GetFileInfo(file.FileName);
+                    var isActive = _selectedFile?.Id == file.Id;
+                    var isEditing = _editingFile?.Id == file.Id;
+                    var isEntry = _entryFileName != null && string.Equals(_entryFileName, file.RelativePath, StringComparison.Ordinal);
+                    <li class="file-row file-row--@info.Variant @(isActive ? "is-active" : "") @(isEntry ? "is-entry" : "")"
+                        style="padding-left: @(row.Depth * 16)px"
+                        draggable="true"
+                        @ondragstart="() => OnFileDragStartAsync(file.Id)"
+                        @ondragend="OnFileDragEndAsync">
+                        <span class="file-row__indicator" aria-hidden="true"></span>
+
+                        <span class="file-row__icon" aria-hidden="true">
+                            <Icon Name="@info.Icon" />
+                            @if (isEntry)
+                            {
+                                <span class="file-row__entry-marker"
+                                      title="@Traductor.T("FILES_ENTRY_POINT")"
+                                      aria-label="@Traductor.T("FILES_ENTRY_POINT")">
+                                    <Icon Name="IconName.StarFill" />
+                                </span>
+                            }
+                        </span>
+
+                        @if (isEditing)
+                        {
+                            <input type="text"
+                                   class="file-row__rename"
+                                   @bind="_editingName"
+                                   @bind:event="oninput"
+                                   @onkeydown="OnRenameKeyDownAsync"
+                                   @onblur="() => CommitRenameAsync(file)"
+                                   placeholder="@Traductor.T("FILES_RENAME_PLACEHOLDER")"
+                                   autofocus />
+                        }
+                        else
+                        {
+                            <button type="button"
+                                    class="file-row__name"
+                                    @onclick="() => OpenFileAsync(file)"
+                                    title="@file.RelativePath">
+                                @file.FileName
+                            </button>
+                        }
+
+                        <span class="file-row__chip">@info.Ext</span>
+
+                        @if (!isEditing)
+                        {
+                            <button type="button"
+                                    class="btn btn-ghost btn-sm file-row__open"
+                                    @onclick="() => OpenFileAsync(file)">
+                                <Icon Name="IconName.BoxArrowUpRight" />
+                                <span>@Traductor.T("FILES_OPEN")</span>
+                            </button>
+
+                            var fileMenuKey = $"file:{file.Id}";
+                            <button type="button"
+                                    class="btn btn-ghost btn-sm file-row__menu-btn @(_openMenuKey == fileMenuKey ? "is-open" : "")"
+                                    data-kmila-menu-key="@fileMenuKey"
+                                    aria-label="@Traductor.T("FILES_MORE_ACTIONS")"
+                                    title="@Traductor.T("FILES_MORE_ACTIONS")"
+                                    @onclick:stopPropagation="true"
+                                    @onclick="async (e) => await ToggleMenuAsync(fileMenuKey, e)">
+                                <Icon Name="IconName.ThreeDotsVertical" />
+                            </button>
+                        }
+                    </li>
+                }
             }
         </ul>
     }
 </div>
 
+@* Single floating popover for the kebab menu of whichever row is currently
+   "open". Rendered at the FilesCard root so it can use position:fixed and
+   escape any ancestor with overflow:hidden. The contents switch based on
+   _openMenuKey ("folder:..." vs "file:...") and only shows when JS interop
+   has resolved a position — so we never paint at (0,0) covering anything. *@
+@if (_openMenuKey != null && _menuTop.HasValue)
+{
+    <div class="file-row__menu-backdrop" @onclick="CloseMenu"></div>
+    <div class="file-row__menu-panel"
+         role="menu"
+         style="top: @(_menuTop.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))px; left: @(_menuLeft!.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))px;"
+         @onclick:stopPropagation="true">
+        @{
+            var k = _openMenuKey;
+            if (k.StartsWith("folder:"))
+            {
+                var path = k.Substring("folder:".Length);
+                <button type="button" class="file-row__menu-item"
+                        @onclick="() => OnMenuItem(() => RequestNewFile(path))">
+                    <Icon Name="IconName.FileEarmarkPlus" />
+                    <span>@Traductor.T("FILES_NEW_FILE")</span>
+                </button>
+                <button type="button" class="file-row__menu-item"
+                        @onclick="() => OnMenuItemSync(() => StartNewFolder(path))">
+                    <Icon Name="IconName.FolderPlus" />
+                    <span>@Traductor.T("FILES_NEW_FOLDER")</span>
+                </button>
+                <button type="button" class="file-row__menu-item"
+                        @onclick="() => OnMenuItemSync(() => StartFolderRename(path))">
+                    <Icon Name="IconName.Pencil" />
+                    <span>@Traductor.T("FILES_FOLDER_RENAME")</span>
+                </button>
+                <button type="button"
+                        class="file-row__menu-item file-row__menu-item--danger"
+                        @onclick="() => OnMenuItem(() => RemoveFolderAsync(path))">
+                    <Icon Name="IconName.Trash" />
+                    <span>@Traductor.T("FILES_DELETE")</span>
+                </button>
+            }
+            else if (k.StartsWith("file:") && int.TryParse(k.Substring("file:".Length), out var fid))
+            {
+                var f = _projectFiles.FirstOrDefault(x => x.Id == fid);
+                if (f != null)
+                {
+                    var fIsEntry = _entryFileName != null && string.Equals(_entryFileName, f.RelativePath, StringComparison.Ordinal);
+                    <button type="button" role="menuitem"
+                            class="file-row__menu-item"
+                            @onclick="() => OnMenuItem(() => ToggleEntryPointAsync(f))">
+                        <Icon Name="@(fIsEntry ? IconName.StarFill : IconName.Star)" />
+                        <span>@Traductor.T(fIsEntry ? "FILES_CLEAR_ENTRY" : "FILES_SET_AS_ENTRY")</span>
+                    </button>
+                    <button type="button" role="menuitem"
+                            class="file-row__menu-item"
+                            @onclick="() => OnMenuItemSync(() => StartRename(f))">
+                        <Icon Name="IconName.Pencil" />
+                        <span>@Traductor.T("FILES_RENAME")</span>
+                    </button>
+                    <button type="button" role="menuitem"
+                            class="file-row__menu-item"
+                            @onclick="() => OnMenuItem(() => OpenDetailsAsync(f))">
+                        <Icon Name="IconName.InfoCircle" />
+                        <span>@Traductor.T("FILES_DETAILS")</span>
+                    </button>
+                    @foreach (var target in MoveTargetsFor(f))
+                    {
+                        var capturedPath = target.Path;
+                        <button type="button" role="menuitem"
+                                class="file-row__menu-item"
+                                @onclick="() => OnMenuItem(() => MoveFileAsync(f, capturedPath))">
+                            <Icon Name="IconName.ArrowRight" />
+                            <span>@Traductor.T("FILES_MOVE_TO"): @target.Label</span>
+                        </button>
+                    }
+                    <button type="button" role="menuitem"
+                            class="file-row__menu-item file-row__menu-item--danger"
+                            @onclick="() => OnMenuItem(() => RemoveFileAsync(f))">
+                        <Icon Name="IconName.Trash" />
+                        <span>@Traductor.T("FILES_DELETE")</span>
+                    </button>
+                }
+            }
+        }
+    </div>
+}
+
 <ConfirmDialog @ref="_removeFileDialog" />
+<ConfirmDialog @ref="_removeFolderDialog" />
+
+<Modal @ref="_createFileModal" Title="@Traductor.T("CREATE_FILE_TITLE")" />
+<Modal @ref="_detailsModal" Title="@Traductor.T("FILES_DETAILS_TITLE")" />
 
 @code {
     [Parameter] public Project Project { get; set; } = null!;
@@ -116,10 +314,38 @@
     [Parameter] public EventCallback<ProjectFile> OnProjectFileRemoved { get; set; } = new();
 
     private List<ProjectFile> _projectFiles { get; set; } = new();
+    private List<string> _directories { get; set; } = new();
     private ConfirmDialog _removeFileDialog = new();
+    private ConfirmDialog _removeFolderDialog = new();
+    private Modal _createFileModal = default!;
+    private Modal _detailsModal = default!;
     private ProjectFile? _selectedFile;
     private ProjectFile? _editingFile;
     private string _editingName = string.Empty;
+    private string? _entryFileName;
+    private int _loadedProjectId = -1;
+
+    // Folder UI state — tracked locally because directories aren't a DB entity.
+    private HashSet<string> _collapsedFolders = new(StringComparer.OrdinalIgnoreCase);
+    private string? _newFolderParent;          // null = no input shown
+    private string _newFolderName = string.Empty;
+    private string? _renamingFolderPath;
+    private string _renamingFolderName = string.Empty;
+
+    // Drag-and-drop
+    private int? _draggedFileId;
+    private string? _dragOverFolder;
+
+    // Kebab menu — Blazor-controlled to avoid the toggle-event timing issues
+    // we hit with <details>: the panel never paints at (0,0) because it's only
+    // rendered once JS interop returns the trigger's rect.
+    private string? _openMenuKey;
+    private double? _menuTop;
+    private double? _menuLeft;
+
+    // Modal state
+    private string _pendingNewFileDir = string.Empty;
+    private ProjectFile? _detailsFile;
 
     protected override void OnInitialized()
     {
@@ -133,43 +359,224 @@
         Traductor.StaticOnLangChanged -= OnLanguageChanged;
     }
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
+        var currentId = Project?.Id ?? -1;
+        if (currentId == _loadedProjectId) return;
+        _loadedProjectId = currentId;
+
         if (Project != null)
         {
-            _projectFiles = await ProjectFiles.GetProjectFilesAsync(Project);
-            if (_projectFiles.Count > 0)
+            await ReloadAllAsync();
+            if (_selectedFile == null && _projectFiles.Count > 0)
                 _selectedFile = _projectFiles.First();
+            _entryFileName = await DbContext.GetProjectMainFileAsync(Project.Id);
         }
-    }
-
-    /// <summary>
-    /// Marks <paramref name="file"/> as the active selection. Safe to call
-    /// before this component has been rendered — FilesCard now lives inside
-    /// a dock tab that may not be visible on the first pass, so the parent
-    /// Editor calls this while our render handle still doesn't exist.
-    /// When that happens we just set the field; the component will render
-    /// with the correct selection whenever the Files tab is first shown.
-    /// </summary>
-    public void SetDefaultFile(ProjectFile file)
-    {
-        _selectedFile = _projectFiles.FirstOrDefault(p => p.Id == file.Id);
-        try
+        else
         {
-            InvokeAsync(StateHasChanged);
-        }
-        catch (InvalidOperationException)
-        {
-            // Not yet rendered — no handle assigned. The current _selectedFile
-            // will be picked up on first render, no action needed.
+            _projectFiles.Clear();
+            _directories.Clear();
+            _selectedFile = null;
+            _entryFileName = null;
         }
     }
 
     public async Task ReloadFiles()
     {
         if (Project != null)
-            _projectFiles = await ProjectFiles.GetProjectFilesAsync(Project);
+            await ReloadAllAsync();
     }
+
+    private async Task ReloadAllAsync()
+    {
+        if (Project == null) return;
+        _projectFiles = await ProjectFiles.GetProjectFilesAsync(Project);
+        _directories = await ProjectFiles.GetDirectoriesAsync(Project);
+    }
+
+    public void SetDefaultFile(ProjectFile file)
+    {
+        _selectedFile = _projectFiles.FirstOrDefault(p => p.Id == file.Id);
+        try { InvokeAsync(StateHasChanged); }
+        catch (InvalidOperationException) { /* not yet rendered */ }
+    }
+
+    // ---- Tree rendering ------------------------------------------------------
+
+    private record TreeRow(int Depth, bool IsFolder, string? FolderPath, string? FolderName, ProjectFile? File);
+
+    /// <summary>
+    /// Flattens the project's files + observed directories into a depth-first list of
+    /// rows for rendering. Folders that appear in <c>_collapsedFolders</c> hide their
+    /// descendants, but the folder row itself stays visible with a chevron.
+    /// </summary>
+    private List<TreeRow> BuildFlatTree()
+    {
+        var rows = new List<TreeRow>();
+        var allDirs = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var d in _directories) if (!string.IsNullOrEmpty(d)) allDirs.Add(d);
+        foreach (var f in _projectFiles)
+        {
+            if (string.IsNullOrEmpty(f.DirectoryPath)) continue;
+            var parts = f.DirectoryPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 1; i <= parts.Length; i++)
+                allDirs.Add(string.Join('/', parts.Take(i)));
+        }
+
+        // Recurse manually using a stack of "render this directory" frames.
+        void EmitDirectory(string parent, int depth)
+        {
+            // Sub-folders directly under `parent`
+            var prefix = string.IsNullOrEmpty(parent) ? string.Empty : parent + "/";
+            var children = allDirs
+                .Where(d => string.IsNullOrEmpty(parent)
+                    ? !d.Contains('/')
+                    : d.StartsWith(prefix) && !d.Substring(prefix.Length).Contains('/'))
+                .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            foreach (var child in children)
+            {
+                var leaf = string.IsNullOrEmpty(parent) ? child : child.Substring(prefix.Length);
+                rows.Add(new TreeRow(depth, true, child, leaf, null));
+                if (!_collapsedFolders.Contains(child))
+                    EmitDirectory(child, depth + 1);
+            }
+            // Files in `parent`
+            var fileChildren = _projectFiles
+                .Where(f => string.Equals(f.DirectoryPath ?? string.Empty, parent ?? string.Empty, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(f => f.FileName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            foreach (var f in fileChildren)
+                rows.Add(new TreeRow(depth, false, null, null, f));
+        }
+
+        EmitDirectory(string.Empty, 0);
+        return rows;
+    }
+
+    private void ToggleFolder(string path)
+    {
+        if (!_collapsedFolders.Add(path))
+            _collapsedFolders.Remove(path);
+    }
+
+    // ---- Folder ops ----------------------------------------------------------
+
+    private void StartNewFolder(string parent)
+    {
+        _newFolderParent = parent ?? string.Empty;
+        _newFolderName = string.Empty;
+        // Make sure the parent is expanded so the input is visible
+        if (!string.IsNullOrEmpty(parent)) _collapsedFolders.Remove(parent);
+    }
+
+    private async Task OnNewFolderKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await CommitNewFolderAsync();
+        else if (e.Key == "Escape") { _newFolderParent = null; _newFolderName = string.Empty; }
+    }
+
+    private async Task CommitNewFolderAsync()
+    {
+        if (_newFolderParent == null) return;
+        var name = (_newFolderName ?? string.Empty).Trim();
+        if (string.IsNullOrEmpty(name)) { _newFolderParent = null; return; }
+        if (name.Contains('/') || name.Contains('\\'))
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), Traductor.T("FILES_INVALID_FOLDER_NAME"), ToastType.Danger));
+            return;
+        }
+        var path = string.IsNullOrEmpty(_newFolderParent) ? name : $"{_newFolderParent}/{name}";
+        var ok = await ProjectFiles.CreateDirectoryAsync(Project, path);
+        if (ok)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), Traductor.T("FILES_FOLDER_CREATED"), ToastType.Success));
+            await ReloadAllAsync();
+        }
+        else
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ProjectFiles.LastError, ToastType.Danger));
+        }
+        _newFolderParent = null;
+        _newFolderName = string.Empty;
+        StateHasChanged();
+    }
+
+    private void StartFolderRename(string path)
+    {
+        _renamingFolderPath = path;
+        _renamingFolderName = path.Contains('/') ? path.Substring(path.LastIndexOf('/') + 1) : path;
+    }
+
+    private async Task OnFolderRenameKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (_renamingFolderPath == null) return;
+        if (e.Key == "Enter") await CommitFolderRenameAsync(_renamingFolderPath);
+        else if (e.Key == "Escape") { _renamingFolderPath = null; _renamingFolderName = string.Empty; }
+    }
+
+    private async Task CommitFolderRenameAsync(string oldPath)
+    {
+        if (_renamingFolderPath == null) return;
+        var newName = (_renamingFolderName ?? string.Empty).Trim();
+        if (string.IsNullOrEmpty(newName) || newName.Contains('/') || newName.Contains('\\'))
+        {
+            _renamingFolderPath = null;
+            return;
+        }
+        var parent = oldPath.Contains('/') ? oldPath.Substring(0, oldPath.LastIndexOf('/')) : string.Empty;
+        var newPath = string.IsNullOrEmpty(parent) ? newName : $"{parent}/{newName}";
+        if (string.Equals(oldPath, newPath, StringComparison.Ordinal))
+        {
+            _renamingFolderPath = null;
+            return;
+        }
+        var ok = await ProjectFiles.RenameDirectoryAsync(Project, oldPath, newPath);
+        if (ok)
+        {
+            await ReloadAllAsync();
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), Traductor.T("FILES_RENAMED_SUCCESS"), ToastType.Success));
+        }
+        else
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ProjectFiles.LastError, ToastType.Danger));
+        }
+        _renamingFolderPath = null;
+        _renamingFolderName = string.Empty;
+        StateHasChanged();
+    }
+
+    private async Task RemoveFolderAsync(string path)
+    {
+        var options = new ConfirmDialogOptions
+        {
+            YesButtonColor = ButtonColor.Danger,
+            NoButtonColor = ButtonColor.Secondary,
+            AutoFocusYesButton = false,
+            YesButtonText = Traductor.T("FILES_DELETE"),
+            NoButtonText = Traductor.T("COMMON_GO_BACK")
+        };
+        var confirmed = await _removeFolderDialog.ShowAsync(
+            Traductor.T("FILES_FOLDER_REMOVE_CONFIRM"),
+            path,
+            string.Empty,
+            options);
+        if (!confirmed) return;
+
+        var ok = await ProjectFiles.RemoveDirectoryAsync(Project, path);
+        if (ok)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), Traductor.T("FILES_FOLDER_REMOVED"), ToastType.Success));
+            await ReloadAllAsync();
+        }
+        else
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ProjectFiles.LastError, ToastType.Danger));
+        }
+        StateHasChanged();
+    }
+
+    // ---- File ops ------------------------------------------------------------
 
     private async Task OpenFileAsync(ProjectFile file)
     {
@@ -177,10 +584,6 @@
         await OnProjectFileClicked.InvokeAsync(file);
     }
 
-    /// <summary>
-    /// Enters inline-edit mode for <paramref name="file"/>. The kebab menu auto-closes
-    /// because moving focus out of the &lt;details&gt; collapses it natively.
-    /// </summary>
     private void StartRename(ProjectFile file)
     {
         _editingFile = file;
@@ -190,14 +593,8 @@
     private async Task OnRenameKeyDownAsync(KeyboardEventArgs e)
     {
         if (_editingFile == null) return;
-        if (e.Key == "Enter")
-        {
-            await CommitRenameAsync(_editingFile);
-        }
-        else if (e.Key == "Escape")
-        {
-            CancelRename();
-        }
+        if (e.Key == "Enter") await CommitRenameAsync(_editingFile);
+        else if (e.Key == "Escape") CancelRename();
     }
 
     private async Task CommitRenameAsync(ProjectFile file)
@@ -205,8 +602,6 @@
         if (_editingFile == null) return;
 
         var newName = _editingName?.Trim() ?? string.Empty;
-
-        // No-op if empty or unchanged — exit edit mode quietly
         if (string.IsNullOrWhiteSpace(newName) ||
             string.Equals(newName, file.FileName, StringComparison.Ordinal))
         {
@@ -219,7 +614,13 @@
 
         if (ok)
         {
+            bool wasEntry = string.Equals(_entryFileName, file.RelativePath, StringComparison.Ordinal);
             file.FileName = newName;
+            if (wasEntry && Project != null)
+            {
+                await DbContext.SetProjectMainFileAsync(Project.Id, file.RelativePath);
+                _entryFileName = file.RelativePath;
+            }
             ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), Traductor.T("FILES_RENAMED_SUCCESS"), ToastType.Success));
             _editingFile = null;
             _editingName = string.Empty;
@@ -228,7 +629,6 @@
         {
             ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
                 $"{Traductor.T("FILES_RENAMED_ERROR")}: {ProjectFiles.LastError}", ToastType.Danger));
-            // Stay in edit mode so the user can correct and retry
         }
         StateHasChanged();
     }
@@ -237,6 +637,34 @@
     {
         _editingFile = null;
         _editingName = string.Empty;
+    }
+
+    private async Task ToggleEntryPointAsync(ProjectFile file)
+    {
+        if (Project == null || file == null) return;
+        bool wasEntry = string.Equals(_entryFileName, file.RelativePath, StringComparison.Ordinal);
+        try
+        {
+            if (wasEntry)
+            {
+                await DbContext.ClearProjectMainFileAsync(Project.Id);
+                _entryFileName = null;
+                ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"),
+                    string.Format(Traductor.T("FILES_ENTRY_CLEARED"), file.FileName), ToastType.Info));
+            }
+            else
+            {
+                await DbContext.SetProjectMainFileAsync(Project.Id, file.RelativePath);
+                _entryFileName = file.RelativePath;
+                ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"),
+                    string.Format(Traductor.T("FILES_ENTRY_SET"), file.FileName), ToastType.Success));
+            }
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
     }
 
     private async Task RemoveFileAsync(ProjectFile file)
@@ -262,6 +690,7 @@
         }
 
         file.Project = Project;
+        bool wasEntry = string.Equals(_entryFileName, file.RelativePath, StringComparison.Ordinal);
         var ok = await ProjectFiles.RemoveAsync(file);
 
         if (ok)
@@ -269,6 +698,11 @@
             _projectFiles.RemoveAll(f => f.Id == file.Id);
             if (_selectedFile?.Id == file.Id)
                 _selectedFile = _projectFiles.FirstOrDefault();
+            if (wasEntry && Project != null)
+            {
+                await DbContext.ClearProjectMainFileAsync(Project.Id);
+                _entryFileName = null;
+            }
             ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), Traductor.T("FILES_REMOVED_SUCCESS"), ToastType.Success));
             await OnProjectFileRemoved.InvokeAsync(file);
         }
@@ -280,12 +714,228 @@
         StateHasChanged();
     }
 
-    private record FileInfo(IconName Icon, string Variant, string Ext);
+    // ---- Move ----------------------------------------------------------------
+
+    private record MoveTarget(string Path, string Label);
+
+    /// <summary>Folders the file isn't already in, plus project root when applicable.</summary>
+    private List<MoveTarget> MoveTargetsFor(ProjectFile file)
+    {
+        var current = file.DirectoryPath ?? string.Empty;
+        var targets = new List<MoveTarget>();
+        if (!string.IsNullOrEmpty(current))
+            targets.Add(new MoveTarget(string.Empty, Traductor.T("FILES_MOVE_ROOT")));
+        foreach (var d in _directories)
+            if (!string.Equals(d, current, StringComparison.OrdinalIgnoreCase))
+                targets.Add(new MoveTarget(d, d));
+        return targets;
+    }
+
+    private async Task MoveFileAsync(ProjectFile file, string targetDir)
+    {
+        file.Project = Project;
+        bool wasEntry = string.Equals(_entryFileName, file.RelativePath, StringComparison.Ordinal);
+        var ok = await ProjectFiles.MoveAsync(file, targetDir);
+        if (ok)
+        {
+            file.DirectoryPath = ProjectFiles.NormalizeDirectoryPath(targetDir);
+            if (wasEntry && Project != null)
+            {
+                await DbContext.SetProjectMainFileAsync(Project.Id, file.RelativePath);
+                _entryFileName = file.RelativePath;
+            }
+            await ReloadAllAsync();
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), Traductor.T("FILES_MOVE_SUCCESS"), ToastType.Success));
+        }
+        else
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                $"{Traductor.T("FILES_MOVE_ERROR")}: {ProjectFiles.LastError}", ToastType.Danger));
+        }
+        StateHasChanged();
+    }
 
     /// <summary>
-    /// Maps a file extension to icon + variant + uppercase extension label.
-    /// Variant drives the CSS color treatment (tinted icon + chip accent).
+    /// Stores the dragged file's id in a JS-side global. Blazor's DragEventArgs
+    /// can't carry data via DataTransfer, and relying on a C# field races with
+    /// re-renders during the drag (StateHasChanged after dragstart can disrupt
+    /// the in-flight drag operation). Bridging through JS keeps the identity
+    /// stable until drop reads it back.
     /// </summary>
+    private async Task OnFileDragStartAsync(int id)
+    {
+        _draggedFileId = id;
+        try { await JS.InvokeVoidAsync("kmilaSetFileDrag", id); } catch { }
+    }
+
+    private async Task OnFileDragEndAsync()
+    {
+        _draggedFileId = null;
+        _dragOverFolder = null;
+        try { await JS.InvokeVoidAsync("kmilaClearFileDrag"); } catch { }
+    }
+
+    private void OnFolderDragOver(string path)
+    {
+        if (_dragOverFolder != path) _dragOverFolder = path;
+    }
+
+    private void OnFolderDragLeave(string path)
+    {
+        if (_dragOverFolder == path) _dragOverFolder = null;
+    }
+
+    // ---- Kebab menu state machine -------------------------------------------
+
+    /// <summary>
+    /// Toggles the popover menu attached to a row. Closes any other open menu,
+    /// then asks JS for the trigger's getBoundingClientRect so we can render
+    /// the panel anchored under it. The panel only enters the DOM after the
+    /// position is known — that's how we avoid the "menu painted at top-left"
+    /// failure mode we had with <details>/toggle.
+    /// </summary>
+    private async Task ToggleMenuAsync(string key, MouseEventArgs e)
+    {
+        if (_openMenuKey == key)
+        {
+            CloseMenu();
+            return;
+        }
+
+        try
+        {
+            var rect = await JS.InvokeAsync<MenuRect?>("kmilaGetButtonRectByKey", key);
+            const double panelWidth = 200; // matches CSS min-width plus padding
+            const double margin = 6;
+            double left, top;
+            if (rect != null)
+            {
+                left = rect.Right - panelWidth;
+                top = rect.Bottom + margin;
+                // Clamp to viewport
+                var vw = await JS.InvokeAsync<double>("kmilaViewportWidth");
+                if (left + panelWidth > vw - 4) left = Math.Max(4, vw - panelWidth - 4);
+                if (left < 4) left = 4;
+            }
+            else
+            {
+                // Fallback: anchor near the click point if the lookup failed
+                left = Math.Max(4, e.ClientX - panelWidth + 16);
+                top = e.ClientY + margin;
+            }
+            _openMenuKey = key;
+            _menuTop = top;
+            _menuLeft = left;
+        }
+        catch
+        {
+            // Last-resort fallback: anchor at the click coordinates so the
+            // menu is at least near the user's pointer instead of (0,0).
+            _openMenuKey = key;
+            _menuTop = e.ClientY + 6;
+            _menuLeft = Math.Max(4, e.ClientX - 180);
+        }
+        StateHasChanged();
+    }
+
+    private void CloseMenu()
+    {
+        _openMenuKey = null;
+        _menuTop = null;
+        _menuLeft = null;
+    }
+
+    /// <summary>Closes the menu, then runs the chosen item's async action.</summary>
+    private async Task OnMenuItem(Func<Task> action)
+    {
+        CloseMenu();
+        await action();
+    }
+
+    /// <summary>Closes the menu, then runs the chosen item's sync action.</summary>
+    private void OnMenuItemSync(Action action)
+    {
+        CloseMenu();
+        action();
+    }
+
+    /// <summary>Shape of the rect returned by kmilaGetButtonRectByKey.</summary>
+    private class MenuRect
+    {
+        public double Left { get; set; }
+        public double Top { get; set; }
+        public double Right { get; set; }
+        public double Bottom { get; set; }
+        public double Width { get; set; }
+        public double Height { get; set; }
+    }
+
+    private async Task OnDropOnFolderAsync(string folderPath)
+    {
+        // Prefer the JS-stored id — survives re-renders that may have nulled
+        // the C# field. Fall back to the field if JS isn't available.
+        int? id = _draggedFileId;
+        try
+        {
+            var jsId = await JS.InvokeAsync<int?>("kmilaGetFileDrag");
+            if (jsId.HasValue) id = jsId.Value;
+        }
+        catch { }
+
+        _draggedFileId = null;
+        _dragOverFolder = null;
+        try { await JS.InvokeVoidAsync("kmilaClearFileDrag"); } catch { }
+
+        if (id == null) return;
+        var file = _projectFiles.FirstOrDefault(f => f.Id == id.Value);
+        if (file == null) return;
+        if (string.Equals(file.DirectoryPath ?? string.Empty, folderPath ?? string.Empty, StringComparison.OrdinalIgnoreCase))
+            return;
+        await MoveFileAsync(file, folderPath ?? string.Empty);
+    }
+
+    // ---- New file modal ------------------------------------------------------
+
+    private async Task RequestNewFile(string targetDir)
+    {
+        _pendingNewFileDir = targetDir ?? string.Empty;
+        if (!string.IsNullOrEmpty(targetDir)) _collapsedFolders.Remove(targetDir);
+        var parameters = new Dictionary<string, object>
+        {
+            { "Project", Project },
+            { "TargetDirectory", _pendingNewFileDir },
+            { "OnProjectFileCreated", EventCallback.Factory.Create(this, OnFileCreatedAsync) }
+        };
+        var title = string.IsNullOrEmpty(_pendingNewFileDir)
+            ? Traductor.T("FILES_NEW_FILE")
+            : $"{Traductor.T("FILES_NEW_FILE")} — {_pendingNewFileDir}";
+        await _createFileModal.ShowAsync<CreateFileModal>(title, parameters: parameters);
+    }
+
+    private async Task OnFileCreatedAsync()
+    {
+        await _createFileModal.HideAsync();
+        await ReloadAllAsync();
+        StateHasChanged();
+    }
+
+    // ---- Details modal -------------------------------------------------------
+
+    private async Task OpenDetailsAsync(ProjectFile file)
+    {
+        file.Project = Project;
+        _detailsFile = file;
+        var parameters = new Dictionary<string, object>
+        {
+            { "File", file }
+        };
+        await _detailsModal.ShowAsync<FileDetailsModal>(Traductor.T("FILES_DETAILS_TITLE"), parameters: parameters);
+    }
+
+    // ---- Misc helpers --------------------------------------------------------
+
+    private record FileInfo(IconName Icon, string Variant, string Ext);
+
     private FileInfo GetFileInfo(string fileName)
     {
         if (!fileName.Contains('.'))

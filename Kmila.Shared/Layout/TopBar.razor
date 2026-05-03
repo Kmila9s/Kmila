@@ -2,14 +2,14 @@
     TopBar — sticky app header.
 
     Layout (LTR):
-      [☰ hamburger (mobile only)]  [Breadcrumbs]                                [FPGA chip] [Lang] [Theme]
+      [☰ hamburger (mobile only)]  [Breadcrumbs]            [ConfigurationsPill] [ProfileMenu]
 
-    • Hamburger is only visible < 641 px and toggles the SidebarState mobile drawer.
-    • Breadcrumbs auto-build from the current route; truncate elegantly at small widths.
-    • FPGA chip replaces the old inline <select>: click opens a modal-less popover
-      (native <details>/<summary> — no JS) with a search input and device list.
-      Keeps the native accessibility, zero extra deps.
-    • Language + theme controls sit on the far end (mirror for RTL via flex).
+    Was much busier before — the right side used to host four separate
+    <details> popovers (account, FPGA, language, theme). They're now
+    consolidated under <ProfileMenu>: a single avatar trigger with
+    everything user-scoped collapsed inside. ConfigurationsPill stays
+    inline because it's project state (named simulation configs), not
+    user preference, and surfacing it next to Build/Run is the point.
 *@
 @implements IDisposable
 @inject SidebarState SidebarState
@@ -29,136 +29,24 @@
         </div>
 
         <div class="kmila-topbar__end">
-
-            @* Configurations pill — save/load named simulation configs *@
+            @* Project-state pill — saved/loaded simulation configurations.
+               Stays separate because it changes per project, not per user. *@
             <ConfigurationsPill />
 
-            @* FPGA picker — <details> popover with search *@
-            <details class="kmila-fpga-picker">
-                <summary class="kmila-fpga-picker__summary"
-                         aria-label="@Traductor.T("TOPBAR_SELECT_FPGA")">
-                    <Icon Name="IconName.CpuFill" />
-                    <span class="kmila-fpga-picker__text">
-                        @if (_fpga is not null && !string.IsNullOrEmpty(_fpga.Model))
-                        {
-                            <span class="kmila-fpga-picker__model">@_fpga.Model</span>
-                            <span class="kmila-fpga-picker__family">@_fpga.Family</span>
-                        }
-                        else
-                        {
-                            <span class="kmila-fpga-picker__placeholder">@Traductor.T("TOPBAR_SELECT_FPGA")</span>
-                        }
-                    </span>
-                    <Icon Name="IconName.ChevronDown" Class="kmila-fpga-picker__chevron" />
-                </summary>
-
-                <div class="kmila-fpga-picker__panel" role="dialog" aria-label="@Traductor.T("TOPBAR_SELECT_FPGA")">
-                    <div class="kmila-fpga-picker__search">
-                        <Icon Name="IconName.Search" />
-                        <input type="text"
-                               class="form-control"
-                               placeholder="@Traductor.T("TOPBAR_SELECT_FPGA")"
-                               @bind="_filter"
-                               @bind:event="oninput" />
-                    </div>
-
-                    @* Manufacturer filter chips — click to narrow the list.
-                       "All" row is sticky-first. *@
-                    @if (_manufacturers.Count > 1)
-                    {
-                        <div class="kmila-fpga-picker__filters" role="tablist">
-                            <button type="button" role="tab"
-                                    class="kmila-fpga-picker__chip @(string.IsNullOrEmpty(_manufacturerFilter) ? "is-active" : "")"
-                                    @onclick="() => _manufacturerFilter = string.Empty">
-                                @Traductor.T("TOPBAR_FPGA_ALL")
-                            </button>
-                            @foreach (var m in _manufacturers)
-                            {
-                                <button type="button" role="tab"
-                                        class="kmila-fpga-picker__chip @(m == _manufacturerFilter ? "is-active" : "")"
-                                        @onclick="() => _manufacturerFilter = m">
-                                    @m
-                                </button>
-                            }
-                        </div>
-                    }
-
-                    <div class="kmila-fpga-picker__list" role="listbox">
-                        @foreach (var path in FilteredFPGAs())
-                        {
-                            var name = System.IO.Path.GetFileNameWithoutExtension(path);
-                            var meta = _fpgaMeta.TryGetValue(path, out var md) ? md : (null, null);
-                            var isSelected = string.Equals(_selectedFPGA, path, StringComparison.OrdinalIgnoreCase);
-                            <button type="button"
-                                    role="option"
-                                    aria-selected="@isSelected"
-                                    class="kmila-fpga-picker__option @(isSelected ? "is-selected" : "")"
-                                    @onclick="() => OnFPGAPicked(path)">
-                                <Icon Name="IconName.CpuFill" />
-                                <span class="kmila-fpga-picker__option-main">
-                                    <span>@name</span>
-                                    @if (!string.IsNullOrEmpty(meta.Item2))
-                                    {
-                                        <span class="kmila-fpga-picker__option-meta">@meta.Item2</span>
-                                    }
-                                </span>
-                                @if (isSelected)
-                                {
-                                    <Icon Name="IconName.CheckLg" Class="kmila-fpga-picker__check" />
-                                }
-                            </button>
-                        }
-                        @if (!FilteredFPGAs().Any())
-                        {
-                            <div class="kmila-fpga-picker__empty">—</div>
-                        }
-                    </div>
-                </div>
-            </details>
-
-            <LanguageChanger />
-            <KmilaThemeSwitcher />
+            @* Everything user-scoped (account · FPGA · language · theme ·
+               settings · sign-out) lives here. The avatar acts as a single
+               anchor so adding more options in the future doesn't widen the
+               bar. *@
+            <ProfileMenu />
         </div>
     </div>
 </header>
 
 @code {
-    private string _selectedFPGA = string.Empty;
-    private FPGA? _fpga = new();
-    private List<string> _fpgas = new();
-    private string _filter = "";
-    private string _manufacturerFilter = string.Empty;
-
-    /// <summary>Per-path metadata (manufacturer, family) — preloaded once at mount so the picker can filter without refetching.</summary>
-    private readonly Dictionary<string, (string?, string?)> _fpgaMeta = new();
-
-    /// <summary>Distinct manufacturer values across the loaded FPGAs, sorted alphabetically.</summary>
-    private List<string> _manufacturers = new();
-
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
         Traductor.StaticOnLangChanged += OnLanguageChanged;
         SidebarState.OnChange += OnSidebarStateChanged;
-        _fpgas = await JSONFileReader.GetFPGAsAsync();
-
-        // Preload minimal metadata for every device so the filter chips work
-        // without round-trips while the user flips between manufacturers.
-        foreach (var p in _fpgas)
-        {
-            try
-            {
-                var m = await JSONFileReader.ReadFPGAJsonFileAsync(p);
-                _fpgaMeta[p] = (m?.Manufacturer, m?.Family);
-            }
-            catch { _fpgaMeta[p] = (null, null); }
-        }
-        _manufacturers = _fpgaMeta.Values
-            .Select(v => v.Item1)
-            .Where(m => !string.IsNullOrEmpty(m))
-            .Cast<string>()
-            .Distinct()
-            .OrderBy(m => m)
-            .ToList();
     }
 
     private void OnSidebarStateChanged() => InvokeAsync(StateHasChanged);
@@ -169,37 +57,4 @@
         Traductor.StaticOnLangChanged -= OnLanguageChanged;
         SidebarState.OnChange -= OnSidebarStateChanged;
     }
-
-    private IEnumerable<string> FilteredFPGAs()
-    {
-        IEnumerable<string> list = _fpgas;
-        if (!string.IsNullOrEmpty(_manufacturerFilter))
-        {
-            list = list.Where(p =>
-                _fpgaMeta.TryGetValue(p, out var meta) &&
-                string.Equals(meta.Item1, _manufacturerFilter, StringComparison.OrdinalIgnoreCase));
-        }
-        if (!string.IsNullOrWhiteSpace(_filter))
-        {
-            list = list.Where(p =>
-                System.IO.Path.GetFileNameWithoutExtension(p)
-                    .Contains(_filter, StringComparison.OrdinalIgnoreCase) ||
-                (_fpgaMeta.TryGetValue(p, out var meta) &&
-                    ((meta.Item2 ?? "").Contains(_filter, StringComparison.OrdinalIgnoreCase))));
-        }
-        return list;
-    }
-
-    private async Task OnFPGAPicked(string path)
-    {
-        _selectedFPGA = path;
-        _fpga = await JSONFileReader.ReadFPGAJsonFileAsync(path);
-        if (_fpga is not null)
-        {
-            SelectedFPGA.SetFPGA(_fpga, path);
-        }
-        _filter = "";
-        StateHasChanged();
-    }
-
 }

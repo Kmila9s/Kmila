@@ -1,0 +1,84 @@
+{
+  "tests": [
+    {
+      "id": "t1",
+      "visible": true,
+      "descriptions": { "en": "Push four times — full goes high", "es": "Cuatro push — full sube" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "push", "values": [{ "time": 0, "scale": "NS", "value": "1" }] },
+        { "portName": "pop",  "values": [{ "time": 0, "scale": "NS", "value": "0" }] }
+      ]
+    },
+    {
+      "id": "t2",
+      "visible": false,
+      "descriptions": { "en": "Empty after reset", "es": "Vacío tras reset" },
+      "durationMicros": 1,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0, "scale": "NS", "value": "1" }
+        ]},
+        { "portName": "push", "values": [{ "time": 0, "scale": "NS", "value": "0" }] },
+        { "portName": "pop",  "values": [{ "time": 0, "scale": "NS", "value": "0" }] }
+      ]
+    },
+    {
+      "id": "t3",
+      "visible": false,
+      "descriptions": { "en": "Push then pop alternating", "es": "Alternar push y pop" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "push", "values": [
+          { "time": 0,    "scale": "NS", "value": "1" },
+          { "time": 200,  "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "pop", "values": [
+          { "time": 0,    "scale": "NS", "value": "0" },
+          { "time": 400,  "scale": "NS", "value": "1" }
+        ]}
+      ]
+    },
+    {
+      "id": "t4",
+      "visible": false,
+      "descriptions": { "en": "Pop on empty stays empty", "es": "Pop en vacío permanece vacío" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "push", "values": [{ "time": 0, "scale": "NS", "value": "0" }] },
+        { "portName": "pop",  "values": [{ "time": 0, "scale": "NS", "value": "1" }] }
+      ]
+    },
+    {
+      "id": "t5",
+      "visible": false,
+      "descriptions": { "en": "Push & pop both high — count holds", "es": "push y pop a la vez — cuenta no cambia" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "push", "values": [{ "time": 0, "scale": "NS", "value": "1" }] },
+        { "portName": "pop",  "values": [{ "time": 0, "scale": "NS", "value": "1" }] }
+      ]
+    }
+  ]
+}

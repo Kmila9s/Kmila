@@ -16,6 +16,22 @@
 @implements IDisposable
 @inject SimulationSnapshotStore Snapshots
 
+@* Toolbar is always visible — even on empty state — so the import button
+   doesn't disappear and force the user to capture a run first just to learn
+   the import path exists. *@
+<div class="runs-panel__toolbar">
+    <span class="runs-panel__count">@(_snapshots?.Count ?? 0)</span>
+    <span class="runs-panel__toolbar-spacer"></span>
+    <label class="btn btn-ghost btn-sm runs-panel__import"
+           title="@Traductor.T("RUNS_IMPORT")">
+        <Icon Name="IconName.Upload" />
+        <span>@Traductor.T("RUNS_IMPORT")</span>
+        @* d-none keeps the native file picker invisible — clicking the
+           label triggers it because the input is its descendant. *@
+        <InputFile OnChange="OnImportFileSelectedAsync" accept=".json" class="d-none" />
+    </label>
+</div>
+
 @if (_snapshots == null)
 {
     <div class="kmila-dock__empty">
@@ -51,10 +67,9 @@ else
         }
 
         <ul class="runs-panel__list">
-            @foreach (var snap in _snapshots)
-            {
-                var isSelected = _selected.Contains(snap.Id);
-                <li class="runs-panel__item @(isSelected ? "is-selected" : "") @(snap.Pinned ? "is-pinned" : "")">
+            <Virtualize Items="_snapshots" Context="snap" ItemSize="84" OverscanCount="4">
+                @{ var isSelected = _selected.Contains(snap.Id); }
+                <li @key="snap.Id" class="runs-panel__item @(isSelected ? "is-selected" : "") @(snap.Pinned ? "is-pinned" : "")">
                     <label class="runs-panel__select" title="@Traductor.T("RUNS_SELECT")">
                         <input type="checkbox" checked="@isSelected"
                                @onchange="() => ToggleSelected(snap.Id)" />
@@ -116,10 +131,38 @@ else
                         </button>
                     </div>
                 </li>
-            }
+            </Virtualize>
         </ul>
     </div>
 }
+
+@* Rename modal — driven by Blazor state instead of the native window.prompt
+   so it follows the rest of the app's modal styling (Bootstrap-themed, ESC to
+   close, focus management, etc). *@
+<Modal @ref="_renameModal" Title="@Traductor.T("RUNS_RENAME")">
+    <BodyTemplate>
+        <div class="form-floating">
+            <input type="text"
+                   id="run-rename-input"
+                   class="form-control"
+                   placeholder="@Traductor.T("RUNS_RENAME_PROMPT")"
+                   @bind="_renameDraft"
+                   @bind:event="oninput"
+                   @onkeydown="OnRenameKeyDown" />
+            <label for="run-rename-input">@Traductor.T("RUNS_RENAME_PROMPT")</label>
+        </div>
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Secondary" @onclick="() => _renameModal.HideAsync()">
+            @Traductor.T("COMMON_CANCEL")
+        </Button>
+        <Button Color="ButtonColor.Primary" @onclick="CommitRenameAsync">
+            @Traductor.T("COMMON_SAVE")
+        </Button>
+    </FooterTemplate>
+</Modal>
+
+<ConfirmDialog @ref="_deleteDialog" />
 
 @code {
     /// <summary>Project whose runs we're listing. Editor passes this in.</summary>
@@ -133,6 +176,14 @@ else
 
     private List<SimulationSnapshot>? _snapshots;
     private readonly HashSet<int> _selected = new();
+
+    // Rename modal state
+    private Modal _renameModal = default!;
+    private SimulationSnapshot? _renameTarget;
+    private string _renameDraft = string.Empty;
+
+    // Delete confirmation
+    private ConfirmDialog _deleteDialog = new();
 
     protected override void OnInitialized()
     {
@@ -187,12 +238,52 @@ else
     private async Task TogglePinAsync(SimulationSnapshot snap)
         => await Snapshots.SetPinnedAsync(snap.Id, !snap.Pinned);
 
+    /// <summary>
+    /// Opens the in-app rename modal pre-filled with the snapshot's current
+    /// label. Replaces the previous window.prompt call — that one was a glaring
+    /// hole in the styling and didn't match the Bootstrap modal aesthetic the
+    /// rest of the app uses.
+    /// </summary>
     private async Task RenameAsync(SimulationSnapshot snap)
     {
-        var next = await JS.InvokeAsync<string?>("prompt",
-            Traductor.T("RUNS_RENAME_PROMPT"), snap.Label);
-        if (string.IsNullOrWhiteSpace(next)) return;
-        await Snapshots.RenameAsync(snap.Id, next.Trim());
+        _renameTarget = snap;
+        _renameDraft  = snap.Label;
+        await _renameModal.ShowAsync();
+    }
+
+    private async Task OnRenameKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await CommitRenameAsync();
+        else if (e.Key == "Escape") await _renameModal.HideAsync();
+    }
+
+    private async Task CommitRenameAsync()
+    {
+        if (_renameTarget == null) return;
+        var next = (_renameDraft ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(next))
+        {
+            await _renameModal.HideAsync();
+            return;
+        }
+        if (string.Equals(next, _renameTarget.Label, StringComparison.Ordinal))
+        {
+            await _renameModal.HideAsync();
+            return;
+        }
+        var ok = await Snapshots.RenameAsync(_renameTarget.Id, next);
+        await _renameModal.HideAsync();
+        if (ok)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"),
+                Traductor.T("RUNS_RENAMED_OK"), ToastType.Success));
+        }
+        else
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                Traductor.T("RUNS_RENAMED_FAILED"), ToastType.Danger));
+        }
+        _renameTarget = null;
     }
 
     private async Task ExportAsync(SimulationSnapshot snap)
@@ -214,20 +305,81 @@ else
         }
     }
 
+    /// <summary>
+    /// Replaces the previous window.confirm with the BlazorBootstrap
+    /// ConfirmDialog component used throughout the rest of the app
+    /// (FilesCard delete, ProjectsView delete). Same UX, same theme.
+    /// </summary>
     private async Task DeleteAsync(SimulationSnapshot snap)
     {
-        var ok = await JS.InvokeAsync<bool>("confirm",
-            string.Format(Traductor.T("RUNS_DELETE_CONFIRM"), snap.Label));
-        if (!ok) return;
-        await Snapshots.DeleteAsync(snap.Id);
+        var options = new ConfirmDialogOptions
+        {
+            YesButtonColor = ButtonColor.Danger,
+            NoButtonColor  = ButtonColor.Secondary,
+            AutoFocusYesButton = false,
+            YesButtonText = Traductor.T("COMMON_DELETE"),
+            NoButtonText  = Traductor.T("COMMON_GO_BACK")
+        };
+        var confirmed = await _deleteDialog.ShowAsync(
+            Traductor.T("RUNS_DELETE_TITLE"),
+            string.Format(Traductor.T("RUNS_DELETE_CONFIRM"), snap.Label),
+            string.Empty,
+            options);
+        if (!confirmed) return;
+        var ok = await Snapshots.DeleteAsync(snap.Id);
+        if (ok)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"),
+                Traductor.T("RUNS_DELETED_OK"), ToastType.Success));
+        }
+        else
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                Traductor.T("RUNS_DELETED_FAILED"), ToastType.Danger));
+        }
     }
 
-    private static string FormatAge(DateTime createdUtc)
+    /// <summary>
+    /// Reads the picked .json file as text, hands it to the store. The store
+    /// resets identity + project binding before insert, so a run exported from
+    /// another machine / project lands cleanly under the current project.
+    /// </summary>
+    private async Task OnImportFileSelectedAsync(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+        // 5 MB ceiling — captured runs are JSON-encoded transitions; even
+        // long simulations rarely exceed a couple of MB. Bumping the limit
+        // is fine, but unbounded reads from user input is not.
+        const long maxBytes = 5 * 1024 * 1024;
+        try
+        {
+            using var stream = file.OpenReadStream(maxBytes);
+            using var reader = new StreamReader(stream);
+            var json = await reader.ReadToEndAsync();
+            var snap = await Snapshots.ImportFromJsonAsync(ProjectId, json);
+            if (snap == null)
+            {
+                ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                    Traductor.T("RUNS_IMPORT_FAILED"), ToastType.Danger));
+                return;
+            }
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"),
+                string.Format(Traductor.T("RUNS_IMPORTED_OK"), snap.Label), ToastType.Success));
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                $"{Traductor.T("RUNS_IMPORT_FAILED")}: {ex.Message}", ToastType.Danger));
+        }
+    }
+
+    private string FormatAge(DateTime createdUtc)
     {
         var diff = DateTime.UtcNow - createdUtc;
-        if (diff.TotalMinutes < 1) return "just now";
-        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
-        if (diff.TotalHours  < 24) return $"{(int)diff.TotalHours}h ago";
+        if (diff.TotalMinutes < 1) return Traductor.T("RUNS_AGE_JUST_NOW");
+        if (diff.TotalMinutes < 60) return Traductor.T("RUNS_AGE_MIN", (int)diff.TotalMinutes);
+        if (diff.TotalHours  < 24) return Traductor.T("RUNS_AGE_HOUR", (int)diff.TotalHours);
         return createdUtc.ToLocalTime().ToString("MMM d · HH:mm");
     }
 

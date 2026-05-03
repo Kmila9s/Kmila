@@ -9,6 +9,7 @@
 *@
 @implements IDisposable
 @inject BuildLog Log
+@inject IJSRuntime JS
 
 @if (Log.Entries.Count == 0)
 {
@@ -22,6 +23,12 @@ else
     <div class="output-panel">
         <div class="output-panel__toolbar">
             <span class="output-panel__count">@Log.Entries.Count</span>
+            <button type="button" class="btn btn-ghost btn-sm"
+                    @onclick="ExportLogAsync"
+                    title="@Traductor.T("OUTPUT_EXPORT")">
+                <Icon Name="IconName.Download" />
+                <span>@Traductor.T("OUTPUT_EXPORT")</span>
+            </button>
             <button type="button" class="btn btn-ghost btn-sm"
                     @onclick="Log.Clear"
                     title="@Traductor.T("OUTPUT_CLEAR")">
@@ -65,6 +72,34 @@ else
     }
 
     private void OnLogChanged() => InvokeAsync(StateHasChanged);
+
+    /// <summary>
+    /// Serializes the in-memory log to a plain-text .log file and triggers a
+    /// browser download. Each line is formatted as
+    /// <c>HH:mm:ss.fff [LEVEL] message</c> — easy to grep and survives copy/paste.
+    /// </summary>
+    private async Task ExportLogAsync()
+    {
+        if (Log.Entries.Count == 0) return;
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"# Kmila build log — exported {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+        foreach (var e in Log.Entries)
+        {
+            sb.AppendLine($"{e.Timestamp:HH:mm:ss.fff} [{e.Level.ToString().ToUpperInvariant()}] {e.Message}");
+        }
+        var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+        try
+        {
+            await JS.InvokeVoidAsync("kmilaDownloadText",
+                $"kmila-build-{stamp}.log", "text/plain", sb.ToString());
+        }
+        catch
+        {
+            // kmilaDownloadText is wired in both hosts; if absent (sandboxed
+            // iframe / disabled JS) we fail silently — the in-app log is still
+            // fully readable.
+        }
+    }
 
     public void Dispose()
     {

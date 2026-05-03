@@ -4,9 +4,22 @@
 @if(Project != null){
     <EditForm class="row" EditContext="_context" OnValidSubmit="CreateFileAsync">
         <DataAnnotationsValidator />
+        @if (!string.IsNullOrEmpty(TargetDirectory))
+        {
+            <div class="col-12 mb-2">
+                <small class="text-muted">
+                    <Icon Name="IconName.Folder2" Class="me-1" />
+                    @TargetDirectory
+                </small>
+            </div>
+        }
         <div class="col-sm-12 col-md-6 my-3">
             <div class="form-floating mb-3">
-                <input type="text" class="form-control" id="InputProjectFileName" placeholder="@Traductor.T("CREATE_FILE_NAME_PLACEHOLDER")" @bind=_projectFile.FileName>
+                <input type="text" class="form-control" id="InputProjectFileName"
+                       placeholder="@Traductor.T("CREATE_FILE_NAME_PLACEHOLDER")"
+                       autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                       inputmode="text" enterkeyhint="next"
+                       @bind=_projectFile.FileName>
                 <label for="InputProjectFileName">@Traductor.T("CREATE_FILE_NAME_LABEL")</label>
                 <ValidationMessage For="@(() => _projectFile.FileName)" />
             </div>
@@ -50,6 +63,12 @@
     [Parameter]
     public EventCallback OnProjectFileCreated { get; set; }
     /// <summary>
+    /// Optional sub-directory inside the project where the new file should be created.
+    /// Empty string (default) means the project root. Forward-slash separated.
+    /// </summary>
+    [Parameter]
+    public string TargetDirectory { get; set; } = string.Empty;
+    /// <summary>
     /// Gets or sets the content of the editor.
     /// </summary>
     [Parameter]
@@ -90,6 +109,7 @@
             if(_context.Validate()){
                 _projectFile.Content = EditorContent;
                 _projectFile.Project = Project;
+                _projectFile.DirectoryPath = TargetDirectory ?? string.Empty;
                 _projectFile.FileName = $"{_projectFile.FileName}.{_extention}";
                 var result = await ProjectFiles.CreateAsync(_projectFile);
                 ToastService.Notify(Message(

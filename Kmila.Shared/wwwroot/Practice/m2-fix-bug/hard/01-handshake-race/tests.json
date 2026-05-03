@@ -1,0 +1,88 @@
+{
+  "tests": [
+    {
+      "id": "t1",
+      "visible": true,
+      "descriptions": { "en": "Short req glitch (~10 ns) — ack must stay 0", "es": "Pulso corto de req (~10 ns) — ack debe quedar en 0" },
+      "durationMicros": 3,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "req", "values": [
+          { "time": 0,   "scale": "NS", "value": "0" },
+          { "time": 200, "scale": "NS", "value": "1" },
+          { "time": 210, "scale": "NS", "value": "0" }
+        ]}
+      ]
+    },
+    {
+      "id": "t2",
+      "visible": false,
+      "descriptions": { "en": "Stable req held high — ack rises after 2 cycles", "es": "req estable alto — ack sube tras 2 ciclos" },
+      "durationMicros": 3,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "req", "values": [
+          { "time": 0,   "scale": "NS", "value": "0" },
+          { "time": 200, "scale": "NS", "value": "1" }
+        ]}
+      ]
+    },
+    {
+      "id": "t3",
+      "visible": false,
+      "descriptions": { "en": "Held in reset — ack stays 0", "es": "Reset mantenido — ack permanece en 0" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [{ "time": 0, "scale": "NS", "value": "1" }] },
+        { "portName": "req",   "values": [{ "time": 0, "scale": "NS", "value": "1" }] }
+      ]
+    },
+    {
+      "id": "t4",
+      "visible": false,
+      "descriptions": { "en": "Two short req glitches — ack must remain 0", "es": "Dos glitches de req — ack debe permanecer en 0" },
+      "durationMicros": 3,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "req", "values": [
+          { "time": 0,    "scale": "NS", "value": "0" },
+          { "time": 300,  "scale": "NS", "value": "1" },
+          { "time": 308,  "scale": "NS", "value": "0" },
+          { "time": 800,  "scale": "NS", "value": "1" },
+          { "time": 808,  "scale": "NS", "value": "0" }
+        ]}
+      ]
+    },
+    {
+      "id": "t5",
+      "visible": false,
+      "descriptions": { "en": "req asserted then deasserted after 200 ns", "es": "req activo y luego inactivo tras 200 ns" },
+      "durationMicros": 3,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "req", "values": [
+          { "time": 0,    "scale": "NS", "value": "0" },
+          { "time": 200,  "scale": "NS", "value": "1" },
+          { "time": 1200, "scale": "NS", "value": "0" }
+        ]}
+      ]
+    }
+  ]
+}

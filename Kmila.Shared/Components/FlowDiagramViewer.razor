@@ -1,0 +1,617 @@
+@*
+    FlowDiagramViewer — control-flow visualization of the parsed VHDL design.
+
+    Complements the gate-level SchematicViewer with a higher-level "how the
+    code runs" view: each entity/architecture appears as a flowchart whose
+    nodes are processes, concurrent assignments, and the if/case/loop
+    structures inside processes. Edges are control-flow (sequential within a
+    process; parallel "fan-out" from architecture root to processes).
+
+    Source of data: <c>Builder.Parser.Entities</c>, populated by the build
+    pipeline. We render after each build (and when the parent component
+    notifies us via Refresh()). The output is a Mermaid <c>flowchart TB</c>
+    string injected as <pre class="mermaid"> — the page-level mermaid@11
+    instance (loaded from CDN in App.razor / index.html for lessons) picks
+    it up via window.kmilaMermaidRun.
+
+    Why Mermaid and not custom SVG: the schematic already does ad-hoc SVG
+    layout for gate-level detail. For a teaching-flow view, Mermaid's
+    auto-layout is good enough and ships zero extra code on our side. If the
+    Mermaid CDN is blocked, we fall back to the raw source so the student at
+    least sees the structure as text.
+*@
+@implements IDisposable
+@inject ProgramBuilder Builder
+@inject IJSRuntime JS
+
+<div class="flow-diagram">
+    @if (string.IsNullOrEmpty(_mermaidSource))
+    {
+        <div class="flow-diagram__empty">
+            <Icon Name="IconName.Diagram2" />
+            <p>@Traductor.T("FLOW_EMPTY")</p>
+        </div>
+    }
+    else
+    {
+        <header class="flow-diagram__head">
+            <span>
+                <Icon Name="IconName.Diagram2" />
+                @Traductor.T("FLOW_TITLE")
+            </span>
+            @if (_entityCount > 0)
+            {
+                <span class="flow-diagram__count">@_entityCount</span>
+            }
+            <button type="button" class="btn btn-ghost btn-sm"
+                    @onclick="ExportSvgAsync"
+                    title="@Traductor.T("FLOW_EXPORT_SVG")">
+                <Icon Name="IconName.Download" />
+                <span>SVG</span>
+            </button>
+            <button type="button" class="btn btn-ghost btn-sm"
+                    @onclick="ExportPngAsync"
+                    title="@Traductor.T("FLOW_EXPORT_PNG")">
+                <Icon Name="IconName.FileEarmarkImage" />
+                <span>PNG</span>
+            </button>
+            <button type="button" class="btn btn-ghost btn-sm"
+                    @onclick="OnRefreshClicked"
+                    title="@Traductor.T("FLOW_REFRESH")">
+                <Icon Name="IconName.ArrowClockwise" />
+            </button>
+        </header>
+        <div class="flow-diagram__body">
+            @* mermaid auto-detects pre.mermaid and replaces with SVG. The
+               key= forces a fresh DOM node when the source changes so we
+               never end up showing a stale, already-processed diagram. *@
+            <pre class="mermaid" @key="_renderKey">@_mermaidSource</pre>
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// Forces a re-render with a fresh source string. Editor calls this after
+    /// each Build so the diagram reflects the most recently parsed design.
+    /// </summary>
+    public async Task RefreshAsync()
+    {
+        _mermaidSource = BuildMermaidSource();
+        _renderKey = Guid.NewGuid();
+        StateHasChanged();
+        await KickMermaidAsync();
+    }
+
+    private string _mermaidSource = string.Empty;
+    private int _entityCount;
+    private Guid _renderKey = Guid.NewGuid();
+
+    protected override void OnInitialized()
+    {
+        Traductor.StaticOnLangChanged += OnLangChanged;
+        // Populate from whatever is already in the Builder. The Editor only
+        // calls RefreshAsync from RunBuildAsync's finally — but if the user
+        // navigates to the Flow tab AFTER a successful build (the common
+        // case: build, look at entities, then click Flow), this component
+        // mounts FRESH with an empty source and falls into the empty state.
+        // Reading the Builder on init keeps the diagram in sync for that
+        // navigation path.
+        _mermaidSource = BuildMermaidSource();
+    }
+
+    /// <summary>
+    /// First render after mount we need to kick mermaid so the inline pre.mermaid
+    /// gets converted to SVG. Subsequent renders that change _mermaidSource
+    /// already kick it from RefreshAsync.
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !string.IsNullOrEmpty(_mermaidSource))
+            await KickMermaidAsync();
+    }
+
+    private void OnLangChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Traductor.StaticOnLangChanged -= OnLangChanged;
+    }
+
+    /// <summary>Manual refresh button — reads whatever the Builder has now.</summary>
+    private async Task OnRefreshClicked() => await RefreshAsync();
+
+    /// <summary>
+    /// Hands the rendered SVG to <c>kmilaDownloadFlowDiagram</c> which
+    /// serializes the SVG element produced by mermaid and triggers a
+    /// browser download. Suffix decides .svg vs .png.
+    /// </summary>
+    private async Task ExportSvgAsync()
+    {
+        var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+        // Pass a CSS selector instead of an element id — earlier versions
+        // generated a per-instance GUID id, but the prerendered HTML and the
+        // interactive component instance produced different GUIDs on the
+        // running editor, so the JS lookup found nothing. Class selector is
+        // unambiguous: there's only ever one .flow-diagram__body on screen.
+        try { await JS.InvokeVoidAsync("kmilaDownloadFlowDiagram", ".flow-diagram__body", $"kmila-flow-{stamp}.svg", "svg"); }
+        catch { /* helper missing / mermaid hadn't rendered yet */ }
+    }
+
+    private async Task ExportPngAsync()
+    {
+        var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+        try { await JS.InvokeVoidAsync("kmilaDownloadFlowDiagram", ".flow-diagram__body", $"kmila-flow-{stamp}.png", "png"); }
+        catch { /* helper missing / mermaid hadn't rendered yet */ }
+    }
+
+    /// <summary>
+    /// Re-runs the page-level mermaid@11 instance to convert pre.mermaid into
+    /// SVG. Idempotent and safe to call when mermaid hasn't loaded yet (the
+    /// JS shim swallows the error so the raw source stays visible as fallback).
+    /// </summary>
+    private async Task KickMermaidAsync()
+    {
+        try
+        {
+            // Two ticks: first to flush this render, second so the
+            // <pre.mermaid> is in the DOM before we ask mermaid to scan it.
+            await Task.Yield();
+            await JS.InvokeVoidAsync("kmilaMermaidRun");
+        }
+        catch { /* CDN blocked or mermaid not yet loaded — pre.mermaid stays as text */ }
+    }
+
+    /// <summary>
+    /// Walks <c>Builder.Parser.Entities</c> and emits a Mermaid flowchart.
+    /// Each entity gets its own subgraph; inside an arch we render a node for
+    /// every concurrent task, drilling into Process tasks to show their
+    /// if/case/loop structure. Falls back to the task type name when we don't
+    /// recognize a shape — that keeps the view alive even when the AST grows.
+    /// </summary>
+    private string BuildMermaidSource()
+    {
+        var parser = Builder?.Parser;
+        var entities = parser?.Entities;
+        if (entities == null || entities.Count == 0)
+        {
+            _entityCount = 0;
+            return string.Empty;
+        }
+        _entityCount = entities.Count;
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("flowchart TB");
+        // Soft styling — the page theme observer in App.razor switches mermaid
+        // theme on dark mode, but a couple of explicit class colors give the
+        // categories of node a stable visual identity within either theme.
+        sb.AppendLine("  classDef arch fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a;");
+        sb.AppendLine("  classDef proc fill:#fef3c7,stroke:#d97706,color:#78350f;");
+        sb.AppendLine("  classDef cond fill:#fae8ff,stroke:#a855f7,color:#581c87;");
+        sb.AppendLine("  classDef loop fill:#dcfce7,stroke:#16a34a,color:#14532d;");
+        sb.AppendLine("  classDef stmt fill:#f1f5f9,stroke:#64748b,color:#0f172a;");
+
+        var ctr = new IdCounter();
+        foreach (var entity in entities)
+        {
+            try { EmitEntity(sb, entity, ctr); }
+            catch (Exception ex)
+            {
+                // Defensive: don't let one malformed AST node poison the whole
+                // diagram. Drop a marker node and keep going.
+                var id = ctr.Next("err");
+                sb.AppendLine($"  {id}[\"{Esc($"⚠ {Traductor.T("FLOW_RENDER_ERROR")}: {ex.Message}")}\"]:::cond");
+            }
+        }
+        return sb.ToString();
+    }
+
+    private void EmitEntity(System.Text.StringBuilder sb, dynamic entity, IdCounter ctr)
+    {
+        string entityName = entity.Name as string ?? "(entity)";
+        var arch = entity.Architecture;
+        string archName = arch?.Name as string ?? "(arch)";
+
+        var entityId = ctr.Next("e");
+        // VHDL keywords (entity / architecture) stay verbatim — they're
+        // language tokens that show up identically in any locale's textbook.
+        sb.AppendLine($"  subgraph {entityId}[\"{Esc($"entity {entityName}")}\"]");
+        sb.AppendLine($"    direction TB");
+
+        var archId = ctr.Next("a");
+        sb.AppendLine($"    {archId}[\"{Esc($"architecture {archName}")}\"]:::arch");
+
+        if (arch?.Tasks is System.Collections.IEnumerable archTasks)
+        {
+            int idx = 0;
+            foreach (var task in archTasks)
+            {
+                idx++;
+                EmitArchTask(sb, archId, task, idx, ctr);
+            }
+        }
+        sb.AppendLine("  end");
+    }
+
+    /// <summary>Emit a single concurrent task under the architecture.</summary>
+    private void EmitArchTask(System.Text.StringBuilder sb, string parentId, object task, int idx, IdCounter ctr)
+    {
+        if (task == null) return;
+        var typeName = task.GetType().Name;
+
+        // Process — branch into its sequential body.
+        if (typeName == "Process")
+        {
+            var procId = ctr.Next("p");
+            string label = $"{Traductor.T("FLOW_PROCESS")} #{idx}";
+            try
+            {
+                var sens = (task as dynamic).SensitiveList as System.Collections.IEnumerable;
+                if (sens != null)
+                {
+                    var names = new List<string>();
+                    foreach (var v in sens)
+                    {
+                        var n = (v as dynamic)?.Name as string;
+                        if (!string.IsNullOrEmpty(n)) names.Add(n);
+                    }
+                    if (names.Count > 0)
+                        label += $"\\n{Traductor.T("FLOW_SENSITIVE_TO")}: {string.Join(", ", names)}";
+                }
+            }
+            catch { }
+            sb.AppendLine($"    {procId}[\"{Esc(label)}\"]:::proc");
+            sb.AppendLine($"    {parentId} --> {procId}");
+
+            try
+            {
+                var tasks = (task as dynamic).Tasks as System.Collections.IEnumerable;
+                if (tasks != null)
+                {
+                    string prevId = procId;
+                    int subIdx = 0;
+                    foreach (var sub in tasks)
+                    {
+                        subIdx++;
+                        prevId = EmitSequential(sb, prevId, sub, subIdx, ctr);
+                    }
+                }
+            }
+            catch { }
+            return;
+        }
+
+        // Concurrent operation — surface the actual VHDL line so the box
+        // reads as the assignment instead of the generic class name.
+        // Prefer Operation.RawData when present, then fall back to
+        // assignment-target + assignment-source for ConditionalAssignment /
+        // SelectedAssignment shapes.
+        var stmtId = ctr.Next("c");
+        sb.AppendLine($"    {stmtId}[\"{Esc(DescribeConcurrent(task, typeName))}\"]:::stmt");
+        sb.AppendLine($"    {parentId} --> {stmtId}");
+    }
+
+    /// <summary>
+    /// Best-effort label for a concurrent task: returns the VHDL-flavoured
+    /// expression where we know the shape, or <paramref name="typeName"/>
+    /// otherwise. Reflection-only so we don't have to take typed
+    /// dependencies on the Interpreter's repository classes.
+    /// </summary>
+    private string DescribeConcurrent(object task, string typeName)
+    {
+        // Plain assignment: Operation has RawData like "y <= a and b".
+        var raw = TryGetString(task, "RawData");
+        if (!string.IsNullOrWhiteSpace(raw)) return Truncate(raw!.Trim());
+
+        // ConditionalAssignment: TargetName <= v1 when c1 else v2 ...
+        if (typeName == "ConditionalAssignment")
+        {
+            var target = TryGetString(task, "TargetName") ?? "?";
+            var parts = new List<string>();
+            try
+            {
+                var brs = task.GetType().GetProperty("Branches")?.GetValue(task) as System.Collections.IEnumerable;
+                if (brs != null)
+                {
+                    foreach (var br in brs)
+                    {
+                        var v = TryGetString(br, "ValueExpression") ?? "?";
+                        var c = TryGetString(br, "ConditionExpression");
+                        parts.Add(string.IsNullOrEmpty(c) ? v : $"{v} when {c}");
+                    }
+                }
+            }
+            catch { }
+            return Truncate($"{target} <= " + (parts.Count > 0 ? string.Join(" else ", parts) : "(?)"));
+        }
+
+        // SelectedAssignment: with selector <selector> select target <= ...
+        if (typeName == "SelectedAssignment")
+        {
+            var target   = TryGetString(task, "TargetName") ?? "?";
+            var selector = TryGetString(task, "SelectorExpression") ?? "?";
+            var n        = 0;
+            try
+            {
+                var brs = task.GetType().GetProperty("Branches")?.GetValue(task) as System.Collections.IEnumerable;
+                if (brs != null) foreach (var _ in brs) n++;
+            }
+            catch { }
+            return Truncate($"with {selector} select {target} <= … ({n} branches)");
+        }
+
+        return typeName;
+    }
+
+    /// <summary>
+    /// Emits a sequential statement under <paramref name="prevId"/> and returns
+    /// the id of the LAST node emitted so the caller can chain the next one.
+    /// Knows the common control-flow shapes (if/case/loops); unknown task
+    /// types render as a generic statement box.
+    /// </summary>
+    private string EmitSequential(System.Text.StringBuilder sb, string prevId, object task, int idx, IdCounter ctr)
+    {
+        if (task == null) return prevId;
+        var typeName = task.GetType().Name;
+
+        if (typeName == "IfStructure")
+        {
+            var diamondId = ctr.Next("if");
+            // Pull the FIRST branch's condition for the diamond label so the
+            // diagram reads as "if a = '1'" rather than a bare "if". The
+            // VHDL keywords (if/else/then/elsif) we keep verbatim — they're
+            // language tokens, not prose.
+            string IF = Traductor.T("FLOW_IF"), THEN = Traductor.T("FLOW_THEN"),
+                   ELSIF = Traductor.T("FLOW_ELSIF"), ELSE = Traductor.T("FLOW_ELSE"),
+                   ENDIF = Traductor.T("FLOW_END_IF"),
+                   FALSE_PATH = Traductor.T("FLOW_FALSE_PATH");
+            string ifLabel = IF;
+            try
+            {
+                var firstBr = ((dynamic)task).Branches?[0];
+                var cond    = firstBr?.Condition;
+                var raw     = cond != null ? TryGetString(cond, "RawData") : null;
+                if (!string.IsNullOrWhiteSpace(raw)) ifLabel = $"{IF} {Truncate(raw!.Trim(), 48)}";
+            }
+            catch { }
+            sb.AppendLine($"    {diamondId}{{{{\"{Esc(ifLabel)}\"}}}}:::cond");
+            sb.AppendLine($"    {prevId} --> {diamondId}");
+            string endId = ctr.Next("ifend");
+            sb.AppendLine($"    {endId}([\"{Esc(ENDIF)}\"]):::stmt");
+            // Track whether any branch was the implicit `else`. VHDL allows
+            // an if without one ("if X then … end if"), in which case the
+            // diagram used to dead-end the diamond on its only true edge —
+            // students couldn't see *what happens when the condition is
+            // false*. Below we emit a synthetic "false" edge from the
+            // diamond straight to the end-if to make that skip path
+            // visible.
+            bool hasElseBranch = false;
+            try
+            {
+                var branches = (task as dynamic).Branches as System.Collections.IEnumerable;
+                if (branches != null)
+                {
+                    int b = 0;
+                    foreach (var br in branches)
+                    {
+                        b++;
+                        bool isElse = false;
+                        try { isElse = (bool)((dynamic)br).IsElse; } catch { }
+                        if (isElse) hasElseBranch = true;
+                        string branchLabel = isElse ? ELSE : (b == 1 ? THEN : ELSIF);
+                        if (!isElse && b > 1)
+                        {
+                            try
+                            {
+                                var raw = TryGetString(((dynamic)br).Condition, "RawData");
+                                if (!string.IsNullOrWhiteSpace(raw))
+                                    branchLabel = $"{ELSIF} {Truncate(raw!.Trim(), 32)}";
+                            }
+                            catch { }
+                        }
+                        var bodyTasks = ((dynamic)br).Tasks as System.Collections.IEnumerable;
+                        // First node of the branch
+                        var startId = ctr.Next("br");
+                        sb.AppendLine($"    {startId}[\"{Esc(branchLabel)}\"]:::stmt");
+                        // Edge label wrapped in double-quotes so content with
+                        // spaces / underscores / Unicode brackets parses as
+                        // one token instead of confusing the |…| delimiter.
+                        sb.AppendLine($"    {diamondId} -->|\"{Esc(branchLabel)}\"| {startId}");
+                        string lastId = startId;
+                        if (bodyTasks != null)
+                        {
+                            int j = 0;
+                            foreach (var t in bodyTasks)
+                            {
+                                j++;
+                                lastId = EmitSequential(sb, lastId, t, j, ctr);
+                            }
+                        }
+                        sb.AppendLine($"    {lastId} --> {endId}");
+                    }
+                }
+            }
+            catch { }
+
+            // No else? Make the implicit skip path explicit so the diamond
+            // shows *both* outcomes — true (down through the body) and
+            // false (jump to end-if). Dotted edge so it reads as the
+            // implicit/skip branch instead of code we wrote.
+            if (!hasElseBranch)
+            {
+                sb.AppendLine($"    {diamondId} -.->|\"{Esc(FALSE_PATH)}\"| {endId}");
+            }
+            return endId;
+        }
+
+        if (typeName == "CaseStructure")
+        {
+            var diamondId = ctr.Next("case");
+            string CASE = Traductor.T("FLOW_CASE"), WHEN = Traductor.T("FLOW_WHEN"),
+                   ENDCASE = Traductor.T("FLOW_END_CASE"),
+                   OTHERS_PATH = Traductor.T("FLOW_OTHERS_PATH");
+            string caseLabel = CASE;
+            var sel = TryGetString(task, "SelectorExpression")
+                   ?? TryGetString(task, "Selector")
+                   ?? TryGetString(task, "Expression")
+                   ?? TryGetString(task, "RawData");
+            if (!string.IsNullOrWhiteSpace(sel)) caseLabel = $"{CASE} {Truncate(sel!.Trim(), 48)}";
+            sb.AppendLine($"    {diamondId}{{{{\"{Esc(caseLabel)}\"}}}}:::cond");
+            sb.AppendLine($"    {prevId} --> {diamondId}");
+            string endId = ctr.Next("caseend");
+            sb.AppendLine($"    {endId}([\"{Esc(ENDCASE)}\"]):::stmt");
+            try
+            {
+                var dyn = (dynamic)task;
+                System.Collections.IEnumerable? cases = null;
+                try { cases = dyn.Branches as System.Collections.IEnumerable; } catch { }
+                if (cases == null)
+                    try { cases = dyn.Cases as System.Collections.IEnumerable; } catch { }
+                bool hasOthers = false;
+                if (cases != null)
+                {
+                    int c = 0;
+                    foreach (var ce in cases)
+                    {
+                        c++;
+                        var label = $"{WHEN} #{c}";
+                        try { label = ((dynamic)ce).Label as string ?? label; } catch { }
+                        // VHDL `when others =>` — the catch-all branch.
+                        // Detected on the label since the AST shape is
+                        // open (no IsOthers boolean). Substring match is
+                        // good enough; nothing else legitimately ends in
+                        // "others" in this position.
+                        if (label.TrimEnd().EndsWith("others", StringComparison.OrdinalIgnoreCase))
+                            hasOthers = true;
+                        var startId = ctr.Next("when");
+                        sb.AppendLine($"    {startId}[\"{Esc(label)}\"]:::stmt");
+                        sb.AppendLine($"    {diamondId} -->|\"{Esc(label)}\"| {startId}");
+                        sb.AppendLine($"    {startId} --> {endId}");
+                    }
+                }
+                // Same intent as the if-without-else fix above: when the
+                // case body doesn't include `when others`, expose the
+                // implicit fall-through so the diamond doesn't read as
+                // exhaustive.
+                if (!hasOthers)
+                {
+                    sb.AppendLine($"    {diamondId} -.->|\"{Esc(OTHERS_PATH)}\"| {endId}");
+                }
+            }
+            catch { }
+            return endId;
+        }
+
+        if (typeName.EndsWith("LoopStructure") || typeName == "GenerateBlock")
+        {
+            var loopId = ctr.Next("lp");
+            var label = typeName switch
+            {
+                "ForLoopStructure"    => Traductor.T("FLOW_FOR_LOOP"),
+                "WhileLoopStructure"  => Traductor.T("FLOW_WHILE_LOOP"),
+                "SimpleLoopStructure" => Traductor.T("FLOW_LOOP"),
+                "GenerateBlock"       => Traductor.T("FLOW_GENERATE"),
+                _                     => typeName
+            };
+            sb.AppendLine($"    {loopId}[/\"{Esc(label)}\"/]:::loop");
+            sb.AppendLine($"    {prevId} --> {loopId}");
+            try
+            {
+                var tasks = (task as dynamic).Tasks as System.Collections.IEnumerable;
+                if (tasks != null)
+                {
+                    string innerLast = loopId;
+                    int j = 0;
+                    foreach (var t in tasks)
+                    {
+                        j++;
+                        innerLast = EmitSequential(sb, innerLast, t, j, ctr);
+                    }
+                    // Loop arrow back to header for the iteration vibe.
+                    sb.AppendLine($"    {innerLast} -.-> {loopId}");
+                }
+            }
+            catch { }
+            return loopId;
+        }
+
+        // Catch-all — prefer the actual VHDL line (Operation.RawData). For
+        // anything else we fall back to type name plus any obvious label
+        // property so the reader at least knows what step it is.
+        var stmtId = ctr.Next("s");
+        var stmtLabel = DescribeConcurrent(task, typeName);
+        sb.AppendLine($"    {stmtId}[\"{Esc(stmtLabel)}\"]:::stmt");
+        sb.AppendLine($"    {prevId} --> {stmtId}");
+        return stmtId;
+    }
+
+    /// <summary>
+    /// Reflection-only string-property reader. Returns null on missing /
+    /// non-string / exception. Lets the rendering walk shapes from the
+    /// Interpreter module without taking a typed dependency.
+    /// </summary>
+    private static string? TryGetString(object obj, string name)
+    {
+        if (obj == null) return null;
+        try
+        {
+            var p = obj.GetType().GetProperty(name,
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+            return p?.GetValue(obj) as string;
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// Mermaid handles long node labels poorly (auto-layout breaks at extreme
+    /// widths). Trim raw VHDL lines past <paramref name="max"/> chars and
+    /// append an ellipsis so the diagram stays readable.
+    /// </summary>
+    private static string Truncate(string s, int max = 64)
+    {
+        if (string.IsNullOrEmpty(s)) return s;
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\s+", " ").Trim();
+        return s.Length <= max ? s : s.Substring(0, max - 1) + "…";
+    }
+
+    /// <summary>
+    /// Escapes a label for safe interpolation into Mermaid source while
+    /// preserving the original VHDL glyphs in the rendered SVG. Mermaid's
+    /// shape delimiters ([], {}, (), {{}}) and the HTML-parse step on quoted
+    /// labels collide with raw `<`, `>`, parens, brackets, braces, pipes and
+    /// double-quotes when they appear in user content.
+    ///
+    /// Earlier versions mapped these to Unicode lookalikes (`‹`, `❨`, …),
+    /// which kept the diagram alive but rendered VHDL like
+    /// <c>q0 ‹= '0'</c> in the exported SVG — visually mangled. Mermaid
+    /// supports an HTML-entity-like sentinel form (<c>#lt;</c>, <c>#40;</c>,
+    /// …) that the parser swallows whole and the renderer turns back into
+    /// the real character at draw time, so we get faithful VHDL like
+    /// <c>q0 &lt;= '0'</c> in both inline diagrams and SVG/PNG exports.
+    /// </summary>
+    private static string Esc(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return "";
+        // Trim first so we don't accidentally chop the `;` off an entity
+        // sentinel introduced below (e.g. `q0 #lt;= '0'`).
+        s = s.Replace("\r", "").Replace("\n", " ").TrimEnd(';');
+        return s
+            .Replace("\"", "#quot;")
+            .Replace("|", "#124;")
+            .Replace("<", "#lt;")
+            .Replace(">", "#gt;")
+            .Replace("(", "#40;")
+            .Replace(")", "#41;")
+            .Replace("[", "#91;")
+            .Replace("]", "#93;")
+            .Replace("{", "#123;")
+            .Replace("}", "#125;");
+    }
+
+    /// <summary>Mutable counter used to generate unique node ids per render pass.</summary>
+    private class IdCounter
+    {
+        private int _i;
+        public string Next(string prefix) => $"{prefix}{++_i}";
+    }
+}

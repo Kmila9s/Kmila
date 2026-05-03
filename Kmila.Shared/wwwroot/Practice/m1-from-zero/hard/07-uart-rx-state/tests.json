@@ -1,0 +1,81 @@
+{
+  "tests": [
+    {
+      "id": "t1",
+      "visible": true,
+      "descriptions": { "en": "rx=1 then drops to 0 — start the FSM", "es": "rx=1 luego baja a 0 — arranca la FSM" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "rx", "values": [
+          { "time": 0,   "scale": "NS", "value": "1" },
+          { "time": 200, "scale": "NS", "value": "0" }
+        ]}
+      ]
+    },
+    {
+      "id": "t2",
+      "visible": false,
+      "descriptions": { "en": "rx held high — stays idle", "es": "rx alto — siempre idle" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "rx", "values": [{ "time": 0, "scale": "NS", "value": "1" }] }
+      ]
+    },
+    {
+      "id": "t3",
+      "visible": false,
+      "descriptions": { "en": "rx=0 from start — full sequence", "es": "rx=0 desde el inicio" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "rx", "values": [{ "time": 0, "scale": "NS", "value": "0" }] }
+      ]
+    },
+    {
+      "id": "t4",
+      "visible": false,
+      "descriptions": { "en": "Held in reset", "es": "Reset mantenido" },
+      "durationMicros": 1,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0, "scale": "NS", "value": "1" }
+        ]},
+        { "portName": "rx", "values": [{ "time": 0, "scale": "NS", "value": "0" }] }
+      ]
+    },
+    {
+      "id": "t5",
+      "visible": false,
+      "descriptions": { "en": "rx pulses repeatedly", "es": "rx pulsa varias veces" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "rx", "values": [
+          { "time": 0,    "scale": "NS", "value": "1" },
+          { "time": 100,  "scale": "NS", "value": "0" },
+          { "time": 800,  "scale": "NS", "value": "1" },
+          { "time": 1200, "scale": "NS", "value": "0" }
+        ]}
+      ]
+    }
+  ]
+}

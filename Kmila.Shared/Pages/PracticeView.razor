@@ -1,0 +1,531 @@
+@page "/practice/{ExerciseId}"
+@using Kmila.Shared.Models
+@using Kmila.Shared.Models.Practice
+@using Kmila.Shared.Services
+@using Kmila.Shared.Services.Practice
+@inject PracticeCatalog Catalog
+@inject PracticeEvaluator Evaluator
+@inject PracticeAttemptStore Attempts
+@inject NavigationManager Nav
+@implements IDisposable
+<PageTitle>@(_titleForTab ?? Traductor.T("PRACTICE_TITLE"))</PageTitle>
+
+@*
+    PracticeView — single-exercise workbench.
+
+    Left column  : statement (Markdown) + visible test details + verdict panel.
+    Right column : Monaco editor seeded with the starter + Submit button.
+
+    On submit we hand the candidate's text to PracticeEvaluator.GradeAsync,
+    which simulates the canonical solution to derive expected waveforms
+    (cached) and runs the candidate against every test case.
+*@
+
+<section class="practice-view">
+    <div class="lesson-page__chrome">
+        <a href="/practice" class="lesson-crumb">
+            <Icon Name="IconName.ArrowLeft" />
+            <span>@Traductor.T("PRACTICE_BACK_CATALOG")</span>
+        </a>
+
+        @if (_exercise != null)
+        {
+            <div class="lesson-chip-row">
+                <span class="learn-card__chip learn-card__chip--@DifficultyClass(_exercise.Difficulty)">
+                    @DifficultyLabel(_exercise.Difficulty)
+                </span>
+                <span class="lesson-chip lesson-chip--kind">
+                    <Icon Name="@ModalityIcon(_exercise.Modality)" />
+                    @ModalityLabel(_exercise.Modality)
+                </span>
+                <span class="lesson-chip lesson-chip--time">
+                    <Icon Name="IconName.CheckSquare" />
+                    @_exercise.TestCases.Count @Traductor.T("PRACTICE_TESTS_LABEL")
+                </span>
+            </div>
+        }
+    </div>
+
+    @if (_exercise == null)
+    {
+        <div class="learn-empty">
+            <div class="learn-empty__icon"><Icon Name="IconName.FileEarmarkX" /></div>
+            <h2>@Traductor.T("PRACTICE_NOT_FOUND")</h2>
+            <a class="btn btn-primary" href="/practice">@Traductor.T("PRACTICE_BACK_CATALOG")</a>
+        </div>
+    }
+    else
+    {
+        <div class="practice-grid">
+            @* ── Left column: statement + visible test + verdict ───────── *@
+            <article class="practice-pane practice-pane--brief">
+                <div class="lesson-markdown">
+                    @MarkdownRenderer.Render(PracticeCatalog.Localize(_exercise.Statements, _lang, string.Empty))
+                </div>
+
+                <h3 class="practice-section-title">
+                    <Icon Name="IconName.LockFill" /> @Traductor.T("PRACTICE_VISIBLE_TEST")
+                </h3>
+                @{
+                    var visible = _exercise.TestCases.FirstOrDefault(t => t.Visible)
+                                  ?? _exercise.TestCases.FirstOrDefault();
+                }
+                @if (visible != null)
+                {
+                    <div class="practice-testcase">
+                        <p class="practice-testcase__desc">
+                            @PracticeCatalog.Localize(visible.Descriptions, _lang, visible.Id)
+                        </p>
+                        <table class="practice-test-table">
+                            <thead>
+                                <tr>
+                                    <th>@Traductor.T("PRACTICE_TC_PORT")</th>
+                                    <th>@Traductor.T("PRACTICE_TC_TIME")</th>
+                                    <th>@Traductor.T("PRACTICE_TC_VALUE")</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var pm in visible.Inputs)
+                                {
+                                    @foreach (var v in pm.Values)
+                                    {
+                                        <tr>
+                                            <td><code>@pm.PortName</code></td>
+                                            <td>@($"{v.Time} {v.TimeScale.ToLowerInvariant()}")</td>
+                                            <td><code>@v.Value</code></td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                        <p class="practice-testcase__hidden">
+                            @string.Format(Traductor.T("PRACTICE_HIDDEN_TESTS_FMT"),
+                                _exercise.TestCases.Count - 1)
+                        </p>
+                    </div>
+                }
+
+                @if (_verdict != null)
+                {
+                    <h3 class="practice-section-title">
+                        <Icon Name="IconName.ListCheck" /> @Traductor.T("PRACTICE_RESULTS")
+                    </h3>
+                    <div class="practice-verdict practice-verdict--@VerdictClass(_verdict.Kind)">
+                        <div class="practice-verdict__head">
+                            <Icon Name="@VerdictIcon(_verdict.Kind)" />
+                            <strong>@VerdictLabel(_verdict.Kind)</strong>
+                            <span class="practice-verdict__time">
+                                @_verdict.TotalDurationMs ms
+                            </span>
+                        </div>
+                        @if (!string.IsNullOrEmpty(_verdict.BuildErrorMessage))
+                        {
+                            <div class="practice-verdict__build-error">
+                                <code>@_verdict.BuildErrorMessage</code>
+                                @if (!string.IsNullOrEmpty(_verdict.BuildErrorDetail))
+                                {
+                                    <pre>@_verdict.BuildErrorDetail</pre>
+                                }
+                            </div>
+                        }
+                        <ul class="practice-verdict__tests">
+                            @{ int idx = 0; }
+                            @foreach (var r in _verdict.TestResults)
+                            {
+                                idx++;
+                                <li class="@(r.Passed ? "ok" : "ko")">
+                                    <Icon Name="@(r.Passed ? IconName.CheckCircleFill : IconName.XCircleFill)" />
+                                    <span class="t-name">
+                                        @($"#{idx}")
+                                        @{
+                                            var tc = _exercise.TestCases.FirstOrDefault(t => t.Id == r.TestCaseId);
+                                        }
+                                        @if (tc != null)
+                                        {
+                                            <span class="t-desc">
+                                                @PracticeCatalog.Localize(tc.Descriptions, _lang, tc.Id)
+                                            </span>
+                                        }
+                                    </span>
+                                    @if (!r.Passed && r.FirstMismatchSignal != null)
+                                    {
+                                        <span class="t-detail">
+                                            @($"@{r.FirstMismatchTimeNs} ns — {r.FirstMismatchSignal}: ")
+                                            <code class="t-actual">@r.ActualAtMismatch</code>
+                                            <span class="t-arrow">≠</span>
+                                            <code class="t-expected">@r.ExpectedAtMismatch</code>
+                                        </span>
+                                    }
+                                    <span class="t-time">@r.SimulationDurationMs ms</span>
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                }
+
+                @if (_pastAttempts.Count > 0)
+                {
+                    <h3 class="practice-section-title">
+                        <Icon Name="IconName.ClockHistory" />
+                        @string.Format(Traductor.T("PRACTICE_PAST_ATTEMPTS_TITLE"), _pastAttempts.Count)
+                    </h3>
+                    <details class="practice-history">
+                        <summary>@Traductor.T("PRACTICE_PAST_ATTEMPTS_TOGGLE")</summary>
+                        <ul class="practice-history__list">
+                            @foreach (var a in _pastAttempts)
+                            {
+                                <li class="practice-history__item practice-history__item--@VerdictClass(a.Verdict)">
+                                    <span class="practice-history__when">
+                                        <Icon Name="@VerdictIcon(a.Verdict)" />
+                                        @a.SubmittedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                                    </span>
+                                    <span class="practice-history__verdict">@VerdictLabel(a.Verdict)</span>
+                                    <span class="practice-history__time">@a.TotalDurationMs ms</span>
+                                    <button type="button"
+                                            class="btn btn-sm btn-ghost practice-history__load"
+                                            @onclick="() => LoadAttemptAsync(a)"
+                                            disabled="@(_grading || !_monacoReady)">
+                                        <Icon Name="IconName.BoxArrowUpRight" />
+                                        <span>@Traductor.T("PRACTICE_LOAD_THIS_CODE")</span>
+                                    </button>
+                                </li>
+                            }
+                        </ul>
+                    </details>
+                }
+
+                @if (_solved)
+                {
+                    <h3 class="practice-section-title">
+                        <Icon Name="IconName.UnlockFill" /> @Traductor.T("PRACTICE_ALL_TESTS_REVEAL")
+                    </h3>
+                    <div class="practice-reveal">
+                        @foreach (var tc in _exercise.TestCases)
+                        {
+                            <details class="practice-test-reveal" open="@tc.Visible">
+                                <summary>
+                                    <Icon Name="IconName.CheckCircleFill" />
+                                    @PracticeCatalog.Localize(tc.Descriptions, _lang, tc.Id)
+                                </summary>
+                                <table class="practice-test-table">
+                                    <thead>
+                                        <tr>
+                                            <th>@Traductor.T("PRACTICE_TC_PORT")</th>
+                                            <th>@Traductor.T("PRACTICE_TC_TIME")</th>
+                                            <th>@Traductor.T("PRACTICE_TC_VALUE")</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var pm in tc.Inputs)
+                                        {
+                                            @foreach (var v in pm.Values)
+                                            {
+                                                <tr>
+                                                    <td><code>@pm.PortName</code></td>
+                                                    <td>@($"{v.Time} {v.TimeScale.ToLowerInvariant()}")</td>
+                                                    <td><code>@v.Value</code></td>
+                                                </tr>
+                                            }
+                                        }
+                                    </tbody>
+                                </table>
+                            </details>
+                        }
+                    </div>
+                }
+            </article>
+
+            @* ── Right column: editor + submit ─────────────────────────── *@
+            <div class="practice-pane practice-pane--editor">
+                <div class="practice-editor-frame">
+                    <StandaloneCodeEditor @ref="_monaco"
+                                          CssClass="practice-monaco"
+                                          ConstructionOptions="EditorOptions"
+                                          OnDidInit="OnMonacoInitAsync"
+                                          OnDidChangeModelContent="OnEditorChanged" />
+                </div>
+                <div class="practice-actions">
+                    <button type="button" class="btn btn-outline-secondary"
+                            @onclick="ResetCodeAsync"
+                            disabled="@_grading">
+                        <Icon Name="IconName.ArrowCounterclockwise" />
+                        <span>@Traductor.T("PRACTICE_RESET_CODE")</span>
+                    </button>
+                    <button type="button" class="btn btn-primary practice-actions__submit"
+                            @onclick="SubmitAsync"
+                            disabled="@_grading">
+                        @if (_grading)
+                        {
+                            <Spinner Type="SpinnerType.Border" Size="SpinnerSize.Small" />
+                            <span>@Traductor.T("PRACTICE_GRADING")</span>
+                        }
+                        else
+                        {
+                            <Icon Name="IconName.PlayFill" />
+                            <span>@Traductor.T("PRACTICE_SUBMIT")</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter] public string ExerciseId { get; set; } = string.Empty;
+
+    private PracticeExercise? _exercise;
+    private StandaloneCodeEditor? _monaco;
+    private string _lang = "en";
+    private string? _titleForTab;
+
+    private bool _grading;
+    private bool _solved;
+    private PracticeAttemptVerdict? _verdict;
+    private List<PracticeAttempt> _pastAttempts = new();
+
+    /// <summary>
+    /// True once Monaco has reported <c>OnDidInit</c>. Until then any
+    /// <c>SetValue</c>/<c>GetValue</c> call would race the JS-side editor
+    /// registration and throw "Couldn't find the editor with id …".
+    /// </summary>
+    private bool _monacoReady;
+
+    /// <summary>
+    /// Tracks the exercise the editor was last seeded with. When the user
+    /// navigates between exercises (same component instance, new parameters),
+    /// we re-seed the buffer with that exercise's starter.
+    /// </summary>
+    private string? _seededExerciseId;
+
+    protected override void OnInitialized()
+    {
+        Traductor.StaticOnLangChanged += OnLangChanged;
+        _lang = Traductor.Lang ?? "en";
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var prevId = _exercise?.Id;
+        _exercise = await Catalog.GetAsync(ExerciseId);
+        _titleForTab = _exercise == null
+            ? null
+            : PracticeCatalog.Localize(_exercise.Titles, _lang, _exercise.Id);
+
+        // Reset verdict on navigation between exercises.
+        if (_exercise?.Id != prevId)
+        {
+            _verdict = null;
+            _solved = false;
+            await ReloadHistoryAsync();
+        }
+
+        // If Monaco was already initialised on a previous exercise, swap the
+        // buffer to the new exercise's starter. First-render seeding goes
+        // through EditorOptions.Value below — handled by Monaco itself.
+        if (_monacoReady && _monaco != null && _exercise != null && _seededExerciseId != _exercise.Id)
+        {
+            try { await _monaco.SetValue(_exercise.StarterVhdl); }
+            catch { /* tolerate transient init races on rapid nav */ }
+            _seededExerciseId = _exercise.Id;
+
+            // Modality may have changed (e.g. FromZero → FillGap) — refresh
+            // the lock state to match.
+            await ApplyOrClearLockAsync();
+        }
+    }
+
+    /// <summary>
+    /// Fires once Monaco's JS editor is registered. Until this runs it's not
+    /// safe to call SetValue / GetValue / theme APIs against the editor's id.
+    /// </summary>
+    private async Task OnMonacoInitAsync()
+    {
+        _monacoReady = true;
+        _seededExerciseId = _exercise?.Id;
+
+        try
+        {
+            var bsTheme = await JS.InvokeAsync<string?>("document.documentElement.getAttribute", "data-bs-theme");
+            await BlazorMonaco.Editor.Global.SetTheme(JS, bsTheme == "dark" ? "vs-dark" : "vs");
+        }
+        catch { /* prerender / hybrid boot — fine */ }
+
+        await ApplyOrClearLockAsync();
+    }
+
+    /// <summary>
+    /// For FillGap exercises, asks Monaco to fade lines outside the
+    /// BEGIN_EDIT/END_EDIT block and highlight the editable region. For
+    /// other modalities, clears any leftover decorations.
+    /// </summary>
+    private async Task ApplyOrClearLockAsync()
+    {
+        if (!_monacoReady) return;
+        try
+        {
+            if (_exercise?.Modality == PracticeModality.FillGap)
+                await JS.InvokeVoidAsync("kmilaPracticeApplyLock");
+            else
+                await JS.InvokeVoidAsync("kmilaPracticeClearLock");
+        }
+        catch { /* JS not available during prerender — handler self-binds on next render */ }
+    }
+
+    private StandaloneEditorConstructionOptions EditorOptions(StandaloneCodeEditor editor) =>
+        new()
+        {
+            AutomaticLayout = true,
+            Language = "vhdl",
+            FontSize = 16,
+            TabSize = 4,
+            InsertSpaces = true,
+            WordWrap = "on",
+            ScrollBeyondLastLine = false,
+            RenderWhitespace = "selection",
+            Minimap = new EditorMinimapOptions { Enabled = false },
+            Value = _exercise?.StarterVhdl ?? string.Empty,
+        };
+
+    private async Task SubmitAsync()
+    {
+        if (_exercise == null || _monaco == null || !_monacoReady || _grading) return;
+        _grading = true;
+        _verdict = null;
+        StateHasChanged();
+        var code = string.Empty;
+        try
+        {
+            code = await _monaco.GetValue() ?? string.Empty;
+            _verdict = await Evaluator.GradeAsync(_exercise, code);
+            _solved = _verdict.Kind == PracticeVerdictKind.Solved;
+        }
+        catch (Exception)
+        {
+            // Surface as a runtime-error verdict so the UI shows something
+            // — silent failure on Submit was the worst possible UX.
+            _verdict = new PracticeAttemptVerdict(
+                PracticeVerdictKind.RuntimeError, _exercise.Id, DateTime.UtcNow,
+                0, 0, "Unexpected grader error", null,
+                new List<PracticeTestResult>());
+        }
+        finally
+        {
+            _grading = false;
+
+            // Persist the attempt + telemetry. Fire-and-forget on the
+            // exception path so a DB failure can't swallow the verdict —
+            // user still sees the result, the failure surfaces in /logs.
+            if (_verdict != null)
+            {
+                try { await Attempts.SaveAttemptAsync(_verdict, code); }
+                catch { /* logged inside the store */ }
+                await ReloadHistoryAsync();
+            }
+
+            StateHasChanged();
+        }
+    }
+
+    private async Task ReloadHistoryAsync()
+    {
+        if (_exercise == null) { _pastAttempts = new(); return; }
+        _pastAttempts = await Attempts.GetAttemptsAsync(_exercise.Id, limit: 25);
+    }
+
+    private async Task LoadAttemptAsync(PracticeAttempt a)
+    {
+        if (_monaco == null || !_monacoReady) return;
+        try
+        {
+            await _monaco.SetValue(a.CodeSnapshot ?? string.Empty);
+            await ApplyOrClearLockAsync();
+        }
+        catch { /* tolerate transient Monaco state issues */ }
+    }
+
+    private async Task ResetCodeAsync()
+    {
+        if (_exercise == null || _monaco == null || !_monacoReady) return;
+        await _monaco.SetValue(_exercise.StarterVhdl);
+        _verdict = null;
+        _solved = false;
+        // Re-apply the lock since SetValue resets the buffer's line count.
+        await ApplyOrClearLockAsync();
+    }
+
+    private void OnEditorChanged(ModelContentChangedEvent _) { /* no-op for Phase 0 */ }
+
+    private void OnLangChanged()
+    {
+        _lang = Traductor.Lang ?? "en";
+        InvokeAsync(StateHasChanged);
+    }
+
+    private string ModalityLabel(PracticeModality m) => m switch
+    {
+        PracticeModality.FromZero => Traductor.T("PRACTICE_MOD_FROM_ZERO"),
+        PracticeModality.FixBug   => Traductor.T("PRACTICE_MOD_FIX_BUG"),
+        PracticeModality.FillGap  => Traductor.T("PRACTICE_MOD_FILL_GAP"),
+        _ => m.ToString()
+    };
+
+    private IconName ModalityIcon(PracticeModality m) => m switch
+    {
+        PracticeModality.FromZero => IconName.PencilSquare,
+        PracticeModality.FixBug   => IconName.Wrench,
+        PracticeModality.FillGap  => IconName.PuzzleFill,
+        _ => IconName.PuzzleFill
+    };
+
+    private string DifficultyLabel(PracticeDifficulty d) => d switch
+    {
+        PracticeDifficulty.Easy   => Traductor.T("PRACTICE_DIFF_EASY"),
+        PracticeDifficulty.Medium => Traductor.T("PRACTICE_DIFF_MEDIUM"),
+        PracticeDifficulty.Hard   => Traductor.T("PRACTICE_DIFF_HARD"),
+        _ => d.ToString()
+    };
+
+    private string DifficultyClass(PracticeDifficulty d) => d switch
+    {
+        PracticeDifficulty.Easy   => "easy",
+        PracticeDifficulty.Medium => "intermediate",
+        PracticeDifficulty.Hard   => "expert",
+        _ => "easy"
+    };
+
+    private string VerdictLabel(PracticeVerdictKind k) => k switch
+    {
+        PracticeVerdictKind.Solved       => Traductor.T("PRACTICE_VERDICT_SOLVED"),
+        PracticeVerdictKind.WrongAnswer  => Traductor.T("PRACTICE_VERDICT_WRONG"),
+        PracticeVerdictKind.BuildError   => Traductor.T("PRACTICE_VERDICT_BUILD_ERROR"),
+        PracticeVerdictKind.RuntimeError => Traductor.T("PRACTICE_VERDICT_RUNTIME_ERROR"),
+        PracticeVerdictKind.Timeout      => Traductor.T("PRACTICE_VERDICT_TIMEOUT"),
+        _ => k.ToString()
+    };
+
+    private IconName VerdictIcon(PracticeVerdictKind k) => k switch
+    {
+        PracticeVerdictKind.Solved       => IconName.PatchCheckFill,
+        PracticeVerdictKind.WrongAnswer  => IconName.ExclamationCircleFill,
+        PracticeVerdictKind.BuildError   => IconName.BugFill,
+        PracticeVerdictKind.RuntimeError => IconName.LightningChargeFill,
+        PracticeVerdictKind.Timeout      => IconName.HourglassSplit,
+        _ => IconName.QuestionCircle
+    };
+
+    private string VerdictClass(PracticeVerdictKind k) => k switch
+    {
+        PracticeVerdictKind.Solved       => "ok",
+        PracticeVerdictKind.WrongAnswer  => "wa",
+        PracticeVerdictKind.BuildError   => "build",
+        PracticeVerdictKind.RuntimeError => "rt",
+        PracticeVerdictKind.Timeout      => "to",
+        _ => "wa"
+    };
+
+    public void Dispose()
+    {
+        Traductor.StaticOnLangChanged -= OnLangChanged;
+    }
+}

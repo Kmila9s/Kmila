@@ -1,0 +1,54 @@
+{
+  "tests": [
+    { "id": "t1", "visible": true, "descriptions": { "en": "Reset 25 ns then en=1 — q toggles each clock", "es": "Reset 25 ns luego en=1 — q alterna cada reloj" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "en", "values": [
+        { "time": 0, "scale": "NS", "value": "1" }
+      ]}
+    ]},
+    { "id": "t2", "visible": false, "descriptions": { "en": "en=0 — q stays 0", "es": "en=0 — q permanece 0" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "en", "values": [
+        { "time": 0, "scale": "NS", "value": "0" }
+      ]}
+    ]},
+    { "id": "t3", "visible": false, "descriptions": { "en": "en pulses gate toggles", "es": "Pulsos de en habilitan el cambio" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "en", "values": [
+        { "time": 0,    "scale": "NS", "value": "0" },
+        { "time": 200,  "scale": "NS", "value": "1" },
+        { "time": 400,  "scale": "NS", "value": "0" },
+        { "time": 800,  "scale": "NS", "value": "1" },
+        { "time": 1200, "scale": "NS", "value": "0" }
+      ]}
+    ]},
+    { "id": "t4", "visible": false, "descriptions": { "en": "Mid-run reset clears q", "es": "Reset a mitad limpia q" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,    "scale": "NS", "value": "1" },
+        { "time": 25,   "scale": "NS", "value": "0" },
+        { "time": 600,  "scale": "NS", "value": "1" },
+        { "time": 625,  "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "en", "values": [
+        { "time": 0, "scale": "NS", "value": "1" }
+      ]}
+    ]},
+    { "id": "t5", "visible": false, "descriptions": { "en": "Held in reset — q stays 0", "es": "Reset mantenido — q permanece 0" }, "durationMicros": 1, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0, "scale": "NS", "value": "1" }
+      ]},
+      { "portName": "en", "values": [
+        { "time": 0, "scale": "NS", "value": "1" }
+      ]}
+    ]}
+  ]
+}

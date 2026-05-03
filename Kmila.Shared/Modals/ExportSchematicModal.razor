@@ -1,0 +1,230 @@
+@*
+    ExportSchematicModal — picks format + scope + appearance options
+    for the Schematic-tab export flow. Hands a structured
+    SchematicExportRequest back to the caller via OnSubmit.
+
+    Layout idiom is two stacked sections:
+      1. "Output" group — format, PNG scale, colour mode, background.
+         Compact, side-by-side selects on desktop; stacks on mobile.
+      2. "Scope" group — full-width radio cards, one per row, each
+         showing a bold title + a single-line hint. One column at all
+         widths so long hints never wrap mid-card and force the modal
+         to grow into the viewport edges.
+      3. "Options" toggles — checkboxes for trim / auto-include /
+         title bar.
+
+    Mobile (≤ 600px): selects collapse to one column, scope cards
+    keep their layout (already single-column), font sizes stay
+    legible, and the action footer stacks the buttons vertically.
+*@
+@implements IDisposable
+@using Interpreter.Synthesis
+@using Kmila.Shared.Models
+
+<div class="kmila-export-form">
+    <section class="kmila-export-section">
+        <h3 class="kmila-export-section__title">@Traductor.T("SCHEMATIC_EXPORT_OUTPUT_GROUP")</h3>
+        <div class="kmila-export-grid">
+            <div class="kmila-export-field">
+                <label class="form-label" for="schex-format">@Traductor.T("EXPORT_FORMAT_LABEL")</label>
+                <select id="schex-format" class="form-select form-select-sm" @bind="_format">
+                    <option value="@SchematicExportFormat.Svg">SVG</option>
+                    <option value="@SchematicExportFormat.Png">PNG</option>
+                </select>
+            </div>
+
+            @if (_format == SchematicExportFormat.Png)
+            {
+                <div class="kmila-export-field">
+                    <label class="form-label" for="schex-scale">@Traductor.T("EXPORT_PNG_SCALE_LABEL")</label>
+                    <select id="schex-scale" class="form-select form-select-sm" @bind="_pngScale">
+                        <option value="1">1× (@Traductor.T("EXPORT_PNG_SCALE_SCREEN"))</option>
+                        <option value="2">2× (@Traductor.T("EXPORT_PNG_SCALE_RETINA"))</option>
+                        <option value="3">3× (@Traductor.T("EXPORT_PNG_SCALE_PRINT"))</option>
+                    </select>
+                </div>
+            }
+
+            <div class="kmila-export-field">
+                <label class="form-label">@Traductor.T("SCHEMATIC_EXPORT_COLOR_LABEL")</label>
+                <div class="kmila-export-pill" role="radiogroup">
+                    <button type="button" role="radio"
+                            aria-checked="@(_colorMode == SchematicExportColorMode.Color)"
+                            class="kmila-export-pill__opt @(_colorMode == SchematicExportColorMode.Color ? "is-active" : "")"
+                            @onclick="() => _colorMode = SchematicExportColorMode.Color">
+                        <Icon Name="IconName.Palette" />
+                        <span>@Traductor.T("SCHEMATIC_EXPORT_COLOR_COLOR")</span>
+                    </button>
+                    <button type="button" role="radio"
+                            aria-checked="@(_colorMode == SchematicExportColorMode.Monochrome)"
+                            class="kmila-export-pill__opt @(_colorMode == SchematicExportColorMode.Monochrome ? "is-active" : "")"
+                            @onclick="() => _colorMode = SchematicExportColorMode.Monochrome">
+                        <Icon Name="IconName.CircleHalf" />
+                        <span>@Traductor.T("SCHEMATIC_EXPORT_COLOR_MONO")</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="kmila-export-field">
+                <label class="form-label" for="schex-bg">@Traductor.T("SCHEMATIC_EXPORT_BG_LABEL")</label>
+                <select id="schex-bg" class="form-select form-select-sm" @bind="_background">
+                    <option value="@SchematicExportBackground.White">@Traductor.T("SCHEMATIC_EXPORT_BG_WHITE")</option>
+                    <option value="@SchematicExportBackground.Dark">@Traductor.T("SCHEMATIC_EXPORT_BG_DARK")</option>
+                    <option value="@SchematicExportBackground.Transparent">@Traductor.T("SCHEMATIC_EXPORT_BG_TRANSPARENT")</option>
+                </select>
+            </div>
+        </div>
+    </section>
+
+    <section class="kmila-export-section">
+        <h3 class="kmila-export-section__title">@Traductor.T("SCHEMATIC_EXPORT_SCOPE_LABEL")</h3>
+        <div class="kmila-export-scope">
+            @foreach (var opt in _scopeOptions)
+            {
+                bool disabled = ScopeDisabled(opt.Scope);
+                <label class="kmila-export-scope__opt @(disabled ? "is-disabled" : "")"
+                       title="@Traductor.T(opt.HintKey)">
+                    <input type="radio" name="schex-scope"
+                           disabled="@disabled"
+                           checked="@(_scope == opt.Scope)"
+                           @onchange="() => _scope = opt.Scope" />
+                    <div class="kmila-export-scope__body">
+                        <strong>@Traductor.T(opt.LabelKey)</strong>
+                        <small>@Traductor.T(opt.HintKey)</small>
+                    </div>
+                </label>
+            }
+        </div>
+
+        @if (_scope == SchematicExportScope.Kind)
+        {
+            <div class="kmila-export-field kmila-export-field--inline">
+                <label class="form-label" for="schex-kind">@Traductor.T("SCHEMATIC_EXPORT_KIND_LABEL")</label>
+                <select id="schex-kind" class="form-select form-select-sm" @bind="_byKind">
+                    @foreach (var kind in AvailableKinds)
+                    {
+                        <option value="@kind.ToString()">@kind.ToString().ToLowerInvariant()</option>
+                    }
+                </select>
+            </div>
+        }
+    </section>
+
+    <section class="kmila-export-section">
+        <h3 class="kmila-export-section__title">@Traductor.T("SCHEMATIC_EXPORT_OPTIONS_GROUP")</h3>
+        <div class="kmila-export-checks">
+            <label class="kmila-export-check">
+                <input type="checkbox" class="form-check-input" @bind="_trim" />
+                <span class="kmila-export-check__body">
+                    <strong>@Traductor.T("SCHEMATIC_EXPORT_TRIM")</strong>
+                    <small>@Traductor.T("SCHEMATIC_EXPORT_TRIM_HINT")</small>
+                </span>
+            </label>
+            <label class="kmila-export-check">
+                <input type="checkbox" class="form-check-input" @bind="_autoInclude" />
+                <span class="kmila-export-check__body">
+                    <strong>@Traductor.T("SCHEMATIC_EXPORT_AUTO_INCLUDE")</strong>
+                    <small>@Traductor.T("SCHEMATIC_EXPORT_AUTO_INCLUDE_HINT")</small>
+                </span>
+            </label>
+            <label class="kmila-export-check">
+                <input type="checkbox" class="form-check-input" @bind="_includeTitle" />
+                <span class="kmila-export-check__body">
+                    <strong>@Traductor.T("SCHEMATIC_EXPORT_TITLE_TOGGLE")</strong>
+                </span>
+            </label>
+        </div>
+    </section>
+
+    <footer class="kmila-export-footer">
+        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CancelAsync">
+            @Traductor.T("EXPORT_MODAL_CANCEL")
+        </button>
+        <button type="button" class="btn btn-primary btn-sm" @onclick="SubmitAsync">
+            <Icon Name="IconName.Download" />
+            <span>@Traductor.T("EXPORT_MODAL_SUBMIT")</span>
+        </button>
+    </footer>
+</div>
+
+@code {
+    /// <summary>Cell kinds present in the current netlist — listed in
+    /// the by-kind dropdown so the user can't pick a kind that
+    /// produces an empty export.</summary>
+    [Parameter] public IReadOnlyList<CellKind> AvailableKinds { get; set; } = Array.Empty<CellKind>();
+
+    /// <summary>True when there's a Naive focus on, enabling the
+    /// "Current Naive block" radio.</summary>
+    [Parameter] public bool HasNaiveFocus { get; set; }
+
+    /// <summary>True when the user has anything in the multi-select
+    /// basket, enabling the "Selection" radio.</summary>
+    [Parameter] public bool HasSelection { get; set; }
+
+    [Parameter] public EventCallback<SchematicExportRequest> OnSubmit { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private SchematicExportFormat _format = SchematicExportFormat.Svg;
+    private int _pngScale = 2;
+    private SchematicExportScope _scope = SchematicExportScope.Full;
+    private string? _byKind;
+    private SchematicExportBackground _background = SchematicExportBackground.White;
+    private SchematicExportColorMode _colorMode = SchematicExportColorMode.Color;
+    private bool _trim = true;
+    private bool _autoInclude = true;
+    private bool _includeTitle = true;
+
+    private record ScopeDef(SchematicExportScope Scope, string LabelKey, string HintKey);
+    private static readonly ScopeDef[] _scopeOptions = new[]
+    {
+        new ScopeDef(SchematicExportScope.Full,       "SCHEMATIC_EXPORT_SCOPE_FULL",     "SCHEMATIC_EXPORT_SCOPE_FULL_HINT"),
+        new ScopeDef(SchematicExportScope.NaiveBlock, "SCHEMATIC_EXPORT_SCOPE_BLOCK",    "SCHEMATIC_EXPORT_SCOPE_BLOCK_HINT"),
+        new ScopeDef(SchematicExportScope.Selection,  "SCHEMATIC_EXPORT_SCOPE_SELECTION","SCHEMATIC_EXPORT_SCOPE_SELECTION_HINT"),
+        new ScopeDef(SchematicExportScope.Inputs,     "SCHEMATIC_EXPORT_SCOPE_INPUTS",   "SCHEMATIC_EXPORT_SCOPE_INPUTS_HINT"),
+        new ScopeDef(SchematicExportScope.Outputs,    "SCHEMATIC_EXPORT_SCOPE_OUTPUTS",  "SCHEMATIC_EXPORT_SCOPE_OUTPUTS_HINT"),
+        new ScopeDef(SchematicExportScope.MidTerms,   "SCHEMATIC_EXPORT_SCOPE_MIDTERMS", "SCHEMATIC_EXPORT_SCOPE_MIDTERMS_HINT"),
+        new ScopeDef(SchematicExportScope.Kind,       "SCHEMATIC_EXPORT_SCOPE_KIND",     "SCHEMATIC_EXPORT_SCOPE_KIND_HINT"),
+    };
+
+    protected override void OnParametersSet()
+    {
+        if (_byKind == null && AvailableKinds.Count > 0)
+            _byKind = AvailableKinds[0].ToString();
+        Traductor.StaticOnLangChanged += OnLangChanged;
+    }
+
+    private bool ScopeDisabled(SchematicExportScope scope) => scope switch
+    {
+        SchematicExportScope.NaiveBlock => !HasNaiveFocus,
+        SchematicExportScope.Selection  => !HasSelection,
+        SchematicExportScope.Kind       => AvailableKinds.Count == 0,
+        _ => false,
+    };
+
+    private async Task SubmitAsync()
+    {
+        if (ScopeDisabled(_scope)) _scope = SchematicExportScope.Full;
+        var req = new SchematicExportRequest
+        {
+            Format = _format,
+            PngScale = _pngScale,
+            Scope = _scope,
+            ByKind = _byKind,
+            AutoIncludeEndpoints = _autoInclude,
+            TrimToBounds = _trim,
+            Background = _background,
+            IncludeTitle = _includeTitle,
+            ColorMode = _colorMode,
+        };
+        await OnSubmit.InvokeAsync(req);
+    }
+
+    private async Task CancelAsync() => await OnCancel.InvokeAsync();
+
+    private void OnLangChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Traductor.StaticOnLangChanged -= OnLangChanged;
+    }
+}

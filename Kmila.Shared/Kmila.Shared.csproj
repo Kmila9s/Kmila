@@ -1,14 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
-    <TargetFrameworks>net9.0;net9.0-android</TargetFrameworks>
+    <TargetFrameworks>net9.0;net9.0-android;net9.0-ios;net9.0-maccatalyst</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1587;CS1591;CS1570;CS1573;CS1574;CS1998;CS8602;CS8604;CS8625;CS8892;CS0219;CS0618;CS4014;NETSDK1206</NoWarn>
-    <!-- Required for Android target -->
-    <UseMaui Condition="'$(TargetFramework)' == 'net9.0-android'">true</UseMaui>
-    <SupportedOSPlatformVersion Condition="'$(TargetFramework)' == 'net9.0-android'">24.0</SupportedOSPlatformVersion>
+    <!-- MAUI is required for every native head (android/ios/maccatalyst); web (net9.0) opts out. -->
+    <UseMaui Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) != ''">true</UseMaui>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">15.0</SupportedOSPlatformVersion>
   </PropertyGroup>
   <ItemGroup>
     <SupportedPlatform Include="browser" />
@@ -34,6 +36,7 @@
     <PackageReference Include="sqlite-net-pcl" Version="1.9.172" />
     <ProjectReference Include="../../../Debugger/Debugger.csproj" />
     <ProjectReference Include="../../../Interpreter/Interpreter.csproj" />
+    <ProjectReference Include="../../../LibraryCompiler/LibraryCompiler.csproj" />
   </ItemGroup>
 
   <!-- Web-specific settings (net9.0 only) -->
@@ -46,8 +49,8 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
-  <!-- MAUI-specific packages (net9.0-android) -->
-  <ItemGroup Condition="'$(TargetFramework)' == 'net9.0-android'">
+  <!-- MAUI-specific packages (every native head: android/ios/maccatalyst). -->
+  <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) != ''">
     <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
   </ItemGroup>

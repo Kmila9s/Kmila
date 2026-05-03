@@ -1,0 +1,89 @@
+@*
+    FileDetailsModal — read-only metadata viewer for a ProjectFile.
+    Shows the project-relative path, full disk path, size, line count and
+    creation/modification timestamps. Used from the FilesCard kebab menu.
+*@
+
+<Card Class="shadow-sm">
+    <CardHeader Class="bg-body-tertiary">
+        <div class="d-flex align-items-center gap-2">
+            <Icon Name="IconName.InfoCircleFill" Class="text-primary fs-5" />
+            <div>
+                <strong>@Traductor.T("FILES_DETAILS_TITLE")</strong>
+                @if (File != null)
+                {
+                    <br />
+                    <small class="text-muted">@File.RelativePath</small>
+                }
+            </div>
+        </div>
+    </CardHeader>
+    <CardBody>
+        @if (_metadata == null)
+        {
+            <div class="d-flex align-items-center justify-content-center py-3">
+                <Spinner Type="SpinnerType.Border" Color="SpinnerColor.Primary" />
+            </div>
+        }
+        else
+        {
+            <dl class="row mb-0">
+                <dt class="col-sm-4">@Traductor.T("FILES_DETAIL_PATH")</dt>
+                <dd class="col-sm-8 text-break"><code>@_metadata.FullPath</code></dd>
+
+                <dt class="col-sm-4">@Traductor.T("FILES_DETAIL_EXISTS")</dt>
+                <dd class="col-sm-8">
+                    @if (_metadata.Exists)
+                    {
+                        <Badge Color="BadgeColor.Success" Pill="true">
+                            <Icon Name="IconName.CheckCircle" Class="me-1" />@Traductor.T("FILES_DETAIL_STATUS_OK")
+                        </Badge>
+                    }
+                    else
+                    {
+                        <Badge Color="BadgeColor.Danger" Pill="true">
+                            <Icon Name="IconName.ExclamationTriangle" Class="me-1" />@Traductor.T("FILES_DETAIL_STATUS_MISSING")
+                        </Badge>
+                    }
+                </dd>
+
+                <dt class="col-sm-4">@Traductor.T("FILES_DETAIL_SIZE")</dt>
+                <dd class="col-sm-8">@_metadata.SizeHuman <small class="text-muted">(@_metadata.SizeBytes B)</small></dd>
+
+                <dt class="col-sm-4">@Traductor.T("FILES_DETAIL_LINES")</dt>
+                <dd class="col-sm-8">@(_metadata.LineCount < 0 ? "—" : _metadata.LineCount.ToString())</dd>
+
+                <dt class="col-sm-4">@Traductor.T("FILES_DETAIL_CREATED")</dt>
+                <dd class="col-sm-8">@_metadata.CreatedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</dd>
+
+                <dt class="col-sm-4">@Traductor.T("FILES_DETAIL_MODIFIED")</dt>
+                <dd class="col-sm-8">@_metadata.ModifiedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</dd>
+            </dl>
+        }
+    </CardBody>
+</Card>
+
+@code {
+    [Parameter] public ProjectFile File { get; set; } = default!;
+
+    private ProjectFileMetadata? _metadata;
+
+    protected override void OnParametersSet()
+    {
+        _metadata = null;
+        if (File?.Project == null) return;
+        try
+        {
+            _metadata = ProjectFiles.GetMetadata(File, File.Project);
+        }
+        catch (Exception ex)
+        {
+            _metadata = new ProjectFileMetadata
+            {
+                FullPath = ex.Message,
+                RelativePath = File.RelativePath,
+                Exists = false
+            };
+        }
+    }
+}

@@ -5,8 +5,8 @@
 **Author:** Ulrich Tamayo Daniel
 **Email:** dulricht1700@alumno.ipn.mx
 **Email 2:** danielulrichtamayo@gmail.com
-**Version:** 1.14.0
-**Last Updated:** April 20, 2026
+**Version:** 1.14.1
+**Last Updated:** May 1, 2026
 
 ## 1. Overview
 
@@ -30,8 +30,11 @@ Kmila-9s is a free, open-source, multiplatform academic platform focused on the 
 
 *   **Dynamic Variable Visualization:** Observe the states of signals, ports, and internal variables at any time via the Waveforms dock tab.
 *   **VHDL IDE with Monaco intelligence:** Hover for rich documentation on keywords/types/IEEE functions, Ctrl+click to jump to signal / port / entity declarations in the current file, Shift+F12 for references, auto-complete covering the full VHDL keyword set + user declarations + ten ready-to-insert snippets (entity, clocked process, counter, shift register…). Minimap with smart auto-hide on narrow viewports. All keyword docs translate with the UI language.
-*   **Single-surface workbench:** The Editor page is a workbench — Monaco at the top, a **Run bar** for build/run/pause/stop with full state machine, a **bottom dock** with five tabs (Entities · Ports · Waveforms · Files · Output), and a **status bar** showing file info + resource % + sim state. No simulation modal; everything is one scroll.
-*   **FPGA Resource Validation:** Pick a target device in the TopBar chip (searchable across 36 devices). Resource chip in the status bar stays green → amber → red as the design grows relative to the selected device. Clickable to jump to the Entities tab.
+*   **Single-surface workbench:** The Editor page is a workbench — Monaco at the top, a **Run bar** for build/run/pause/stop with full state machine, a **bottom dock** with seven tabs (Entities · Schematic · Ports · Waveforms · Runs · Files · Output), and a **status bar** showing file info + resource % + sim state. No simulation modal; everything is one scroll.
+*   **Schematic dock tab:** A new dock tab renders the synthesised netlist for the selected entity (`SchematicViewer.razor`, backed by `Interpreter.Synthesis.Synthesizer` and the `LayeredLayout` placement pass). Lets students cross-reference behavioural VHDL against its inferred structural form.
+*   **Runs history dock tab:** The **Runs** tab lists past simulation runs persisted via `SimulationSnapshotStore`, so students can compare results between code edits without re-running every time.
+*   **Lesson mode:** Two new pages — `Learn.razor` (catalog) and `LessonView.razor` (per-lesson reader) — render the bundled lessons sourced from `LessonCatalog`, with progress saved by `LessonProgressStore`.
+*   **FPGA Resource Validation:** Pick a target device in the TopBar chip (searchable across 34 devices — AMD/Xilinx Spartan-6 and Artix-7, Intel/Altera Cyclone IV E, and Lattice iCE40 HX / iCE40 UltraPlus / ECP5; full JSON catalogue under `App/Kmila/Devices/`). Resource chip in the status bar stays green → amber → red as the design grows relative to the selected device. Clickable to jump to the Entities tab.
 *   **Configurations on the fly:** Save / load named simulation setups (FPGA + time + port moments) from a TopBar pill — round-trip through SQLite, no file management needed.
 *   **Sample project template:** One click creates a ready-to-build 4-bit counter project *and* a companion simulation config — three clicks to a running waveform on first use.
 *   **In-app Logs viewer:** Every `ILogger<T>` write in the app lands in the `/logs` page with filtering, auto-scroll, pause, and level gating. Useful on mobile / MAUI where there's no console to watch.
@@ -419,14 +422,20 @@ The `Kmila.Shared` project contains the core logic, UI components, and data mode
 #### Pages
 *   **Home.razor** — Landing page: hero band with logo lockup + primary CTA, overview copy, features bento grid (six cards with size variation), closing CTA panel.
 *   **ProjectsView.razor** — Project list as responsive card grid (auto-fill at 280px track). Header with live search, count pill, primary **Create new** CTA and ghost **Try a sample** CTA. Empty / no-match states. Per-project hover reveal of Open + Delete kebab (Rename inline). `/projects/create` route auto-opens the create modal.
-*   **Editor.razor** — Workbench: Monaco at top, **RunBar** (build / run state machine + time + scale + FPGA chip), **EditorDock** (5 tabs), **StatusBar**. Handles per-project reload via `OnParametersSetAsync`, marshals `ProgramBuilder` events into `SimulationParameters` + `BuildLog`, auto-switches the active dock tab on build/run transitions.
+*   **Editor.razor** — Workbench: Monaco at top, **RunBar** (build / run state machine + time + scale + FPGA chip), **EditorDock** (7 tabs: Entities · Schematic · Ports · Waveforms · Runs · Files · Output), **StatusBar**. Handles per-project reload via `OnParametersSetAsync`, marshals `ProgramBuilder` events into `SimulationParameters` + `BuildLog`, auto-switches the active dock tab on build/run transitions.
+*   **Learn.razor** — Lesson catalog. Reads from `LessonCatalog`, paints lesson cards with progress badges sourced from `LessonProgressStore`. Entry point for the in-app teaching path that complements the interactive editor.
+*   **LessonView.razor** — Per-lesson reader. Renders Markdown content via `MarkdownRenderer`, marks completion in `LessonProgressStore`, and links back to a sample editor session when a lesson has an associated VHDL exercise.
 *   **Settings.razor** — Skeleton preference surface with four token-styled cards (Appearance, Editor, Simulation, Diagnostics). Diagnostics card links to the Logs viewer.
 *   **Logs.razor** — Live viewer over `AppLogStore`. Search (message + category), level filter (All / Info+ / Warning+ / Error+), auto-scroll, pause, clear. Renders up to 500 recent entries out of a 2000-entry ring buffer.
 
 #### Components
 *   **Breadcrumbs.razor** — Live breadcrumb trail rendered inside the TopBar. Walks `NavigationManager.Uri` for `/`, `/projects`, `/projects/create`, `/editor/{id}`; for editor routes, looks up the project name. Re-renders on `LocationChanged` + `StaticOnLangChanged`. Truncates to last 2 crumbs under 641 px.
 *   **ConfigurationsPill.razor** — TopBar dropdown for named simulation configs. Pill trigger shows current name with a warning-dot when `SimulationParameters.IsDirty`. Popover lists saved configs with checkmark on the active one and a hover-reveal delete; actions include Save changes, inline Save as, and deleting by name. All round-trips through `ConfigurationService`.
-*   **EditorDock.razor** — Bottom dock on the Editor page. Tab strip with five slots (Entities · Ports · Waveforms · Files · Output) rendered via named `RenderFragment` parameters. Collapse toggle at the far end, per-tab count pills (Entities, Files) or ready dots (Waveforms, Output). Active tab + collapsed state persisted via `EditorDockState` service + `localStorage`.
+*   **EditorDock.razor** — Bottom dock on the Editor page. Tab strip with seven slots (Entities · Schematic · Ports · Waveforms · Runs · Files · Output) rendered via named `RenderFragment` parameters and driven by `EditorTab` enum entries. Collapse toggle at the far end, per-tab count pills (Entities, Files, Runs) or ready dots (Waveforms, Output). Active tab + collapsed state + dock height persisted via `EditorDockState` service + `localStorage`.
+*   **EditorTabStrip.razor** — Standalone strip extracted from the dock so the same tab UI can render outside the Editor page when needed (e.g. landing previews of the workbench layout).
+*   **EnhancedRangeSlider.razor** — Token-styled dual-thumb range slider component used by the time / scale controls and the schematic zoom UI; handles touch + keyboard parity.
+*   **RunsPanel.razor** — Content for the **Runs** dock tab. Lists past simulation snapshots saved through `SimulationSnapshotStore`, exposes "Re-run", "Compare", and "Delete" affordances per row.
+*   **SchematicViewer.razor** (+ `Schematic/` sub-components) — Renders the layered netlist returned by `LayeredLayout.Layout(Netlist)` as an SVG schematic. Supports per-net highlighting on hover, port-pin labelling, and synchronised cursor selection through `SignalCursorBus` (so clicking a wire highlights the matching trace in `WaveformViewer`).
 *   **EntityResourceUsage.razor** — FPGA resource estimate for an entity. Bento grid of `ResourceMetricBox` cards (FF / LUT / DSP / BRAM / I/O / Clock Domains) with a tokenized info note about estimation accuracy.
 *   **EntityView.razor** — Parsed-entity panel. VHDL-syntax-flavored title (`entity <name> is`), port-count chips, compact signal list replacing the former BB Grid. `Current Value` column appears only once the simulation has run.
 *   **FilesCard.razor** — Project files list (no BB Grid). Row-per-file: tinted icon tile → mono filename → type chip → inline ghost **Open** → kebab menu with **Rename** (inline edit) + **Delete** (with confirm dialog). Active row gets a left-edge accent bar.
@@ -550,6 +559,21 @@ classDiagram
 *   **ConfigurationService.cs** — Save / load / delete of named simulation configs (.k-config semantics, stored in SQLite). Fires `OnConfigurationsChanged` so the `ConfigurationsPill` auto-refreshes its list.
 *   **Traductor.cs** — i18n service with 7 languages. Reactive reload on `AppSettings.KEY_LANGUAGE` change via `ApplicationDbContext.StaticOnValueChanged`. Supports optional `ILogger<Traductor>` injection.
 *   **IFormFactor.cs** — Interface for device form factor / platform detection.
+*   **EditorSessionStore.cs** — Persists per-project editor session state (open file, scroll/cursor position, dock layout) so reopening a project restores the workbench exactly where the student left it.
+*   **RecentProjectsTracker.cs** — Bounded MRU of recently opened projects, surfaced on Home and ProjectsView. Trims when the cap is reached.
+*   **ProjectBundleService.cs** — Export/import of full project bundles (project + files + active configuration) for sharing assignments between students or handing in homework.
+*   **UserAssetStore.cs** — Filesystem abstraction for user-supplied assets (custom VHDL packages, lesson attachments, exported waveforms). Centralises path resolution across MAUI / Web hosts.
+*   **WaveformExporter.cs** — Renders the current `SignalHistory` to `.vcd`, `.csv`, or formatted text for handoff to GTKWave or external tooling.
+*   **SimulationSnapshotStore.cs** — Persists past simulation runs (signals, ports, time bounds) so the Runs dock tab can show history and the Compare action can diff them.
+*   **StimulusBuilder.cs** — Translates the editor's port-moments timeline into the `List<StimulusEvent>` shape that `Interpreter.Models.SimulationConfig` expects, including expansion of clock-mode ports into auto-toggling `ClockConfig`s.
+*   **SignalCursorBus.cs** — Cross-component event bus for "selected signal" + "cursor at time T" so `WaveformViewer`, `SchematicViewer`, and `PortsPanel` stay synchronised on hover/click without component-to-component wiring.
+*   **MarkdownRenderer.cs** — Markdown → HTML rendering for `LessonView` and `MarkdownModal`. Sanitised; respects the active language so code-fence labels translate.
+*   **LessonCatalog.cs** — In-memory catalog of bundled lessons. Read on app start; consumed by `Learn.razor`.
+*   **LessonProgressStore.cs** — Per-user lesson progress flags persisted in SQLite. Used by Learn / LessonView for badges and the "Continue where you left off" CTA on Home.
+*   **AutoErrorReporter.cs** — Hooks into `AppDomain.CurrentDomain.UnhandledException` and Blazor circuit error events; routes serialised reports through `FeedbackHelper`.
+*   **FeedbackHelper.cs** — Glue for the user-feedback flow: opens GitHub issue templates pre-filled with environment + recent log lines from `AppLogStore`.
+*   **GitHubAuth.cs** — Optional sign-in helper for the feedback path; used to attach an authenticated identity to issue submissions when the user opts in.
+*   **ConsoleToLoggerWriter.cs** — Redirects raw `Console.Out` writes (used by older parser/interpreter paths) into `ILogger<T>` so they end up in the Logs page alongside structured logs.
 
 **UI state services (shared across components — avoid component → component wiring):**
 *   **SidebarState.cs** — Drives the custom sidebar: `IsCollapsed` (desktop rail mode) + `IsMobileOpen` (off-canvas drawer). TopBar hamburger toggles the drawer, sidebar subscribes for re-render.
@@ -1072,6 +1096,20 @@ Kmila-9s is released as free and open-source software. Please refer to the LICEN
 
 ## 19. Changelog
 
+### Version 1.14.1 (2026-05-01)
+
+#### Documentation Re-alignment
+
+*   **§3 Key Features**: Corrected the dock-tab count (5 → **7**) and listed the actual tabs (Entities · Schematic · Ports · Waveforms · Runs · Files · Output). Added bullets for the new **Schematic** tab (backed by `Interpreter.Synthesis.Synthesizer` + `LayeredLayout`), the **Runs** history tab (backed by `SimulationSnapshotStore`), and the **Lesson mode** pages (`Learn.razor` + `LessonView.razor`).
+*   **§3 FPGA Resource Validation**: Fixed the device count from "36" to **34** to match the actual `App/Kmila/Devices/` JSON catalogue (AMD/Xilinx Spartan-6 + Artix-7, Intel/Altera Cyclone IV E, Lattice iCE40 HX / iCE40 UltraPlus / ECP5).
+*   **§10.1 Pages**: Added `Learn.razor` and `LessonView.razor` (lesson mode entry points). Updated the `Editor.razor` description to call out 7 dock tabs.
+*   **§10.1 Components**: Added `EditorTabStrip`, `EnhancedRangeSlider`, `RunsPanel`, and `SchematicViewer` (+ `Schematic/` sub-components). Updated the `EditorDock` description to match the current 7-tab layout, the new persisted dock-height, and the `Runs` count pill.
+*   **§10.2 Services**: Documented the previously-missing services that landed during the v1.14 cycle — `EditorSessionStore`, `RecentProjectsTracker`, `ProjectBundleService`, `UserAssetStore`, `WaveformExporter`, `SimulationSnapshotStore`, `StimulusBuilder`, `SignalCursorBus`, `MarkdownRenderer`, `LessonCatalog`, `LessonProgressStore`, `AutoErrorReporter`, `FeedbackHelper`, `GitHubAuth`, `ConsoleToLoggerWriter`.
+*   **Header**: Bumped version to 1.14.1 and stamped 2026-05-01.
+*   No source changes ship with this revision; behaviour is identical to 1.14.0. The doc gap was a backlog of items that landed without companion README updates.
+
+---
+
 ### Version 1.14.0 (2026-04-20)
 
 #### UX redesign — tokens, dark mode, workbench editor
@@ -1491,4 +1529,4 @@ task from the previous month of work. Grouped by theme:
 For questions, support, or feedback, please open an issue on our GitHub repository or contact the development team through the project page.
 
 ---
-*Last Updated: 2026-04-19*
+*Last Updated: 2026-05-01*

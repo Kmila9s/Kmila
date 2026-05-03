@@ -1,0 +1,190 @@
+@*
+    EditorTabStrip — VS Code style horizontal tab bar above a Monaco
+    editor. One button per open file. Click switches tab. × button closes
+    a tab (parent decides whether to prompt). Drag-and-drop reorders the
+    strip; dragging onto a sibling EditorTabStrip moves the tab between
+    panes (the parent's TabMoveRequest handler resolves both cases).
+
+    Drag wiring lives in the host page's kmilaSetupTabDrag — a single
+    document-level listener that intercepts dragstart, populates
+    dataTransfer (Blazor's DragEventArgs can't), and stashes the source
+    on window.kmilaTabDrag. We just render data-kmila-pane / data-kmila-tab
+    attributes for the listener to read.
+*@
+
+@implements IDisposable
+
+@if (Tabs != null && Tabs.Count > 0)
+{
+    <nav class="editor-tabs" role="tablist" aria-label="@Traductor.T("EDITOR_TABS_ARIA")">
+        @for (int i = 0; i < Tabs.Count; i++)
+        {
+            var idx = i; // capture for closures
+            var tab = Tabs[idx];
+            var info = GetFileInfo(tab.File?.FileName ?? string.Empty);
+            var isActive = idx == ActiveIndex;
+
+            <button type="button"
+                    role="tab"
+                    aria-selected="@isActive"
+                    class="editor-tab editor-tab--@info.Variant @(isActive ? "is-active" : "") @(tab.HasUnsavedChanges ? "is-dirty" : "")"
+                    title="@(tab.File?.FileName)"
+                    data-kmila-pane="@PaneIndex"
+                    data-kmila-tab="@idx"
+                    @onclick="() => OnTabClickAsync(idx)"
+                    @onpointerup="() => OnPointerUpAsync(idx)">
+                <span class="editor-tab__icon" aria-hidden="true">
+                    <Icon Name="@info.Icon" />
+                </span>
+                <span class="editor-tab__name">@(tab.File?.FileName)</span>
+                @if (tab.HasUnsavedChanges)
+                {
+                    <span class="editor-tab__dirty-dot"
+                          aria-label="@Traductor.T("EDITOR_TAB_UNSAVED")"
+                          title="@Traductor.T("EDITOR_TAB_UNSAVED")"></span>
+                }
+                <span class="editor-tab__close-wrap">
+                    <button type="button"
+                            class="editor-tab__close"
+                            aria-label="@Traductor.T("EDITOR_TAB_CLOSE")"
+                            title="@Traductor.T("EDITOR_TAB_CLOSE")"
+                            @onclick:stopPropagation="true"
+                            @onclick="() => OnCloseClickedAsync(idx)">
+                        <Icon Name="IconName.XLg" />
+                    </button>
+                </span>
+            </button>
+        }
+    </nav>
+}
+
+@code {
+    /// <summary>Tabs to render, in display order.</summary>
+    [Parameter] public List<OpenFileTab> Tabs { get; set; } = new();
+
+    /// <summary>Index of the currently active tab. -1 when there are no tabs.</summary>
+    [Parameter] public int ActiveIndex { get; set; }
+
+    /// <summary>Which pane this strip belongs to. Stamped onto every tab as
+    /// data-kmila-pane so the document-level dragstart listener can record
+    /// the source pane along with the source tab index.</summary>
+    [Parameter] public int PaneIndex { get; set; }
+
+    /// <summary>Fires when the user clicks a tab. Argument is the new active index.</summary>
+    [Parameter] public EventCallback<int> OnTabSelect { get; set; }
+
+    /// <summary>Fires when the user clicks the × on a tab. Argument is the
+    /// index to close. Parent owns the unsaved-changes prompt.</summary>
+    [Parameter] public EventCallback<int> OnTabClose { get; set; }
+
+    /// <summary>
+    /// Fires when the user finishes a drag — for both same-pane reorder
+    /// AND cross-pane move. Carries source/destination pane and tab
+    /// indices so the parent can route to the right pane mutation.
+    /// Parent owns the actual list move so it can persist alongside any
+    /// other state changes (active index, focus, etc.).
+    /// </summary>
+    [Parameter] public EventCallback<TabMoveRequest> OnTabMove { get; set; }
+
+    protected override void OnInitialized()
+    {
+        Traductor.StaticOnLangChanged += OnLanguageChanged;
+    }
+
+    /// <summary>
+    /// Install the document-level pointer-drag listeners once. Real wiring
+    /// lives in app.js's kmilaSetupTabDrag (PointerEvents — works on touch,
+    /// mouse, and pen). The shim is idempotent so calling it from every
+    /// strip's first render is safe.
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try { await JS.InvokeVoidAsync("kmilaSetupTabDrag"); }
+        catch { /* prerender / sandboxed iframe — drag will silently no-op */ }
+    }
+
+    private void OnLanguageChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task OnTabClickAsync(int idx)
+    {
+        if (idx == ActiveIndex) return;
+        if (OnTabSelect.HasDelegate)
+            await OnTabSelect.InvokeAsync(idx);
+    }
+
+    private async Task OnCloseClickedAsync(int idx)
+    {
+        if (OnTabClose.HasDelegate)
+            await OnTabClose.InvokeAsync(idx);
+    }
+
+    /// <summary>
+    /// Pointer-up over a tab is the "drop" event for the touch-friendly drag
+    /// system. The JS controller stashes the source pane/tab on a successful
+    /// pointerup and we read it back here. No-op when there is no pending
+    /// drag (regular taps already fired through OnTabClickAsync).
+    /// </summary>
+    private async Task OnPointerUpAsync(int destIdx)
+    {
+        TabDragInfo info;
+        try
+        {
+            info = await JS.InvokeAsync<TabDragInfo>("kmilaGetTabDrag");
+        }
+        catch
+        {
+            info = new TabDragInfo(-1, -1);
+        }
+        if (info.TabIdx < 0 || info.PaneIdx < 0) return;
+
+        // Consume the pending drop so a second pointerup elsewhere doesn't replay it.
+        try { await JS.InvokeVoidAsync("kmilaClearTabDrag"); } catch { }
+
+        // No-op on dropping a tab onto itself.
+        if (info.PaneIdx == PaneIndex && info.TabIdx == destIdx) return;
+        if (destIdx < 0 || destIdx >= Tabs.Count + 1) return;
+
+        if (OnTabMove.HasDelegate)
+        {
+            await OnTabMove.InvokeAsync(new TabMoveRequest(
+                SrcPaneIndex: info.PaneIdx,
+                SrcTabIndex: info.TabIdx,
+                DestPaneIndex: PaneIndex,
+                DestTabIndex: destIdx));
+        }
+    }
+
+    /// <summary>JS-shape for kmilaGetTabDrag — matches the JS object's
+    /// camelCase keys; System.Text.Json honours the property names case-
+    /// insensitively by default, but the explicit attribute makes the
+    /// contract self-documenting.</summary>
+    public record TabDragInfo(
+        [property: System.Text.Json.Serialization.JsonPropertyName("paneIdx")] int PaneIdx,
+        [property: System.Text.Json.Serialization.JsonPropertyName("tabIdx")]  int TabIdx);
+
+    /// <summary>File-extension → (icon, variant). Mirrors the same mapping
+    /// FilesCard uses so the visual treatment of a file is identical
+    /// whether the user sees it in the file list or as a tab.</summary>
+    private static (IconName Icon, string Variant) GetFileInfo(string fileName)
+    {
+        if (!fileName.Contains('.'))
+            return (IconName.FileEarmark, "other");
+
+        var ext = fileName.Substring(fileName.LastIndexOf('.')).ToLowerInvariant();
+        return ext switch
+        {
+            ".vhd" or ".vhdl" => (IconName.FileCode,    "vhdl"),
+            ".md"             => (IconName.FileTypeMd,  "markdown"),
+            ".txt"            => (IconName.FileTypeTxt, "text"),
+            ".json"           => (IconName.Braces,      "json"),
+            ".xml"             => (IconName.Code,        "xml"),
+            _                 => (IconName.FileEarmark, "other"),
+        };
+    }
+
+    public void Dispose()
+    {
+        Traductor.StaticOnLangChanged -= OnLanguageChanged;
+    }
+}

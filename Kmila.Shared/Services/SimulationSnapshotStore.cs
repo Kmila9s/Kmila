@@ -169,6 +169,49 @@ public class SimulationSnapshotStore
     }
 
     /// <summary>
+    /// Imports a snapshot from a JSON payload previously produced by the Runs
+    /// panel's Export action. Re-targets the row to <paramref name="projectId"/>
+    /// regardless of the project the JSON came from — students often share
+    /// runs across machines/projects, and binding the import to the current
+    /// project is the only sensible option (otherwise it would land in a
+    /// possibly non-existent project id and never appear in the UI).
+    /// Returns the inserted snapshot or null on parse / DB failure.
+    /// </summary>
+    public async Task<SimulationSnapshot?> ImportFromJsonAsync(int projectId, string json)
+    {
+        try
+        {
+            await _db.InitDBAsync();
+            var parsed = System.Text.Json.JsonSerializer.Deserialize<SimulationSnapshot>(json);
+            if (parsed == null || string.IsNullOrEmpty(parsed.WaveformJson))
+            {
+                _logger.LogWarning("[SnapshotStore] Import rejected — payload missing required fields");
+                return null;
+            }
+            // Reset identity / project binding; preserve label, time, scale,
+            // FPGA hint and waveform data. Mark as just imported so the user
+            // sees it at the top of the list.
+            parsed.Id = 0;
+            parsed.ProjectId = projectId;
+            parsed.CreatedAt = DateTime.UtcNow;
+            parsed.Pinned    = false;
+            if (string.IsNullOrWhiteSpace(parsed.Label))
+                parsed.Label = "Imported · " + DateTime.Now.ToString("HH:mm:ss");
+
+            await _db.InsertAsync(parsed);
+            await EnforceRetentionAsync(projectId);
+            OnChange?.Invoke(projectId);
+            _logger.LogInformation("[SnapshotStore] Imported run #{Id} into project {P}", parsed.Id, projectId);
+            return parsed;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SnapshotStore] Import failed for project {P}", projectId);
+            return null;
+        }
+    }
+
+    /// <summary>
     /// LRU cap per project: unpinned oldest rows evicted once the count
     /// crosses <see cref="MaxPerProject"/>. Pinned rows are never touched.
     /// </summary>

@@ -1,8 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
-    <!--<TargetFrameworks>net9.0-android;net9.0-ios;net9.0-maccatalyst</TargetFrameworks>-->
-    <TargetFramework>net9.0-android</TargetFramework>
+    <TargetFrameworks>net9.0-android;net9.0-ios;net9.0-maccatalyst</TargetFrameworks>
     <!--<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net9.0-windows10.0.19041.0</TargetFrameworks>-->
     <!-- Uncomment to also build the tizen app. You will need to install tizen by following this: https://github.com/Samsung/Tizen.NET -->
     <!-- <TargetFrameworks>$(TargetFrameworks);net9.0-tizen</TargetFrameworks> -->
@@ -68,6 +67,12 @@
          LogicalName pattern as Dictionaries so FileSystem.OpenAppPackageFileAsync
          can open them using the relative path (Learn/manifest.json, Learn/en/…). -->
     <MauiAsset Include="..\Kmila.Shared\wwwroot\Learn\**\*" LogicalName="Learn\%(RecursiveDir)%(Filename)%(Extension)" />
+
+    <!-- Practice catalog: manifest + per-exercise vhdl/json/md assets. Same
+         LogicalName pattern so PracticeCatalog can open them via
+         FileSystem.OpenAppPackageFileAsync ("Practice/manifest.json",
+         "Practice/{folder}/solution.vhdl", etc). -->
+    <MauiAsset Include="..\Kmila.Shared\wwwroot\Practice\**\*" LogicalName="Practice\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

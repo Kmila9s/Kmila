@@ -1,0 +1,100 @@
+{
+  "tests": [
+    {
+      "id": "t1",
+      "visible": true,
+      "descriptions": { "en": "Push then pop one — empty must come back exactly when count returns to 0", "es": "Push y luego pop — empty debe volver a 1 justo cuando count vuelve a 0" },
+      "durationMicros": 3,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "push", "values": [
+          { "time": 0,   "scale": "NS", "value": "0" },
+          { "time": 100, "scale": "NS", "value": "1" },
+          { "time": 130, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "pop", "values": [
+          { "time": 0,   "scale": "NS", "value": "0" },
+          { "time": 300, "scale": "NS", "value": "1" },
+          { "time": 330, "scale": "NS", "value": "0" }
+        ]}
+      ]
+    },
+    {
+      "id": "t2",
+      "visible": false,
+      "descriptions": { "en": "Idle — empty stays 1", "es": "Sin actividad — empty permanece en 1" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "push", "values": [{ "time": 0, "scale": "NS", "value": "0" }] },
+        { "portName": "pop",  "values": [{ "time": 0, "scale": "NS", "value": "0" }] }
+      ]
+    },
+    {
+      "id": "t3",
+      "visible": false,
+      "descriptions": { "en": "Push 3 in a row — empty drops on first push", "es": "Tres push seguidos — empty cae con el primer push" },
+      "durationMicros": 3,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "push", "values": [
+          { "time": 0,   "scale": "NS", "value": "0" },
+          { "time": 100, "scale": "NS", "value": "1" },
+          { "time": 220, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "pop", "values": [{ "time": 0, "scale": "NS", "value": "0" }] }
+      ]
+    },
+    {
+      "id": "t4",
+      "visible": false,
+      "descriptions": { "en": "Pop while empty — count clamped at 0", "es": "Pop estando vacío — count se queda en 0" },
+      "durationMicros": 3,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "push", "values": [{ "time": 0, "scale": "NS", "value": "0" }] },
+        { "portName": "pop", "values": [
+          { "time": 100, "scale": "NS", "value": "1" },
+          { "time": 200, "scale": "NS", "value": "0" }
+        ]}
+      ]
+    },
+    {
+      "id": "t5",
+      "visible": false,
+      "descriptions": { "en": "Single push then single pop near each other", "es": "Un push y un pop cercanos" },
+      "durationMicros": 3,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "push", "values": [
+          { "time": 100, "scale": "NS", "value": "1" },
+          { "time": 130, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "pop", "values": [
+          { "time": 160, "scale": "NS", "value": "1" },
+          { "time": 190, "scale": "NS", "value": "0" }
+        ]}
+      ]
+    }
+  ]
+}

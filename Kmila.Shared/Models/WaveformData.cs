@@ -24,26 +24,36 @@ public class WaveformData
     public List<string> TimeLabels { get; init; } = new();
 
     /// <summary>
-    /// Total number of ticks in the simulation.
+    /// Total number of ticks in the simulation. Mutable because the live
+    /// merge path grows the X-axis as new transitions arrive — see
+    /// <see cref="MergeFrom"/>.
     /// </summary>
-    public ulong TotalTicks { get; init; }
+    public ulong TotalTicks { get; set; }
+
+    /// <summary>
+    /// Per-signal append watermark used by the live merge path. Indexed by
+    /// the original <see cref="Variable"/> reference (the simulator keeps a
+    /// stable instance per signal for the run's lifetime). Private, so
+    /// System.Text.Json's default public-only contract leaves it alone —
+    /// snapshots round-trip through <see cref="SerializedForm"/> only.
+    /// </summary>
+    private readonly Dictionary<Variable, int> _liveWatermarks = new();
 
     /// <summary>
     /// Nanoseconds per tick (timescale).
     /// </summary>
     public int TimescaleNs { get; init; }
 
-    /// <summary>
-    /// The underlying SignalHistory for VCD export.
-    /// </summary>
-    public SignalHistory? SourceHistory { get; init; }
+    // SourceHistory used to live here as a back-reference to the simulator's
+    // SignalHistory for VCD export, but it's never actually read — VCD export
+    // goes through Builder.SimulationHistory directly. Holding it kept the
+    // entire raw signal history (multi-MB per run) rooted for as long as the
+    // WaveformData lived; removed to stop the leak.
 
     /// <summary>
     /// JSON round-trip used by <c>SimulationSnapshotStore</c> to persist and
-    /// replay runs. Drops <see cref="SourceHistory"/> — it references live
-    /// Interpreter objects that can't serialize — but keeps every rendered
-    /// transition, so the stored run replays pixel-identically to the
-    /// original.
+    /// replay runs. Keeps every rendered transition so the stored run replays
+    /// pixel-identically to the original.
     /// </summary>
     public string ToJson()
     {
@@ -69,8 +79,7 @@ public class WaveformData
                 Signals     = payload.Signals ?? new(),
                 TimeLabels  = new(),
                 TotalTicks  = payload.TotalTicks,
-                TimescaleNs = payload.TimescaleNs,
-                SourceHistory = null
+                TimescaleNs = payload.TimescaleNs
             };
         }
         catch
@@ -85,6 +94,116 @@ public class WaveformData
         public int TimescaleNs { get; set; }
         public List<WaveformSignal>? Signals { get; set; }
     }
+
+    /// <summary>
+    /// Creates an empty live waveform that callers grow incrementally by
+    /// calling <see cref="MergeFrom"/> on each progress tick. The Editor
+    /// uses this for real-time display — the SVG viewer reads
+    /// <see cref="Signals"/> and <see cref="TotalTicks"/> on every render
+    /// and so picks up appended transitions automatically.
+    /// </summary>
+    public static WaveformData CreateEmpty(int timescaleNs)
+        => new WaveformData { TimescaleNs = timescaleNs };
+
+    /// <summary>
+    /// Appends transitions that have arrived in <paramref name="history"/>
+    /// since the last call. New signals discovered mid-run are inserted
+    /// (signals are then re-sorted by port direction so the Y-order stays
+    /// stable across renders). Idempotent: re-running with no new entries
+    /// is a cheap no-op via the per-signal watermarks.
+    ///
+    /// Returns <c>true</c> when the merge appended at least one transition
+    /// or added a new signal — the live-update path uses this to skip
+    /// <see cref="Microsoft.AspNetCore.Components.ComponentBase.StateHasChanged"/>
+    /// on no-op fires (e.g. periodic ticks while the simulator is paused).
+    /// </summary>
+    public bool MergeFrom(SignalHistory history)
+    {
+        var trackedSignals = history.GetTrackedSignals();
+        bool addedSignal = false;
+        bool appendedAny = false;
+        long maxTimeMoment = 0;
+
+        foreach (var signal in trackedSignals)
+        {
+            var name = signal.Name;
+            var sig = Signals.FirstOrDefault(s => s.Name == name);
+            if (sig == null)
+            {
+                sig = new WaveformSignal
+                {
+                    Name = name,
+                    DataType = GetSignalDataType(signal),
+                    BitWidth = GetBitWidth(signal),
+                    PortType = signal.IsPort ? signal.PortType.ToString() : "INTERNAL"
+                };
+                Signals.Add(sig);
+                addedSignal = true;
+            }
+
+            int from = _liveWatermarks.GetValueOrDefault(signal, 0);
+            var transitions = sig.Transitions;
+            // Capture so the inner closure can flip the outer-scope flag.
+            bool localAppended = false;
+            int newCount = history.ReadSince(signal, from, (timeMoment, value) =>
+            {
+                if (timeMoment > maxTimeMoment) maxTimeMoment = timeMoment;
+                ulong tick = (ulong)(timeMoment / 1000);
+                long ns = (long)tick * TimescaleNs;
+                double? val = ConvertToChartValue(value, sig.DataType, sig.BitWidth);
+                string? lbl = (sig.DataType != "std_logic" && value != null)
+                    ? FormatDisplayLabel(value, sig.DataType, sig.BitWidth)
+                    : null;
+
+                // Same-tick collapse: deltas inside one tick → keep last.
+                if (transitions.Count > 0 && transitions[^1].TimeNs == ns)
+                {
+                    transitions[^1] = new WaveformTransition(ns, val, lbl);
+                    localAppended = true;
+                    return;
+                }
+                // Same-state skip: the step function only cares about real changes.
+                if (transitions.Count > 0 && Equals(val, transitions[^1].Value) &&
+                    string.Equals(lbl, transitions[^1].Label, StringComparison.Ordinal))
+                {
+                    return;
+                }
+                transitions.Add(new WaveformTransition(ns, val, lbl));
+                localAppended = true;
+            });
+            _liveWatermarks[signal] = newCount;
+            if (localAppended) appendedAny = true;
+        }
+
+        // Grow the X-axis to whatever we've now seen.
+        ulong maxTick = maxTimeMoment > 0 ? (ulong)(maxTimeMoment / 1000) : 0;
+        ulong observed = maxTick + 1;
+        if (observed > TotalTicks) TotalTicks = observed;
+
+        // Re-sort the signal list when new entries appeared so the Y-order
+        // (IN → OUT → INOUT → INTERNAL, alphabetical inside each group)
+        // stays stable as the simulator registers signals lazily.
+        if (addedSignal)
+        {
+            Signals.Sort((a, b) =>
+            {
+                int oa = SortOrderForPortString(a.PortType);
+                int ob = SortOrderForPortString(b.PortType);
+                int c = oa.CompareTo(ob);
+                return c != 0 ? c : string.Compare(a.Name, b.Name, StringComparison.Ordinal);
+            });
+        }
+
+        return appendedAny || addedSignal;
+    }
+
+    private static int SortOrderForPortString(string port) => port switch
+    {
+        "IN"    => 0,
+        "OUT"   => 1,
+        "INOUT" => 2,
+        _       => 3
+    };
 
     /// <summary>
     /// Creates WaveformData from a SignalHistory produced by the simulation engine.
@@ -105,12 +224,11 @@ public class WaveformData
         ulong maxTick = maxTime > 0 ? (ulong)(maxTime / 1000) : 0;
         ulong totalTicks = maxTick + 1;
 
-        // Sample stride for the legacy uniform-sample arrays (ChartValues +
-        // DisplayLabels). The SVG viewer reads from Transitions directly
-        // and ignores these, but snapshot JSON round-trip still serialises
-        // them for forward-compat. ~2000 samples to prevent aliasing when
-        // a legacy renderer is ever re-enabled.
-        int sampleStep = Math.Max(1, (int)(totalTicks / 2000));
+        // ChartValues / DisplayLabels are no longer computed: they were a
+        // legacy uniform-sample path for an earlier Chart.js renderer and
+        // nothing reads them anymore (the SVG viewer plots Transitions
+        // directly). The previous backward-scan fill was O(totalTicks/step)
+        // dictionary searches per signal — the dominant cost on long runs.
 
         var waveformSignals = new List<WaveformSignal>();
 
@@ -126,96 +244,52 @@ public class WaveformData
             int bitWidth = GetBitWidth(signal);
             string portType = signal.IsPort ? signal.PortType.ToString() : "INTERNAL";
 
-            // Collapse delta-level events to tick-level: when multiple deltas occur
-            // within the same tick, only the last value is kept for charting
-            var chartValues = new List<double?>();
-            var displayLabels = new List<string?>();
-
-            // Build a tick->value map from the raw history.
-            // Raw encoding: timeMoment = tick * 1000 + delta, so dividing by 1000
-            // extracts the tick number. Overwriting ensures last-delta-wins semantics.
-            var tickValues = new Dictionary<ulong, object>();
+            // Collapse delta-level events to tick-level: when multiple deltas
+            // occur within the same tick we only keep the last value. The raw
+            // history is roughly tick-ordered already, but a final OrderBy
+            // guarantees monotonic time even if the engine flushed deltas out
+            // of order during a stop.
+            //
+            // Build the transition list in a single forward pass over the raw
+            // history. The previous implementation iterated every Nth tick and
+            // searched backwards through a tick→value dictionary, which scaled
+            // with simulation length even when the signal barely changed.
+            var transitions = new List<WaveformTransition>();
+            ulong? lastTick = null;
+            double? prevVal = null;
+            string? prevLbl = null;
             foreach (var entry in rawHistory)
             {
                 ulong tick = (ulong)(entry.Item1 / 1000);
-                tickValues[tick] = entry.Item2; // last delta wins
-            }
-
-            // Fill chart arrays at the high-density sample resolution so fast
-            // signals (e.g. a 50 MHz clock with a 2-tick period) don't alias
-            // into a flat line.
-            object? lastValue = null;
-            for (ulong t = 0; t < totalTicks; t += (ulong)sampleStep)
-            {
-                // Search backwards from the current tick to find the most recent
-                // value assignment (signals hold their value until changed)
-                object? value = null;
-                for (ulong search = t; ; search--)
-                {
-                    if (tickValues.TryGetValue(search, out var v))
-                    {
-                        value = v;
-                        break;
-                    }
-                    if (search == 0) break;
-                }
-
-                // If no value found searching backwards, use the initial value
-                // from the raw history as a fallback (e.g., initial signal state)
-                if (value == null && rawHistory.Count > 0)
-                {
-                    value = rawHistory[0].Item2;
-                }
-
-                double? chartVal = ConvertToChartValue(value, dataType, bitWidth);
-                chartValues.Add(chartVal);
-
-                // For non-std_logic signals (vectors, integers), generate display labels
-                // only at transition points to avoid cluttering the chart
-                if (dataType != "std_logic" && value != null)
-                {
-                    string? label = null;
-                    bool isTransition = lastValue == null || !Equals(value, lastValue);
-                    if (isTransition)
-                    {
-                        label = FormatDisplayLabel(value, dataType, bitWidth);
-                    }
-                    displayLabels.Add(label);
-                }
-                else
-                {
-                    displayLabels.Add(null);
-                }
-
-                lastValue = value;
-            }
-
-            // Build the transition list from the (already-collapsed) tick
-            // map. One entry per tick with a recorded value, in tick order,
-            // duplicates collapsed — the SVG renderer emits a horizontal
-            // segment between consecutive entries and a vertical step at
-            // each. No downsampling: fast signals like a 50 MHz clock show
-            // up as an honest square wave instead of aliasing flat.
-            var transitions = new List<WaveformTransition>(tickValues.Count);
-            double? prevVal = null;
-            foreach (var kv in tickValues.OrderBy(kv => kv.Key))
-            {
-                long ns = (long)kv.Key * timescaleNs;
-                double? val = ConvertToChartValue(kv.Value, dataType, bitWidth);
-                string? lbl = (dataType != "std_logic" && kv.Value != null)
-                    ? FormatDisplayLabel(kv.Value, dataType, bitWidth)
+                long ns = (long)tick * timescaleNs;
+                double? val = ConvertToChartValue(entry.Item2, dataType, bitWidth);
+                string? lbl = (dataType != "std_logic" && entry.Item2 != null)
+                    ? FormatDisplayLabel(entry.Item2, dataType, bitWidth)
                     : null;
 
-                // Skip consecutive duplicates to keep the list small. The
-                // step-function render only cares about actual changes.
-                if (transitions.Count > 0 && Equals(val, prevVal) &&
-                    string.Equals(lbl, transitions[^1].Label, StringComparison.Ordinal))
+                if (lastTick == tick && transitions.Count > 0)
                 {
+                    // Multiple deltas inside the same tick — keep only the last
+                    // value (matches the previous tick→value dictionary's
+                    // last-write-wins semantics).
+                    transitions[^1] = new WaveformTransition(ns, val, lbl);
+                    prevVal = val;
+                    prevLbl = lbl;
+                    continue;
+                }
+
+                if (transitions.Count > 0 && Equals(val, prevVal) &&
+                    string.Equals(lbl, prevLbl, StringComparison.Ordinal))
+                {
+                    // Same logical state as the previous tick — skip to keep
+                    // the step-function list compact.
                     continue;
                 }
 
                 transitions.Add(new WaveformTransition(ns, val, lbl));
+                lastTick = tick;
                 prevVal = val;
+                prevLbl = lbl;
             }
 
             waveformSignals.Add(new WaveformSignal
@@ -224,9 +298,9 @@ public class WaveformData
                 DataType = dataType,
                 BitWidth = bitWidth,
                 PortType = portType,
-                ChartValues = chartValues,
-                DisplayLabels = displayLabels,
                 Transitions = transitions
+                // ChartValues / DisplayLabels intentionally left as their
+                // default empty lists — see comment above near sampleStep.
             });
         }
 
@@ -234,8 +308,7 @@ public class WaveformData
         {
             Signals = waveformSignals,
             TotalTicks = totalTicks,
-            TimescaleNs = timescaleNs,
-            SourceHistory = history
+            TimescaleNs = timescaleNs
         };
     }
 

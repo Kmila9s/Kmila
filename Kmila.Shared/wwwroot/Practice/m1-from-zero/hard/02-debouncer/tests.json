@@ -1,0 +1,90 @@
+{
+  "tests": [
+    {
+      "id": "t1",
+      "visible": true,
+      "descriptions": { "en": "raw stays high — clean rises after 4 cycles", "es": "raw alto — clean sube tras 4 ciclos" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "raw", "values": [
+          { "time": 0,  "scale": "NS", "value": "0" },
+          { "time": 30, "scale": "NS", "value": "1" }
+        ]}
+      ]
+    },
+    {
+      "id": "t2",
+      "visible": false,
+      "descriptions": { "en": "Glitch shorter than 4 cycles is filtered", "es": "Pulso corto se filtra" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "raw", "values": [
+          { "time": 0,   "scale": "NS", "value": "0" },
+          { "time": 100, "scale": "NS", "value": "1" },
+          { "time": 130, "scale": "NS", "value": "0" }
+        ]}
+      ]
+    },
+    {
+      "id": "t3",
+      "visible": false,
+      "descriptions": { "en": "Held in reset", "es": "Reset mantenido" },
+      "durationMicros": 1,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0, "scale": "NS", "value": "1" }
+        ]},
+        { "portName": "raw", "values": [
+          { "time": 0, "scale": "NS", "value": "1" }
+        ]}
+      ]
+    },
+    {
+      "id": "t4",
+      "visible": false,
+      "descriptions": { "en": "Toggle pattern", "es": "Patrón alternado" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "raw", "values": [
+          { "time": 0,    "scale": "NS", "value": "0" },
+          { "time": 200,  "scale": "NS", "value": "1" },
+          { "time": 600,  "scale": "NS", "value": "0" },
+          { "time": 1000, "scale": "NS", "value": "1" }
+        ]}
+      ]
+    },
+    {
+      "id": "t5",
+      "visible": false,
+      "descriptions": { "en": "raw rises late then stays", "es": "raw sube tarde y se mantiene" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "raw", "values": [
+          { "time": 0,   "scale": "NS", "value": "0" },
+          { "time": 800, "scale": "NS", "value": "1" }
+        ]}
+      ]
+    }
+  ]
+}

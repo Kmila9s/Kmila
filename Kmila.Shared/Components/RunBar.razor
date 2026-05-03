@@ -25,9 +25,15 @@
     <div class="run-bar__row">
 
         @* FPGA reference chip. When nothing is selected we flag it in the
-           danger tone so students know this is the blocker for Build/Run. *@
-        <span class="run-bar__fpga @(NoFpga ? "run-bar__fpga--missing" : "")"
-              title="@(NoFpga ? Traductor.T("RUNBAR_FPGA_REQUIRED") : SelectedFPGA.FPGA.Model)">
+           danger tone so students know this is the blocker for Build/Run.
+           Clicking the chip opens the FPGA picker (Settings → FPGA section
+           gets opened in a modal) — quicker than navigating away from the
+           Editor to switch board. *@
+        <button type="button"
+                class="run-bar__fpga @(NoFpga ? "run-bar__fpga--missing" : "")"
+                @onclick="() => OnFpgaChipClickedCallback.InvokeAsync()"
+                title="@(NoFpga ? Traductor.T("RUNBAR_FPGA_REQUIRED") : Traductor.T("RUNBAR_FPGA_CHANGE"))"
+                aria-label="@Traductor.T("RUNBAR_FPGA_CHANGE")">
             <Icon Name="@(NoFpga ? IconName.ExclamationTriangleFill : IconName.CpuFill)" />
             @if (!NoFpga)
             {
@@ -37,7 +43,8 @@
             {
                 <span class="run-bar__fpga-empty">@Traductor.T("RUNBAR_SELECT_FPGA_FIRST")</span>
             }
-        </span>
+            <Icon Name="IconName.ChevronDown" Class="run-bar__fpga-chevron" />
+        </button>
 
         @* Time input + scale select — simulation duration *@
         <div class="run-bar__time" role="group" aria-label="@Traductor.T("SIM_DURATION")">
@@ -157,12 +164,12 @@
             </button>
         }
 
-        @* Visible file actions — Save and New file. Users asked for these to
-           live on the bar itself (not hidden in the overflow) since they're
-           used on almost every session. Kept in the overflow too as a fallback
-           for narrow viewports where we hide these to save horizontal space. *@
+        @* Visible file actions — Save and New file. Styled as outline ghost
+           buttons (matching the Build/Run trio) instead of the previous
+           muted-text variant which felt visually disconnected from the rest
+           of the bar. *@
         <button type="button"
-                class="btn btn-ghost run-bar__file-btn run-bar__file-btn--save"
+                class="btn btn-outline-secondary btn-sm run-bar__file-btn run-bar__file-btn--save"
                 @onclick="() => OnSaveClickedCallback.InvokeAsync()"
                 title="@Traductor.T("EDITOR_SAVE_FILE")"
                 aria-label="@Traductor.T("EDITOR_SAVE_FILE")">
@@ -170,7 +177,7 @@
             <span class="run-bar__file-btn-label">@Traductor.T("EDITOR_SAVE_FILE")</span>
         </button>
         <button type="button"
-                class="btn btn-ghost run-bar__file-btn run-bar__file-btn--new"
+                class="btn btn-outline-secondary btn-sm run-bar__file-btn run-bar__file-btn--new"
                 @onclick="() => OnNewFileClickedCallback.InvokeAsync()"
                 title="@Traductor.T("EDITOR_NEW_FILE")"
                 aria-label="@Traductor.T("EDITOR_NEW_FILE")">
@@ -178,27 +185,10 @@
             <span class="run-bar__file-btn-label">@Traductor.T("EDITOR_NEW_FILE")</span>
         </button>
 
-        @* Overflow menu — kept for future actions (Export VCD…) *@
-        <details class="run-bar__overflow">
-            <summary class="btn btn-ghost"
-                     aria-label="@Traductor.T("EDITOR_MORE_ACTIONS")"
-                     title="@Traductor.T("EDITOR_MORE_ACTIONS")">
-                <Icon Name="IconName.ThreeDotsVertical" />
-            </summary>
-            <div class="run-bar__overflow-panel" role="menu">
-                <button type="button" role="menuitem" class="run-bar__overflow-item"
-                        @onclick="() => OnSaveClickedCallback.InvokeAsync()">
-                    <Icon Name="IconName.Floppy2" />
-                    <span>@Traductor.T("EDITOR_SAVE_FILE")</span>
-                    <kbd class="run-bar__shortcut">⌃S</kbd>
-                </button>
-                <button type="button" role="menuitem" class="run-bar__overflow-item"
-                        @onclick="() => OnNewFileClickedCallback.InvokeAsync()">
-                    <Icon Name="IconName.FilePlus" />
-                    <span>@Traductor.T("EDITOR_NEW_FILE")</span>
-                </button>
-            </div>
-        </details>
+        @* Previous burger overflow menu was removed — its only items were
+           duplicates of Save / New File which already live on the bar. When
+           there's a real cross-cutting action (Export VCD…) we'll bring it
+           back with actual content. *@
     </div>
 
     @* Progress line — only rendered while running, fills left-to-right *@
@@ -221,6 +211,11 @@
     [Parameter] public EventCallback OnStopClicked { get; set; }
     [Parameter] public EventCallback OnSaveClickedCallback { get; set; }
     [Parameter] public EventCallback OnNewFileClickedCallback { get; set; }
+    /// <summary>
+    /// Fires when the user clicks the FPGA chip so the parent can open the
+    /// FPGA picker without forcing a trip to Settings.
+    /// </summary>
+    [Parameter] public EventCallback OnFpgaChipClickedCallback { get; set; }
 
     /// <summary>
     /// True when this component triggered the current build as part of Run,

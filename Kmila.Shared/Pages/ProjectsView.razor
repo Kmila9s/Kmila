@@ -229,39 +229,80 @@
     /// encounter everywhere else.
     /// </summary>
     private const string SAMPLE_MAIN_VHD =
-@"-- Kmila sample project: a 4-bit counter.
--- Try it:
---   1. Click the ⚒ Build button to parse the design.
---   2. Open the Ports tab and:
---        • set `clk`    as a clock signal
---        • set `reset`  to '1' at time 0, '0' at time 5
---   3. Click ▶ Run, then switch to the Waveforms tab.
+@"-- Kmila sample project: a 7-stage ripple counter (""Visible Wave"").
+-- Click ▶ Run and watch the Waveforms tab fill in live.
+--
+-- What you should see:
+--   • bit0 toggles every clock cycle (densest trace)
+--   • each higher bit toggles half as often as the one below it
+--   • bit6 only toggles ~12 times across the whole run — easy to read
+--   • from 5 µs to 10 µs `enable` goes low and every output freezes,
+--     then resumes — clear proof the waveform is rendering live
+--   • heart mirrors bit3 so you have a slower rhythm to track
 
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
-use IEEE.NUMERIC_STD.ALL;
 
-entity counter is
+entity sim_lab is
   port (
-    clk   : in  std_logic;
-    reset : in  std_logic;
-    q     : out std_logic_vector(3 downto 0)
+    clk    : in  STD_LOGIC;
+    reset  : in  STD_LOGIC;
+    enable : in  STD_LOGIC;
+    bit0   : out STD_LOGIC;
+    bit1   : out STD_LOGIC;
+    bit2   : out STD_LOGIC;
+    bit3   : out STD_LOGIC;
+    bit4   : out STD_LOGIC;
+    bit5   : out STD_LOGIC;
+    bit6   : out STD_LOGIC;
+    heart  : out STD_LOGIC
   );
-end entity counter;
+end entity sim_lab;
 
-architecture behavioral of counter is
-  signal cnt : unsigned(3 downto 0) := (others => '0');
+architecture behavioral of sim_lab is
+  signal q0, q1, q2, q3, q4, q5, q6 : STD_LOGIC := '0';
+  signal h_reg : STD_LOGIC := '0';
 begin
   process(clk, reset)
   begin
     if reset = '1' then
-      cnt <= (others => '0');
+      q0 <= '0'; q1 <= '0'; q2 <= '0'; q3 <= '0';
+      q4 <= '0'; q5 <= '0'; q6 <= '0';
+      h_reg <= '0';
     elsif rising_edge(clk) then
-      cnt <= cnt + 1;
+      if enable = '1' then
+        q0 <= not q0;
+        if q0 = '1' then
+          q1 <= not q1;
+          if q1 = '1' then
+            q2 <= not q2;
+            if q2 = '1' then
+              q3 <= not q3;
+              if q3 = '1' then
+                q4 <= not q4;
+                if q4 = '1' then
+                  q5 <= not q5;
+                  if q5 = '1' then
+                    q6 <= not q6;
+                  end if;
+                end if;
+              end if;
+            end if;
+          end if;
+        end if;
+        h_reg <= q3;
+      end if;
     end if;
   end process;
 
-  q <= std_logic_vector(cnt);
+  bit0  <= q0;
+  bit1  <= q1;
+  bit2  <= q2;
+  bit3  <= q3;
+  bit4  <= q4;
+  bit5  <= q5;
+  bit6  <= q6;
+  heart <= h_reg;
 end architecture behavioral;
 ";
 
@@ -341,12 +382,18 @@ end architecture behavioral;
     /// what <see cref="ConfigurationService.SaveConfigurationAsync"/> does
     /// under the hood anyway.
     ///
-    /// Shape:
-    ///   • Time          : 100 US
+    /// Shape (matches the Visible Wave sample design):
+    ///   • Time          : 30 US (1500 cycles at 50 MHz — long enough for
+    ///                     the live-update timer to fire several times so
+    ///                     the waveform is seen growing on-screen)
     ///   • FPGA          : whatever the user currently has selected (may be null)
     ///   • Port moments  :
-    ///       – clk   → clock signal marker
-    ///       – reset → '1' @ t=0, '0' @ t=5
+    ///       – clk    → clock signal marker
+    ///       – reset  → '1' @ 0 ns, '0' @ 50 ns (one clean reset pulse)
+    ///       – enable → '0' @ 0 ns, '1' @ 100 ns (start counting once
+    ///                  reset releases), '0' @ 5000 ns, '1' @ 10000 ns
+    ///                  (a 5 µs pause window mid-run so the user can
+    ///                  watch every output freeze and then resume)
     /// </summary>
     private async Task SaveSampleConfigurationAsync()
     {
@@ -367,8 +414,19 @@ end architecture behavioral;
                     PortName = "reset",
                     Values = new List<PortMomentValue>
                     {
-                        new PortMomentValue { Time = 0, TimeScale = "US", Value = "1" },
-                        new PortMomentValue { Time = 5, TimeScale = "US", Value = "0" }
+                        new PortMomentValue { Time = 0,  TimeScale = "NS", Value = "1" },
+                        new PortMomentValue { Time = 50, TimeScale = "NS", Value = "0" }
+                    }
+                },
+                new PortMomentConfiguration
+                {
+                    PortName = "enable",
+                    Values = new List<PortMomentValue>
+                    {
+                        new PortMomentValue { Time = 0,     TimeScale = "NS", Value = "0" },
+                        new PortMomentValue { Time = 100,   TimeScale = "NS", Value = "1" },
+                        new PortMomentValue { Time = 5000,  TimeScale = "NS", Value = "0" },
+                        new PortMomentValue { Time = 10000, TimeScale = "NS", Value = "1" }
                     }
                 }
             };
@@ -378,7 +436,7 @@ end architecture behavioral;
                 description: Traductor.T("PROJECTS_SAMPLE_CONFIG_DESCRIPTION"),
                 fpga: SelectedFPGA?.FPGA,
                 fpgaPath: SelectedFPGA?.Path ?? string.Empty,
-                timeValue: 100,
+                timeValue: 30,
                 timeScale: "US",
                 portMoments: portMoments);
 

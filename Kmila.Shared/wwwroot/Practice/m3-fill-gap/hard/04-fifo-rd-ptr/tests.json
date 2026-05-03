@@ -1,0 +1,66 @@
+{
+  "tests": [
+    { "id": "t1", "visible": true, "descriptions": { "en": "Reset, push four, pop four — empty toggles", "es": "Reset, cuatro push, cuatro pop — empty conmuta" }, "durationMicros": 3, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "push", "values": [
+        { "time": 0,    "scale": "NS", "value": "0" },
+        { "time": 100,  "scale": "NS", "value": "1" },
+        { "time": 200,  "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "pop", "values": [
+        { "time": 0,    "scale": "NS", "value": "0" },
+        { "time": 1000, "scale": "NS", "value": "1" },
+        { "time": 1100, "scale": "NS", "value": "0" }
+      ]}
+    ]},
+    { "id": "t2", "visible": false, "descriptions": { "en": "Pop while empty — rd_ptr stays still", "es": "Pop con FIFO vacía — rd_ptr no avanza" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "push", "values": [ { "time": 0, "scale": "NS", "value": "0" } ] },
+      { "portName": "pop",  "values": [
+        { "time": 0,   "scale": "NS", "value": "0" },
+        { "time": 100, "scale": "NS", "value": "1" }
+      ]}
+    ]},
+    { "id": "t3", "visible": false, "descriptions": { "en": "Continuous push and pop — empty=1 every cycle", "es": "Push y pop continuos — empty=1 en cada ciclo" }, "durationMicros": 3, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "push", "values": [
+        { "time": 0,   "scale": "NS", "value": "0" },
+        { "time": 100, "scale": "NS", "value": "1" }
+      ]},
+      { "portName": "pop", "values": [
+        { "time": 0,   "scale": "NS", "value": "0" },
+        { "time": 100, "scale": "NS", "value": "1" }
+      ]}
+    ]},
+    { "id": "t4", "visible": false, "descriptions": { "en": "Held in reset", "es": "Reset mantenido" }, "durationMicros": 1, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [ { "time": 0, "scale": "NS", "value": "1" } ] },
+      { "portName": "push",  "values": [ { "time": 0, "scale": "NS", "value": "1" } ] },
+      { "portName": "pop",   "values": [ { "time": 0, "scale": "NS", "value": "1" } ] }
+    ]},
+    { "id": "t5", "visible": false, "descriptions": { "en": "Push burst then idle then pop burst", "es": "Ráfaga de push, espera, ráfaga de pop" }, "durationMicros": 3, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "push", "values": [
+        { "time": 0,    "scale": "NS", "value": "0" },
+        { "time": 100,  "scale": "NS", "value": "1" },
+        { "time": 300,  "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "pop", "values": [
+        { "time": 0,    "scale": "NS", "value": "0" },
+        { "time": 1500, "scale": "NS", "value": "1" },
+        { "time": 1700, "scale": "NS", "value": "0" }
+      ]}
+    ]}
+  ]
+}

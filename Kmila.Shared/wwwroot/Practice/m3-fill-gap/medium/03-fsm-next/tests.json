@@ -1,0 +1,49 @@
+{
+  "tests": [
+    { "id": "t1", "visible": true,  "descriptions": { "en": "x=1 always — climb 00→01→10", "es": "x=1 siempre — sube 00→01→10" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "x", "values": [{ "time": 0, "scale": "NS", "value": "1" }] }
+    ]},
+    { "id": "t2", "visible": false, "descriptions": { "en": "x=0 always — stays in 00", "es": "x=0 siempre — permanece en 00" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "x", "values": [{ "time": 0, "scale": "NS", "value": "0" }] }
+    ]},
+    { "id": "t3", "visible": false, "descriptions": { "en": "Pulse x=1 once — 00→01→00", "es": "Pulso x=1 una vez — 00→01→00" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "x", "values": [
+        { "time": 0,   "scale": "NS", "value": "0" },
+        { "time": 100, "scale": "NS", "value": "1" },
+        { "time": 140, "scale": "NS", "value": "0" }
+      ]}
+    ]},
+    { "id": "t4", "visible": false, "descriptions": { "en": "Two pulses of x=1 — reach 10 then drop to 00", "es": "Dos pulsos de x=1 — llega a 10 y cae a 00" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "x", "values": [
+        { "time": 0,    "scale": "NS", "value": "1" },
+        { "time": 80,   "scale": "NS", "value": "1" },
+        { "time": 200,  "scale": "NS", "value": "0" }
+      ]}
+    ]},
+    { "id": "t5", "visible": false, "descriptions": { "en": "Mid-run reset returns to 00", "es": "Reset a mitad regresa a 00" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,    "scale": "NS", "value": "1" },
+        { "time": 25,   "scale": "NS", "value": "0" },
+        { "time": 600,  "scale": "NS", "value": "1" },
+        { "time": 625,  "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "x", "values": [{ "time": 0, "scale": "NS", "value": "1" }] }
+    ]}
+  ]
+}

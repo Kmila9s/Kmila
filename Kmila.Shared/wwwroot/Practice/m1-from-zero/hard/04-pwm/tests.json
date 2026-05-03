@@ -1,0 +1,76 @@
+{
+  "tests": [
+    {
+      "id": "t1",
+      "visible": true,
+      "descriptions": { "en": "duty = 8 → 50% duty cycle", "es": "duty = 8 → 50%" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "duty", "values": [{ "time": 0, "scale": "NS", "value": "1000" }] }
+      ]
+    },
+    {
+      "id": "t2",
+      "visible": false,
+      "descriptions": { "en": "duty = 0 → always low", "es": "duty = 0 → siempre bajo" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "duty", "values": [{ "time": 0, "scale": "NS", "value": "0000" }] }
+      ]
+    },
+    {
+      "id": "t3",
+      "visible": false,
+      "descriptions": { "en": "duty = 15 → almost always high", "es": "duty = 15 → casi siempre alto" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "duty", "values": [{ "time": 0, "scale": "NS", "value": "1111" }] }
+      ]
+    },
+    {
+      "id": "t4",
+      "visible": false,
+      "descriptions": { "en": "duty changes mid-run", "es": "duty cambia a mitad" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "duty", "values": [
+          { "time": 0,    "scale": "NS", "value": "0100" },
+          { "time": 1000, "scale": "NS", "value": "1100" }
+        ]}
+      ]
+    },
+    {
+      "id": "t5",
+      "visible": false,
+      "descriptions": { "en": "Held in reset", "es": "Reset mantenido" },
+      "durationMicros": 1,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0, "scale": "NS", "value": "1" }
+        ]},
+        { "portName": "duty", "values": [{ "time": 0, "scale": "NS", "value": "1000" }] }
+      ]
+    }
+  ]
+}

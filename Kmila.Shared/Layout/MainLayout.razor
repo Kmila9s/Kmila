@@ -23,7 +23,11 @@
 *@
 @inherits LayoutComponentBase
 @implements IDisposable
-@inject NavigationManager NavigationManager
+@* Eagerly construct the auto-error-reporter so its AppLogStore
+   subscription is live for the lifetime of the layout. The variable
+   is unused inside the component but the @inject side-effect is what
+   we want — DI instantiates it once per circuit / app session. *@
+@inject AutoErrorReporter AutoErrorReporter
 
 @if (!_isLoading)
 {
@@ -40,15 +44,10 @@
         <main class="kmila-shell__main" id="kmila-main-content" tabindex="-1">
             <TopBar />
 
-            @*
-                The Editor route wants the article to fill the full viewport,
-                not the 1440px reading cap. We compute a conditional class from
-                the current URI instead of relying on `:has(.editor-page)` —
-                `:has()` is evaluated live but Blazor's rendering timing and
-                some WebView engines can miss the update on route-change /
-                project-load, producing the layout jump the user reported.
-            *@
-            <article class="content @(IsEditorRoute ? "content--wide" : "px-4")">
+            @* Single article sizing across every route — the centred 1440px
+               reading column matches the Logs page so all main views share
+               the same canvas proportions. *@
+            <article class="content px-4">
                 @Body
             </article>
         </main>
@@ -62,8 +61,8 @@ else
 }
 <Toasts class="p-3" AutoHide="true" Delay="5000" Placement="ToastsPlacement.TopCenter" />
 <div id="blazor-error-ui" data-nosnippet>
-    An unhandled error has occurred.
-    <a href="." class="reload">Reload</a>
+    @Traductor.T("ERROR_UNHANDLED")
+    <a href="." class="reload">@Traductor.T("COMMON_RELOAD")</a>
     <span class="dismiss">🗙</span>
 </div>
 
@@ -74,29 +73,6 @@ else
     /// This prevents child components from rendering before translations are initialized.
     /// </summary>
     private bool _isLoading = true;
-
-    /// <summary>
-    /// True when the current route is the Editor (matches `/editor/...`).
-    /// Used to swap the article between the 1440px reading cap and the
-    /// full-viewport editor layout.
-    /// </summary>
-    /// <remarks>
-    /// Check both the relative path and the absolute URI because MAUI Blazor
-    /// Hybrid bases the navigation at <c>0.0.0.0/</c>, which can leave a stray
-    /// leading slash in some versions and cause <c>StartsWith("editor/")</c>
-    /// to miss. The second branch is a safety net.
-    /// </remarks>
-    private bool IsEditorRoute
-    {
-        get
-        {
-            var rel = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
-            if (rel.StartsWith("editor/", StringComparison.OrdinalIgnoreCase) ||
-                rel.StartsWith("/editor/", StringComparison.OrdinalIgnoreCase))
-                return true;
-            return NavigationManager.Uri.Contains("/editor/", StringComparison.OrdinalIgnoreCase);
-        }
-    }
 
     /// <summary>
     /// Initializes the layout component asynchronously.
@@ -113,10 +89,6 @@ else
 
         // Subscribe to language changes to refresh the layout when user switches language
         Traductor.StaticOnLangChanged += OnLanguageChanged;
-
-        // Re-evaluate IsEditorRoute on every navigation so the article class
-        // flips immediately when the user enters / leaves the Editor route.
-        NavigationManager.LocationChanged += OnLocationChanged;
 
         // Load saved language preference from SQLite and initialize the translation service
         // Pass the settings reader callback for reactive language changes
@@ -138,17 +110,11 @@ else
         InvokeAsync(StateHasChanged);
     }
 
-    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
-    {
-        InvokeAsync(StateHasChanged);
-    }
-
     /// <summary>
     /// Cleans up event subscriptions when the component is disposed.
     /// </summary>
     public void Dispose()
     {
         Traductor.StaticOnLangChanged -= OnLanguageChanged;
-        NavigationManager.LocationChanged -= OnLocationChanged;
     }
 }

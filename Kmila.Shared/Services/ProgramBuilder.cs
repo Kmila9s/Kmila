@@ -1,7 +1,10 @@
+using System.Text.RegularExpressions;
 using Debugger;
 using Interpreter.Models;
 using Interpreter.Services;
 using Kmila.Shared.Models;
+using LibraryCompiler.Repositories;
+using LibraryCompiler.Services;
 using Parser.Models;
 namespace Kmila.Shared.Services;
 
@@ -39,6 +42,21 @@ public class ProgramBuilder : IDisposable
     /// </summary>
     public event Action<SignalHistory>? OnSimulationCompleted;
     /// <summary>
+    /// Fires periodically during a running simulation with the live
+    /// <see cref="SignalHistory"/> so the UI can grow the waveform in
+    /// real time. Throttled by <see cref="ProgressUpdateIntervalMs"/>;
+    /// stops firing once the run ends — the final state arrives via
+    /// <see cref="OnSimulationCompleted"/>.
+    /// </summary>
+    public event Action<SignalHistory>? OnSimulationProgressUpdate;
+    /// <summary>
+    /// Tick rate (ms) for live waveform refreshes. 200 ms ≈ 5 Hz, which
+    /// feels real-time without burning UI cycles on long sims; the merge
+    /// is incremental so per-tick cost scales with new transitions, not
+    /// total sim length.
+    /// </summary>
+    private const int ProgressUpdateIntervalMs = 200;
+    /// <summary>
     /// Gets the parser used to parse the VHDL file.
     /// </summary>
     public Debugger.Repositories.Parser Parser { get; private set; } = default!;
@@ -66,11 +84,40 @@ public class ProgramBuilder : IDisposable
     private SimulationRunner? _simulationRunner;
     // Cancellation token source for cooperative cancellation of async operations
     private readonly CancellationTokenSource _cts = new();
+
+    // Library compiler (optional) — when present, ProgramBuilder pre-scans
+    // the file being built for `use X.Y.all` clauses, asks the compiler to
+    // resolve them, and seeds the symbol names into FunctionRegistry so the
+    // parser sees library-defined functions as known. Null in test contexts
+    // that construct ProgramBuilder without DI.
+    private readonly LibraryCompiler.Services.LibraryCompiler? _libraryCompiler;
+
+    /// <summary>
+    /// Matches a VHDL <c>use</c> clause as <c>library.package.something</c>.
+    /// Captures the library segment (group 1) and the package segment
+    /// (group 2) so the validator can check the right one against the
+    /// resolver. Multiline-anchored to avoid false hits inside string
+    /// literals; case-insensitive so <c>USE</c> / <c>Use</c> / <c>use</c>
+    /// all match.
+    /// </summary>
+    private static readonly Regex UseClauseRe = new(
+        @"(?im)^\s*use\s+([a-z_][a-z0-9_]*)\s*\.\s*([a-z_][a-z0-9_]*)",
+        RegexOptions.Compiled);
+
     /// <summary>
     /// Initializes a new instance of the <see cref="ProgramBuilder"/> class.
     /// </summary>
-    public ProgramBuilder()
+    /// <param name="libraryCompiler">
+    /// DI-supplied library compiler. Optional — when null the builder
+    /// behaves exactly as it did before #22's library-compiler integration
+    /// (relying on the Interpreter's runtime function lookup instead of
+    /// a pre-seeded FunctionRegistry). Test harnesses that construct
+    /// <see cref="ProgramBuilder"/> via <c>new()</c> get the legacy path.
+    /// </param>
+    public ProgramBuilder(LibraryCompiler.Services.LibraryCompiler? libraryCompiler = null)
     {
+        _libraryCompiler = libraryCompiler;
+
         _timeMachine.OnSimulationEnded += OnSimulationEnd;
         _timeMachine.OnProgressAdvance += OnProgressAdvance;
 
@@ -144,7 +191,13 @@ public class ProgramBuilder : IDisposable
 
         try
         {
-            string filePath = Path.Join(file.Project.BasePath, file.FileName);
+            // Honor sub-directory layout: files can live in BasePath/<DirectoryPath>/<FileName>
+            // since the file-tree refactor. Empty DirectoryPath collapses to BasePath/<FileName>.
+            string filePath = string.IsNullOrEmpty(file.DirectoryPath)
+                ? Path.Join(file.Project.BasePath, file.FileName)
+                : Path.Combine(new[] { file.Project.BasePath }
+                    .Concat(file.DirectoryPath.Split('/', StringSplitOptions.RemoveEmptyEntries))
+                    .Concat(new[] { file.FileName }).ToArray());
             string ext = Path.GetExtension(filePath).ToLowerInvariant();
             // Accept both .vhd (IEEE 1076 traditional) and .vhdl (common on Linux
             // tooling). The Parser treats them identically — this is just an
@@ -154,6 +207,17 @@ public class ProgramBuilder : IDisposable
 
             // Check for cancellation before starting parse
             ProgressReporter.Instance.ThrowIfCancellationRequested();
+
+            // Resolve every `use X.Y.all` clause across the whole project
+            // through the LibraryCompiler before the parser walks the file
+            // we're building. We scan all sibling .vhd files under
+            // Project.BasePath so cross-file dependencies are captured in
+            // a single compile pass, and we fail loudly when a clause
+            // references a library that hasn't been imported — at that
+            // point we genuinely don't know what symbols it would expose,
+            // so continuing the build would just produce confusing
+            // "unknown function" diagnostics deep in the parser.
+            EnsureLibrariesCompiledForBuild(filePath, file.Project?.BasePath);
 
             Parser = new(filePath);
             Parser.ParseFile();
@@ -244,6 +308,14 @@ public class ProgramBuilder : IDisposable
         _simulationRunner?.Dispose();
         _simulationRunner = new SimulationRunner();
 
+        // Live-update timer: periodically pushes the running SignalHistory
+        // out via OnSimulationProgressUpdate so the UI can grow the waveform
+        // in real time. Created up here in the closure so OnSimulationEnded
+        // can stop it before OnSimulationCompleted fires (keeps the final
+        // frame from racing with a trailing tick).
+        System.Threading.Timer? progressTimer = null;
+        int liveTickInflight = 0;
+
         // Subscribe to runner events and forward them. Important: we fire
         // OnSimulationCompleted whenever *any* signal history exists — even
         // on user-stopped runs (completed=false). That way the user sees a
@@ -252,6 +324,11 @@ public class ProgramBuilder : IDisposable
         _simulationRunner.OnProgressChanged += progress => OnProgressAdvanced?.Invoke(progress);
         _simulationRunner.OnSimulationEnded += completed =>
         {
+            // Stop the live-update timer first so its callback can't race
+            // with the final OnSimulationCompleted fire below.
+            progressTimer?.Dispose();
+            progressTimer = null;
+
             OnSimulationEnded?.Invoke(completed);
             var history = _simulationRunner?.Engine?.History;
             if (history != null && history.TotalSamples > 0)
@@ -265,8 +342,49 @@ public class ProgramBuilder : IDisposable
         };
         _simulationRunner.OnError += msg => OnBuildError?.Invoke("Simulation error", msg);
 
-        // Run on current async context (caller should be on background/UI thread)
-        await _simulationRunner.RunAsync(config);
+        // Start the live-update timer just before the run kicks off. The
+        // Interlocked guard drops timer fires that arrive while a previous
+        // merge is still inflight on the consumer — keeps slow listeners
+        // from queueing redundant work.
+        progressTimer = new System.Threading.Timer(_ =>
+        {
+            if (Interlocked.Exchange(ref liveTickInflight, 1) == 1) return;
+            try
+            {
+                // Skip the fire entirely while the runner is stopped or
+                // paused. Without this the UI thread would still receive
+                // (and render) one no-op merge every 200 ms during a long
+                // pause, drowning out subsequent button clicks with render
+                // work and making Resume / Stop appear unresponsive.
+                var runner = _simulationRunner;
+                if (runner == null || !runner.IsRunning || runner.IsPaused) return;
+
+                var h = runner.Engine?.History;
+                if (h != null && h.TotalSamples > 0)
+                    OnSimulationProgressUpdate?.Invoke(h);
+            }
+            catch
+            {
+                // A throwing subscriber must not kill the timer thread —
+                // swallow and keep ticking. The next interval will retry.
+            }
+            finally
+            {
+                Interlocked.Exchange(ref liveTickInflight, 0);
+            }
+        }, null, ProgressUpdateIntervalMs, ProgressUpdateIntervalMs);
+
+        try
+        {
+            // Run on current async context (caller should be on background/UI thread)
+            await _simulationRunner.RunAsync(config);
+        }
+        finally
+        {
+            // Belt-and-braces: if RunAsync threw before OnSimulationEnded
+            // fired, the timer would otherwise leak.
+            progressTimer?.Dispose();
+        }
     }
 
     /// <summary>
@@ -328,6 +446,148 @@ public class ProgramBuilder : IDisposable
     {
         _timeMachine.Start(WaitTime);
     }
+    /// <summary>
+    /// Pre-scans every <c>.vhd</c> / <c>.vhdl</c> file under the project's
+    /// <c>BasePath</c> for <c>use library.package.all</c> clauses, validates
+    /// that every referenced library is known to the resolver (IEEE bundles
+    /// or a user-imported plugin), and asks the LibraryCompiler to compile
+    /// the union. Symbols from each compiled library land in
+    /// <see cref="FunctionRegistry"/> before the parser sees them.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Missing libraries throw a build exception — we deliberately don't
+    /// degrade silently because we can't guess what the missing library
+    /// would have contributed. The user has to import the plugin (Settings
+    /// → Libraries) before the build can complete.
+    /// </para>
+    /// <para>
+    /// No-op when <see cref="_libraryCompiler"/> is null (legacy / test
+    /// contexts that constructed <see cref="ProgramBuilder"/> directly).
+    /// </para>
+    /// </remarks>
+    /// <exception cref="Exception">
+    /// Thrown when a <c>use</c> clause references a library the resolver
+    /// doesn't know — the build halts at that point.
+    /// </exception>
+    private void EnsureLibrariesCompiledForBuild(string buildingFilePath, string? basePath)
+    {
+        if (_libraryCompiler is null) return;
+
+        // Collect every (library, package) pair we'll need to resolve.
+        var requestedPackages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var declaredLibs      = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var path in EnumerateProjectVhdlFiles(buildingFilePath, basePath))
+        {
+            string source;
+            try { source = File.ReadAllText(path); }
+            catch { continue; }   // unreadable sibling — let the parser surface it later
+
+            foreach (Match m in UseClauseRe.Matches(source))
+            {
+                var lib = m.Groups[1].Value;
+                var pkg = m.Groups[2].Value;
+
+                // STD is intrinsic — the parser handles std.standard / std.textio
+                // without LibraryCompiler help.
+                if (string.Equals(lib, "STD", StringComparison.OrdinalIgnoreCase)) continue;
+
+                // WORK = current project. Sibling files are parsed directly,
+                // so there's nothing to compile through LibraryCompiler.
+                if (string.Equals(lib, "WORK", StringComparison.OrdinalIgnoreCase)) continue;
+
+                if (string.Equals(lib, "IEEE", StringComparison.OrdinalIgnoreCase))
+                {
+                    // For IEEE.<pkg>.all the resolver entry is keyed on the
+                    // package name (std_logic_1164 / numeric_std / …).
+                    requestedPackages.Add(pkg);
+                }
+                else
+                {
+                    // Single-segment user library naming: the user's plugin
+                    // file-stem becomes both the library and the package
+                    // entry the resolver knows. Track the original library
+                    // name so the diagnostic mentions what the user wrote.
+                    declaredLibs.Add(lib);
+                    requestedPackages.Add(lib);
+                }
+            }
+        }
+
+        if (requestedPackages.Count == 0) return;
+
+        // Validate every requested package against the resolver before
+        // dispatching the build. Anything unknown halts the build with a
+        // user-targeted message — at that point we genuinely don't know
+        // what symbols the library would expose.
+        var resolver = _libraryCompiler.Resolver;
+        var unknown  = requestedPackages
+            .Where(name => resolver.Resolve(name) is null)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (unknown.Count > 0)
+        {
+            var first = unknown[0];
+            // Phrase the message with the library segment when the user
+            // wrote a non-IEEE clause; that's what they'll search for in
+            // the editor when they go fix the import.
+            var blame = declaredLibs.Contains(first) ? first : first;
+            throw new Exception(
+                $"Library '{blame}' not found. Import it under " +
+                $"Settings → Libraries before building, or remove the " +
+                $"corresponding `use {blame}.…` clause.");
+        }
+
+        var compiled = _libraryCompiler
+            .CompileAsync(requestedPackages, BuildExecutionMode.Linear)
+            .GetAwaiter().GetResult();
+
+        foreach (var lib in compiled)
+        {
+            foreach (var sym in lib.Functions)
+            {
+                if (sym.Kind != LibrarySymbolKind.Function && sym.Kind != LibrarySymbolKind.Procedure)
+                    continue;
+                FunctionRegistry.Instance.Register(new FunctionDefinition
+                {
+                    Name        = sym.Name,
+                    PackageName = lib.LibraryName,
+                    IsPure      = sym.Kind == LibrarySymbolKind.Function
+                });
+            }
+        }
+    }
+
+    /// <summary>
+    /// Lists every VHDL source file under <paramref name="basePath"/> (recursive)
+    /// or, when <paramref name="basePath"/> is null/missing, falls back to
+    /// just the file currently being built. Returns absolute paths.
+    /// </summary>
+    private static IEnumerable<string> EnumerateProjectVhdlFiles(string buildingFilePath, string? basePath)
+    {
+        if (!string.IsNullOrEmpty(basePath) && Directory.Exists(basePath))
+        {
+            IEnumerable<string> files;
+            try
+            {
+                files = Directory.EnumerateFiles(basePath, "*.*", SearchOption.AllDirectories)
+                                 .Where(p =>
+                                     p.EndsWith(".vhd",  StringComparison.OrdinalIgnoreCase) ||
+                                     p.EndsWith(".vhdl", StringComparison.OrdinalIgnoreCase));
+            }
+            catch
+            {
+                files = new[] { buildingFilePath };
+            }
+            foreach (var f in files) yield return f;
+        }
+        else
+        {
+            yield return buildingFilePath;
+        }
+    }
+
     /// <summary>
     /// Releases the resources used by the <see cref="ProgramBuilder"/> class.
     /// Unsubscribes from all events and disposes managed resources.

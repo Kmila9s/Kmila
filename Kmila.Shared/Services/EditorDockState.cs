@@ -8,6 +8,8 @@ namespace Kmila.Shared.Services;
 public enum EditorTab
 {
     Entities,
+    Schematic,
+    Flow,
     Ports,
     Waveforms,
     Runs,
@@ -48,6 +50,11 @@ public class EditorDockState
         OnChange?.Invoke();
     }
 
+    /// <summary>
+    /// Selects which dock tab is currently shown. Also un-collapses the dock so
+    /// clicking a tab while collapsed feels responsive (the panel pops back open).
+    /// </summary>
+    /// <param name="tab">The tab to focus.</param>
     public void SetActive(EditorTab tab)
     {
         // Clicking a tab while the dock is collapsed should pop it open —
@@ -58,6 +65,7 @@ public class EditorDockState
         if (changed) OnChange?.Invoke();
     }
 
+    /// <summary>Flips the dock between collapsed (header-only) and expanded.</summary>
     public void ToggleCollapsed()
     {
         IsCollapsed = !IsCollapsed;

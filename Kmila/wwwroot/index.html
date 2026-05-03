@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#334155" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)" />
+    <meta name="format-detection" content="telephone=no" />
     <title>Kmila</title>
     <base href="/" />
     <script>
@@ -62,24 +65,37 @@
             } catch (e) { console.warn('[kmilaSetMonacoMarkers]', e); }
         };
 
-        // Dock grabber drag — shared with the Web host.
+        // Dock grabber drag — shared with the Web host. PointerEvents work
+        // across mouse + touch + pen with one code path; preventDefault keeps
+        // the page from scrolling underneath the drag on touch devices.
         window.kmilaDockDragStart = function (dotnetRef, startY) {
             var dockEl = document.querySelector('.kmila-dock');
             if (!dockEl) return;
             var startHeight = dockEl.getBoundingClientRect().height;
+            var moved = false;
             function onMove(ev) {
+                ev.preventDefault();
                 var delta = startY - ev.clientY;
-                var next  = Math.max(200, Math.min(1200, Math.round(startHeight + delta)));
+                if (Math.abs(delta) > 2) moved = true;
+                var next  = Math.max(160, Math.min(window.innerHeight - 80, Math.round(startHeight + delta)));
                 dotnetRef.invokeMethodAsync('OnGrabberMove', next);
             }
             function onUp() {
                 window.removeEventListener('pointermove', onMove);
                 window.removeEventListener('pointerup',   onUp);
+                window.removeEventListener('pointercancel', onUp);
+                if (window.matchMedia('(max-width: 768px)').matches && moved) {
+                    var h = dockEl.getBoundingClientRect().height;
+                    var vh = window.innerHeight;
+                    var snap = h < vh * 0.25 ? 'peek' : (h < vh * 0.66 ? 'half' : 'full');
+                    if (window.kmilaSetDockSnap) window.kmilaSetDockSnap(snap);
+                }
                 dotnetRef.invokeMethodAsync('OnGrabberUp').catch(() => {});
                 dotnetRef.dispose();
             }
-            window.addEventListener('pointermove', onMove);
+            window.addEventListener('pointermove', onMove, { passive: false });
             window.addEventListener('pointerup',   onUp);
+            window.addEventListener('pointercancel', onUp);
         };
 
         // Blob-based download helper (shared Web + MAUI). Used by Settings to
@@ -100,6 +116,84 @@
                 console.error('[kmilaDownloadText] failed', e);
                 return false;
             }
+        };
+
+        // ─── Editor tab drag-and-drop ───────────────────────────────────
+        // Real implementation lives in _content/Kmila.Shared/js/app.js using
+        // PointerEvents (touch + mouse + pen). Stubs here only act as a safety
+        // net during the brief moment between this inline script running and
+        // the real handlers being parsed.
+        if (typeof window.kmilaSetupTabDrag !== 'function') {
+            window.kmilaSetupTabDrag = function () { /* superseded */ };
+        }
+        if (typeof window.kmilaGetTabDrag !== 'function') {
+            window.kmilaGetTabDrag = function () { return { paneIdx: -1, tabIdx: -1 }; };
+        }
+        if (typeof window.kmilaClearTabDrag !== 'function') {
+            window.kmilaClearTabDrag = function () { };
+        }
+
+        // Rasterises an SVG document to PNG via a canvas, then triggers a
+        // download. `scale` lets the caller hit roughly N× the embedded
+        // dimensions for crispness in print/docs (2 ≈ retina, 3 ≈ near-print).
+        // Returns a Promise that resolves true/false so callers can await
+        // it and surface failure toasts. The Image-from-data-URL pattern is
+        // the only way to round-trip SVG → canvas without tainting the
+        // canvas (works in MAUI WebView and modern Chromium/WebKit alike).
+        window.kmilaDownloadPng = function (fileName, svgText, scale) {
+            return new Promise(function (resolve) {
+                try {
+                    var s = (typeof scale === 'number' && scale > 0) ? scale : 2;
+                    // Parse the dimensions out of the SVG root so the canvas
+                    // matches; falls back to 1200×400 if the SVG didn't carry
+                    // explicit width/height (defensive — the exporter always
+                    // emits them today).
+                    var widthMatch  = /\bwidth="(\d+)"/.exec(svgText);
+                    var heightMatch = /\bheight="(\d+)"/.exec(svgText);
+                    var w = widthMatch  ? parseInt(widthMatch[1], 10)  : 1200;
+                    var h = heightMatch ? parseInt(heightMatch[1], 10) : 400;
+
+                    var canvas = document.createElement('canvas');
+                    canvas.width  = Math.max(1, Math.floor(w * s));
+                    canvas.height = Math.max(1, Math.floor(h * s));
+                    var ctx = canvas.getContext('2d');
+                    ctx.scale(s, s);
+
+                    var img = new Image();
+                    img.onload = function () {
+                        try {
+                            ctx.drawImage(img, 0, 0);
+                            canvas.toBlob(function (blob) {
+                                if (!blob) { resolve(false); return; }
+                                var url = URL.createObjectURL(blob);
+                                var a = document.createElement('a');
+                                a.href = url;
+                                a.download = fileName || 'kmila-waveform.png';
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+                                resolve(true);
+                            }, 'image/png');
+                        } catch (drawErr) {
+                            console.error('[kmilaDownloadPng] draw/blob failed', drawErr);
+                            resolve(false);
+                        }
+                    };
+                    img.onerror = function (e) {
+                        console.error('[kmilaDownloadPng] image load failed', e);
+                        resolve(false);
+                    };
+                    // Use a Blob URL rather than a data: URL so very large SVGs
+                    // (multi-thousand transitions) don't trip the 2 MB data-URL
+                    // ceiling some engines impose.
+                    var svgBlob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
+                    img.src = URL.createObjectURL(svgBlob);
+                } catch (e) {
+                    console.error('[kmilaDownloadPng] failed', e);
+                    resolve(false);
+                }
+            });
         };
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -124,9 +218,13 @@
         }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-bs-theme'] });
         window.addEventListener('load', () => window.kmilaMermaidRun());
     </script>
-    <link rel="stylesheet" href="_content/Kmila.Shared/css/tokens.css" />
-    <link rel="stylesheet" href="_content/Kmila.Shared/app.css" />
-    <link rel="stylesheet" href="_content/Kmila.Shared/css/pages.css" />
+    <!-- Bump the version query string when shipping CSS changes; see the
+         note in Kmila.Web/Components/App.razor — browsers were holding the
+         cached pages.css across the ProfileMenu refactor and the menu
+         appeared completely unstyled until a manual hard-refresh. -->
+    <link rel="stylesheet" href="_content/Kmila.Shared/css/tokens.css?v=2" />
+    <link rel="stylesheet" href="_content/Kmila.Shared/app.css?v=2" />
+    <link rel="stylesheet" href="_content/Kmila.Shared/css/pages.css?v=2" />
     <link rel="stylesheet" href="app.css" />
     <link rel="stylesheet" href="Kmila.styles.css" />
     <link rel="icon" href="data:,">

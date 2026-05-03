@@ -146,6 +146,11 @@ public class SimulationParameters
         IsDirty = true;
     }
 
+    /// <summary>
+    /// Marks the parameter set as freshly loaded from a saved configuration.
+    /// Stamps the configuration name and clears <see cref="IsDirty"/>.
+    /// </summary>
+    /// <param name="name">Name of the configuration being loaded.</param>
     public void MarkLoaded(string name)
     {
         LoadedName = name;
@@ -153,6 +158,11 @@ public class SimulationParameters
         OnChange?.Invoke();
     }
 
+    /// <summary>
+    /// Marks the parameter set as just saved under the given name. Clears
+    /// <see cref="IsDirty"/> so the "unsaved changes" indicator drops.
+    /// </summary>
+    /// <param name="name">Name under which the configuration was saved.</param>
     public void MarkSaved(string name)
     {
         LoadedName = name;
@@ -160,6 +170,10 @@ public class SimulationParameters
         OnChange?.Invoke();
     }
 
+    /// <summary>
+    /// Clears the loaded-configuration link (so the next save creates a new
+    /// entry) and resets the dirty flag. No-op when neither is set.
+    /// </summary>
     public void ClearLoaded()
     {
         if (LoadedName == null && !IsDirty) return;
@@ -168,6 +182,8 @@ public class SimulationParameters
         OnChange?.Invoke();
     }
 
+    /// <summary>Updates the simulation duration in <see cref="Scale"/> units. Marks dirty.</summary>
+    /// <param name="time">New duration value; comparison is by exact equality.</param>
     public void SetTime(int time)
     {
         if (Time == time) return;
@@ -176,6 +192,8 @@ public class SimulationParameters
         OnChange?.Invoke();
     }
 
+    /// <summary>Updates the simulation timescale (ns / µs / ms / …). Marks dirty.</summary>
+    /// <param name="scale">New time-unit scale.</param>
     public void SetScale(TimeScale scale)
     {
         if (Scale == scale) return;
@@ -209,6 +227,8 @@ public class SimulationParameters
             ? ClockOverrideMhz.Value
             : Math.Max(1, fpgaDefault);
 
+    /// <summary>Transitions the run state machine. Does not mark dirty.</summary>
+    /// <param name="state">New simulation state (Idle/Building/Running/Paused/Done/Error).</param>
     public void SetState(SimState state)
     {
         if (State == state) return;
@@ -216,12 +236,22 @@ public class SimulationParameters
         OnChange?.Invoke();
     }
 
+    /// <summary>
+    /// Updates the [0..100] progress percentage. Clamped server-side so progress
+    /// reporters can pass raw fractions or percents without checking bounds.
+    /// </summary>
+    /// <param name="progress">Progress percent in [0, 100].</param>
     public void SetProgress(double progress)
     {
         Progress = Math.Clamp(progress, 0, 100);
         OnChange?.Invoke();
     }
 
+    /// <summary>
+    /// Inserts or updates the stimulus configuration for a port. Empty
+    /// <c>PortName</c> is ignored. Marks the parameter set dirty.
+    /// </summary>
+    /// <param name="config">Stimulus configuration; <c>PortName</c> is the dictionary key.</param>
     public void UpsertPortMoment(PortMomentConfiguration config)
     {
         if (string.IsNullOrEmpty(config.PortName)) return;
@@ -230,6 +260,7 @@ public class SimulationParameters
         OnChange?.Invoke();
     }
 
+    /// <summary>Removes every port stimulus and marks dirty. No-op when already empty.</summary>
     public void ClearPortMoments()
     {
         if (PortMoments.Count == 0) return;

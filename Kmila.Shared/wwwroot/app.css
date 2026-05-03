@@ -427,33 +427,20 @@ a:hover, .btn-link:hover {
    App shell — content area
    ---------------------------------------------------------------------------- */
 
+/* All routes share the same article sizing — a centred 1440 px reading
+   column with consistent vertical padding. Logs is the reference page;
+   Editor and Settings used to opt into a full-bleed variant but the
+   inconsistency hurt UI/UX, so they now inherit this single rule.
+
+   `min-width: 0` breaks flex's default `min-width: auto` so a wide
+   descendant (e.g. the Editor's WaveformViewer SVG at max zoom) can't
+   stretch the article past its grid column. */
 .content {
     padding-top: var(--space-5);
     padding-bottom: var(--space-6);
     max-width: var(--content-max);
     margin: 0 auto;
-    /* The article is a flex item of .kmila-shell__main. Flex items default
-       to `min-width: auto`, meaning "at least as wide as my content". When
-       the Editor's WaveformViewer renders an inline SVG 24 000 px wide at
-       max zoom, that intrinsic width bubbles all the way up through the
-       dock and the editor-page and lets the article grow past the grid
-       column — the whole shell shifts sideways. Setting `min-width: 0`
-       breaks the chain; every descendant honors its own overflow rules. */
     min-width: 0;
-}
-
-/* The Editor page is a workbench — wants every pixel of horizontal space.
-   Two triggers, belt-and-braces:
-     • `.content--wide` — applied by MainLayout when the current route is
-       `/editor/...`. Deterministic, fires on route change.
-     • `:has(.editor-page)` — CSS-level fallback for cases where the outer
-       article happens to contain an editor-page (e.g. nested route scenarios).
-   `!important` is needed because Bootstrap's `px-4` utility ships with it. */
-.content--wide,
-.content:has(.editor-page),
-html[data-route="editor"] .content {
-    max-width: none !important;
-    padding: var(--space-3) var(--space-3) var(--space-4) !important;
 }
 
 

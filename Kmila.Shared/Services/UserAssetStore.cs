@@ -1,4 +1,5 @@
 using System.Text.Json;
+using LibraryCompiler.Repositories;
 using Microsoft.Extensions.Logging;
 
 namespace Kmila.Shared.Services;
@@ -42,6 +43,14 @@ public class UserAssetStore
 
     public string UserDevicesDir       => Path.Combine(_root, "UserAssets", "Devices");
     public string UserDictionariesDir  => Path.Combine(_root, "UserAssets", "Dictionaries");
+    /// <summary>
+    /// User-imported VHDL library packs. Same .vhd / .vhdl files the
+    /// student would feed to a real toolchain — file-stem becomes the
+    /// library name surfaced in <c>use my_pkg.x.all</c>.
+    /// </summary>
+    public string UserLibrariesDir     => Path.Combine(_root, "UserAssets", "Libraries");
+    /// <summary>Persistent cache for compiled library artifacts, written by <c>FileSystemBlobStore</c>.</summary>
+    public string LibraryCacheDir      => Path.Combine(_root, "UserAssets", "LibraryCache");
 
     private void EnsureDirs()
     {
@@ -49,6 +58,8 @@ public class UserAssetStore
         {
             Directory.CreateDirectory(UserDevicesDir);
             Directory.CreateDirectory(UserDictionariesDir);
+            Directory.CreateDirectory(UserLibrariesDir);
+            Directory.CreateDirectory(LibraryCacheDir);
         }
         catch (Exception ex)
         {
@@ -253,6 +264,278 @@ public class UserAssetStore
         }
         catch { /* best-effort */ }
         return fallback;
+    }
+
+    // ------------------------------------------------------------------
+    // VHDL libraries (plugins)
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Absolute paths of every <c>.vhd</c> / <c>.vhdl</c> file dropped
+    /// under <see cref="UserLibrariesDir"/>. Sub-directories are NOT
+    /// recursed: one library per top-level file is the v1 convention.
+    /// </summary>
+    public List<string> ListUserLibraryPaths()
+    {
+        try
+        {
+            if (!Directory.Exists(UserLibrariesDir)) return new();
+            return Directory.EnumerateFiles(UserLibrariesDir, "*.*", SearchOption.TopDirectoryOnly)
+                            .Where(p =>
+                                p.EndsWith(".vhd",  StringComparison.OrdinalIgnoreCase) ||
+                                p.EndsWith(".vhdl", StringComparison.OrdinalIgnoreCase))
+                            .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
+                            .ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[UserAssetStore] Failed to list user library files");
+            return new();
+        }
+    }
+
+    /// <summary>
+    /// Adapts <see cref="ListUserLibraryPaths"/> into the LibraryCompiler's
+    /// input shape. One physical <c>.vhd</c> file can declare multiple
+    /// <c>package X is … end;</c> blocks; each becomes its own resolvable
+    /// library. We encode the owning file plus the package selector into
+    /// <see cref="LibrarySource.SourceKey"/> as <c>{abs-path}#package={X}</c>;
+    /// the host's <c>OpenLibrarySource</c> callback parses the fragment and
+    /// hands back just the bytes inside that package block so each compiled
+    /// artifact has a tight, content-hashable byte range.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When a file contains no <c>package</c> declaration, we fall back to
+    /// the v0 convention (one library per file, library name = file stem,
+    /// SourceKey = absolute path with no fragment). Authors who treat each
+    /// file as one package don't need to do anything different.
+    /// </para>
+    /// <para>
+    /// Dependencies between user libraries are not declared here — the
+    /// orchestrator's resolver tolerates dangling deps and the user can
+    /// always split declarations across files when ordering matters.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<LibrarySource> ListUserLibrarySources()
+    {
+        var paths = ListUserLibraryPaths();
+        var sources = new List<LibrarySource>();
+        foreach (var p in paths)
+        {
+            string text;
+            try { text = File.ReadAllText(p); }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[UserAssetStore] Failed to read user library {Path}", p);
+                continue;
+            }
+
+            var packageNames = ExtractPackageNames(text).ToList();
+            if (packageNames.Count == 0)
+            {
+                // No `package X is` declaration found — treat the entire
+                // file as a single anonymous library named after its stem.
+                var stem = Path.GetFileNameWithoutExtension(p);
+                if (!string.IsNullOrWhiteSpace(stem))
+                {
+                    sources.Add(new LibrarySource(
+                        LibraryName: stem,
+                        Vendor:      "WORK",
+                        SourceKey:   p,
+                        DependsOn:   Array.Empty<string>()));
+                }
+                continue;
+            }
+
+            foreach (var pkg in packageNames)
+            {
+                sources.Add(new LibrarySource(
+                    LibraryName: pkg,
+                    Vendor:      "WORK",
+                    SourceKey:   $"{p}#package={pkg}",
+                    DependsOn:   Array.Empty<string>()));
+            }
+        }
+        return sources;
+    }
+
+    /// <summary>
+    /// Imports a <c>.vhd</c> / <c>.vhdl</c> stream as a new user library
+    /// pack. Validates that the file declares at least one <c>entity</c>,
+    /// <c>package</c>, or top-level <c>function</c> / <c>procedure</c> so a
+    /// random text file won't be silently accepted. Returns the saved
+    /// path on success.
+    /// </summary>
+    public async Task<string?> ImportLibraryAsync(Stream source, string originalFileName)
+    {
+        var safeName = SanitizeLibraryFileName(originalFileName);
+        if (string.IsNullOrEmpty(safeName)) return null;
+
+        var target = Path.Combine(UserLibrariesDir, safeName);
+        try
+        {
+            using var ms = new MemoryStream();
+            await source.CopyToAsync(ms);
+            ms.Position = 0;
+
+            // Cheap validation — sniff for any VHDL declaration. We don't
+            // run a full parser here; that's the LibraryCompiler's job at
+            // build time.
+            var text = System.Text.Encoding.UTF8.GetString(ms.ToArray());
+            if (!System.Text.RegularExpressions.Regex.IsMatch(
+                    text,
+                    @"(?im)\b(entity|package|function|procedure)\s+[a-z_]"))
+            {
+                _logger.LogWarning("[UserAssetStore] Rejected library import — no VHDL declarations: {Name}", safeName);
+                return null;
+            }
+
+            ms.Position = 0;
+            using var file = File.Create(target);
+            await ms.CopyToAsync(file);
+
+            OnChange?.Invoke();
+            _logger.LogInformation("[UserAssetStore] Imported library {Path}", target);
+            return target;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[UserAssetStore] Library import failed for {Name}", safeName);
+            return null;
+        }
+    }
+
+    /// <summary>Deletes a user library file by base name (ignores directory component).</summary>
+    public bool DeleteLibrary(string fileName)
+    {
+        try
+        {
+            var name = Path.GetFileName(fileName);
+            var path = Path.Combine(UserLibrariesDir, name);
+            if (!File.Exists(path)) return false;
+            File.Delete(path);
+            OnChange?.Invoke();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[UserAssetStore] Delete library failed: {Name}", fileName);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Returns the package names declared in <paramref name="filePath"/> for
+    /// the Settings UI's library inspector. Empty when the file declares
+    /// no packages (file-stem fallback applies at compile time).
+    /// </summary>
+    public static IReadOnlyList<string> ListPackagesInFile(string filePath)
+    {
+        try
+        {
+            var text = File.ReadAllText(filePath);
+            return ExtractPackageNames(text).ToList();
+        }
+        catch
+        {
+            return Array.Empty<string>();
+        }
+    }
+
+    private static string? SanitizeLibraryFileName(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return null;
+        var name = Path.GetFileName(input);
+        foreach (var c in Path.GetInvalidFileNameChars()) name = name.Replace(c, '_');
+
+        // Accept .vhd or .vhdl; default to .vhd if the import had no
+        // recognised extension so the file lands somewhere predictable.
+        var lower = name.ToLowerInvariant();
+        if (!lower.EndsWith(".vhd") && !lower.EndsWith(".vhdl")) name += ".vhd";
+        return name;
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex PackageDeclRe =
+        new(@"(?im)^\s*package\s+([a-z_][a-z0-9_]*)\s+is\b",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>
+    /// Returns every <c>package X is</c> name declared in <paramref name="vhdlSource"/>.
+    /// Skips <c>package body</c> declarations — those don't introduce a
+    /// new library, they fill in an already-declared one.
+    /// </summary>
+    private static IEnumerable<string> ExtractPackageNames(string vhdlSource)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (System.Text.RegularExpressions.Match m in PackageDeclRe.Matches(vhdlSource))
+        {
+            var name = m.Groups[1].Value;
+            // Suppress duplicates and the legacy `package body X is`
+            // pattern: we only care about the declaration that introduces
+            // the package's symbols.
+            if (string.Equals(name, "body", StringComparison.OrdinalIgnoreCase)) continue;
+            if (seen.Add(name)) yield return name;
+        }
+    }
+
+    /// <summary>
+    /// Reads the bytes belonging to <paramref name="packageName"/> inside the file
+    /// <paramref name="filePath"/>. When the file contains a single package or no
+    /// package declarations, returns the full file. When several packages
+    /// share the file, returns the substring from <c>package X is</c> through
+    /// the matching <c>end</c>. The trim is conservative — better to ship
+    /// a few extra lines than miss a function declaration.
+    /// </summary>
+    public static byte[]? ReadPackageBytes(string filePath, string? packageName)
+    {
+        if (!File.Exists(filePath)) return null;
+        byte[] all;
+        try { all = File.ReadAllBytes(filePath); }
+        catch { return null; }
+
+        if (string.IsNullOrEmpty(packageName)) return all;
+
+        var text = System.Text.Encoding.UTF8.GetString(all);
+        // `package <name> is` opens the block; the matching close is
+        // `end [<name>]?;` — VHDL allows the trailing identifier or just
+        // `end;`. Two regexes wired with a positional anchor keep the
+        // body extraction simple.
+        var startRe = new System.Text.RegularExpressions.Regex(
+            $@"(?im)^\s*package\s+{System.Text.RegularExpressions.Regex.Escape(packageName)}\s+is\b",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+        var startMatch = startRe.Match(text);
+        if (!startMatch.Success) return all; // fall back to whole file
+
+        var afterStart = text.Substring(startMatch.Index);
+        // Match `end` followed by optional package name and a semicolon.
+        var endRe = new System.Text.RegularExpressions.Regex(
+            $@"(?im)^\s*end(?:\s+{System.Text.RegularExpressions.Regex.Escape(packageName)})?\s*;",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+        var endMatch = endRe.Match(afterStart);
+        if (!endMatch.Success) return all; // mis-shaped — better to overshoot than miss symbols
+
+        var slice = afterStart.Substring(0, endMatch.Index + endMatch.Length);
+        return System.Text.Encoding.UTF8.GetBytes(slice);
+    }
+
+    /// <summary>
+    /// Splits a <c>SourceKey</c> of the form <c>{abs-path}#package={X}</c>
+    /// into its parts. Returns the raw path and a null package name when
+    /// no fragment is present (single-package files).
+    /// </summary>
+    public static (string Path, string? Package) ParseLibrarySourceKey(string sourceKey)
+    {
+        if (string.IsNullOrEmpty(sourceKey)) return (sourceKey, null);
+        var idx = sourceKey.IndexOf('#');
+        if (idx < 0) return (sourceKey, null);
+
+        var path = sourceKey.Substring(0, idx);
+        var frag = sourceKey.Substring(idx + 1);
+        const string prefix = "package=";
+        if (frag.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            return (path, frag.Substring(prefix.Length));
+        return (path, null);
     }
 
     // ------------------------------------------------------------------

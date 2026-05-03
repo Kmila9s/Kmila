@@ -65,7 +65,7 @@
         </button>
     </nav>
 
-    <div class="kmila-dock__panel"
+    <div class="kmila-dock__panel kmila-dock__panel--@DockState.Active.ToString().ToLowerInvariant()"
          id="dock-panel"
          role="tabpanel"
          aria-labelledby="@($"dock-tab-{DockState.Active}")"
@@ -75,6 +75,14 @@
             case EditorTab.Entities:
                 @if (EntitiesContent != null) { @EntitiesContent }
                 else { @RenderEmpty(IconName.Diagram3, "EDITOR_EMPTY_ENTITIES") }
+                break;
+            case EditorTab.Schematic:
+                @if (SchematicContent != null) { @SchematicContent }
+                else { @RenderEmpty(IconName.Diagram3, "EDITOR_EMPTY_SCHEMATIC") }
+                break;
+            case EditorTab.Flow:
+                @if (FlowContent != null) { @FlowContent }
+                else { @RenderEmpty(IconName.Diagram2, "EDITOR_EMPTY_FLOW") }
                 break;
             case EditorTab.Ports:
                 @if (PortsContent != null) { @PortsContent }
@@ -102,6 +110,8 @@
 
 @code {
     [Parameter] public RenderFragment? EntitiesContent { get; set; }
+    [Parameter] public RenderFragment? SchematicContent { get; set; }
+    [Parameter] public RenderFragment? FlowContent { get; set; }
     [Parameter] public RenderFragment? PortsContent { get; set; }
     [Parameter] public RenderFragment? WaveformsContent { get; set; }
     [Parameter] public RenderFragment? RunsContent { get; set; }
@@ -122,6 +132,8 @@
     private static readonly TabDef[] _tabs = new[]
     {
         new TabDef(EditorTab.Entities,  IconName.Diagram3Fill,     "EDITOR_ENTITIES"),
+        new TabDef(EditorTab.Schematic, IconName.Diagram3,     "EDITOR_SCHEMATIC"),
+        new TabDef(EditorTab.Flow,      IconName.Diagram2,         "EDITOR_FLOW"),
         new TabDef(EditorTab.Ports,     IconName.Plugin,           "EDITOR_TAB_PORTS"),
         new TabDef(EditorTab.Waveforms, IconName.GraphUp,          "EDITOR_WAVEFORMS"),
         new TabDef(EditorTab.Runs,      IconName.ClockHistory,     "EDITOR_TAB_RUNS"),
@@ -134,6 +146,11 @@
     private const string HEIGHT_KEY    = "kmila-dock-height";
     private bool _hydrated;
 
+    // Reused across drag sessions — the previous implementation called
+    // DotNetObjectReference.Create on every pointerdown without disposing,
+    // leaking the component instance into JS-side roots after each drag.
+    private Microsoft.JSInterop.DotNetObjectReference<EditorDock>? _selfRef;
+
     /// <summary>
     /// Mouse/pointer drag start on the grabber. Subsequent moves write the
     /// new height into <see cref="EditorDockState"/> via a JS helper; on
@@ -143,9 +160,8 @@
     {
         try
         {
-            await JS.InvokeVoidAsync("kmilaDockDragStart",
-                Microsoft.JSInterop.DotNetObjectReference.Create(this),
-                e.ClientY);
+            _selfRef ??= Microsoft.JSInterop.DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("kmilaDockDragStart", _selfRef, e.ClientY);
         }
         catch { /* JS missing — no-op */ }
     }
@@ -248,6 +264,8 @@
     {
         DockState.OnChange -= OnStateChanged;
         Traductor.StaticOnLangChanged -= OnStateChanged;
+        _selfRef?.Dispose();
+        _selfRef = null;
     }
 
     private RenderFragment RenderEmpty(IconName icon, string key) => @<div class="kmila-dock__empty">

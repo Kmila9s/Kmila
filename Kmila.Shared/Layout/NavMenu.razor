@@ -19,8 +19,10 @@
 @inject Kmila.Shared.Services.LessonProgressStore LearnProgress
 @inject Kmila.Shared.Services.LessonCatalog LessonCatalog
 @inject Kmila.Shared.Services.SimulationParameters Sim
+@inject Kmila.Shared.Services.Practice.PracticeCatalog PracticeCatalog
+@inject Kmila.Shared.Services.Practice.PracticeAttemptStore PracticeAttempts
 
-<aside class="kmila-sidebar @_rootClass" aria-label="Main navigation">
+<aside class="kmila-sidebar @_rootClass" aria-label="@Traductor.T("A11Y_MAIN_NAV")">
     @* Top row: logo + wordmark + version chip *@
     <a href="/" class="kmila-sidebar__brand" @onclick="OnNavClicked">
         <img src="_content/Kmila.Shared/img/Logo.png" alt="Kmila" class="kmila-sidebar__logo" />
@@ -67,6 +69,21 @@
                 {
                     <span class="kmila-nav-item__badge" title="@string.Format(Traductor.T("LEARN_YOUR_PROGRESS_FMT"), _learnDone, _learnTotal)">
                         @_learnDone / @_learnTotal
+                    </span>
+                }
+            </a>
+
+            <a href="/practice"
+               class="kmila-nav-item @ActiveClass("/practice", exact: false)"
+               @onclick="OnNavClicked"
+               data-tooltip="@Traductor.T("NAV_PRACTICE")">
+                <span class="kmila-nav-item__indicator"></span>
+                <Icon Name="IconName.PuzzleFill" Class="kmila-nav-item__icon" />
+                <span class="kmila-nav-item__label">@Traductor.T("NAV_PRACTICE")</span>
+                @if (_practiceTotal > 0)
+                {
+                    <span class="kmila-nav-item__badge" title="@string.Format(Traductor.T("PRACTICE_NAV_BADGE_FMT"), _practiceSolved, _practiceTotal)">
+                        @_practiceSolved / @_practiceTotal
                     </span>
                 }
             </a>
@@ -181,6 +198,9 @@
     private int _learnDone;
     private int _learnTotal;
 
+    private int _practiceSolved;
+    private int _practiceTotal;
+
     private string _currentPath = "/";
 
     private string _rootClass =>
@@ -196,10 +216,12 @@
         Recent.OnChange += OnRecentChanged;
         LearnProgress.OnChange += OnLearnProgressChanged;
         Sim.OnChange += OnSimChanged;
+        PracticeAttempts.OnChange += OnPracticeChanged;
 
         _currentPath = new Uri(NavigationManager.Uri).AbsolutePath;
         await LoadProjectsAsync();
         await LoadLearnProgressAsync();
+        await LoadPracticeProgressAsync();
     }
 
     private async Task LoadLearnProgressAsync()
@@ -221,6 +243,33 @@
     private async void OnLearnProgressChanged()
     {
         await LoadLearnProgressAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Hydrates <see cref="_practiceSolved"/> / <see cref="_practiceTotal"/>.
+    /// Falls back to (0, 0) on any failure so the nav doesn't break if the
+    /// catalog manifest is missing or the DB is locked at boot.
+    /// </summary>
+    private async Task LoadPracticeProgressAsync()
+    {
+        try
+        {
+            var meta = await PracticeCatalog.ListAsync();
+            _practiceTotal  = meta.Count;
+            _practiceSolved = await PracticeAttempts.TotalSolvedAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[NavMenu] Failed to load practice progress");
+            _practiceTotal = 0;
+            _practiceSolved = 0;
+        }
+    }
+
+    private async void OnPracticeChanged(string _)
+    {
+        await LoadPracticeProgressAsync();
         await InvokeAsync(StateHasChanged);
     }
 
@@ -361,5 +410,6 @@
         Recent.OnChange -= OnRecentChanged;
         LearnProgress.OnChange -= OnLearnProgressChanged;
         Sim.OnChange -= OnSimChanged;
+        PracticeAttempts.OnChange -= OnPracticeChanged;
     }
 }

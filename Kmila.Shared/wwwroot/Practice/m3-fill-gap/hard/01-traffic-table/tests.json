@@ -1,0 +1,35 @@
+{
+  "tests": [
+    { "id": "t1", "visible": true,  "descriptions": { "en": "Reset 25 ns then free run — observe 00→01→10→00 cycle", "es": "Reset 25 ns y luego ejecución libre — observa el ciclo 00→01→10→00" }, "durationMicros": 3, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]}
+    ]},
+    { "id": "t2", "visible": false, "descriptions": { "en": "Held in reset — state stays at 00", "es": "Reset mantenido — el estado permanece en 00" }, "durationMicros": 1, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0, "scale": "NS", "value": "1" }
+      ]}
+    ]},
+    { "id": "t3", "visible": false, "descriptions": { "en": "Mid-run reset re-arms the FSM", "es": "Reset a mitad reinicia la FSM" }, "durationMicros": 3, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,    "scale": "NS", "value": "1" },
+        { "time": 25,   "scale": "NS", "value": "0" },
+        { "time": 700,  "scale": "NS", "value": "1" },
+        { "time": 725,  "scale": "NS", "value": "0" }
+      ]}
+    ]},
+    { "id": "t4", "visible": false, "descriptions": { "en": "Late release of reset", "es": "Liberación tardía del reset" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,   "scale": "NS", "value": "1" },
+        { "time": 200, "scale": "NS", "value": "0" }
+      ]}
+    ]},
+    { "id": "t5", "visible": false, "descriptions": { "en": "Long run — multiple cycles 00→01→10→00", "es": "Ejecución larga — varios ciclos 00→01→10→00" }, "durationMicros": 3, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]}
+    ]}
+  ]
+}

@@ -23,6 +23,8 @@
 
 @using Kmila.Shared.Models
 @inject Microsoft.Extensions.Logging.ILogger<Kmila.Shared.Components.WaveformViewer> Logger
+@inject Microsoft.JSInterop.IJSRuntime JS
+@implements IDisposable
 
 @if (_compareTracks != null && _compareTracks.Count >= 2)
 {
@@ -117,16 +119,24 @@ else if (Data != null && Data.Signals.Count > 0)
                 <span class="waveform-viewer__chip">@Data.Signals.Count @Traductor.T("WAVEFORM_SIGNALS")</span>
             </div>
             <div class="waveform-viewer__actions">
+                @* Zoom controls are disabled while a live simulation is
+                   driving the viewer — the trailing-window view doesn't
+                   pan, so changing the zoom on it would just move the
+                   visible slice off-screen. They re-enable automatically
+                   when the run ends and the viewer reverts to full-range. *@
                 <button type="button" class="btn btn-ghost btn-sm"
-                        @onclick="ZoomIn" aria-label="@Traductor.T("WAVEFORM_ZOOM_IN")" title="@Traductor.T("WAVEFORM_ZOOM_IN")">
+                        @onclick="ZoomIn" disabled="@IsLive"
+                        aria-label="@Traductor.T("WAVEFORM_ZOOM_IN")" title="@Traductor.T("WAVEFORM_ZOOM_IN")">
                     <Icon Name="IconName.ZoomIn" />
                 </button>
                 <button type="button" class="btn btn-ghost btn-sm"
-                        @onclick="ZoomOut" aria-label="@Traductor.T("WAVEFORM_ZOOM_OUT")" title="@Traductor.T("WAVEFORM_ZOOM_OUT")">
+                        @onclick="ZoomOut" disabled="@IsLive"
+                        aria-label="@Traductor.T("WAVEFORM_ZOOM_OUT")" title="@Traductor.T("WAVEFORM_ZOOM_OUT")">
                     <Icon Name="IconName.ZoomOut" />
                 </button>
                 <button type="button" class="btn btn-ghost btn-sm"
-                        @onclick="ZoomReset" aria-label="@Traductor.T("WAVEFORM_ZOOM_RESET")" title="@Traductor.T("WAVEFORM_ZOOM_RESET")">
+                        @onclick="ZoomReset" disabled="@IsLive"
+                        aria-label="@Traductor.T("WAVEFORM_ZOOM_RESET")" title="@Traductor.T("WAVEFORM_ZOOM_RESET")">
                     <Icon Name="IconName.ArrowCounterclockwise" />
                 </button>
                 <button type="button" class="btn btn-ghost btn-sm @(_showClock ? "" : "is-off")"
@@ -134,6 +144,12 @@ else if (Data != null && Data.Signals.Count > 0)
                         title="@Traductor.T(_showClock ? "WAVEFORM_HIDE_CLOCK" : "WAVEFORM_SHOW_CLOCK")"
                         aria-pressed="@_showClock">
                     <Icon Name="@(_showClock ? IconName.EyeFill : IconName.EyeSlash)" />
+                </button>
+                <button type="button" class="btn btn-outline-primary btn-sm"
+                        @onclick="OpenExportModalAsync" disabled="@IsLive"
+                        title="@Traductor.T("WAVEFORM_EXPORT_IMAGE")">
+                    <Icon Name="IconName.Image" />
+                    <span>@Traductor.T("WAVEFORM_EXPORT_IMAGE_SHORT")</span>
                 </button>
                 <button type="button" class="btn btn-primary btn-sm"
                         @onclick="HandleVcdExport" title="@Traductor.T("WAVEFORM_EXPORT_VCD")">
@@ -145,7 +161,10 @@ else if (Data != null && Data.Signals.Count > 0)
 
         <div class="waveform-viewer__body">
             <div class="waveform-grid">
-                @{ var trackWidthPx = _zoomWidth; }
+                @{
+                    var trackWidthPx = _zoomWidth;
+                    var (viewStartNs, viewEndNs) = GetViewBounds();
+                }
                 @for (int i = 0; i < Data.Signals.Count; i++)
                 {
                     var signal = Data.Signals[i];
@@ -163,7 +182,7 @@ else if (Data != null && Data.Signals.Count > 0)
                             }
                         </div>
                         <div class="waveform-row__track" style="width: @(trackWidthPx)px;">
-                            @((MarkupString)BuildTraceSvg(signal, trackWidthPx, color))
+                            @((MarkupString)BuildTraceSvg(signal, trackWidthPx, color, viewStartNs, viewEndNs))
                         </div>
                     </div>
                 }
@@ -172,7 +191,7 @@ else if (Data != null && Data.Signals.Count > 0)
                 <div class="waveform-row waveform-row--ruler">
                     <div class="waveform-row__label"></div>
                     <div class="waveform-row__track" style="width: @(trackWidthPx)px;">
-                        @((MarkupString)BuildRulerSvg(trackWidthPx))
+                        @((MarkupString)BuildRulerSvg(trackWidthPx, viewStartNs, viewEndNs))
                     </div>
                 </div>
             </div>
@@ -180,9 +199,34 @@ else if (Data != null && Data.Signals.Count > 0)
     </section>
 }
 
+@* Export modal — shared between live and static modes (only opens in static
+   mode; the toolbar button is disabled while IsLive). Mounted outside the
+   conditional branches above so it survives every render. *@
+<Modal @ref="_exportModal" Title="@Traductor.T("EXPORT_MODAL_TITLE")" />
+
 @code {
     [Parameter] public WaveformData? Data { get; set; }
     [Parameter] public EventCallback<string> OnExportVcd { get; set; }
+
+    /// <summary>
+    /// When true, the viewer renders only a trailing time window of fixed
+    /// duration (<see cref="LiveWindowNs"/>) so that as new transitions
+    /// arrive from a running simulation the X-axis stays at a constant
+    /// scale and the trace appears to scroll right — instead of every
+    /// existing transition shrinking to fit a growing total time. Once
+    /// the simulation ends and this flips back to false the viewer drops
+    /// the clip and shows the full run, at which point the zoom / scroll
+    /// controls behave as they always have.
+    /// </summary>
+    [Parameter] public bool IsLive { get; set; }
+
+    /// <summary>
+    /// Trailing window length while <see cref="IsLive"/> is true. 10 µs
+    /// fits the sample design's interesting features (the bit6 ripple
+    /// period is ~2.5 µs, and the enable pause window is 5 µs) without
+    /// dropping frame rate when the bottom bits are toggling fast.
+    /// </summary>
+    private const long LiveWindowNs = 10_000;
 
     /// <summary>
     /// Multi-snapshot compare mode. When non-null and populated with ≥2
@@ -198,10 +242,12 @@ else if (Data != null && Data.Signals.Count > 0)
     /// <summary>
     /// Pre-materialised compare datasets — one entry per snapshot carrying
     /// the deserialised waveform + a stable colour. Re-derived on
-    /// parameter change via OnParametersSet.
+    /// parameter change via OnParametersSet, but cache hits by Id avoid
+    /// re-parsing the WaveformJson on every parent re-render (zoom changes,
+    /// language switches, sim-state ticks etc. used to thrash this).
     /// </summary>
     private List<CompareTrack>? _compareTracks;
-    private record CompareTrack(string Label, string Colour, WaveformData Data);
+    private record CompareTrack(int Id, string Label, string Colour, WaveformData Data);
 
     /// <summary>
     /// Palette used for compare overlays. Walks in order; N >= 2 needs ≥ 2
@@ -220,21 +266,64 @@ else if (Data != null && Data.Signals.Count > 0)
         "#ec4899"  // pink
     };
 
+    /// <summary>
+    /// Pan-zoom JS handle. Re-bound on the first render of either render branch
+    /// (compare vs single) so swapping modes still works. Body is the gesture
+    /// surface; the SVG strips inside still own their own zoom buttons.
+    /// </summary>
+    private int _panZoomId = -1;
+    private bool _panZoomBound;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Re-bind whenever the wrapper might have remounted.
+        if (_panZoomBound && _panZoomId > 0) return;
+        try
+        {
+            _panZoomId = await JS.InvokeAsync<int>("kmilaAttachPanZoom",
+                ".waveform-viewer__body",
+                new { targetSelector = ".waveform-grid", minScale = 0.5, maxScale = 4 });
+            _panZoomBound = _panZoomId > 0;
+        }
+        catch
+        {
+            // Prerender / no JS — toolbar zoom is still functional.
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_panZoomId > 0)
+        {
+            try { _ = JS.InvokeVoidAsync("kmilaDetachPanZoom", _panZoomId).AsTask(); }
+            catch { }
+        }
+    }
+
     protected override void OnParametersSet()
     {
         if (Snapshots != null && Snapshots.Count >= 2)
         {
-            _compareTracks = new List<CompareTrack>();
+            // Reuse previously-deserialised WaveformData by snapshot Id —
+            // FromJson on multi-MB payloads is the expensive step.
+            var prior = _compareTracks?.ToDictionary(t => t.Id) ?? new Dictionary<int, CompareTrack>();
+            var next = new List<CompareTrack>(Snapshots.Count);
             for (int i = 0; i < Snapshots.Count; i++)
             {
                 var s = Snapshots[i];
+                var colour = _comparePalette[i % _comparePalette.Length];
+                if (prior.TryGetValue(s.Id, out var hit))
+                {
+                    // Label and palette slot can shift between renders; keep
+                    // the cached Data and refresh the cheap fields.
+                    next.Add(hit with { Label = s.Label, Colour = colour });
+                    continue;
+                }
                 var wd = Kmila.Shared.Models.WaveformData.FromJson(s.WaveformJson);
                 if (wd == null) continue;
-                _compareTracks.Add(new CompareTrack(
-                    Label: s.Label,
-                    Colour: _comparePalette[i % _comparePalette.Length],
-                    Data: wd));
+                next.Add(new CompareTrack(s.Id, s.Label, colour, wd));
             }
+            _compareTracks = next;
         }
         else
         {
@@ -261,11 +350,39 @@ else if (Data != null && Data.Signals.Count > 0)
     private void ZoomReset() => _zoomWidth = BaseWidth;
 
     /// <summary>
-    /// Builds the SVG path + optional value labels for a single signal's
-    /// step-function trace. Returned as a raw HTML string so Blazor can
-    /// inject it without round-tripping through the component system.
+    /// Resolves the visible time window for the current render frame.
+    /// Live mode: trailing slice of fixed duration ending at the latest
+    /// observed time, with the start clamped to 0 and the end pinned to
+    /// at least <see cref="LiveWindowNs"/> so the early-run case (very
+    /// little data yet) still draws into a full-width axis instead of a
+    /// thin sliver. Static mode: the full simulation range, matching the
+    /// historical behaviour the zoom / scroll controls expect.
     /// </summary>
-    private string BuildTraceSvg(WaveformSignal signal, int widthPx, string color)
+    private (long startNs, long endNs) GetViewBounds()
+    {
+        long maxNs = (long)(Data?.TotalTicks ?? 0) * (Data?.TimescaleNs ?? 1);
+        if (!IsLive)
+            return (0, maxNs);
+
+        long endNs = Math.Max(maxNs, LiveWindowNs);
+        long startNs = Math.Max(0, endNs - LiveWindowNs);
+        return (startNs, endNs);
+    }
+
+    /// <summary>
+    /// Builds the SVG path + optional value labels for a single signal's
+    /// step-function trace, clipped to the visible time window
+    /// [<paramref name="viewStartNs"/>, <paramref name="viewEndNs"/>].
+    /// In live mode that window slides with the simulation; in static
+    /// mode it spans the full run. Transitions outside the window are
+    /// skipped, and the entry-level into the window is taken from the
+    /// most recent transition at or before <paramref name="viewStartNs"/>
+    /// so a partially-clipped signal still starts at its real level
+    /// rather than re-baselining to whatever its first stored transition
+    /// happens to be. Returned as raw HTML so Blazor injects it without
+    /// round-tripping through the component system.
+    /// </summary>
+    private string BuildTraceSvg(WaveformSignal signal, int widthPx, string color, long viewStartNs, long viewEndNs)
     {
         const int H = 40;         // row height in SVG units
         const int PadY = 4;       // vertical padding so strokes don't clip
@@ -276,8 +393,8 @@ else if (Data != null && Data.Signals.Count > 0)
         var sb = new System.Text.StringBuilder();
         sb.Append($"<svg class=\"waveform-svg\" viewBox=\"0 0 {widthPx} {H}\" preserveAspectRatio=\"none\" width=\"{widthPx}\" height=\"{H}\">");
 
-        var maxNs = (long)(Data?.TotalTicks ?? 0) * (Data?.TimescaleNs ?? 1);
-        if (maxNs <= 0 || signal.Transitions.Count == 0)
+        long spanNs = viewEndNs - viewStartNs;
+        if (spanNs <= 0 || signal.Transitions.Count == 0)
         {
             // Nothing to draw — render the baseline only so the row still
             // aligns visually with siblings.
@@ -286,7 +403,29 @@ else if (Data != null && Data.Signals.Count > 0)
             return sb.ToString();
         }
 
-        double X(long ns) => (double)ns / maxNs * widthPx;
+        double X(long ns) => (double)(ns - viewStartNs) / spanNs * widthPx;
+
+        // Find the index of the first transition strictly inside the window
+        // and remember the last transition at or before viewStartNs — that
+        // one fixes the entry-level so a partially-clipped signal starts
+        // at its real value rather than at whatever the first in-window
+        // transition happens to be.
+        int firstInside = signal.Transitions.Count;
+        WaveformTransition entry = signal.Transitions[0];
+        bool haveEntry = false;
+        for (int i = 0; i < signal.Transitions.Count; i++)
+        {
+            var t = signal.Transitions[i];
+            if (t.TimeNs <= viewStartNs)
+            {
+                entry = t;
+                haveEntry = true;
+                continue;
+            }
+            firstInside = i;
+            break;
+        }
+        if (!haveEntry) entry = signal.Transitions[0];
 
         if (signal.DataType == "std_logic")
         {
@@ -308,14 +447,15 @@ else if (Data != null && Data.Signals.Count > 0)
             var solid  = new System.Text.StringBuilder();
             var dashed = new System.Text.StringBuilder();
 
-            bool onDashed = !signal.Transitions[0].Value.HasValue;
-            double curY = LevelY(signal.Transitions[0].Value);
+            bool onDashed = !entry.Value.HasValue;
+            double curY = LevelY(entry.Value);
             var target  = onDashed ? dashed : solid;
             target.Append($"M 0 {curY:0.##} ");
 
-            for (int i = 0; i < signal.Transitions.Count; i++)
+            for (int i = firstInside; i < signal.Transitions.Count; i++)
             {
                 var t  = signal.Transitions[i];
+                if (t.TimeNs > viewEndNs) break;
                 double tx = X(t.TimeNs);
                 bool nextDashed = !t.Value.HasValue;
                 double nextY    = LevelY(t.Value);
@@ -357,9 +497,10 @@ else if (Data != null && Data.Signals.Count > 0)
             // each plateau. Mirrors the way GTKWave renders bus signals.
             var d = new System.Text.StringBuilder();
             d.Append($"M 0 {ValMid:0.##} ");
-            for (int i = 0; i < signal.Transitions.Count; i++)
+            for (int i = firstInside; i < signal.Transitions.Count; i++)
             {
                 var t = signal.Transitions[i];
+                if (t.TimeNs > viewEndNs) break;
                 double tx = X(t.TimeNs);
                 // A pinch at every transition (triangle marker).
                 d.Append($"L {tx - 3:0.##} {ValMid:0.##} ");
@@ -372,12 +513,17 @@ else if (Data != null && Data.Signals.Count > 0)
             // Value text in each plateau (skip if the plateau is too narrow
             // to fit legibly — SVG text doesn't clip cleanly without extra
             // clip paths, and a label wider than its plateau just looks wrong).
-            for (int i = 0; i < signal.Transitions.Count; i++)
+            // Use the entry-level transition's label for the leading slice
+            // when its plateau extends into the window.
+            int plateauStart = haveEntry ? Array.IndexOf(signal.Transitions.ToArray(), entry) : firstInside;
+            if (plateauStart < 0) plateauStart = firstInside;
+            for (int i = plateauStart; i < signal.Transitions.Count; i++)
             {
                 var t = signal.Transitions[i];
+                if (t.TimeNs > viewEndNs) break;
                 if (string.IsNullOrEmpty(t.Label)) continue;
-                double tx = X(t.TimeNs);
-                double nextX = i + 1 < signal.Transitions.Count
+                double tx = i < firstInside ? 0 : X(t.TimeNs);
+                double nextX = i + 1 < signal.Transitions.Count && signal.Transitions[i + 1].TimeNs <= viewEndNs
                     ? X(signal.Transitions[i + 1].TimeNs)
                     : widthPx;
                 double midX = (tx + nextX) / 2.0;
@@ -458,19 +604,29 @@ else if (Data != null && Data.Signals.Count > 0)
     private string BuildRulerSvg(int widthPx) =>
         BuildRulerSvg(widthPx, (long)(Data?.TotalTicks ?? 0) * (Data?.TimescaleNs ?? 1));
 
+    /// <summary>
+    /// Compare-mode / legacy overload: ruler drawn from 0 to
+    /// <paramref name="maxNs"/>. The single-trace path uses the windowed
+    /// overload below so the ruler labels match the trailing-window view
+    /// during a live run.
+    /// </summary>
     private string BuildRulerSvg(int widthPx, long maxNs)
+        => BuildRulerSvg(widthPx, 0, maxNs);
+
+    private string BuildRulerSvg(int widthPx, long viewStartNs, long viewEndNs)
     {
         const int H = 22;
         var sb = new System.Text.StringBuilder();
         sb.Append($"<svg class=\"waveform-svg waveform-svg--ruler\" viewBox=\"0 0 {widthPx} {H}\" preserveAspectRatio=\"none\" width=\"{widthPx}\" height=\"{H}\">");
-        if (maxNs <= 0) { sb.Append("</svg>"); return sb.ToString(); }
+        long spanNs = viewEndNs - viewStartNs;
+        if (spanNs <= 0) { sb.Append("</svg>"); return sb.ToString(); }
 
         int labelCount = 12;
         for (int i = 0; i <= labelCount; i++)
         {
             double frac = (double)i / labelCount;
             double x = frac * widthPx;
-            long ns = (long)(frac * maxNs);
+            long ns = viewStartNs + (long)(frac * spanNs);
             sb.Append($"<line x1=\"{x:0.##}\" y1=\"0\" x2=\"{x:0.##}\" y2=\"5\" stroke=\"var(--text-muted)\" />");
             var anchor = i == 0 ? "start" : (i == labelCount ? "end" : "middle");
             sb.Append($"<text x=\"{x:0.##}\" y=\"17\" text-anchor=\"{anchor}\" font-size=\"10\" font-family=\"ui-monospace, Menlo, monospace\" fill=\"var(--text-muted)\">{FormatAxisLabel(ns)}</text>");
@@ -566,5 +722,107 @@ else if (Data != null && Data.Signals.Count > 0)
             }
         }
         return sb.ToString();
+    }
+
+    // ─── Image export (SVG / PNG, optional multi-page split) ────────────────
+
+    private Modal _exportModal = new();
+
+    /// <summary>
+    /// Opens the export modal with the current waveform's range pre-baked
+    /// in. Disabled while a sim is live — exporting a moving window would
+    /// race the renderer.
+    /// </summary>
+    private async Task OpenExportModalAsync()
+    {
+        if (Data == null || Data.Signals.Count == 0) return;
+        long totalNs = (long)Data.TotalTicks * Math.Max(1, Data.TimescaleNs);
+        var parameters = new Dictionary<string, object>
+        {
+            { "TotalNs", totalNs },
+            { "OnSubmit", EventCallback.Factory.Create<WaveformExportRequest>(this, HandleExportSubmitAsync) },
+            { "OnCancel", EventCallback.Factory.Create(this, () => _exportModal.HideAsync()) }
+        };
+        await _exportModal.ShowAsync<ExportWaveformModal>(
+            Traductor.T("EXPORT_MODAL_TITLE"), null, parameters);
+    }
+
+    /// <summary>
+    /// Receives the validated request from the modal, paginates the range,
+    /// and renders + downloads each page. SVG goes through kmilaDownloadText;
+    /// PNG goes through kmilaDownloadPng (canvas rasterisation, scale set
+    /// in the modal). Multi-page exports just emit consecutive numbered
+    /// files — sequential downloads work in MAUI WebView and any modern
+    /// browser, so we avoid pulling in a JS zip lib for v1.
+    /// </summary>
+    private async Task HandleExportSubmitAsync(WaveformExportRequest req)
+    {
+        if (Data == null) return;
+        await _exportModal.HideAsync();
+
+        var pages = WaveformExporter.PaginateRange(req.FromNs, req.ToNs, req.PageSpanNs).ToList();
+        if (pages.Count == 0) return;
+
+        // Per-page width: keep the on-screen track width as the canvas size
+        // for single-page; scale it down a touch for multi-page so each
+        // file is readable rather than a 24 000 px monster.
+        int pageWidth = pages.Count == 1
+            ? Math.Min(_zoomWidth, 1800)
+            : Math.Min(1600, Math.Max(800, _zoomWidth));
+
+        string baseName = SanitizeFileName($"kmila-waveform_{FormatRangeForFilename(req.FromNs, req.ToNs)}");
+        string ext = req.Format == WaveformExportFormat.Svg ? "svg" : "png";
+
+        try
+        {
+            for (int i = 0; i < pages.Count; i++)
+            {
+                var (startNs, endNs) = pages[i];
+                string title = pages.Count == 1
+                    ? $"{FormatRangeForTitle(startNs, endNs)}"
+                    : $"{FormatRangeForTitle(startNs, endNs)}  ·  page {i + 1}/{pages.Count}";
+                string svg = WaveformExporter.BuildSvg(Data, startNs, endNs, pageWidth, _showClock, title);
+
+                string fileName = pages.Count == 1
+                    ? $"{baseName}.{ext}"
+                    : $"{baseName}_p{i + 1:D2}.{ext}";
+
+                if (req.Format == WaveformExportFormat.Svg)
+                {
+                    await JS.InvokeVoidAsync("kmilaDownloadText", fileName, "image/svg+xml", svg);
+                }
+                else
+                {
+                    await JS.InvokeAsync<bool>("kmilaDownloadPng", fileName, svg, req.PngScale);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[WaveformViewer] Export failed");
+        }
+    }
+
+    private static string FormatRangeForTitle(long fromNs, long toNs)
+    {
+        return $"{FormatAxisLabel(fromNs)} – {FormatAxisLabel(toNs)}";
+    }
+
+    /// <summary>Filename-friendly range tag (e.g. "10us-30us"). Underscores
+    /// replace spaces and the µ glyph, since some file systems still trip
+    /// on non-ASCII names.</summary>
+    private static string FormatRangeForFilename(long fromNs, long toNs)
+    {
+        string a = FormatAxisLabel(fromNs).Replace(" ", "").Replace("µ", "u");
+        string b = FormatAxisLabel(toNs).Replace(" ", "").Replace("µ", "u");
+        return $"{a}-{b}";
+    }
+
+    private static string SanitizeFileName(string s)
+    {
+        var buf = new System.Text.StringBuilder(s.Length);
+        foreach (var c in s)
+            buf.Append(char.IsLetterOrDigit(c) || c == '_' || c == '-' || c == '.' ? c : '_');
+        return buf.ToString();
     }
 }

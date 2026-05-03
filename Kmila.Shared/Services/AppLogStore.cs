@@ -31,6 +31,15 @@ public class AppLogStore
     public event Action? OnChange;
 
     /// <summary>
+    /// Fires once per <see cref="Add"/> with the freshly-added entry.
+    /// Distinct from <see cref="OnChange"/> (the bulk "something
+    /// happened, re-render" event) — consumers that only care about
+    /// new entries (e.g. <see cref="AutoErrorReporter"/>) avoid
+    /// re-snapshotting the whole list on every change.
+    /// </summary>
+    public event Action<AppLogEntry>? OnEntryAdded;
+
+    /// <summary>
     /// Returns a snapshot of current entries. Returns an array so consumers
     /// can iterate / sort without holding the internal lock.
     /// </summary>
@@ -39,6 +48,12 @@ public class AppLogStore
         lock (_lock) { return _entries.ToArray(); }
     }
 
+    /// <summary>
+    /// Appends a new entry. Bounded buffer: when the count exceeds the cap, the
+    /// oldest entries are dropped in batches of 100 to amortise the shift. Both
+    /// <see cref="OnChange"/> and <see cref="OnEntryAdded"/> fire on every call.
+    /// </summary>
+    /// <param name="entry">The log entry to append.</param>
     public void Add(AppLogEntry entry)
     {
         lock (_lock)
@@ -50,8 +65,10 @@ public class AppLogStore
                 _entries.RemoveRange(0, _entries.Count - MaxEntries + 100);
         }
         OnChange?.Invoke();
+        OnEntryAdded?.Invoke(entry);
     }
 
+    /// <summary>Empties the buffer and notifies <see cref="OnChange"/> subscribers.</summary>
     public void Clear()
     {
         lock (_lock) { _entries.Clear(); }

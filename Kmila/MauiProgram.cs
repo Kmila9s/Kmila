@@ -73,6 +73,36 @@ public static class MauiProgram
                 logger: provider.GetService<ILogger<JSONFileReader>>(),
                 userAssets: provider.GetRequiredService<UserAssetStore>()));
 
+        // VHDL library compiler — same wiring as the Web host. Persistent
+        // policy points at UserAssetStore.LibraryCacheDir under
+        // FileSystem.AppDataDirectory, so compiled artifacts survive app
+        // updates the same way user-imported FPGAs and language packs do.
+        builder.Services.AddSingleton<LibraryCompiler.Services.LibraryCompiler>(provider =>
+        {
+            var userAssets = provider.GetRequiredService<UserAssetStore>();
+            var blobLogger = provider.GetService<ILogger<FileSystemBlobStore>>();
+            var blobStore  = new FileSystemBlobStore(userAssets.LibraryCacheDir, blobLogger);
+
+            return new LibraryCompiler.Services.LibraryCompiler(
+                new LibraryCompiler.Services.LibraryCompilerOptions(
+                    OpenLibrarySource: (key, ct) =>
+                    {
+                        // Same multi-package #package= fragment handling as
+                        // the Web host — see Program.cs for the full
+                        // commentary.
+                        var (path, package) = UserAssetStore.ParseLibrarySourceKey(key);
+                        if (!string.IsNullOrEmpty(path) && Path.IsPathRooted(path) && File.Exists(path))
+                        {
+                            var bytes = UserAssetStore.ReadPackageBytes(path, package);
+                            if (bytes != null) return Task.FromResult<Stream?>(new MemoryStream(bytes));
+                        }
+                        return Task.FromResult<Stream?>(null);
+                    },
+                    CacheStore:        blobStore,
+                    AdditionalSources: userAssets.ListUserLibrarySources(),
+                    Policy:            LibraryCompiler.Services.LibraryBuildPolicy.AlwaysPersistent));
+        });
+
         // ProgramBuilder handles compiling/building FPGA programs from user projects
         builder.Services.AddSingleton<ProgramBuilder>();
 
@@ -87,6 +117,10 @@ public static class MauiProgram
 
         // Shared state for the Editor bottom dock (active tab + collapse)
         builder.Services.AddSingleton<EditorDockState>();
+
+        // Cross-component cursor bus tying the schematic's Debug mode to
+        // the waveform viewer (cursor tick + selected net).
+        builder.Services.AddSingleton<SignalCursorBus>();
 
         // Run-bar state (time/scale/run-state/progress/port moments) + build log
         builder.Services.AddSingleton<SimulationParameters>();
@@ -166,6 +200,32 @@ public static class MauiProgram
         // the hydrated cache but a cold start still reads from SQLite.
         builder.Services.AddScoped<LessonProgressStore>();
 
+        // Practice — coding-challenge catalog + grader. The catalog reads
+        // its manifest + per-exercise assets from the bundled app package
+        // (`Practice/manifest.json`, `Practice/{folder}/*.{vhdl,json,md}`)
+        // via FileSystem.OpenAppPackageFileAsync — same pattern as
+        // LessonCatalog. Evaluator caches generated expected waveforms per
+        // exercise and serializes runs through a semaphore.
+        builder.Services.AddSingleton<Kmila.Shared.Services.Practice.PracticeCatalog>(provider =>
+            new Kmila.Shared.Services.Practice.PracticeCatalog(
+                async path =>
+                {
+                    try
+                    {
+                        return await FileSystem.OpenAppPackageFileAsync(path);
+                    }
+                    catch (FileNotFoundException)
+                    {
+                        throw new FileNotFoundException($"Practice asset not found: {path}");
+                    }
+                },
+                provider.GetRequiredService<ILoggerFactory>().CreateLogger<Kmila.Shared.Services.Practice.PracticeCatalog>()));
+        builder.Services.AddSingleton<Kmila.Shared.Services.Practice.PracticeEvaluator>();
+
+        // Practice persistence — scoped so it shares the circuit's DbContext.
+        // Stores every Submit click + the aggregate progress row.
+        builder.Services.AddScoped<Kmila.Shared.Services.Practice.PracticeAttemptStore>();
+
         // Sidebar MRU — caps the sidebar project list at 10 most-recent.
         builder.Services.AddScoped<RecentProjectsTracker>();
 
@@ -175,6 +235,21 @@ public static class MauiProgram
 
         // Single-file .kmila project bundle — export/import all state in one JSON blob.
         builder.Services.AddScoped<ProjectBundleService>();
+
+        // Per-project editor session — open tabs, active index, split state.
+        // Stored in localStorage (browser/WebView) keyed by project id.
+        builder.Services.AddScoped<EditorSessionStore>();
+
+        // GitHub Device-Flow OAuth + issue submission. Login is optional;
+        // the auth state propagates via the service's OnChange event so
+        // the TopBar pill / Settings card can reactively re-render.
+        builder.Services.AddScoped<GitHubAuth>();
+
+        // Auto error reporter — opt-in per Settings → Account toggle,
+        // gated additionally on GitHub login. Eagerly constructed by
+        // MainLayout so its AppLogStore subscription is live before
+        // any page-level code can throw.
+        builder.Services.AddScoped<AutoErrorReporter>();
 
         // Register the Blazor WebView for hosting Razor components inside MAUI
         builder.Services.AddMauiBlazorWebView();
@@ -189,6 +264,22 @@ public static class MauiProgram
 #endif
 
         var app = builder.Build();
+
+        // Apply the saved library-build mode so the FIRST build of a session
+        // honours the user's Settings → Build mode choice. See the Web
+        // Program.cs counterpart for the full commentary.
+        try
+        {
+            var db       = app.Services.GetRequiredService<Kmila.Shared.Data.ApplicationDbContext>();
+            var compiler = app.Services.GetRequiredService<LibraryCompiler.Services.LibraryCompiler>();
+            var raw      = db.GetSettingAsync(Kmila.Shared.Models.AppSettings.KEY_LIBRARY_BUILD_MODE).GetAwaiter().GetResult();
+            var policy   = Kmila.Shared.Models.LibraryBuildModeExtensions.ParseToken(raw);
+            compiler.Orchestrator.Policy = Kmila.Shared.Models.LibraryBuildModeExtensions.ToPolicy(policy);
+        }
+        catch
+        {
+            // First-launch path: AppSettings table may not exist yet.
+        }
 
         // Redirect Console.Out into an ILogger so that Console.WriteLine calls
         // from the referenced Parser / Interpreter / TimeMachine projects land

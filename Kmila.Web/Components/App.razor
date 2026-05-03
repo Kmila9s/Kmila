@@ -3,7 +3,16 @@
 
 <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#334155" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Kmila" />
+    <meta name="format-detection" content="telephone=no" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="_content/Kmila.Shared/favicon.png" />
     <base href="/" />
     <script>
         // Resolve 'light' | 'dark' | 'auto' → concrete 'light' | 'dark'.
@@ -82,23 +91,39 @@
         // (startingHeight + (startingY - currentY)). The grabber sits above
         // the dock, so dragging UP shrinks the dock body (opposite of
         // intuition); we mirror the delta for the student-facing behavior.
+        //
+        // Touch-friendly: PointerEvents are unified (mouse + touch + pen) and
+        // we suppress page scroll during the drag with touch-action via CSS
+        // on the grabber itself.
         window.kmilaDockDragStart = function (dotnetRef, startY) {
             var dockEl = document.querySelector('.kmila-dock');
             if (!dockEl) return;
             var startHeight = dockEl.getBoundingClientRect().height;
+            var moved = false;
             function onMove(ev) {
+                ev.preventDefault();
                 var delta = startY - ev.clientY;
-                var next  = Math.max(200, Math.min(1200, Math.round(startHeight + delta)));
+                if (Math.abs(delta) > 2) moved = true;
+                var next  = Math.max(160, Math.min(window.innerHeight - 80, Math.round(startHeight + delta)));
                 dotnetRef.invokeMethodAsync('OnGrabberMove', next);
             }
-            function onUp() {
+            function onUp(ev) {
                 window.removeEventListener('pointermove', onMove);
                 window.removeEventListener('pointerup',   onUp);
+                window.removeEventListener('pointercancel', onUp);
+                // On phones we snap to the closest point.
+                if (window.matchMedia('(max-width: 768px)').matches && moved) {
+                    var h = dockEl.getBoundingClientRect().height;
+                    var vh = window.innerHeight;
+                    var snap = h < vh * 0.25 ? 'peek' : (h < vh * 0.66 ? 'half' : 'full');
+                    if (window.kmilaSetDockSnap) window.kmilaSetDockSnap(snap);
+                }
                 dotnetRef.invokeMethodAsync('OnGrabberUp').catch(() => {});
                 dotnetRef.dispose();
             }
-            window.addEventListener('pointermove', onMove);
+            window.addEventListener('pointermove', onMove, { passive: false });
             window.addEventListener('pointerup',   onUp);
+            window.addEventListener('pointercancel', onUp);
         };
 
         window.kmilaDownloadText = function (fileName, mime, text) {
@@ -117,6 +142,74 @@
                 console.error('[kmilaDownloadText] failed', e);
                 return false;
             }
+        };
+
+        // ─── Editor tab drag-and-drop ────────────────────────────────────
+        // Real implementation lives in _content/Kmila.Shared/js/app.js using
+        // PointerEvents (touch + mouse + pen). The shims here only exist for
+        // the brief moment between this inline script running and app.js
+        // being parsed — they make sure Blazor's first interop call to
+        // kmilaSetupTabDrag / kmilaGetTabDrag / kmilaClearTabDrag doesn't
+        // throw before the real handlers replace these.
+        if (typeof window.kmilaSetupTabDrag !== 'function') {
+            window.kmilaSetupTabDrag = function () { /* superseded by app.js */ };
+        }
+        if (typeof window.kmilaGetTabDrag !== 'function') {
+            window.kmilaGetTabDrag = function () { return { paneIdx: -1, tabIdx: -1 }; };
+        }
+        if (typeof window.kmilaClearTabDrag !== 'function') {
+            window.kmilaClearTabDrag = function () { };
+        }
+
+        // Mirror of the MAUI host's kmilaDownloadPng — see its comment for
+        // rationale. Keeps Web and MAUI on the same export contract.
+        window.kmilaDownloadPng = function (fileName, svgText, scale) {
+            return new Promise(function (resolve) {
+                try {
+                    var s = (typeof scale === 'number' && scale > 0) ? scale : 2;
+                    var widthMatch  = /\bwidth="(\d+)"/.exec(svgText);
+                    var heightMatch = /\bheight="(\d+)"/.exec(svgText);
+                    var w = widthMatch  ? parseInt(widthMatch[1], 10)  : 1200;
+                    var h = heightMatch ? parseInt(heightMatch[1], 10) : 400;
+
+                    var canvas = document.createElement('canvas');
+                    canvas.width  = Math.max(1, Math.floor(w * s));
+                    canvas.height = Math.max(1, Math.floor(h * s));
+                    var ctx = canvas.getContext('2d');
+                    ctx.scale(s, s);
+
+                    var img = new Image();
+                    img.onload = function () {
+                        try {
+                            ctx.drawImage(img, 0, 0);
+                            canvas.toBlob(function (blob) {
+                                if (!blob) { resolve(false); return; }
+                                var url = URL.createObjectURL(blob);
+                                var a = document.createElement('a');
+                                a.href = url;
+                                a.download = fileName || 'kmila-waveform.png';
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+                                resolve(true);
+                            }, 'image/png');
+                        } catch (drawErr) {
+                            console.error('[kmilaDownloadPng] draw/blob failed', drawErr);
+                            resolve(false);
+                        }
+                    };
+                    img.onerror = function (e) {
+                        console.error('[kmilaDownloadPng] image load failed', e);
+                        resolve(false);
+                    };
+                    var svgBlob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
+                    img.src = URL.createObjectURL(svgBlob);
+                } catch (e) {
+                    console.error('[kmilaDownloadPng] failed', e);
+                    resolve(false);
+                }
+            });
         };
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -145,9 +238,15 @@
         }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-bs-theme'] });
         window.addEventListener('load', () => window.kmilaMermaidRun());
     </script>
-    <link rel="stylesheet" href="_content/Kmila.Shared/css/tokens.css" />
-    <link rel="stylesheet" href="_content/Kmila.Shared/app.css" />
-    <link rel="stylesheet" href="_content/Kmila.Shared/css/pages.css" />
+    @* Bump the version query string when shipping CSS changes — the
+       browser otherwise hangs onto the cached pages.css indefinitely
+       (no fingerprinting / ETag-only validation isn't enough on hot
+       reload, and contributors hit "menu has no styles" repeatedly
+       after the ProfileMenu refactor). Increment whenever a hot-cache
+       miss matters for the UI. *@
+    <link rel="stylesheet" href="_content/Kmila.Shared/css/tokens.css?v=2" />
+    <link rel="stylesheet" href="_content/Kmila.Shared/app.css?v=2" />
+    <link rel="stylesheet" href="_content/Kmila.Shared/css/pages.css?v=2" />
     <link rel="stylesheet" href="Kmila.Web.styles.css" />
     <link rel="icon" type="image/png" href="_content/Kmila.Shared/favicon.png" />
     <HeadOutlet @rendermode="InteractiveServer" />

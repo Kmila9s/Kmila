@@ -1,0 +1,39 @@
+{
+  "tests": [
+    { "id": "t1", "visible": true, "descriptions": { "en": "Reset 25 ns then duty=8 (50%)", "es": "Reset 25 ns y duty=8 (50%)" }, "durationMicros": 3, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "duty", "values": [ { "time": 0, "scale": "NS", "value": "1000" } ] }
+    ]},
+    { "id": "t2", "visible": false, "descriptions": { "en": "Duty=0 — output stays low", "es": "Duty=0 — la salida queda baja" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "duty", "values": [ { "time": 0, "scale": "NS", "value": "0000" } ] }
+    ]},
+    { "id": "t3", "visible": false, "descriptions": { "en": "Duty=15 — output high 15/16 of the period", "es": "Duty=15 — salida alta 15/16 del periodo" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "duty", "values": [ { "time": 0, "scale": "NS", "value": "1111" } ] }
+    ]},
+    { "id": "t4", "visible": false, "descriptions": { "en": "Duty changes mid-run from 4 to 12", "es": "Duty cambia a mitad de 4 a 12" }, "durationMicros": 3, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "duty", "values": [
+        { "time": 0,    "scale": "NS", "value": "0100" },
+        { "time": 1500, "scale": "NS", "value": "1100" }
+      ]}
+    ]},
+    { "id": "t5", "visible": false, "descriptions": { "en": "Held in reset — pwm_out is '0'", "es": "Reset mantenido — pwm_out es '0'" }, "durationMicros": 1, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [ { "time": 0, "scale": "NS", "value": "1" } ] },
+      { "portName": "duty",  "values": [ { "time": 0, "scale": "NS", "value": "1000" } ] }
+    ]}
+  ]
+}

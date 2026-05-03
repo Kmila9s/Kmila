@@ -75,6 +75,45 @@ public class Program
                 logger: provider.GetService<ILogger<JSONFileReader>>(),
                 userAssets: provider.GetRequiredService<UserAssetStore>()));
 
+        // VHDL library compiler — owns IEEE builtins + user-imported library
+        // packs, persists compiled artifacts under
+        // UserAssetStore.LibraryCacheDir so subsequent app starts skip the
+        // cold build. The OpenLibrarySource callback handles two cases: an
+        // absolute path (user plugin under UserLibrariesDir) opens with
+        // File.OpenRead; an embedded-resource key (Builtins/IEEE/*.vhd
+        // shipped by the LibraryCompiler module) returns null so the
+        // module's own embedded-resource fallback takes over.
+        builder.Services.AddSingleton<LibraryCompiler.Services.LibraryCompiler>(provider =>
+        {
+            var userAssets = provider.GetRequiredService<UserAssetStore>();
+            var blobLogger = provider.GetService<ILogger<FileSystemBlobStore>>();
+            var blobStore  = new FileSystemBlobStore(userAssets.LibraryCacheDir, blobLogger);
+
+            return new LibraryCompiler.Services.LibraryCompiler(
+                new LibraryCompiler.Services.LibraryCompilerOptions(
+                    OpenLibrarySource: (key, ct) =>
+                    {
+                        // SourceKey may carry a #package=X fragment when one
+                        // physical .vhd declares several packages. Trim to
+                        // just that package's bytes so each compiled artifact
+                        // hashes deterministically and survives the addition
+                        // / removal of unrelated packages in the same file.
+                        var (path, package) = UserAssetStore.ParseLibrarySourceKey(key);
+                        if (!string.IsNullOrEmpty(path) && Path.IsPathRooted(path) && File.Exists(path))
+                        {
+                            var bytes = UserAssetStore.ReadPackageBytes(path, package);
+                            if (bytes != null) return Task.FromResult<Stream?>(new MemoryStream(bytes));
+                        }
+                        // Embedded-resource key for IEEE builtins, or unknown
+                        // path — fall through; the LibraryBuilder's embedded
+                        // resource fallback handles the IEEE case.
+                        return Task.FromResult<Stream?>(null);
+                    },
+                    CacheStore:        blobStore,
+                    AdditionalSources: userAssets.ListUserLibrarySources(),
+                    Policy:            LibraryCompiler.Services.LibraryBuildPolicy.AlwaysPersistent));
+        });
+
         // ProgramBuilder handles compiling/building FPGA programs from user projects
         builder.Services.AddSingleton<ProgramBuilder>();
 
@@ -89,6 +128,10 @@ public class Program
 
         // Shared state for the Editor bottom dock (active tab + collapse)
         builder.Services.AddScoped<EditorDockState>();
+
+        // Cross-component cursor bus tying the schematic's Debug mode to
+        // the waveform viewer (cursor tick + selected net).
+        builder.Services.AddScoped<SignalCursorBus>();
 
         // Run-bar state (time/scale/run-state/progress/port moments) + build log
         builder.Services.AddScoped<SimulationParameters>();
@@ -211,6 +254,48 @@ public class Program
         // in-memory cache layered over the shared AppSettings table.
         builder.Services.AddScoped<LessonProgressStore>();
 
+        // Practice — coding-challenge catalog + grader. Singletons: the
+        // catalog is read-only after manifest load, and the evaluator's
+        // expected-waveform cache is fine to share across circuits since
+        // exercise IDs are global. Reuses the same "try a handful of paths"
+        // approach Traductor / LessonCatalog use so manifest + per-exercise
+        // assets load in both dev and production Web deployments.
+        builder.Services.AddSingleton<Kmila.Shared.Services.Practice.PracticeCatalog>(provider =>
+        {
+            var env = provider.GetRequiredService<IWebHostEnvironment>();
+            var logger = provider.GetRequiredService<ILoggerFactory>()
+                                 .CreateLogger<Kmila.Shared.Services.Practice.PracticeCatalog>();
+            return new Kmila.Shared.Services.Practice.PracticeCatalog(async path =>
+            {
+                var pathsToTry = new List<string>
+                {
+                    Path.Combine(env.ContentRootPath, "..", "Kmila.Shared", "wwwroot", path),
+                    Path.Combine(Directory.GetCurrentDirectory(), "..", "Kmila.Shared", "wwwroot", path)
+                };
+                if (!string.IsNullOrEmpty(env.WebRootPath) && Directory.Exists(env.WebRootPath))
+                {
+                    pathsToTry.Add(Path.Combine(env.WebRootPath, "_content", "Kmila.Shared", path));
+                    pathsToTry.Add(Path.Combine(env.WebRootPath, path));
+                }
+                foreach (var candidate in pathsToTry)
+                {
+                    try
+                    {
+                        var normalized = Path.GetFullPath(candidate);
+                        if (File.Exists(normalized)) return File.OpenRead(normalized);
+                    }
+                    catch { /* try next */ }
+                }
+                throw new FileNotFoundException($"Practice asset not found: {path}");
+            }, logger);
+        });
+        builder.Services.AddSingleton<Kmila.Shared.Services.Practice.PracticeEvaluator>();
+
+        // Practice persistence — scoped so each circuit shares its
+        // ApplicationDbContext. One row per Submit click, plus the
+        // aggregate progress chip data.
+        builder.Services.AddScoped<Kmila.Shared.Services.Practice.PracticeAttemptStore>();
+
         // Sidebar MRU — scoped so it reads from the same per-circuit
         // ApplicationDbContext the rest of the UI is using.
         builder.Services.AddScoped<RecentProjectsTracker>();
@@ -223,10 +308,45 @@ public class Program
         // repositories resolve to the current circuit's DB context.
         builder.Services.AddScoped<ProjectBundleService>();
 
+        // Per-project editor session — open tabs, active index, split
+        // state. Stored in browser localStorage keyed by project id.
+        builder.Services.AddScoped<EditorSessionStore>();
+
+        // GitHub Device-Flow OAuth + issue submission. Login is optional;
+        // unconfigured Client ID leaves the in-app submit disabled but
+        // the Tier 1+2 feedback paths still work.
+        builder.Services.AddScoped<GitHubAuth>();
+
+        // Auto error reporter. Eagerly constructed via MainLayout's
+        // injection so the subscription is live before pages can throw.
+        builder.Services.AddScoped<AutoErrorReporter>();
+
         // BlazorBootstrap provides Bootstrap-based Blazor UI components
         builder.Services.AddBlazorBootstrap();
 
         var app = builder.Build();
+
+        // Apply the saved library-build mode (Settings → Build mode) to the
+        // singleton LibraryCompiler. Reading from a fresh DbContext scope
+        // here means the FIRST build of a session already honours the
+        // user's choice — without this we'd default to Persistent and only
+        // pick up the saved value once the Settings page mounted and the
+        // user touched the dropdown.
+        try
+        {
+            using var scope = app.Services.CreateScope();
+            var db       = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var compiler = app.Services.GetRequiredService<LibraryCompiler.Services.LibraryCompiler>();
+            var raw      = db.GetSettingAsync(AppSettings.KEY_LIBRARY_BUILD_MODE).GetAwaiter().GetResult();
+            var policy   = LibraryBuildModeExtensions.ParseToken(raw);
+            compiler.Orchestrator.Policy = LibraryBuildModeExtensions.ToPolicy(policy);
+        }
+        catch
+        {
+            // First-launch path: AppSettings table may not exist yet. The
+            // singleton compiler keeps its default Persistent policy until
+            // the Settings page applies a stored choice on first load.
+        }
 
         // Redirect Console.Out into an ILogger so that Console.WriteLine calls
         // from the referenced Parser / Interpreter / TimeMachine projects (e.g.
