@@ -1,4 +1,6 @@
-## ⚠ ترجمة قيد الإنجاز — 4-bit comparator, equality output stuck
+## 4-bit comparator, equality output stuck
+
+⚠ الترجمة معلقة — الوصف معروض بالإنجليزية.
 
 A 4-bit unsigned comparator with `gt`, `eq`, `lt` flags. `gt` and `lt` are correct but `eq` is hardwired to `'0'`, so equal inputs leave all three flags low.
 

@@ -1,4 +1,6 @@
-## ⚠ 翻訳作業中 — T flip-flop, enable input ignored
+## T flip-flop, enable input ignored
+
+⚠ 翻訳待ち — 説明は英語で表示されます。
 
 A T flip-flop with toggle enable `t`. Async high-active reset clears `q`. On `rising_edge(clk)`, toggle `q` only when `t = '1'`; otherwise hold.
 

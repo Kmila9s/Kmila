@@ -1,4 +1,6 @@
-## ⚠ 翻訳作業中 — 4-bit ALU, missing operation
+## 4-bit ALU, missing operation
+
+⚠ 翻訳待ち — 説明は英語で表示されます。
 
 A 4-operation ALU selected by `op`: `00 = a+b`, `01 = a-b`, `10 = a and b`, `11 = a xor b`.
 

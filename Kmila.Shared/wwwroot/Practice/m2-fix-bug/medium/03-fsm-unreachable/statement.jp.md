@@ -1,4 +1,6 @@
-## ⚠ 翻訳作業中 — 3-state FSM, unreachable state
+## 3-state FSM, unreachable state
+
+⚠ 翻訳待ち — 説明は英語で表示されます。
 
 A 3-state machine with states `S0` (`"00"`), `S1` (`"01"`), `S2` (`"10"`).
 

@@ -88,10 +88,17 @@ public class WaveformData
         }
     }
 
+    /// <summary>
+    /// JSON-serialisation DTO for <see cref="WaveformData"/>. Decoupled from the public
+    /// shape so the on-disk format can evolve without breaking the in-memory contract.
+    /// </summary>
     private class SerializedForm
     {
+        /// <summary>Total simulated ticks captured by the waveform.</summary>
         public ulong TotalTicks { get; set; }
+        /// <summary>Timescale resolution in nanoseconds per tick (canonical 10).</summary>
         public int TimescaleNs { get; set; }
+        /// <summary>Per-signal sampled transitions.</summary>
         public List<WaveformSignal>? Signals { get; set; }
     }
 

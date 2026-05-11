@@ -1,4 +1,6 @@
-## ⚠ 翻訳待ち — Stack pop with empty-guard — fill the gap
+## Stack pop with empty-guard — fill the gap
+
+⚠ 翻訳待ち — 説明は英語で表示されます。
 
 A simple stack pointer with the push branch and empty flag
 already wired. Decrement `sp` on pop, but only when not empty.

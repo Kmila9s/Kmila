@@ -1,4 +1,6 @@
-## ⚠ 翻訳待ち — CRC-8 update step — fill the gap
+## CRC-8 update step — fill the gap
+
+⚠ 翻訳待ち — 説明は英語で表示されます。
 
 A serial CRC-8 register is almost complete. Implement the
 one-bit step on every rising clock edge.

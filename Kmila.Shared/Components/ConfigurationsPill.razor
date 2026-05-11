@@ -88,7 +88,7 @@
         <div class="kmila-config-pill__actions">
             @if (!string.IsNullOrEmpty(Sim.LoadedName) && Sim.IsDirty)
             {
-                <button type="button" class="btn btn-secondary btn-sm"
+                <button type="button" class="kmila-btn kmila-btn--primary btn-sm"
                         @onclick="() => SaveAsync(Sim.LoadedName!)">
                     <Icon Name="IconName.Floppy2" />
                     <span>@Traductor.T("CONFIG_SAVE_CHANGES")</span>
@@ -105,12 +105,12 @@
                            @bind:event="oninput"
                            @onkeydown="OnSaveAsKeyDownAsync"
                            aria-label="@Traductor.T("CONFIG_SAVE_AS")" />
-                    <button type="button" class="btn btn-primary btn-sm"
+                    <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--sm"
                             disabled="@string.IsNullOrWhiteSpace(_newName)"
                             @onclick="() => SaveAsync(_newName!.Trim())">
                         <Icon Name="IconName.CheckLg" />
                     </button>
-                    <button type="button" class="btn btn-ghost btn-sm"
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
                             @onclick="() => { _showSaveAs = false; _newName = string.Empty; }"
                             title="@Traductor.T("COMMON_GO_BACK")">
                         <Icon Name="IconName.X" />
@@ -119,7 +119,7 @@
             }
             else
             {
-                <button type="button" class="btn btn-ghost btn-sm" @onclick="() => _showSaveAs = true">
+                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm" @onclick="() => _showSaveAs = true">
                     <Icon Name="IconName.Plus" />
                     <span>@Traductor.T("CONFIG_SAVE_AS")</span>
                 </button>

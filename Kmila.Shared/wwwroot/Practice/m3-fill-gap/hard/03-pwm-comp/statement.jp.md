@@ -1,4 +1,6 @@
-## ⚠ 翻訳待ち — PWM comparator — fill the gap
+## PWM comparator — fill the gap
+
+⚠ 翻訳待ち — 説明は英語で表示されます。
 
 A 4-bit free-running counter has been wired up for you. You
 must add the **comparator** that turns the counter into a

@@ -1,4 +1,6 @@
-## ⚠ 翻译待完成 — Up/down counter, direction ignored
+## Up/down counter, direction ignored
+
+⚠ 翻译未完成 — 描述以英文显示。
 
 A 4-bit up/down counter controlled by `dir`: `dir = '1'` counts up, `dir = '0'` counts down. Async high-active reset.
 

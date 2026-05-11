@@ -1,4 +1,6 @@
-## ⚠ ترجمة قيد الإنجاز — 3-bit binary-to-Gray, Gray property broken
+## 3-bit binary-to-Gray, Gray property broken
+
+⚠ الترجمة معلقة — الوصف معروض بالإنجليزية.
 
 Standard binary-to-Gray: `g(2) = b(2)`, `g(1) = b(2) xor b(1)`, `g(0) = b(1) xor b(0)`.
 

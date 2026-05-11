@@ -1,4 +1,6 @@
-## ⚠ Translation pending — LFSR primitive polynomial fix
+## LFSR primitive polynomial fix
+
+⚠ الترجمة معلقة — الوصف معروض بالإنجليزية.
 
 This 8-bit LFSR should generate a maximal-length pseudo-random
 sequence (period 255). The current code uses a non-primitive

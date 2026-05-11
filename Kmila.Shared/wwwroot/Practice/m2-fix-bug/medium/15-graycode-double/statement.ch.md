@@ -1,4 +1,6 @@
-## ⚠ 翻译待完成 — 3-bit binary-to-Gray, Gray property broken
+## 3-bit binary-to-Gray, Gray property broken
+
+⚠ 翻译未完成 — 描述以英文显示。
 
 Standard binary-to-Gray: `g(2) = b(2)`, `g(1) = b(2) xor b(1)`, `g(0) = b(1) xor b(0)`.
 

@@ -1,4 +1,6 @@
-## ⚠ 翻译待完成 — Loadable register, wrong clock edge
+## Loadable register, wrong clock edge
+
+⚠ 翻译未完成 — 描述以英文显示。
 
 A 4-bit register with synchronous load. Async high-active reset. On `rising_edge(clk)`, if `load = '1'` then `q <- d`.
 

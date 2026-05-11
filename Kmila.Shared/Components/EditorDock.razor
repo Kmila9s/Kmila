@@ -19,7 +19,9 @@
 <section class="kmila-dock @(DockState.IsCollapsed ? "kmila-dock--collapsed" : "")"
          role="tablist"
          aria-label="@Traductor.T("EDITOR_DOCK_ARIA")"
-         style="@($"--kmila-dock-height: {DockState.Height}px;")">
+         style="@(DockState.IsCollapsed
+             ? "--kmila-dock-height: auto; height: auto; min-height: 0;"
+             : $"--kmila-dock-height: {DockState.Height}px;")">
 
     @* Drag handle — pointer-events on the grabber change the dock height live;
        DockState persists to localStorage via the EditorDock's OnAfterRender. *@
@@ -38,7 +40,7 @@
                     aria-selected="@isActive"
                     aria-controls="@($"dock-panel-{tab.Id}")"
                     id="@($"dock-tab-{tab.Id}")"
-                    class="kmila-dock__tab @(isActive ? "is-active" : "")"
+                    class="kmila-btn-tab kmila-btn-tab--accent kmila-dock__tab @(isActive ? "is-active" : "")"
                     @onclick="() => DockState.SetActive(tab.Id)">
                 <Icon Name="@tab.Icon" />
                 <span class="kmila-dock__tab-label">@Traductor.T(tab.LabelKey)</span>
@@ -53,17 +55,20 @@
                 }
             </button>
         }
-
-        <button type="button"
-                class="kmila-dock__collapse"
-                @onclick="ToggleCollapsedAsync"
-                aria-expanded="@(!DockState.IsCollapsed)"
-                aria-controls="dock-panel"
-                aria-label="@Traductor.T(DockState.IsCollapsed ? "DOCK_EXPAND" : "DOCK_COLLAPSE")"
-                title="@Traductor.T(DockState.IsCollapsed ? "DOCK_EXPAND" : "DOCK_COLLAPSE")">
-            <Icon Name="@(DockState.IsCollapsed ? IconName.ChevronUp : IconName.ChevronDown)" />
-        </button>
     </nav>
+
+    @* Collapse toggle lives outside .kmila-dock__tabs so it stays reachable
+       even when 8 tabs overflow the strip horizontally on phones. CSS pins
+       it absolutely to the top-right of .kmila-dock. *@
+    <button type="button"
+            class="kmila-dock__collapse"
+            @onclick="ToggleCollapsedAsync"
+            aria-expanded="@(!DockState.IsCollapsed)"
+            aria-controls="dock-panel"
+            aria-label="@Traductor.T(DockState.IsCollapsed ? "DOCK_EXPAND" : "DOCK_COLLAPSE")"
+            title="@Traductor.T(DockState.IsCollapsed ? "DOCK_EXPAND" : "DOCK_COLLAPSE")">
+        <Icon Name="@(DockState.IsCollapsed ? IconName.ChevronUp : IconName.ChevronDown)" />
+    </button>
 
     <div class="kmila-dock__panel kmila-dock__panel--@DockState.Active.ToString().ToLowerInvariant()"
          id="dock-panel"

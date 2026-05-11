@@ -1,4 +1,6 @@
-## ⚠ ترجمة قيد الإنجاز — 4-to-1 mux, selector under-decoded
+## 4-to-1 mux, selector under-decoded
+
+⚠ الترجمة معلقة — الوصف معروض بالإنجليزية.
 
 A 4-to-1 mux with 2-bit `sel`: `00→a`, `01→b`, `10→c`, `11→d`.
 

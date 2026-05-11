@@ -13,8 +13,13 @@
 
 html {
     font-family: var(--font-sans);
-    font-size: 16px;
+    /* Root font-size scales with the user's chosen text size (Settings →
+       Apariencia → Tamaño de letra). All --fs-* tokens are in `rem`, so
+       lifting the root scales the entire type system uniformly. The
+       inline boot script in index.html sets --user-text-scale pre-FOUC. */
+    font-size: calc(16px * var(--user-text-scale, 1));
     color-scheme: light dark;
+    transition: font-size var(--duration-base, 180ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1));
 }
 
 body {
@@ -438,8 +443,13 @@ a:hover, .btn-link:hover {
 .content {
     padding-top: var(--space-5);
     padding-bottom: var(--space-6);
-    max-width: var(--content-max);
-    margin: 0 auto;
+    /* Fill the available main area — Mac Catalyst windows are commonly
+       wider than 1440px and the previous fixed reading-column cap left
+       large empty margins on either side. Padding still keeps content
+       off the sidebar/edge; min-width:0 keeps flex children from
+       overflowing. The 1440px cap (--content-max) remains in tokens.css
+       for any view that wants to opt in via its own selector. */
+    width: 100%;
     min-width: 0;
 }
 
@@ -549,7 +559,11 @@ h1:focus {
         position: sticky;
         top: 0;
         height: env(safe-area-inset-top);
-        background-color: var(--kmila-primary-dark);
+        /* Match the TopBar surface so the safe-area zone reads as a single
+           continuous bar from the screen edge through the breadcrumbs. The
+           previous `--kmila-primary-dark` was a slate gray that visibly
+           differed from the dark-navy `--surface-2` of the TopBar below. */
+        background-color: var(--surface-2);
         width: 100%;
         z-index: var(--z-sticky);
     }

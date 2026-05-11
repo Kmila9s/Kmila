@@ -1,4 +1,6 @@
-## ⚠ 翻訳作業中 — 4-bit counter, async reset bug
+## 4-bit counter, async reset bug
+
+⚠ 翻訳待ち — 説明は英語で表示されます。
 
 The block is meant to be a 4-bit counter with an **asynchronous active-high reset**.
 

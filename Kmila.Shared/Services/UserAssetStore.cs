@@ -1,5 +1,6 @@
 using System.Text.Json;
 using LibraryCompiler.Repositories;
+using LibraryCompiler.Services;
 using Microsoft.Extensions.Logging;
 
 namespace Kmila.Shared.Services;
@@ -23,7 +24,7 @@ namespace Kmila.Shared.Services;
 /// shape as the bundled ones, so importing is copy-paste and exporting is
 /// "take the file out of this folder."
 /// </remarks>
-public class UserAssetStore
+public class UserAssetStore : IDisposable
 {
     /// <summary>Name of the optional display-name key inside a language file.</summary>
     public const string LanguageDisplayNameKey = "__LANG_NAME__";
@@ -31,11 +32,22 @@ public class UserAssetStore
     private readonly string _root;
     private readonly ILogger _logger;
 
+    // External-change watchers. One per asset directory; we don't hand them
+    // out to callers — they exist purely to fire OnChange when something
+    // outside the in-app Settings flow mutates the directory (cloud sync,
+    // Finder, a different tool, …). Debounced via _watcherDebounce so a
+    // batch of writes (text editors often save+rename) collapses into one
+    // notification.
+    private readonly List<FileSystemWatcher> _watchers = new();
+    private System.Threading.Timer? _watcherDebounce;
+    private const int WatcherDebounceMs = 250;
+
     public UserAssetStore(ILogger<UserAssetStore>? logger = null)
     {
         _logger = (ILogger?)logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
         _root = ResolveRoot();
         EnsureDirs();
+        StartWatchers();
     }
 
     /// <summary>Fires when a file is imported or deleted so UIs can refresh.</summary>
@@ -443,6 +455,68 @@ public class UserAssetStore
         }
     }
 
+    /// <summary>
+    /// Wipes everything under <see cref="LibraryCacheDir"/>. Pairs with
+    /// <c>BuildOrchestrator.Reset()</c> to give Settings → "Clear cache"
+    /// a clean two-step: drop the on-disk artifacts, then drop the
+    /// in-memory snapshot. Returns the number of files removed.
+    /// </summary>
+    public int ClearLibraryCache()
+    {
+        if (!Directory.Exists(LibraryCacheDir)) return 0;
+        int removed = 0;
+        try
+        {
+            foreach (var f in Directory.EnumerateFiles(LibraryCacheDir, "*", SearchOption.AllDirectories))
+            {
+                try { File.Delete(f); removed++; }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "[UserAssetStore] ClearLibraryCache: failed to delete {File}", f);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[UserAssetStore] ClearLibraryCache enumeration failed");
+        }
+        return removed;
+    }
+
+    /// <summary>
+    /// Reconciles <paramref name="resolver"/>'s user-vendor entries against
+    /// the current contents of <see cref="UserLibrariesDir"/>. Adds any new
+    /// packages, removes any whose backing file is gone, leaves IEEE
+    /// builtins untouched. Hosts wire this into
+    /// <see cref="OnChange"/> so the resolver stays in sync after Settings →
+    /// Libraries Import / Delete (and after external file changes that
+    /// trigger the same event).
+    /// </summary>
+    public void SyncResolver(LibraryResolver resolver)
+    {
+        if (resolver is null) return;
+        var fresh      = ListUserLibrarySources();
+        var freshNames = new HashSet<string>(
+            fresh.Select(s => s.LibraryName),
+            StringComparer.OrdinalIgnoreCase);
+
+        // 1. Drop user-vendor entries (Vendor != "IEEE") whose package
+        //    is no longer present on disk. Iterating over the snapshot
+        //    `All` returns a copy, so it's safe to mutate inside.
+        foreach (var existing in resolver.All)
+        {
+            if (string.Equals(existing.Vendor, "IEEE", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (!freshNames.Contains(existing.LibraryName))
+                resolver.Unregister(existing.LibraryName);
+        }
+
+        // 2. Add or refresh anything currently on disk. Register is
+        //    add-or-replace, so re-imports with new content also pick
+        //    up the latest SourceKey (e.g. updated #package= fragment).
+        foreach (var s in fresh) resolver.Register(s);
+    }
+
     private static string? SanitizeLibraryFileName(string input)
     {
         if (string.IsNullOrWhiteSpace(input)) return null;
@@ -609,6 +683,69 @@ public class UserAssetStore
         foreach (var c in Path.GetInvalidFileNameChars()) name = name.Replace(c, '_');
         if (!name.EndsWith(requiredExtension, StringComparison.OrdinalIgnoreCase)) name += requiredExtension;
         return name;
+    }
+
+    /// <summary>
+    /// Wires a <see cref="FileSystemWatcher"/> per user-asset folder so
+    /// external mutations (cloud sync drop, Finder copy, scripted import)
+    /// reach the resolver / picker without an app restart. All events fan
+    /// into a single debounced <see cref="OnChange"/> fire so a batch of
+    /// writes doesn't blow up subscribers.
+    /// </summary>
+    private void StartWatchers()
+    {
+        foreach (var dir in new[] { UserDevicesDir, UserDictionariesDir, UserLibrariesDir })
+        {
+            try
+            {
+                var w = new FileSystemWatcher(dir)
+                {
+                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite |
+                                   NotifyFilters.Size     | NotifyFilters.CreationTime,
+                    IncludeSubdirectories = false,
+                    EnableRaisingEvents   = true
+                };
+                w.Created += (_, _) => DebouncedFireChange();
+                w.Deleted += (_, _) => DebouncedFireChange();
+                w.Renamed += (_, _) => DebouncedFireChange();
+                w.Changed += (_, _) => DebouncedFireChange();
+                _watchers.Add(w);
+            }
+            catch (Exception ex)
+            {
+                // FileSystemWatcher fails on some sandboxed targets (older
+                // Android, browser-targeting builds). Falling back to "no
+                // external watch" matches the v1 behaviour exactly — Settings
+                // imports still fire OnChange directly.
+                _logger.LogWarning(ex, "[UserAssetStore] Failed to start FileSystemWatcher on {Dir}", dir);
+            }
+        }
+    }
+
+    private void DebouncedFireChange()
+    {
+        _watcherDebounce?.Dispose();
+        _watcherDebounce = new System.Threading.Timer(_ =>
+        {
+            try { OnChange?.Invoke(); }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[UserAssetStore] OnChange subscriber threw");
+            }
+        }, null, WatcherDebounceMs, System.Threading.Timeout.Infinite);
+    }
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        foreach (var w in _watchers)
+        {
+            try { w.Dispose(); }
+            catch { /* swallow — disposing already-broken watchers shouldn't fail teardown */ }
+        }
+        _watchers.Clear();
+        _watcherDebounce?.Dispose();
+        _watcherDebounce = null;
     }
 
     private static string ResolveRoot()

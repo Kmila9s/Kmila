@@ -225,6 +225,9 @@ public static class MauiProgram
         // Practice persistence — scoped so it shares the circuit's DbContext.
         // Stores every Submit click + the aggregate progress row.
         builder.Services.AddScoped<Kmila.Shared.Services.Practice.PracticeAttemptStore>();
+        // Session export — scoped so it composes the same DbContext the
+        // store reads from when emitting Markdown/ZIP reports.
+        builder.Services.AddScoped<Kmila.Shared.Services.Practice.PracticeSessionExportService>();
 
         // Sidebar MRU — caps the sidebar project list at 10 most-recent.
         builder.Services.AddScoped<RecentProjectsTracker>();
@@ -266,19 +269,41 @@ public static class MauiProgram
         var app = builder.Build();
 
         // Apply the saved library-build mode so the FIRST build of a session
-        // honours the user's Settings → Build mode choice. See the Web
-        // Program.cs counterpart for the full commentary.
+        // honours the user's Settings → Build mode choice. The DB read is
+        // pushed onto a thread-pool thread and fire-and-forget: blocking
+        // the Mac Catalyst startup thread on `GetSettingAsync(...)` causes
+        // a sync-over-async deadlock (the SQLite continuation waits for the
+        // UI sync context that's currently blocked on .GetResult). The
+        // user's first build will use the default Persistent policy if the
+        // hydration loses the race; the Settings page re-applies on mount.
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var db       = app.Services.GetRequiredService<Kmila.Shared.Data.ApplicationDbContext>();
+                var compiler = app.Services.GetRequiredService<LibraryCompiler.Services.LibraryCompiler>();
+                var raw      = await db.GetSettingAsync(Kmila.Shared.Models.AppSettings.KEY_LIBRARY_BUILD_MODE);
+                var policy   = Kmila.Shared.Models.LibraryBuildModeExtensions.ParseToken(raw);
+                compiler.Orchestrator.Policy = Kmila.Shared.Models.LibraryBuildModeExtensions.ToPolicy(policy);
+            }
+            catch
+            {
+                // First-launch path: AppSettings table may not exist yet.
+            }
+        });
+
+        // Reconcile the resolver against disk on every UserAssetStore
+        // change (Settings import / delete, external file mutations).
+        // See Web Program.cs for the rationale.
         try
         {
-            var db       = app.Services.GetRequiredService<Kmila.Shared.Data.ApplicationDbContext>();
-            var compiler = app.Services.GetRequiredService<LibraryCompiler.Services.LibraryCompiler>();
-            var raw      = db.GetSettingAsync(Kmila.Shared.Models.AppSettings.KEY_LIBRARY_BUILD_MODE).GetAwaiter().GetResult();
-            var policy   = Kmila.Shared.Models.LibraryBuildModeExtensions.ParseToken(raw);
-            compiler.Orchestrator.Policy = Kmila.Shared.Models.LibraryBuildModeExtensions.ToPolicy(policy);
+            var compiler   = app.Services.GetRequiredService<LibraryCompiler.Services.LibraryCompiler>();
+            var userAssets = app.Services.GetRequiredService<UserAssetStore>();
+            userAssets.OnChange += () => userAssets.SyncResolver(compiler.Resolver);
         }
         catch
         {
-            // First-launch path: AppSettings table may not exist yet.
+            // Subscription is best-effort.
         }
 
         // Redirect Console.Out into an ILogger so that Console.WriteLine calls

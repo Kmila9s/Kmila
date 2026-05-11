@@ -45,6 +45,15 @@ public class AppSettings
     public const string KEY_THEME = "KMILA_THEME";
 
     /// <summary>
+    /// Key for the user-chosen text-size step (xs/sm/md/lg/xl). Drives the
+    /// --user-text-scale CSS variable on &lt;html&gt; so all rem-based type
+    /// tokens scale uniformly. Persisted in SQLite for native parity; the
+    /// browser-side localStorage copy ('kmila-text-scale') is read by the
+    /// inline &lt;head&gt; boot script to apply the size pre-FOUC.
+    /// </summary>
+    public const string KEY_TEXT_SCALE = "KMILA_TEXT_SCALE";
+
+    /// <summary>
     /// Key for the simulation tick-resolution mode. See <see cref="TickResolutionMode"/>.
     /// Controls how fine-grained the discrete-time simulator's tick is, which
     /// caps the maximum clock frequency the waveform can faithfully represent

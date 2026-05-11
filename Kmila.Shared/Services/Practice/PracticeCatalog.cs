@@ -133,7 +133,8 @@ public class PracticeCatalog
                     Difficulty: difficulty,
                     Titles: e.Titles ?? new(),
                     Summaries: e.Summaries ?? new(),
-                    TestCaseCount: 0)); // hydrated lazily on GetAsync; -1 sentinel would be misleading on the catalog card
+                    TestCaseCount: 0, // hydrated lazily on GetAsync; -1 sentinel would be misleading on the catalog card
+                    RequiresEngine: string.IsNullOrEmpty(e.RequiresEngine) ? null : e.RequiresEngine));
                 raw[e.Id] = e;
             }
 
@@ -193,7 +194,8 @@ public class PracticeCatalog
                 MatchKind: matchKind,
                 OutputPortsToCompare: e.OutputPorts ?? new(),
                 SampleTimesNs: e.SampleTimesNs ?? new(),
-                TestCases: tests);
+                TestCases: tests,
+                RequiresEngine: string.IsNullOrEmpty(e.RequiresEngine) ? null : e.RequiresEngine);
         }
         catch (Exception ex)
         {
@@ -288,12 +290,16 @@ public class PracticeCatalog
     // Manifest + tests.json DTOs (private — never escape the service)
     // ────────────────────────────────────────────────────────────────────
 
+    /// <summary>Root document shape of <c>Practice/manifest.json</c>: schema version + exercise entries.</summary>
     private class ManifestRoot
     {
+        /// <summary>Manifest schema version number; bumped when the on-disk shape changes.</summary>
         public int Version { get; set; }
+        /// <summary>List of exercises declared by the manifest.</summary>
         public List<ManifestEntry>? Exercises { get; set; }
     }
 
+    /// <summary>One exercise entry inside <see cref="ManifestRoot.Exercises"/>; later projected into the public <c>PracticeExerciseMeta</c>.</summary>
     private class ManifestEntry
     {
         public string? Id { get; set; }
@@ -305,13 +311,18 @@ public class PracticeCatalog
         public List<long>? SampleTimesNs { get; set; }
         public Dictionary<string, string>? Titles { get; set; }
         public Dictionary<string, string>? Summaries { get; set; }
+        /// <summary>Optional engine-feature gate. See PracticeExerciseMeta.RequiresEngine.</summary>
+        public string? RequiresEngine { get; set; }
     }
 
+    /// <summary>Root document shape of an exercise's <c>tests.json</c> file.</summary>
     private class TestsJson
     {
+        /// <summary>List of test cases declared by the file.</summary>
         public List<TestJsonItem>? Tests { get; set; }
     }
 
+    /// <summary>One test case inside <see cref="TestsJson.Tests"/>: id, visibility, descriptions, duration/clock parameters, and inputs.</summary>
     private class TestJsonItem
     {
         public string? Id { get; set; }
@@ -322,16 +333,21 @@ public class PracticeCatalog
         public List<PortInputJson>? Inputs { get; set; }
     }
 
+    /// <summary>Time-stamped input sequence applied to a single port during a test case.</summary>
     private class PortInputJson
     {
         public string? PortName { get; set; }
         public List<PortValueJson>? Values { get; set; }
     }
 
+    /// <summary>One <c>(time, scale, value)</c> tuple inside <see cref="PortInputJson.Values"/>.</summary>
     private class PortValueJson
     {
+        /// <summary>Numeric time value (interpreted in the unit named by <see cref="Scale"/>).</summary>
         public int Time { get; set; }
+        /// <summary>Time unit ("ns", "us", "ms"…); empty defaults to nanoseconds.</summary>
         public string? Scale { get; set; }
+        /// <summary>Bit value to drive on the port at the given time.</summary>
         public string? Value { get; set; }
     }
 }

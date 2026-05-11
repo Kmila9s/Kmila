@@ -1,4 +1,6 @@
-## ⚠ ترجمة قيد الإنجاز — 8-bit shift register, wrong direction
+## 8-bit shift register, wrong direction
+
+⚠ الترجمة معلقة — الوصف معروض بالإنجليزية.
 
 A serial-in / parallel-out shift register was requested, shifting **left** every clock.
 

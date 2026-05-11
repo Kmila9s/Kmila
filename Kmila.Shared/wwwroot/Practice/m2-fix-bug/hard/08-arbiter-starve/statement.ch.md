@@ -1,4 +1,6 @@
-## ⚠ Translation pending — Round-robin arbiter starvation fix
+## Round-robin arbiter starvation fix
+
+⚠ 翻译未完成 — 描述以英文显示。
 
 Four agents drive `req(3..0)`. The arbiter must give one grant per
 cycle, but the current implementation is a fixed-priority encoder:

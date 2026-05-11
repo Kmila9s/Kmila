@@ -74,6 +74,27 @@
         </div>
     </header>
 
+    @* Quick filters — same pattern as Practice. Tapping the active chip
+       again clears the filter. *@
+    <div class="catalog-filters" role="group" aria-label="@Traductor.T("CATALOG_FILTERS_LABEL")">
+        <div class="catalog-filters__row">
+            <span class="catalog-filters__label">@Traductor.T("LEARN_FILTER_LEVEL")</span>
+            <button type="button"
+                    class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm filter-chip @(_levelFilter == null ? "filter-chip--active is-active" : "")"
+                    @onclick="() => SetLevel(null)">
+                @Traductor.T("CATALOG_FILTER_ALL")
+            </button>
+            @foreach (var lvl in _allLevels)
+            {
+                <button type="button"
+                        class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm filter-chip filter-chip--@LevelClass(lvl) @(_levelFilter == lvl ? "filter-chip--active is-active" : "")"
+                        @onclick="() => SetLevel(lvl)">
+                    @LevelLabel(lvl)
+                </button>
+            }
+        </div>
+    </div>
+
     @if (_loading)
     {
         <div class="learn-empty">
@@ -167,6 +188,21 @@
     /// <summary>Live filter text. Empty = show everything.</summary>
     private string _filter = string.Empty;
 
+    /// <summary>Selected level chip; null = "All".</summary>
+    private LessonLevel? _levelFilter;
+
+    private static readonly LessonLevel[] _allLevels = new[]
+    {
+        LessonLevel.Beginner, LessonLevel.Easy, LessonLevel.Intermediate,
+        LessonLevel.Advanced, LessonLevel.Expert
+    };
+
+    private void SetLevel(LessonLevel? l)
+    {
+        _levelFilter = (_levelFilter == l) ? null : l;
+        ApplyFilter();
+    }
+
     protected override async Task OnInitializedAsync()
     {
         Traductor.StaticOnLangChanged += OnLangOrProgressChanged;
@@ -253,6 +289,7 @@
         }
 
         _grouped = _manifest.Modules
+            .Where(m => !_levelFilter.HasValue || m.Level == _levelFilter.Value)
             .Where(ModuleMatches)
             .OrderBy(m => (int)m.Level)
             .ThenBy(m => m.Order)

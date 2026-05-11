@@ -1,4 +1,6 @@
-## ⚠ Translation pending — Asymmetric sign-extension fix
+## Asymmetric sign-extension fix
+
+⚠ 翻訳待ち — 説明は英語で表示されます。
 
 Two unsigned 4-bit values `a` and `b` are multiplied to produce an
 8-bit unsigned `product`. The current code accidentally interprets

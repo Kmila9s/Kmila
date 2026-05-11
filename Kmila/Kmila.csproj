@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
-    <TargetFrameworks>net9.0-android;net9.0-ios;net9.0-maccatalyst</TargetFrameworks>
+    <TargetFrameworks>net9.0-android35.0;net9.0-ios;net9.0-maccatalyst</TargetFrameworks>
     <!--<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net9.0-windows10.0.19041.0</TargetFrameworks>-->
     <!-- Uncomment to also build the tizen app. You will need to install tizen by following this: https://github.com/Samsung/Tizen.NET -->
     <!-- <TargetFrameworks>$(TargetFrameworks);net9.0-tizen</TargetFrameworks> -->
@@ -43,6 +43,22 @@
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'tizen'">6.5</SupportedOSPlatformVersion>-->
   </PropertyGroup>
 
+  <!-- Android-specific packaging for Google Play's 16 KB page-size requirement
+       (mandatory for new releases targeting API 35+ since Nov 2025). Backwards
+       compatible: 16 KB-aligned APKs run unchanged on 4 KB-page devices because
+       16 is a multiple of 4 — devices < API 35 just ignore the extra padding.
+       minSdk stays at 24, so installable device set is unchanged. -->
+  <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+    <!-- Force the packager to align .so entries on 16 KB ZIP-page boundaries. -->
+    <AndroidZipAlignmentPages>16</AndroidZipAlignmentPages>
+    <!-- Keep native libs uncompressed inside the APK so the loader can mmap
+         them directly from the package. Requires API 23+ (we're at 24). -->
+    <AndroidExtractNativeLibs>false</AndroidExtractNativeLibs>
+    <!-- 64-bit ABIs only — 16 KB pages don't exist on 32-bit Android, and
+         Play no longer requires armeabi-v7a / x86 for new submissions. -->
+    <RuntimeIdentifiers>android-arm64;android-x64</RuntimeIdentifiers>
+  </PropertyGroup>
+
   <ItemGroup>
     <!-- App Icon - Kmila branding with dark slate blue -->
     <MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.png" Color="#475569" ForegroundScale="0.65" />
@@ -62,6 +78,14 @@
 
     <!-- Include Devices from Shared project as raw assets -->
     <MauiAsset Include="..\Kmila.Shared\wwwroot\Devices\**\*.json" LogicalName="Devices\%(RecursiveDir)%(Filename)%(Extension)" />
+
+    <!-- Translation dictionaries: pulled from Kmila.Shared so the Web build
+         and the MAUI bundle read the same file. Same LogicalName pattern as
+         Devices/Learn/Practice so MauiProgram.cs's Traductor resolver finds
+         them via FileSystem.OpenAppPackageFileAsync("Dictionaries/{lang}.json").
+         Without this rule, the bundle ships no dictionaries and every UI
+         string renders as its raw key (e.g. "NAV_LEARN" instead of "Learn"). -->
+    <MauiAsset Include="..\Kmila.Shared\wwwroot\Dictionaries\**\*.json" LogicalName="Dictionaries\%(RecursiveDir)%(Filename)%(Extension)" />
 
     <!-- Learn curriculum: manifest + per-language Markdown bodies. Same
          LogicalName pattern as Dictionaries so FileSystem.OpenAppPackageFileAsync

@@ -1,4 +1,6 @@
-## ⚠ 翻訳待ち — Traffic-light table — fill the gap
+## Traffic-light table — fill the gap
+
+⚠ 翻訳待ち — 説明は英語で表示されます。
 
 A 3-state traffic-light controller is **almost** complete. The
 state register, the asynchronous reset and the output assignment

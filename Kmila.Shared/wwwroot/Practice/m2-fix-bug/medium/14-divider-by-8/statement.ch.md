@@ -1,4 +1,6 @@
-## ⚠ 翻译待完成 — Clock divider, wrong divisor
+## Clock divider, wrong divisor
+
+⚠ 翻译未完成 — 描述以英文显示。
 
 A divide-by-4 clock. A 3-bit free-running counter `cnt` increments each rising edge; `clk_out` should be `cnt(1)` so the period is 4 input clocks.
 

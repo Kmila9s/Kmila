@@ -105,6 +105,21 @@ public class ProgramBuilder : IDisposable
         RegexOptions.Compiled);
 
     /// <summary>
+    /// Matches a VHDL <c>library X;</c> (or <c>library X, Y, Z;</c>)
+    /// declaration. Captures the comma-separated list as group 1; the
+    /// caller splits on commas. <c>STD</c> and <c>WORK</c> are implicit
+    /// in VHDL and don't need a declaration.
+    /// </summary>
+    private static readonly Regex LibraryDeclRe = new(
+        @"(?im)^\s*library\s+([a-z_][a-z0-9_]*(?:\s*,\s*[a-z_][a-z0-9_]*)*)\s*;",
+        RegexOptions.Compiled);
+
+    /// <summary>Strip line comments before pre-scanning; matches the LibraryBuilder rule.</summary>
+    private static readonly Regex LineCommentRe = new(
+        @"--[^\r\n]*",
+        RegexOptions.Compiled);
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ProgramBuilder"/> class.
     /// </summary>
     /// <param name="libraryCompiler">
@@ -181,7 +196,16 @@ public class ProgramBuilder : IDisposable
     /// <param name="file">The project file to build.</param>
     /// <returns>True if the build was successful, otherwise false.</returns>
     /// <exception cref="OperationCanceledException">Thrown when the build is cancelled by the user.</exception>
-    public bool Build(ProjectFile file)
+    /// <remarks>
+    /// Async because the library-compile step awaits real I/O
+    /// (FileSystemBlobStore reads/writes). Calling it via
+    /// <c>.GetAwaiter().GetResult()</c> from the Blazor UI thread deadlocks
+    /// when the inner awaits' continuations try to resume on the captured
+    /// sync context — that produced a silent first-run freeze that only
+    /// cleared on Blazor Server after F5 (singleton cache hit) and never
+    /// cleared on MAUI BlazorWebView.
+    /// </remarks>
+    public async Task<bool> BuildAsync(ProjectFile file, CancellationToken ct = default)
     {
         IsBuilding = true;
 
@@ -217,7 +241,8 @@ public class ProgramBuilder : IDisposable
             // point we genuinely don't know what symbols it would expose,
             // so continuing the build would just produce confusing
             // "unknown function" diagnostics deep in the parser.
-            EnsureLibrariesCompiledForBuild(filePath, file.Project?.BasePath);
+            await EnsureLibrariesCompiledForBuildAsync(filePath, file.Project?.BasePath, ct)
+                .ConfigureAwait(false);
 
             Parser = new(filePath);
             Parser.ParseFile();
@@ -470,13 +495,25 @@ public class ProgramBuilder : IDisposable
     /// Thrown when a <c>use</c> clause references a library the resolver
     /// doesn't know — the build halts at that point.
     /// </exception>
-    private void EnsureLibrariesCompiledForBuild(string buildingFilePath, string? basePath)
+    private async Task EnsureLibrariesCompiledForBuildAsync(string buildingFilePath, string? basePath, CancellationToken ct)
     {
         if (_libraryCompiler is null) return;
 
         // Collect every (library, package) pair we'll need to resolve.
         var requestedPackages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var declaredLibs      = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // Library names the user actually declared via `library X;` —
+        // we enforce that every non-trivial `use` clause has a matching
+        // declaration. STD / WORK / IEEE are implicit in VHDL even
+        // without explicit declarations, so we seed them here.
+        var declaredViaLibraryClause = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "STD", "WORK", "IEEE"
+        };
+        // Track which library-clause referent appears in which file so
+        // the diagnostic can point at the right offender when a `use`
+        // is missing its `library` partner.
+        var useClauseLibraries = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var path in EnumerateProjectVhdlFiles(buildingFilePath, basePath))
         {
@@ -484,10 +521,25 @@ public class ProgramBuilder : IDisposable
             try { source = File.ReadAllText(path); }
             catch { continue; }   // unreadable sibling — let the parser surface it later
 
+            // Strip line comments so a "-- use foo.bar.all" inside docs
+            // can't trip the package-validation logic below.
+            source = LineCommentRe.Replace(source, string.Empty);
+
+            // Pick up `library X, Y;` declarations.
+            foreach (Match m in LibraryDeclRe.Matches(source))
+            {
+                foreach (var raw in m.Groups[1].Value.Split(','))
+                {
+                    var name = raw.Trim();
+                    if (name.Length > 0) declaredViaLibraryClause.Add(name);
+                }
+            }
+
             foreach (Match m in UseClauseRe.Matches(source))
             {
                 var lib = m.Groups[1].Value;
                 var pkg = m.Groups[2].Value;
+                useClauseLibraries.Add(lib);
 
                 // STD is intrinsic — the parser handles std.standard / std.textio
                 // without LibraryCompiler help.
@@ -515,6 +567,25 @@ public class ProgramBuilder : IDisposable
             }
         }
 
+        // Strict-mode check: every library mentioned in a `use` clause must
+        // also have a matching `library X;` declaration in some project
+        // file. Real toolchains require this; without the check a user can
+        // accidentally `use my_lib.foo.all` while forgetting the
+        // `library my_lib;` line and get cryptic diagnostics deep in the
+        // parser.
+        var missingLibraryDecl = useClauseLibraries
+            .Where(l => !declaredViaLibraryClause.Contains(l))
+            .OrderBy(l => l, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (missingLibraryDecl.Count > 0)
+        {
+            var first = missingLibraryDecl[0];
+            throw new Exception(
+                $"`use {first}.…` is missing its `library {first};` declaration. " +
+                "Add the declaration before the `use` clause, or remove the " +
+                "`use` clause if it isn't needed.");
+        }
+
         if (requestedPackages.Count == 0) return;
 
         // Validate every requested package against the resolver before
@@ -539,9 +610,9 @@ public class ProgramBuilder : IDisposable
                 $"corresponding `use {blame}.…` clause.");
         }
 
-        var compiled = _libraryCompiler
-            .CompileAsync(requestedPackages, BuildExecutionMode.Linear)
-            .GetAwaiter().GetResult();
+        var compiled = await _libraryCompiler
+            .CompileAsync(requestedPackages, BuildExecutionMode.Linear, ct)
+            .ConfigureAwait(false);
 
         foreach (var lib in compiled)
         {

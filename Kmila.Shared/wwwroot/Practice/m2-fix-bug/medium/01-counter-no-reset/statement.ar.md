@@ -1,4 +1,6 @@
-## ⚠ ترجمة قيد الإنجاز — 4-bit counter, async reset bug
+## 4-bit counter, async reset bug
+
+⚠ الترجمة معلقة — الوصف معروض بالإنجليزية.
 
 The block is meant to be a 4-bit counter with an **asynchronous active-high reset**.
 

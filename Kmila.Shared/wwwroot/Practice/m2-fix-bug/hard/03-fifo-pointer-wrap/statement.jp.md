@@ -1,4 +1,6 @@
-## ⚠ Translation pending — FIFO pointer wrap fix
+## FIFO pointer wrap fix
+
+⚠ 翻訳待ち — 説明は英語で表示されます。
 
 A depth-4 FIFO drops data after the buffer rolls over. The
 `count`/`full`/`empty` logic looks fine, but the read and write

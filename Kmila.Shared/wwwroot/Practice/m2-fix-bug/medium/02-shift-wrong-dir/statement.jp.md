@@ -1,4 +1,6 @@
-## ⚠ 翻訳作業中 — 8-bit shift register, wrong direction
+## 8-bit shift register, wrong direction
+
+⚠ 翻訳待ち — 説明は英語で表示されます。
 
 A serial-in / parallel-out shift register was requested, shifting **left** every clock.
 

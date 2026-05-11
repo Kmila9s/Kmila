@@ -1,4 +1,6 @@
-## ⚠ 翻訳待ち — UART mid-bit sampler — fill the gap
+## UART mid-bit sampler — fill the gap
+
+⚠ 翻訳待ち — 説明は英語で表示されます。
 
 In a 16× over-sampled UART receiver, the bit decision happens
 at the centre of the bit window — when the oversample counter

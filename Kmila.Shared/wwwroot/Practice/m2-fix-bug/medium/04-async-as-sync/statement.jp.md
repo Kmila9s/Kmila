@@ -1,4 +1,6 @@
-## ⚠ 翻訳作業中 — D flip-flop, async reset that isn't async
+## D flip-flop, async reset that isn't async
+
+⚠ 翻訳待ち — 説明は英語で表示されます。
 
 A D flip-flop with **async high-active reset**.
 

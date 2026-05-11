@@ -1,4 +1,6 @@
-## ⚠ ترجمة قيد الإنجاز — Clock divider, wrong divisor
+## Clock divider, wrong divisor
+
+⚠ الترجمة معلقة — الوصف معروض بالإنجليزية.
 
 A divide-by-4 clock. A 3-bit free-running counter `cnt` increments each rising edge; `clk_out` should be `cnt(1)` so the period is 4 input clocks.
 

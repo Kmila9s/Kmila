@@ -1,4 +1,6 @@
-## ⚠ Translation pending — FIFO read-pointer — fill the gap
+## FIFO read-pointer — fill the gap
+
+⚠ الترجمة معلقة — الوصف معروض بالإنجليزية.
 
 A small FIFO skeleton has its write pointer, empty flag and
 reset already wired. Advance the read pointer only when

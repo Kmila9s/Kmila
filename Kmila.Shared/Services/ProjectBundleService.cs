@@ -184,6 +184,7 @@ public class ProjectBundleService
         public List<SnapshotRecord> Snapshots { get; set; } = new();
     }
 
+    /// <summary>Minimal project metadata embedded in the bundle (name, description, creation timestamp).</summary>
     public class ProjectRecord
     {
         public string Name { get; set; } = string.Empty;
@@ -191,12 +192,14 @@ public class ProjectBundleService
         public DateTime CreationTime { get; set; }
     }
 
+    /// <summary>One source file inside the bundle: filename plus full text content.</summary>
     public class FileRecord
     {
         public string FileName { get; set; } = string.Empty;
         public string? Content { get; set; }
     }
 
+    /// <summary>One simulation snapshot included in the bundle (label, scale, FPGA target, signal/sample counts, pinned flag).</summary>
     public class SnapshotRecord
     {
         public string Label { get; set; } = string.Empty;

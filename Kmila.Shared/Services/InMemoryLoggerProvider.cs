@@ -25,9 +25,16 @@ public sealed class InMemoryLoggerProvider : ILoggerProvider
     public void Dispose() { /* AppLogStore lives longer than this provider */ }
 }
 
+/// <summary>
+/// Per-category <see cref="ILogger"/> implementation backing
+/// <see cref="InMemoryLoggerProvider"/>. Forwards every log entry to the shared
+/// <see cref="AppLogStore"/>; scope/level filtering is delegated upstream.
+/// </summary>
 internal sealed class InMemoryLogger : ILogger
 {
+    /// <summary>Logger category name passed by the framework (typically a fully-qualified type name).</summary>
     private readonly string _category;
+    /// <summary>Shared in-memory log buffer that receives every emitted entry.</summary>
     private readonly AppLogStore _store;
 
     public InMemoryLogger(string category, AppLogStore store)

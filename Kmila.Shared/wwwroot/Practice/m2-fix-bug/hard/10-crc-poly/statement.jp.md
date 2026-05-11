@@ -1,4 +1,6 @@
-## ⚠ Translation pending — CRC-8 polynomial fix
+## CRC-8 polynomial fix
+
+⚠ 翻訳待ち — 説明は英語で表示されます。
 
 A serial CRC-8 generator XORs a feedback bit into shift-register
 positions chosen by the polynomial. The current code uses the

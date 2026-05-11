@@ -1,4 +1,6 @@
-## ⚠ Translation pending — Signed-overflow flag fix
+## Signed-overflow flag fix
+
+⚠ 翻译未完成 — 描述以英文显示。
 
 The 8-bit ALU computes `a + b` in two's complement and asserts `ovf`
 when the signed result does not fit in 8 bits. The current

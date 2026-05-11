@@ -1,4 +1,6 @@
-## ⚠ Translation pending — ALU shift-left — fill the gap
+## ALU shift-left — fill the gap
+
+⚠ الترجمة معلقة — الوصف معروض بالإنجليزية.
 
 A barrel shifter is **almost** done. The entity already declares
 the 8-bit data input `a`, the 3-bit shift amount `sh`, and the

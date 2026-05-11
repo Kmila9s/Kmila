@@ -171,5 +171,9 @@ public class LessonCatalog
     }
 }
 
-// Local alias to keep the converter declaration tidy in LoadManifestAsync above.
+/// <summary>
+/// Local alias for <see cref="System.Text.Json.Serialization.JsonStringEnumConverter"/>
+/// so <see cref="LessonCatalog"/>'s manifest deserialisation reads tidily without
+/// fully-qualifying the BCL converter name on every reference.
+/// </summary>
 internal class JsonStringEnumConverter : System.Text.Json.Serialization.JsonStringEnumConverter { }

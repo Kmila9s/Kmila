@@ -1,4 +1,6 @@
-## ⚠ ترجمة قيد الإنجاز — 3-state FSM, unreachable state
+## 3-state FSM, unreachable state
+
+⚠ الترجمة معلقة — الوصف معروض بالإنجليزية.
 
 A 3-state machine with states `S0` (`"00"`), `S1` (`"01"`), `S2` (`"10"`).
 

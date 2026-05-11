@@ -1,4 +1,6 @@
-## ⚠ 翻译待补 — Traffic-light table — fill the gap
+## Traffic-light table — fill the gap
+
+⚠ 翻译未完成 — 描述以英文显示。
 
 A 3-state traffic-light controller is **almost** complete. The
 state register, the asynchronous reset and the output assignment

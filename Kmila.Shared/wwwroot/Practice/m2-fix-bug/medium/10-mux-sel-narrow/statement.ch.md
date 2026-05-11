@@ -1,4 +1,6 @@
-## ⚠ 翻译待完成 — 4-to-1 mux, selector under-decoded
+## 4-to-1 mux, selector under-decoded
+
+⚠ 翻译未完成 — 描述以英文显示。
 
 A 4-to-1 mux with 2-bit `sel`: `00→a`, `01→b`, `10→c`, `11→d`.
 

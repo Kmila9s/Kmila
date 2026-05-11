@@ -1,4 +1,6 @@
-## ⚠ 翻译待完成 — Mixed-width signed adder, sign extension bug
+## Mixed-width signed adder, sign extension bug
+
+⚠ 翻译未完成 — 描述以英文显示。
 
 `a` is 4-bit two's-complement (−8…+7), `b` is 8-bit two's-complement. `sum = a + b` is 8 bits.
 

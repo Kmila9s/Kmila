@@ -1,4 +1,6 @@
-## ⚠ Translation pending — Handshake race fix
+## Handshake race fix
+
+⚠ 翻訳待ち — 説明は英語で表示されます。
 
 A simple `req`/`ack` handshake fails intermittently. When the upstream
 block raises `req` for a single cycle (a glitch from a clock-domain

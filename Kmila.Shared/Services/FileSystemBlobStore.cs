@@ -103,6 +103,34 @@ public sealed class FileSystemBlobStore : IBlobStore
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Wipes every blob under the store root. Used by Settings →
+    /// Library compilation → "Clear cache" so the user can force a cold
+    /// rebuild after corrupting the cache or just to free disk space.
+    /// Returns the number of files removed.
+    /// </summary>
+    public int ClearAll()
+    {
+        if (!Directory.Exists(_rootPath)) return 0;
+        int removed = 0;
+        try
+        {
+            foreach (var f in Directory.EnumerateFiles(_rootPath, "*", SearchOption.AllDirectories))
+            {
+                try { File.Delete(f); removed++; }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "[FileSystemBlobStore] ClearAll: failed to delete {File}", f);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[FileSystemBlobStore] ClearAll enumeration failed under {Root}", _rootPath);
+        }
+        return removed;
+    }
+
     /// <inheritdoc/>
     public async IAsyncEnumerable<string> EnumerateKeysAsync(
         [EnumeratorCancellation] CancellationToken ct = default)

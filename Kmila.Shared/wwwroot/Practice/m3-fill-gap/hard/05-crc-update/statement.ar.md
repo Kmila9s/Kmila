@@ -1,4 +1,6 @@
-## ⚠ Translation pending — CRC-8 update step — fill the gap
+## CRC-8 update step — fill the gap
+
+⚠ الترجمة معلقة — الوصف معروض بالإنجليزية.
 
 A serial CRC-8 register is almost complete. Implement the
 one-bit step on every rising clock edge.

@@ -1,4 +1,6 @@
-## ⚠ ترجمة قيد الإنجاز — 4-bit ALU, missing operation
+## 4-bit ALU, missing operation
+
+⚠ الترجمة معلقة — الوصف معروض بالإنجليزية.
 
 A 4-operation ALU selected by `op`: `00 = a+b`, `01 = a-b`, `10 = a and b`, `11 = a xor b`.
 

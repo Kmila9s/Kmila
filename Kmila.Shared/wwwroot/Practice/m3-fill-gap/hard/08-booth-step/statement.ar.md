@@ -1,4 +1,6 @@
-## ⚠ Translation pending — Booth multiplier — fill the gap
+## Booth multiplier — fill the gap
+
+⚠ الترجمة معلقة — الوصف معروض بالإنجليزية.
 
 A 4×4 Booth multiplier is almost complete. Implement the
 conditional add/subtract case based on `lsb_pair = q0 & q_minus1`.

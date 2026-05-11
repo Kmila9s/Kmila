@@ -1,4 +1,6 @@
-## ⚠ 翻訳作業中 — 4-bit comparator, equality output stuck
+## 4-bit comparator, equality output stuck
+
+⚠ 翻訳待ち — 説明は英語で表示されます。
 
 A 4-bit unsigned comparator with `gt`, `eq`, `lt` flags. `gt` and `lt` are correct but `eq` is hardwired to `'0'`, so equal inputs leave all three flags low.
 

@@ -319,6 +319,11 @@ public class GitHubAuth
 
     // ─── Wire types ──────────────────────────────────────────────
 
+    /// <summary>
+    /// Response payload from GitHub's device-flow <c>/login/device/code</c> endpoint —
+    /// holds the device + user codes the client polls and the verification URL the
+    /// user types into a browser.
+    /// </summary>
     public class DeviceCodeResponse
     {
         [JsonPropertyName("device_code")]      public string DeviceCode      { get; set; } = "";
@@ -328,6 +333,11 @@ public class GitHubAuth
         [JsonPropertyName("interval")]         public int    IntervalSeconds { get; set; }
     }
 
+    /// <summary>
+    /// Response payload from GitHub's <c>/login/oauth/access_token</c> endpoint while
+    /// polling the device-flow handshake. Either <see cref="AccessToken"/> is filled
+    /// or <see cref="Error"/> carries the still-pending / failed reason.
+    /// </summary>
     public class TokenResponse
     {
         [JsonPropertyName("access_token")] public string? AccessToken { get; set; }
@@ -336,6 +346,10 @@ public class GitHubAuth
         [JsonPropertyName("error")]        public string? Error       { get; set; }
     }
 
+    /// <summary>
+    /// Subset of the GitHub <c>/user</c> response that the app surfaces in the
+    /// account UI (login handle, display name, avatar URL, profile page URL).
+    /// </summary>
     public class GitHubAccount
     {
         [JsonPropertyName("login")]      public string  Login     { get; set; } = "";

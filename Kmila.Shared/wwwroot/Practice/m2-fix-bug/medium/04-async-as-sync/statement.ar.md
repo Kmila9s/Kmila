@@ -1,4 +1,6 @@
-## ⚠ ترجمة قيد الإنجاز — D flip-flop, async reset that isn't async
+## D flip-flop, async reset that isn't async
+
+⚠ الترجمة معلقة — الوصف معروض بالإنجليزية.
 
 A D flip-flop with **async high-active reset**.
 

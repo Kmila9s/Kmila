@@ -1,4 +1,6 @@
-## ⚠ 翻译待完成 — BCD-to-7-segment decoder, one digit blanked
+## BCD-to-7-segment decoder, one digit blanked
+
+⚠ 翻译未完成 — 描述以英文显示。
 
 A standard BCD-to-7-segment decoder for digits 0…9 (active-high segments, order `a b c d e f g`).
 

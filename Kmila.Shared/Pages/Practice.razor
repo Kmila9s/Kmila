@@ -19,12 +19,70 @@
             <span class="home-section__eyebrow">@Traductor.T("PRACTICE_EYEBROW")</span>
             <h1 id="practice-hero-title" class="learn-hero__title">@Traductor.T("PRACTICE_TITLE")</h1>
             <p class="learn-hero__subtitle">@Traductor.T("PRACTICE_SUBTITLE")</p>
+
+            <label class="learn-hero__search" aria-label="@Traductor.T("PRACTICE_SEARCH_LABEL")">
+                <Icon Name="IconName.Search" />
+                <input type="search"
+                       class="form-control"
+                       placeholder="@Traductor.T("PRACTICE_SEARCH_PLACEHOLDER")"
+                       value="@_search"
+                       @oninput="OnSearchChanged" />
+                @if (!string.IsNullOrEmpty(_search))
+                {
+                    <button type="button" class="learn-hero__search-clear"
+                            @onclick="() => { _search = string.Empty; StateHasChanged(); }"
+                            aria-label="@Traductor.T("COMMON_CLEAR")">
+                        <Icon Name="IconName.XLg" />
+                    </button>
+                }
+            </label>
         </div>
     </header>
 
+    @* Quick filters — chip rows scroll horizontally on small screens so the
+       full set is reachable on mobile without an overflow menu. *@
+    <div class="catalog-filters" role="group" aria-label="@Traductor.T("CATALOG_FILTERS_LABEL")">
+        <div class="catalog-filters__row">
+            <span class="catalog-filters__label">@Traductor.T("PRACTICE_FILTER_DIFFICULTY")</span>
+            <button type="button"
+                    class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm filter-chip @(_difficulty == null ? "filter-chip--active is-active" : "")"
+                    @onclick="() => SetDifficulty(null)">
+                @Traductor.T("CATALOG_FILTER_ALL")
+            </button>
+            @foreach (var d in _allDifficulties)
+            {
+                <button type="button"
+                        class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm filter-chip filter-chip--@DifficultyClass(d) @(_difficulty == d ? "filter-chip--active is-active" : "")"
+                        @onclick="() => SetDifficulty(d)">
+                    @DifficultyLabel(d)
+                </button>
+            }
+        </div>
+        <div class="catalog-filters__row">
+            <span class="catalog-filters__label">@Traductor.T("PRACTICE_FILTER_MODALITY")</span>
+            <button type="button"
+                    class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm filter-chip @(_modality == null ? "filter-chip--active is-active" : "")"
+                    @onclick="() => SetModality(null)">
+                @Traductor.T("CATALOG_FILTER_ALL")
+            </button>
+            @foreach (var m in _modalities)
+            {
+                <button type="button"
+                        class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm filter-chip @(_modality == m ? "filter-chip--active is-active" : "")"
+                        @onclick="() => SetModality(m)">
+                    <Icon Name="@ModalityIcon(m)" />
+                    <span>@ModalityLabel(m)</span>
+                </button>
+            }
+        </div>
+    </div>
+
     @foreach (var modality in _modalities)
     {
+        if (_modality != null && _modality != modality) continue;
+
         var bucket = _byModality.TryGetValue(modality, out var lst) ? lst : new List<PracticeExerciseMeta>();
+        var filtered = bucket.Where(MatchesFilters).ToList();
         <section class="learn-track">
             <header class="learn-track__header">
                 <span class="home-section__eyebrow">@ModalityNumber(modality) &middot; @ModalityLabel(modality)</span>
@@ -32,23 +90,38 @@
                 <p>@ModalityBlurb(modality)</p>
             </header>
 
-            @if (bucket.Count == 0)
+            @if (filtered.Count == 0)
             {
                 <div class="learn-empty">
                     <div class="learn-empty__icon"><Icon Name="IconName.Hourglass" /></div>
-                    <p>@Traductor.T("PRACTICE_BUCKET_EMPTY")</p>
+                    <p>
+                        @if (bucket.Count == 0)
+                        {
+                            @Traductor.T("PRACTICE_BUCKET_EMPTY")
+                        }
+                        else
+                        {
+                            @Traductor.T("CATALOG_NO_MATCH")
+                        }
+                    </p>
                 </div>
             }
             else
             {
                 <div class="learn-grid">
-                    @foreach (var ex in bucket)
+                    @foreach (var ex in filtered)
                     {
                         var title = PracticeCatalog.Localize(ex.Titles, _lang, ex.Id);
                         var summary = PracticeCatalog.Localize(ex.Summaries, _lang, string.Empty);
                         var href = $"/practice/{ex.Id}";
+                        var gated = !string.IsNullOrEmpty(ex.RequiresEngine);
+                        var gateTip = gated
+                            ? string.Format(Traductor.T("PRACTICE_GATED_TOOLTIP_FMT"), GateReason(ex.RequiresEngine))
+                            : null;
 
-                        <a class="learn-card" href="@href">
+                        <a class="learn-card @(gated ? "learn-card--gated" : "")"
+                           href="@href"
+                           title="@gateTip">
                             <div class="learn-card__icon learn-card__icon--@DifficultyVariant(ex.Difficulty)">
                                 <Icon Name="@ModalityIcon(ex.Modality)" />
                             </div>
@@ -59,15 +132,23 @@
                                     <span class="learn-card__chip learn-card__chip--@DifficultyClass(ex.Difficulty)">
                                         @DifficultyLabel(ex.Difficulty)
                                     </span>
-                                    @{
-                                        var status = _progressById.TryGetValue(ex.Id, out var p) ? p.Status : PracticeStatus.NotStarted;
-                                    }
-                                    @if (status != PracticeStatus.NotStarted)
+                                    @if (gated)
                                     {
-                                        <span class="practice-status-chip practice-status-chip--@StatusClass(status)">
-                                            <Icon Name="@StatusIcon(status)" />
-                                            @StatusLabel(status)
+                                        <span class="practice-status-chip practice-status-chip--gated">
+                                            <Icon Name="IconName.LockFill" />
+                                            @Traductor.T("PRACTICE_GATED_CHIP")
                                         </span>
+                                    }
+                                    else
+                                    {
+                                        var status = _progressById.TryGetValue(ex.Id, out var p) ? p.Status : PracticeStatus.NotStarted;
+                                        if (status != PracticeStatus.NotStarted)
+                                        {
+                                            <span class="practice-status-chip practice-status-chip--@StatusClass(status)">
+                                                <Icon Name="@StatusIcon(status)" />
+                                                @StatusLabel(status)
+                                            </span>
+                                        }
                                     }
                                     @if (ex.TestCaseCount > 0)
                                     {
@@ -92,9 +173,60 @@
         PracticeModality.FromZero, PracticeModality.FixBug, PracticeModality.FillGap
     };
 
+    private readonly PracticeDifficulty[] _allDifficulties = new[]
+    {
+        PracticeDifficulty.Easy, PracticeDifficulty.Medium, PracticeDifficulty.Hard
+    };
+
     private string _lang = "en";
     private Dictionary<PracticeModality, List<PracticeExerciseMeta>> _byModality = new();
     private Dictionary<string, PracticeProgress> _progressById = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Free-text search applied across title + summary in the active language.</summary>
+    private string _search = string.Empty;
+    /// <summary>Selected difficulty chip; null = "All".</summary>
+    private PracticeDifficulty? _difficulty;
+    /// <summary>Selected modality chip; null = "All". Drives both the chip row and the section filter.</summary>
+    private PracticeModality? _modality;
+
+    private void OnSearchChanged(ChangeEventArgs e)
+    {
+        _search = e.Value?.ToString() ?? string.Empty;
+        StateHasChanged();
+    }
+
+    private void SetDifficulty(PracticeDifficulty? d)
+    {
+        // Tapping the active chip again clears the filter — the "All" button
+        // is the canonical clear path but on mobile it's quicker to retap
+        // the row's current selection than to reach across to "All".
+        _difficulty = (_difficulty == d) ? null : d;
+        StateHasChanged();
+    }
+
+    private void SetModality(PracticeModality? m)
+    {
+        _modality = (_modality == m) ? null : m;
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Returns true when the exercise passes every active filter. Search
+    /// matches case-insensitively on the localized title and summary —
+    /// matching the raw <c>ex.Id</c> too gives the user an "I know its
+    /// codename" escape hatch when localization is incomplete.
+    /// </summary>
+    private bool MatchesFilters(PracticeExerciseMeta ex)
+    {
+        if (_difficulty.HasValue && ex.Difficulty != _difficulty.Value) return false;
+        if (string.IsNullOrWhiteSpace(_search)) return true;
+        var needle = _search.Trim();
+        var title   = PracticeCatalog.Localize(ex.Titles,    _lang, ex.Id);
+        var summary = PracticeCatalog.Localize(ex.Summaries, _lang, string.Empty);
+        return title.Contains(needle, StringComparison.OrdinalIgnoreCase)
+            || summary.Contains(needle, StringComparison.OrdinalIgnoreCase)
+            || ex.Id.Contains(needle, StringComparison.OrdinalIgnoreCase);
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -213,6 +345,13 @@
         PracticeStatus.InProgress => IconName.Hourglass,
         PracticeStatus.Solved     => IconName.PatchCheckFill,
         _                         => IconName.Circle
+    };
+
+    /// <summary>Maps a <c>RequiresEngine</c> token to a localized human-readable reason.</summary>
+    private string GateReason(string? key) => key switch
+    {
+        "numeric_std-sim" => Traductor.T("PRACTICE_GATED_REASON_NUMERIC_STD"),
+        _ => key ?? string.Empty
     };
 
     public void Dispose()

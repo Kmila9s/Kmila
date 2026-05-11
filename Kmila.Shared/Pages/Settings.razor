@@ -60,6 +60,15 @@
                         <LanguageChanger />
                     </div>
                 </div>
+                <div class="settings-row">
+                    <div class="settings-row__label">
+                        <strong>@Traductor.T("SETTINGS_TEXT_SIZE_TITLE")</strong>
+                        <small>@Traductor.T("SETTINGS_TEXT_SIZE_HINT")</small>
+                    </div>
+                    <div class="settings-row__control">
+                        <KmilaTextSizeSwitcher />
+                    </div>
+                </div>
             </div>
         </article>
 
@@ -146,6 +155,14 @@
                     LibraryCompiler.Services.LibraryBuildMode.ProcessCached => "SETTINGS_LIB_BUILD_PROCESS_DESC",
                     _                                                       => "SETTINGS_LIB_BUILD_PERSISTENT_DESC"
                 })</p>
+
+                <div class="settings-card__actions">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary"
+                            @onclick="ClearLibraryCache">
+                        <Icon Name="IconName.Trash" />
+                        <span>@Traductor.T("SETTINGS_LIB_CACHE_CLEAR")</span>
+                    </button>
+                </div>
             </div>
         </article>
 
@@ -162,12 +179,12 @@
             </header>
             <div class="settings-card__body">
                 <div class="settings-card__actions">
-                    <button type="button" class="btn btn-secondary"
+                    <button type="button" class="kmila-btn kmila-btn--primary"
                             @onclick="DownloadFpgaTemplate">
                         <Icon Name="IconName.Download" />
                         <span>@Traductor.T("SETTINGS_DOWNLOAD_TEMPLATE")</span>
                     </button>
-                    <label class="btn btn-primary settings-import-btn">
+                    <label class="kmila-btn kmila-btn--accent settings-import-btn">
                         <Icon Name="IconName.FileEarmarkPlus" />
                         <span>@Traductor.T("SETTINGS_IMPORT_FPGA")</span>
                         <InputFile OnChange="OnFpgaImportAsync" accept=".json" class="d-none" />
@@ -189,7 +206,7 @@
                                     <Icon Name="IconName.FileEarmarkCode" />
                                     <span class="settings-list__name">@name</span>
                                 </div>
-                                <button type="button" class="btn btn-ghost btn-sm"
+                                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
                                         @onclick="() => DeleteFpga(name)"
                                         aria-label="@Traductor.T("COMMON_DELETE")"
                                         title="@Traductor.T("COMMON_DELETE")">
@@ -215,12 +232,12 @@
             </header>
             <div class="settings-card__body">
                 <div class="settings-card__actions">
-                    <button type="button" class="btn btn-secondary"
+                    <button type="button" class="kmila-btn kmila-btn--primary"
                             @onclick="DownloadLanguageTemplate">
                         <Icon Name="IconName.Download" />
                         <span>@Traductor.T("SETTINGS_DOWNLOAD_TEMPLATE")</span>
                     </button>
-                    <label class="btn btn-primary settings-import-btn">
+                    <label class="kmila-btn kmila-btn--accent settings-import-btn">
                         <Icon Name="IconName.FileEarmarkPlus" />
                         <span>@Traductor.T("SETTINGS_IMPORT_LANG")</span>
                         <InputFile OnChange="OnLangImportAsync" accept=".json" class="d-none" />
@@ -244,7 +261,7 @@
                                     <span class="settings-list__name">@display</span>
                                     <span class="settings-list__code">@name</span>
                                 </div>
-                                <button type="button" class="btn btn-ghost btn-sm"
+                                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
                                         @onclick="() => DeleteLang(name)"
                                         aria-label="@Traductor.T("COMMON_DELETE")"
                                         title="@Traductor.T("COMMON_DELETE")">
@@ -275,7 +292,7 @@
             </header>
             <div class="settings-card__body">
                 <div class="settings-card__actions">
-                    <label class="btn btn-primary settings-import-btn">
+                    <label class="kmila-btn kmila-btn--accent settings-import-btn">
                         <Icon Name="IconName.FileEarmarkPlus" />
                         <span>@Traductor.T("SETTINGS_IMPORT_LIB")</span>
                         <InputFile OnChange="OnLibraryImportAsync" accept=".vhd,.vhdl" class="d-none" />
@@ -304,12 +321,20 @@
                                         </span>
                                     }
                                 </div>
-                                <button type="button" class="btn btn-ghost btn-sm"
-                                        @onclick="() => DeleteLibrary(name)"
-                                        aria-label="@Traductor.T("COMMON_DELETE")"
-                                        title="@Traductor.T("COMMON_DELETE")">
-                                    <Icon Name="IconName.Trash" />
-                                </button>
+                                <div class="d-flex gap-1">
+                                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                                            @onclick="() => ViewLibrary(path)"
+                                            aria-label="@Traductor.T("SETTINGS_LIB_VIEW")"
+                                            title="@Traductor.T("SETTINGS_LIB_VIEW")">
+                                        <Icon Name="IconName.Eye" />
+                                    </button>
+                                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                                            @onclick="() => DeleteLibrary(name)"
+                                            aria-label="@Traductor.T("COMMON_DELETE")"
+                                            title="@Traductor.T("COMMON_DELETE")">
+                                        <Icon Name="IconName.Trash" />
+                                    </button>
+                                </div>
                             </li>
                         }
                     </ul>
@@ -342,13 +367,13 @@
                             <option value="@p.Id">@p.Name</option>
                         }
                     </select>
-                    <button type="button" class="btn btn-secondary"
+                    <button type="button" class="kmila-btn kmila-btn--primary"
                             disabled="@(_exportProjectId <= 0)"
                             @onclick="ExportBundleAsync">
                         <Icon Name="IconName.Download" />
                         <span>@Traductor.T("SETTINGS_BUNDLE_EXPORT")</span>
                     </button>
-                    <label class="btn btn-primary settings-import-btn">
+                    <label class="kmila-btn kmila-btn--accent settings-import-btn">
                         <Icon Name="IconName.FileEarmarkPlus" />
                         <span>@Traductor.T("SETTINGS_BUNDLE_IMPORT")</span>
                         <InputFile OnChange="OnBundleImportAsync" accept=".kmila,.json" class="d-none" />
@@ -375,7 +400,7 @@
                         <small>@string.Format(Traductor.T("SETTINGS_LEARN_COMPLETED_N"), _learnCompleted)</small>
                     </div>
                     <div class="settings-row__control">
-                        <button type="button" class="btn btn-outline-danger btn-sm"
+                        <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--danger kmila-btn--sm"
                                 @onclick="ResetLearnProgressAsync"
                                 disabled="@(_learnCompleted == 0)">
                             <Icon Name="IconName.ArrowCounterclockwise" />
@@ -398,7 +423,7 @@
                 </div>
             </header>
             <div class="settings-card__body">
-                <a href="/logs" class="btn btn-secondary">
+                <a href="/logs" class="kmila-btn kmila-btn--primary">
                     <Icon Name="IconName.JournalText" />
                     <span>@Traductor.T("SETTINGS_OPEN_LOGS")</span>
                 </a>
@@ -442,7 +467,7 @@
                                 <span class="settings-list__name">@(GitHubAuth.Account.Name ?? GitHubAuth.Account.Login)</span>
                                 <span class="settings-list__code">@GitHubAuth.Account.Login</span>
                             </div>
-                            <button type="button" class="btn btn-ghost btn-sm"
+                            <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
                                     @onclick="SignOutAsync"
                                     aria-label="@Traductor.T("TOPBAR_SIGN_OUT")"
                                     title="@Traductor.T("TOPBAR_SIGN_OUT")">
@@ -468,7 +493,7 @@
 
                     <div class="settings-card__actions">
                         <button type="button"
-                                class="btn btn-primary"
+                                class="kmila-btn kmila-btn--accent"
                                 @onclick="SubmitManualReportAsync"
                                 disabled="@_submitting">
                             <Icon Name="IconName.Send" />
@@ -522,7 +547,7 @@
                         </div>
 
                         <div class="settings-card__actions">
-                            <button type="button" class="btn btn-primary"
+                            <button type="button" class="kmila-btn kmila-btn--accent"
                                     @onclick="SaveClientIdAsync"
                                     disabled="@string.IsNullOrWhiteSpace(_clientIdInput)">
                                 <Icon Name="IconName.Save" />
@@ -533,7 +558,7 @@
                     else
                     {
                         <div class="settings-card__actions">
-                            <button type="button" class="btn btn-primary"
+                            <button type="button" class="kmila-btn kmila-btn--accent"
                                     @onclick="OpenLoginAsync">
                                 <Icon Name="IconName.Github" />
                                 <span>@Traductor.T("TOPBAR_SIGN_IN_GITHUB")</span>
@@ -564,13 +589,13 @@
                                 </div>
                             </div>
                             <div class="settings-card__actions">
-                                <button type="button" class="btn btn-primary"
+                                <button type="button" class="kmila-btn kmila-btn--accent"
                                         @onclick="SaveClientIdAsync"
                                         disabled="@string.IsNullOrWhiteSpace(_clientIdInput)">
                                     <Icon Name="IconName.Save" />
                                     <span>@Traductor.T("COMMON_SAVE")</span>
                                 </button>
-                                <button type="button" class="btn btn-outline-danger"
+                                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--danger"
                                         @onclick="ClearClientIdAsync">
                                     <Icon Name="IconName.Trash" />
                                     <span>@Traductor.T("COMMON_CLEAR")</span>
@@ -610,13 +635,13 @@
             <div class="settings-card__body">
                 <div class="settings-card__actions">
                     <button type="button"
-                            class="btn btn-secondary"
+                            class="kmila-btn kmila-btn--primary"
                             @onclick="CopyDiagnosticsAsync">
                         <Icon Name="IconName.Clipboard2CheckFill" />
                         <span>@Traductor.T("SETTINGS_FEEDBACK_COPY")</span>
                     </button>
                     <button type="button"
-                            class="btn btn-primary"
+                            class="kmila-btn kmila-btn--accent"
                             @onclick="OpenIssueUrlAsync">
                         <Icon Name="IconName.BoxArrowUpRight" />
                         <span>@Traductor.T("SETTINGS_FEEDBACK_OPEN_ISSUE")</span>
@@ -630,6 +655,17 @@
 
 <ConfirmDialog @ref="_confirmDialog" />
 <Modal @ref="_accountLoginModal" Title="@Traductor.T("TOPBAR_SIGN_IN_GITHUB")" />
+
+@* Library source viewer — opened from the "View" button on each
+   imported library row. Plain <pre> rendering keeps the VHDL source
+   readable without dragging in a Monaco instance for what's
+   effectively a one-off browse. *@
+<Modal @ref="_libraryViewModal" Title="@_libraryViewName" Size="ModalSize.Large">
+    <BodyTemplate>
+        <pre class="library-source-view"
+             style="max-height:60vh; overflow:auto; white-space:pre; font-family:var(--bs-font-monospace);">@_libraryViewSource</pre>
+    </BodyTemplate>
+</Modal>
 
 @code {
     private List<string> _userFpgas = new();
@@ -664,6 +700,11 @@
     private string? _lastReportUrl;
     private Modal _accountLoginModal = new();
     private string _clientIdInput = string.Empty;
+
+    // Library source viewer state (View button on each imported library row).
+    private Modal _libraryViewModal = default!;
+    private string _libraryViewName   = string.Empty;
+    private string _libraryViewSource = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -843,26 +884,14 @@
         // extensively documented; anything bigger probably isn't a library.
         using var src = file.OpenReadStream(maxAllowedSize: 4 * 1024 * 1024);
         var saved = await UserAssets.ImportLibraryAsync(src, file.Name);
-        if (saved != null)
-        {
-            // Re-seed the LibraryCompiler's resolver so the new plugin is
-            // visible to the very next build — without this the user would
-            // have to restart the app between Import and Build.
-            try
-            {
-                foreach (var s in UserAssets.ListUserLibrarySources())
-                    LibCompiler.Resolver.Register(s);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[Settings] Failed to register imported library: {ex.Message}");
-            }
-            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), Traductor.T("SETTINGS_LIB_IMPORTED"), ToastType.Success));
-        }
-        else
-        {
-            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), Traductor.T("SETTINGS_IMPORT_FAILED"), ToastType.Danger));
-        }
+        // Resolver re-sync happens automatically via the
+        // UserAssetStore.OnChange subscription wired up in Program.cs /
+        // MauiProgram.cs — Import / Delete fire OnChange, which calls
+        // SyncResolver, so the next build sees the new state without an
+        // app restart.
+        ToastService.Notify(saved != null
+            ? Message(Traductor.T("COMMON_MESSAGE"), Traductor.T("SETTINGS_LIB_IMPORTED"), ToastType.Success)
+            : Message(Traductor.T("COMMON_ERROR"), Traductor.T("SETTINGS_IMPORT_FAILED"), ToastType.Danger));
     }
 
     private void DeleteLibrary(string name)
@@ -870,6 +899,50 @@
         if (UserAssets.DeleteLibrary(name))
         {
             ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), Traductor.T("SETTINGS_LIB_REMOVED"), ToastType.Info));
+        }
+    }
+
+    /// <summary>
+    /// Opens a modal with the raw .vhd contents so the user can inspect
+    /// what's actually in their imported library without leaving the app.
+    /// Reads on demand (no caching) — these files are tiny.
+    /// </summary>
+    private async Task ViewLibrary(string absolutePath)
+    {
+        try
+        {
+            _libraryViewName   = System.IO.Path.GetFileName(absolutePath);
+            _libraryViewSource = System.IO.File.Exists(absolutePath)
+                ? await System.IO.File.ReadAllTextAsync(absolutePath)
+                : string.Empty;
+        }
+        catch (Exception ex)
+        {
+            _libraryViewSource = $"-- Failed to read file: {ex.Message}";
+        }
+        await _libraryViewModal.ShowAsync();
+    }
+
+    /// <summary>
+    /// Wipes the library cache directory AND the orchestrator's in-memory
+    /// snapshot so the next build is a guaranteed cold rebuild. Useful
+    /// when the user suspects a corrupted artifact or just wants to
+    /// reclaim disk space.
+    /// </summary>
+    private void ClearLibraryCache()
+    {
+        try
+        {
+            int removed = UserAssets.ClearLibraryCache();
+            LibCompiler.Orchestrator.Reset();
+            ToastService.Notify(Message(
+                Traductor.T("COMMON_MESSAGE"),
+                string.Format(Traductor.T("SETTINGS_LIB_CACHE_CLEARED"), removed),
+                ToastType.Info));
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
         }
     }
 

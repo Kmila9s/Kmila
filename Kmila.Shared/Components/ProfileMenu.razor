@@ -123,14 +123,14 @@
                     {
                         <div class="kmila-fpga-picker__filters" role="tablist">
                             <button type="button" role="tab"
-                                    class="kmila-fpga-picker__chip @(string.IsNullOrEmpty(_manufacturerFilter) ? "is-active" : "")"
+                                    class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm kmila-fpga-picker__chip @(string.IsNullOrEmpty(_manufacturerFilter) ? "is-active" : "")"
                                     @onclick="() => _manufacturerFilter = string.Empty">
                                 @Traductor.T("TOPBAR_FPGA_ALL")
                             </button>
                             @foreach (var m in _manufacturers)
                             {
                                 <button type="button" role="tab"
-                                        class="kmila-fpga-picker__chip @(m == _manufacturerFilter ? "is-active" : "")"
+                                        class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm kmila-fpga-picker__chip @(m == _manufacturerFilter ? "is-active" : "")"
                                         @onclick="() => _manufacturerFilter = m">
                                     @m
                                 </button>
@@ -183,7 +183,7 @@
                 {
                     var isActive = lang.Code == Traductor.Lang;
                     <button type="button"
-                            class="kmila-profile-menu__lang-chip @(isActive ? "is-active" : "")"
+                            class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm kmila-profile-menu__lang-chip @(isActive ? "is-active" : "")"
                             @onclick="() => SetLanguageAsync(lang.Code)"
                             title="@lang.NativeName">
                         <span class="kmila-profile-menu__lang-code">@lang.Code.ToUpperInvariant()</span>
@@ -201,19 +201,19 @@
             </header>
             <div class="kmila-profile-menu__theme-row" role="group">
                 <button type="button"
-                        class="kmila-profile-menu__theme-btn @(_theme == "light" ? "is-active" : "")"
+                        class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm kmila-profile-menu__theme-btn @(_theme == "light" ? "is-active" : "")"
                         @onclick='() => SetThemeAsync("light")'>
                     <Icon Name="IconName.SunFill" />
                     <span>@Traductor.T("THEME_LIGHT")</span>
                 </button>
                 <button type="button"
-                        class="kmila-profile-menu__theme-btn @(_theme == "dark" ? "is-active" : "")"
+                        class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm kmila-profile-menu__theme-btn @(_theme == "dark" ? "is-active" : "")"
                         @onclick='() => SetThemeAsync("dark")'>
                     <Icon Name="IconName.MoonStarsFill" />
                     <span>@Traductor.T("THEME_DARK")</span>
                 </button>
                 <button type="button"
-                        class="kmila-profile-menu__theme-btn @(_theme == "auto" ? "is-active" : "")"
+                        class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm kmila-profile-menu__theme-btn @(_theme == "auto" ? "is-active" : "")"
                         @onclick='() => SetThemeAsync("auto")'>
                     <Icon Name="IconName.CircleHalf" />
                     <span>@Traductor.T("THEME_AUTO")</span>
@@ -223,7 +223,8 @@
 
         @* ── Account actions ──────────────────────────────────────── *@
         <section class="kmila-profile-menu__section kmila-profile-menu__section--actions">
-            <button type="button" class="kmila-profile-menu__action"
+            <button type="button"
+                    class="kmila-btn kmila-btn--primary kmila-btn--sm kmila-profile-menu__action"
                     @onclick="OpenSettingsAsync">
                 <Icon Name="IconName.Gear" />
                 <span>@Traductor.T("TOPBAR_ACCOUNT_SETTINGS")</span>
@@ -231,7 +232,7 @@
             @if (GitHubAuth.IsLoggedIn)
             {
                 <button type="button"
-                        class="kmila-profile-menu__action kmila-profile-menu__action--danger"
+                        class="kmila-btn kmila-btn--danger kmila-btn--sm kmila-profile-menu__action kmila-profile-menu__action--danger"
                         @onclick="SignOutAsync">
                     <Icon Name="IconName.BoxArrowRight" />
                     <span>@Traductor.T("TOPBAR_SIGN_OUT")</span>
@@ -240,7 +241,7 @@
             else
             {
                 <button type="button"
-                        class="kmila-profile-menu__action kmila-profile-menu__action--primary"
+                        class="kmila-btn kmila-btn--accent kmila-btn--sm kmila-profile-menu__action kmila-profile-menu__action--primary"
                         @onclick="OpenLoginAsync">
                     <Icon Name="IconName.Github" />
                     <span>@Traductor.T("TOPBAR_SIGN_IN_GITHUB")</span>

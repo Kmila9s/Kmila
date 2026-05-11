@@ -200,7 +200,7 @@ public class PracticeEvaluator
             builder.OnBuildError += OnErr;
             try
             {
-                if (!builder.Build(pf))
+                if (!await builder.BuildAsync(pf, ct))
                     throw new BuildPhaseException("Build returned false", null);
             }
             catch (BuildPhaseException) { throw; }
@@ -227,7 +227,16 @@ public class PracticeEvaluator
             void OnDone(SignalHistory h) => tcs.TrySetResult(h);
             void OnRuntimeErr(string msg, string? det)
             {
-                if (!tcs.Task.IsCompleted) tcs.TrySetException(new InvalidOperationException(msg));
+                // Surface the runner's *detail* — it's the line that names the
+                // VHDL construct or signal that actually failed. Without this
+                // the verdict shows only the generic title "Simulation error",
+                // which makes diagnosing impossible. Format as a single string
+                // since the verdict UI takes only an error message.
+                if (!tcs.Task.IsCompleted)
+                {
+                    var combined = string.IsNullOrEmpty(det) ? msg : $"{msg}: {det}";
+                    tcs.TrySetException(new InvalidOperationException(combined));
+                }
             }
 
             builder.OnSimulationCompleted += OnDone;
@@ -258,7 +267,29 @@ public class PracticeEvaluator
 
                 // No history was produced → report as null so the caller
                 // surfaces a runtime/empty-output verdict instead of hanging.
-                if (!tcs.Task.IsCompleted) tcs.TrySetResult(null);
+                if (!tcs.Task.IsCompleted)
+                {
+                    // Diagnostic — the no-waveform case is the validator's
+                    // dominant failure mode. Snapshot what the engine *did*
+                    // record (signals tracked, sample count) before we
+                    // forfeit the run, so /logs shows the actual gap.
+                    var diag = builder.SimulationHistory;
+                    var trackedCount = 0;
+                    var totalSamples = 0L;
+                    try
+                    {
+                        if (diag != null)
+                        {
+                            trackedCount = diag.GetTrackedSignals()?.Count() ?? 0;
+                            totalSamples = diag.TotalSamples;
+                        }
+                    }
+                    catch { /* defensive — diagnostic must not throw */ }
+                    _logger.LogWarning(
+                        "[Practice] Sim ended without history for test {Tc}: tracked-signals={Sigs}, total-samples={Samples}, history-null={NullHist}",
+                        test.Id, trackedCount, totalSamples, diag == null);
+                    tcs.TrySetResult(null);
+                }
 
                 var history = await tcs.Task;
                 if (history == null) return null;
@@ -378,9 +409,16 @@ public class PracticeEvaluator
         return $"{(long)Math.Round(v.Value)} (0x{(long)Math.Round(v.Value):X})";
     }
 
+    /// <summary>
+    /// Internal sentinel exception raised when the build phase of a practice grade
+    /// fails. Carries optional <see cref="Detail"/> with a parser/synthesis trace
+    /// so the caller can render a richer <see cref="PracticeVerdictKind.BuildError"/>.
+    /// </summary>
     private class BuildPhaseException : Exception
     {
+        /// <summary>Optional detailed error trace (parser output, stack snippet, …).</summary>
         public string? Detail { get; }
+        /// <summary>Creates a build-phase exception with a summary message and optional detailed trace.</summary>
         public BuildPhaseException(string message, string? detail) : base(message) { Detail = detail; }
     }
 

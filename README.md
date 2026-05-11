@@ -1524,6 +1524,299 @@ task from the previous month of work. Grouped by theme:
 
 ---
 
+## 19.bis. Audit diagrams (2026-05-09)
+
+The cross-module audit identified that several App-layer subsystems (Learn,
+Practice, EditorDock, Runs/Snapshot) had no visual coverage in TT1, and that the
+existing C4 component / persistence / services diagrams were significantly stale.
+The blocks below mirror the canonical sources in `Documentacion/TT1/diagrams/`.
+
+### `fig_5_2_c4_contenedores` — Container diagram (updated)
+
+```mermaid
+graph TB
+    classDef person fill:#08427B,color:#fff,stroke:#08427B,stroke-width:2px
+    classDef container fill:#1168BD,color:#fff,stroke:#0E5AA7,stroke-width:2px
+    classDef containerDb fill:#1168BD,color:#fff,stroke:#0E5AA7,stroke-width:2px
+    classDef external fill:#999999,color:#fff,stroke:#666,stroke-width:2px
+    classDef boundary fill:none,stroke:#444,stroke-width:1px,stroke-dasharray: 5 5
+
+    student["<b>&lt;&lt;Person&gt;&gt;</b><br/><b>Estudiante de ISC</b>"]:::person
+
+    subgraph presentacion["Hosts de presentacion"]
+        maui["<b>Kmila (MAUI Host)</b><br/>BlazorWebView<br/>DI: Singleton"]:::container
+        web["<b>Kmila.Web</b><br/>Blazor Server<br/>DI: Scoped"]:::container
+        shared["<b>Kmila.Shared</b><br/>RCL net9.0 + net9.0-android<br/>9 paginas / 25+ servicios /<br/>3 repositorios / 35+ modelos"]:::container
+    end
+
+    subgraph motor["Motor de simulacion y analisis"]
+        debugger["<b>Debugger</b><br/>Fachada estructural + lint"]:::container
+        parser["<b>Parser</b><br/>Tokenizer + delegacion<br/>Entity/Arch/Package"]:::container
+        libcomp["<b>LibraryCompiler</b><br/>IEEE + librerias usuario<br/>cache hash"]:::container
+        interpreter["<b>Interpreter</b><br/>DeltaCycleEngine + ProcessScheduler<br/>+ SignalScheduler + SignalHistory"]:::container
+        tm["<b>TimeMachine</b><br/>Timer step-by-step<br/>(path interactivo)"]:::container
+    end
+
+    sqlite[("<b>SQLite</b><br/>Projects, ProjectFiles,<br/>AppSettings,<br/>SimulationSnapshot")]:::containerDb
+    fs["<b>Sistema de archivos</b><br/>Archivos .vhd, .kmila,<br/>assets de usuario, cache lib"]:::external
+
+    student --> maui
+    student --> web
+    maui --> shared
+    web --> shared
+    shared --> debugger
+    debugger --> parser
+    shared --> libcomp
+    libcomp --> parser
+    shared --> interpreter
+    shared --> tm
+    interpreter --> tm
+    shared --> sqlite
+    shared --> fs
+
+    class presentacion,motor boundary
+```
+
+### `fig_5_3_c4_componentes` — Component diagram (rewritten)
+
+```mermaid
+graph TB
+    classDef layerPage fill:#08427B,color:#fff
+    classDef layerService fill:#1168BD,color:#fff
+    classDef layerRepo fill:#438DD5,color:#fff
+    classDef external fill:#999,color:#fff
+
+    paginas["<b>9 Paginas Razor</b><br/>Home · ProjectsView · Editor ·<br/>Learn · LessonView ·<br/>Practice · PracticeView ·<br/>Settings · Logs"]:::layerPage
+    componentes["<b>25+ Componentes UI</b><br/>RunBar · EditorDock ·<br/>WaveformViewer · SchematicViewer ·<br/>EntityResourceUsage · 8 modales"]:::layerPage
+    servicios["<b>25+ Servicios</b><br/>ProgramBuilder · StimulusBuilder ·<br/>SimulationParameters · ConfigurationService ·<br/>EditorSessionStore · EditorDockState ·<br/>SignalCursorBus · BuildLog · Traductor ·<br/>LessonCatalog · LessonProgressStore ·<br/>PracticeCatalog · PracticeEvaluator · PracticeAttemptStore ·<br/>SimulationSnapshotStore · ProjectBundleService ·<br/>UserAssetStore · JSONFileReader · SelectedFPGA ·<br/>SchematicExporter · WaveformExporter ·<br/>AppLogStore · AutoErrorReporter"]:::layerService
+    repos["<b>3 Repositorios</b><br/>Projects · ProjectFiles · JSONFileReader"]:::layerRepo
+    db[("<b>ApplicationDbContext</b><br/>Projects, ProjectFiles, AppSettings,<br/>SimulationSnapshot;<br/>LessonProgress y PracticeAttempts<br/>via claves prefijadas")]:::layerService
+
+    debugger["Debugger"]:::external
+    parser["Parser"]:::external
+    libcomp["LibraryCompiler"]:::external
+    interpreter["Interpreter"]:::external
+    tm["TimeMachine"]:::external
+
+    paginas --> componentes
+    paginas --> servicios
+    componentes --> servicios
+    servicios --> db
+    servicios --> repos
+    servicios --> debugger
+    debugger --> parser
+    servicios --> libcomp
+    libcomp --> parser
+    servicios --> interpreter
+    servicios --> tm
+    interpreter --> tm
+    repos --> db
+```
+
+### `fig_5_5_1_clases_persistencia` — Persistence classes (rewritten)
+
+```mermaid
+classDiagram
+    direction LR
+
+    class Project {
+        +int Id
+        +string Name
+        +string Description
+        +string BasePath
+        +DateTime CreationTime
+    }
+
+    class ProjectFile {
+        +int Id
+        +string FileName
+        +string Content
+        +int ProjectId
+        +string DirectoryPath
+        +Project Project
+    }
+
+    class AppSettings {
+        +int Id
+        +string Key
+        +string Value
+        +DateTime LastModified
+    }
+
+    class SimulationSnapshot {
+        +int Id
+        +int ProjectId
+        +DateTime Timestamp
+        +string EntityName
+        +int PortCount
+        +long DurationMs
+        +string WaveformDataJson
+    }
+
+    class LessonProgress {
+        <<vista logica sobre AppSettings>>
+        +string LessonId
+        +bool Completed
+        +DateTime CompletedAt
+    }
+
+    class PracticeAttempt {
+        <<vista logica sobre AppSettings>>
+        +string ExerciseId
+        +PracticeVerdictKind Kind
+        +DateTime SubmittedAt
+        +long DurationMs
+    }
+
+    Project "1" o-- "*" ProjectFile : agrega
+    Project "1" o-- "*" SimulationSnapshot : registra
+    AppSettings "1" --> "*" LessonProgress : claves prefijadas
+    AppSettings "1" --> "*" PracticeAttempt : claves prefijadas
+```
+
+### `fig_5_13_1_app_learn_subsystem` — Learn subsystem (new)
+
+```mermaid
+flowchart TD
+    A([Estudiante navega a /learn]) --> B[Learn.razor renderiza]
+    B --> C[LessonCatalog.GetLessonsAsync]
+    C --> D[Leer manifest.json desde<br/>wwwroot/Learn/&lt;lang&gt;/manifest.json]
+    D --> E[UserAssetStore.ListUserLessonPaths]
+    E --> F[Merge: user packs override bundled]
+    F --> G[Mostrar grid de modulos y lecciones]
+    G --> H[LessonProgressStore.GetProgressAsync]
+    H --> I[Pintar badges completado / pendiente]
+
+    G --> J{Click en leccion}
+    J --> K[Navega /learn/&lt;module&gt;/&lt;id&gt;]
+    K --> L[LessonView.razor]
+    L --> M[Cargar Markdown de leccion]
+    M --> N[MarkdownRenderer.RenderAsync]
+    N --> O[Mostrar contenido + Sample]
+    O --> P{Estudiante marca completado}
+    P --> Q[LessonProgressStore.MarkCompletedAsync]
+    Q --> R[Persistir en AppSettings<br/>key lesson_&lt;id&gt;_progress]
+    R --> S([UI actualiza badge])
+
+    O --> T{Click 'Try in Editor' en Sample}
+    T --> U[Crear proyecto temporal con Sample.Vhdl]
+    U --> V([Navega a /editor/&lt;tempId&gt;])
+```
+
+### `fig_5_13_2_app_practice_grading` — Practice grading flow (new)
+
+```mermaid
+sequenceDiagram
+    actor E as Estudiante
+    participant PV as PracticeView.razor
+    participant Cat as PracticeCatalog
+    participant Eval as PracticeEvaluator
+    participant PB as ProgramBuilder (efimero)
+    participant Sim as SimulationRunner
+    participant Store as PracticeAttemptStore
+
+    E->>PV: Click "Submit"
+    PV->>Cat: GetExerciseAsync(id)
+    Cat-->>PV: PracticeExercise
+    PV->>Eval: GradeAsync(exercise, candidateCode)
+
+    alt Modalidad = FillGap
+        Eval->>Eval: SpliceFillGap(starterVhdl, candidateCode)
+    end
+
+    Eval->>PB: Build(candidateVhdl)
+    alt Build error
+        PB-->>Eval: BuildPhaseException
+        Eval-->>PV: Verdict.BuildError
+    else Build OK
+        loop Por cada TestCase
+            Eval->>Eval: GetExpectedAsync(exerciseId, testId)
+            alt Cache miss
+                Eval->>PB: Build(solutionVhdl)
+                Eval->>Sim: RunAsync(stimulus, duration)
+                Sim-->>Eval: WaveformData solucion
+            end
+            Eval->>Sim: RunAsync candidato con stimulus
+            Sim-->>Eval: WaveformData candidato
+            Eval->>Eval: Compare(esperado, actual,<br/>OutputPortsToCompare,<br/>SampleTimesNs, tolerancia 1e-9)
+        end
+        Eval->>Eval: Verdict<br/>(BuildError > RuntimeError > WrongAnswer > Solved)
+        Eval-->>PV: PracticeAttemptVerdict
+    end
+    PV->>Store: RecordAttemptAsync(verdict)
+    PV-->>E: Mostrar resultado y mismatches
+```
+
+### `fig_5_13_3_app_editordock_composition` — EditorDock composition (new)
+
+```mermaid
+flowchart TB
+    classDef tab fill:#1168BD,color:#fff
+    classDef shared fill:#08427B,color:#fff
+
+    Editor["Editor.razor"]
+    RunBar["RunBar"]
+    Dock["EditorDock (7 tabs)"]
+    Status["StatusBar"]
+
+    Editor --> RunBar
+    Editor --> Dock
+    Editor --> Status
+
+    T1[Entities]:::tab
+    T2[Schematic]:::tab
+    T3[Ports]:::tab
+    T4[Waveforms]:::tab
+    T5[Runs]:::tab
+    T6[Files]:::tab
+    T7[Output]:::tab
+
+    Dock --> T1
+    Dock --> T2
+    Dock --> T3
+    Dock --> T4
+    Dock --> T5
+    Dock --> T6
+    Dock --> T7
+
+    EDState[EditorDockState]:::shared
+    Cursor[SignalCursorBus]:::shared
+    Params[SimulationParameters]:::shared
+    Build[BuildLog]:::shared
+
+    Dock <--> EDState
+    T2 <--> Cursor
+    T4 <--> Cursor
+    T3 <--> Params
+    RunBar <--> Params
+    T7 <--> Build
+```
+
+### `fig_5_13_4_app_runs_snapshot` — Runs/Snapshot persistence (new)
+
+```mermaid
+flowchart TD
+    A([RunBar: Run press]) --> B[ProgramBuilder.RunSimulationAsync]
+    B --> C[SimulationRunner.RunAsync]
+    C --> D[DeltaCycleEngine + SignalHistory]
+    D --> E[OnSimulationCompleted con history]
+    E --> F[WaveformData.FromSignalHistory]
+    F --> G[SimulationSnapshotStore.SaveAsync]
+    G --> H[Persist row en SimulationSnapshot]
+    H --> I([Tab Runs muestra fila nueva])
+
+    I --> J{Accion en Runs}
+    J -->|Re-run| K[Cargar config a SimulationParameters]
+    K --> A
+    J -->|Compare| L[Cargar 2 snapshots]
+    L --> M[Diff por puerto x tiempo]
+    J -->|Delete| N[SimulationSnapshotStore.DeleteAsync]
+    J -->|Replay| O[Cargar WaveformData del JSON]
+    O --> P[WaveformViewer renderiza sin re-simular]
+```
+
+---
+
 ## 20. Contact
 
 For questions, support, or feedback, please open an issue on our GitHub repository or contact the development team through the project page.

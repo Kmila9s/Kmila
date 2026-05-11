@@ -1,4 +1,6 @@
-## ⚠ Translation pending — SPI sample-edge fix
+## SPI sample-edge fix
+
+⚠ 翻译未完成 — 描述以英文显示。
 
 A bare-bones SPI master clock generator divides `clk` by 8 to
 produce `sclk` (toggling at divider counts 3 and 7) and pulses

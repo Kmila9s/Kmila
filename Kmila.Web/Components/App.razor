@@ -14,204 +14,14 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="apple-touch-icon" href="_content/Kmila.Shared/favicon.png" />
     <base href="/" />
-    <script>
-        // Resolve 'light' | 'dark' | 'auto' → concrete 'light' | 'dark'.
-        window.kmilaResolveTheme = function (input) {
-            if (input === 'dark' || input === 'light') return input;
-            try {
-                return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-            } catch (_) { return 'light'; }
-        };
-        // Apply persisted theme before first paint.
-        (function () {
-            try {
-                var t = localStorage.getItem('kmila-theme') || 'auto';
-                document.documentElement.setAttribute('data-bs-theme', window.kmilaResolveTheme(t));
-            } catch (_) { /* localStorage may be unavailable */ }
-        })();
-        // Language pointer used by the VHDL Monaco providers for doc strings.
-        // Blazor (LanguageChanger) writes to it via kmilaSetDocsLang(...).
-        window.kmilaSetDocsLang = function (lang) {
-            window.kmilaCurrentDocsLang = lang || 'en';
-            try { localStorage.setItem('kmila-lang', window.kmilaCurrentDocsLang); } catch (_) {}
-        };
-        try { window.kmilaCurrentDocsLang = localStorage.getItem('kmila-lang') || 'en'; }
-        catch (_) { window.kmilaCurrentDocsLang = 'en'; }
-
-        // Close any open <details> popover when the user clicks outside of it,
-        // or hits Escape. Native <details> doesn't do this by default.
-        // Popovers opted out (e.g. an inline <details> inside a long-running
-        // workflow) can add the `data-no-auto-close` attribute to opt out.
-        document.addEventListener('click', function (e) {
-            document.querySelectorAll('details[open]').forEach(function (d) {
-                if (d.hasAttribute('data-no-auto-close')) return;
-                if (!d.contains(e.target)) d.open = false;
-            });
-        });
-        document.addEventListener('keydown', function (e) {
-            if (e.key !== 'Escape') return;
-            document.querySelectorAll('details[open]').forEach(function (d) {
-                if (d.hasAttribute('data-no-auto-close')) return;
-                d.open = false;
-            });
-        });
-        // Swallow Ctrl+S / Cmd+S on the editor route so the browser's "Save
-        // page as…" dialog never pops up. Editor.razor's OnKeyDown still fires
-        // inside Monaco and saves through our code path. We use capture phase
-        // so we beat Monaco's own handler to the event and win the race.
-        document.addEventListener('keydown', function (e) {
-            var isSave = (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey &&
-                         (e.key === 's' || e.key === 'S' || e.code === 'KeyS');
-            if (!isSave) return;
-            if (document.documentElement.getAttribute('data-route') !== 'editor') return;
-            e.preventDefault();
-            e.stopPropagation();
-        }, { capture: true });
-
-        // Trigger a browser download from a JS-side text blob. Used by
-        // Settings to save FPGA / language templates without writing them to
-        // the file system first.
-        // Push parser diagnostics into Monaco. Called from Editor.razor
-        // after every Build so red/yellow squiggles appear on offending
-        // lines. Passing an empty array clears all Kmila-owned markers.
-        window.kmilaSetMonacoMarkers = function (markers) {
-            try {
-                if (!window.monaco || !window.monaco.editor) return;
-                var models = window.monaco.editor.getModels();
-                for (var i = 0; i < models.length; i++) {
-                    window.monaco.editor.setModelMarkers(models[i], 'kmila-vhdl', markers || []);
-                }
-            } catch (e) {
-                console.warn('[kmilaSetMonacoMarkers]', e);
-            }
-        };
-
-        // Pointer-driven resize for the editor dock. Razor component passes
-        // its .NET ref + the starting Y so we can compute new height from
-        // (startingHeight + (startingY - currentY)). The grabber sits above
-        // the dock, so dragging UP shrinks the dock body (opposite of
-        // intuition); we mirror the delta for the student-facing behavior.
-        //
-        // Touch-friendly: PointerEvents are unified (mouse + touch + pen) and
-        // we suppress page scroll during the drag with touch-action via CSS
-        // on the grabber itself.
-        window.kmilaDockDragStart = function (dotnetRef, startY) {
-            var dockEl = document.querySelector('.kmila-dock');
-            if (!dockEl) return;
-            var startHeight = dockEl.getBoundingClientRect().height;
-            var moved = false;
-            function onMove(ev) {
-                ev.preventDefault();
-                var delta = startY - ev.clientY;
-                if (Math.abs(delta) > 2) moved = true;
-                var next  = Math.max(160, Math.min(window.innerHeight - 80, Math.round(startHeight + delta)));
-                dotnetRef.invokeMethodAsync('OnGrabberMove', next);
-            }
-            function onUp(ev) {
-                window.removeEventListener('pointermove', onMove);
-                window.removeEventListener('pointerup',   onUp);
-                window.removeEventListener('pointercancel', onUp);
-                // On phones we snap to the closest point.
-                if (window.matchMedia('(max-width: 768px)').matches && moved) {
-                    var h = dockEl.getBoundingClientRect().height;
-                    var vh = window.innerHeight;
-                    var snap = h < vh * 0.25 ? 'peek' : (h < vh * 0.66 ? 'half' : 'full');
-                    if (window.kmilaSetDockSnap) window.kmilaSetDockSnap(snap);
-                }
-                dotnetRef.invokeMethodAsync('OnGrabberUp').catch(() => {});
-                dotnetRef.dispose();
-            }
-            window.addEventListener('pointermove', onMove, { passive: false });
-            window.addEventListener('pointerup',   onUp);
-            window.addEventListener('pointercancel', onUp);
-        };
-
-        window.kmilaDownloadText = function (fileName, mime, text) {
-            try {
-                var blob = new Blob([text], { type: mime || 'application/octet-stream' });
-                var url = URL.createObjectURL(blob);
-                var a = document.createElement('a');
-                a.href = url;
-                a.download = fileName || 'kmila-download.txt';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
-                return true;
-            } catch (e) {
-                console.error('[kmilaDownloadText] failed', e);
-                return false;
-            }
-        };
-
-        // ─── Editor tab drag-and-drop ────────────────────────────────────
-        // Real implementation lives in _content/Kmila.Shared/js/app.js using
-        // PointerEvents (touch + mouse + pen). The shims here only exist for
-        // the brief moment between this inline script running and app.js
-        // being parsed — they make sure Blazor's first interop call to
-        // kmilaSetupTabDrag / kmilaGetTabDrag / kmilaClearTabDrag doesn't
-        // throw before the real handlers replace these.
-        if (typeof window.kmilaSetupTabDrag !== 'function') {
-            window.kmilaSetupTabDrag = function () { /* superseded by app.js */ };
-        }
-        if (typeof window.kmilaGetTabDrag !== 'function') {
-            window.kmilaGetTabDrag = function () { return { paneIdx: -1, tabIdx: -1 }; };
-        }
-        if (typeof window.kmilaClearTabDrag !== 'function') {
-            window.kmilaClearTabDrag = function () { };
-        }
-
-        // Mirror of the MAUI host's kmilaDownloadPng — see its comment for
-        // rationale. Keeps Web and MAUI on the same export contract.
-        window.kmilaDownloadPng = function (fileName, svgText, scale) {
-            return new Promise(function (resolve) {
-                try {
-                    var s = (typeof scale === 'number' && scale > 0) ? scale : 2;
-                    var widthMatch  = /\bwidth="(\d+)"/.exec(svgText);
-                    var heightMatch = /\bheight="(\d+)"/.exec(svgText);
-                    var w = widthMatch  ? parseInt(widthMatch[1], 10)  : 1200;
-                    var h = heightMatch ? parseInt(heightMatch[1], 10) : 400;
-
-                    var canvas = document.createElement('canvas');
-                    canvas.width  = Math.max(1, Math.floor(w * s));
-                    canvas.height = Math.max(1, Math.floor(h * s));
-                    var ctx = canvas.getContext('2d');
-                    ctx.scale(s, s);
-
-                    var img = new Image();
-                    img.onload = function () {
-                        try {
-                            ctx.drawImage(img, 0, 0);
-                            canvas.toBlob(function (blob) {
-                                if (!blob) { resolve(false); return; }
-                                var url = URL.createObjectURL(blob);
-                                var a = document.createElement('a');
-                                a.href = url;
-                                a.download = fileName || 'kmila-waveform.png';
-                                document.body.appendChild(a);
-                                a.click();
-                                document.body.removeChild(a);
-                                setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
-                                resolve(true);
-                            }, 'image/png');
-                        } catch (drawErr) {
-                            console.error('[kmilaDownloadPng] draw/blob failed', drawErr);
-                            resolve(false);
-                        }
-                    };
-                    img.onerror = function (e) {
-                        console.error('[kmilaDownloadPng] image load failed', e);
-                        resolve(false);
-                    };
-                    var svgBlob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
-                    img.src = URL.createObjectURL(svgBlob);
-                } catch (e) {
-                    console.error('[kmilaDownloadPng] failed', e);
-                    resolve(false);
-                }
-            });
-        };
-    </script>
+    @* ╔═══════════════════════════════════════════════════════════════════╗
+       ║   SHARED HEAD-LEVEL JS — DO NOT INLINE NEW LOGIC HERE.            ║
+       ║   Edit Kmila.Shared/wwwroot/js/kmila-shared-head.js instead so     ║
+       ║   both Web (this file) and MAUI (Kmila/wwwroot/index.html) stay   ║
+       ║   in sync automatically. Bump ?v= when the shared file changes.   ║
+       ║   See memory: project_dual_host_pages.md.                         ║
+       ╚═══════════════════════════════════════════════════════════════════╝ *@
+    <script src="_content/Kmila.Shared/js/kmila-shared-head.js?v=2"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -238,15 +48,17 @@
         }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-bs-theme'] });
         window.addEventListener('load', () => window.kmilaMermaidRun());
     </script>
-    @* Bump the version query string when shipping CSS changes — the
-       browser otherwise hangs onto the cached pages.css indefinitely
-       (no fingerprinting / ETag-only validation isn't enough on hot
-       reload, and contributors hit "menu has no styles" repeatedly
-       after the ProfileMenu refactor). Increment whenever a hot-cache
-       miss matters for the UI. *@
-    <link rel="stylesheet" href="_content/Kmila.Shared/css/tokens.css?v=2" />
-    <link rel="stylesheet" href="_content/Kmila.Shared/app.css?v=2" />
-    <link rel="stylesheet" href="_content/Kmila.Shared/css/pages.css?v=2" />
+    @* ╔═══════════════════════════════════════════════════════════════════╗
+       ║   SHARED DESIGN STYLESHEETS — KEEP THIS BLOCK IDENTICAL TO         ║
+       ║   Kmila/wwwroot/index.html. When you add/remove a sheet here,     ║
+       ║   mirror it in BOTH hosts. When you change any of the referenced  ║
+       ║   files, bump every ?v= so browsers refresh together.              ║
+       ║   See memory: project_dual_host_pages.md.                         ║
+       ╚═══════════════════════════════════════════════════════════════════╝ *@
+    <link rel="stylesheet" href="_content/Kmila.Shared/css/tokens.css?v=7" />
+    <link rel="stylesheet" href="_content/Kmila.Shared/app.css?v=7" />
+    <link rel="stylesheet" href="_content/Kmila.Shared/css/pages.css?v=7" />
+    <link rel="stylesheet" href="_content/Kmila.Shared/css/buttons.css?v=7" />
     <link rel="stylesheet" href="Kmila.Web.styles.css" />
     <link rel="icon" type="image/png" href="_content/Kmila.Shared/favicon.png" />
     <HeadOutlet @rendermode="InteractiveServer" />

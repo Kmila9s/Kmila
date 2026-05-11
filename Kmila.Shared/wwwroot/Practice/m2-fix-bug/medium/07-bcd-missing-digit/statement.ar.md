@@ -1,4 +1,6 @@
-## ⚠ ترجمة قيد الإنجاز — BCD-to-7-segment decoder, one digit blanked
+## BCD-to-7-segment decoder, one digit blanked
+
+⚠ الترجمة معلقة — الوصف معروض بالإنجليزية.
 
 A standard BCD-to-7-segment decoder for digits 0…9 (active-high segments, order `a b c d e f g`).
 

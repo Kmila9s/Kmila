@@ -34,7 +34,6 @@ begin
 
     process(req, last_grant)
     begin
-        -- BEGIN_EDIT
         nxt_grant <= (others => '0');
         case last_grant is
             when "00" =>
@@ -62,7 +61,6 @@ begin
                 elsif req(3) = '1' then nxt_grant <= "1000";
                 end if;
         end case;
-        -- END_EDIT
     end process;
 
     grant <= cur_grant;

@@ -5,9 +5,24 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1587;CS1591;CS1570;CS1573;CS1574;CS1998;CS8602;CS8604;CS8625;CS8892;CS0219;CS0618;CS4014;NETSDK1206</NoWarn>
+    <!-- CA1416 fires because the netstandard target *could* run on browser
+         (Blazor WebAssembly), but the Web host uses Blazor Server and the
+         MAUI heads run on native runtimes; FileSystemWatcher is supported
+         in every target we actually ship. Suppressing here keeps the build
+         clean without weakening the platform check at runtime — UserAssetStore
+         already wraps watcher creation in try/catch with a logged warning. -->
+    <NoWarn>$(NoWarn);CS1587;CS1591;CS1570;CS1573;CS1574;CS1998;CS8602;CS8604;CS8625;CS8892;CS0219;CS0618;CS4014;NETSDK1206;CA1416</NoWarn>
     <!-- MAUI is required for every native head (android/ios/maccatalyst); web (net9.0) opts out. -->
     <UseMaui Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) != ''">true</UseMaui>
+
+    <!-- See <Target Name="_KmilaSharedForceRclSwa"> below for the actual
+         RCL-mode override. The MAUI SDK targets re-set
+         StaticWebAssetProjectMode=Root + StaticWebAssetBasePath=/ after this
+         PropertyGroup runs (because <UseMaui>true</UseMaui> tells MAUI to
+         treat the project as an app); a Target firing later is the only way
+         to win. -->
+    <StaticWebAssetProjectMode>Default</StaticWebAssetProjectMode>
+    <StaticWebAssetBasePath>_content/Kmila.Shared</StaticWebAssetBasePath>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">15.0</SupportedOSPlatformVersion>
@@ -54,5 +69,27 @@
     <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
   </ItemGroup>
+
+  <!--
+    Restore RCL static-web-asset semantics after the MAUI SDK has run. MAUI
+    sets StaticWebAssetProjectMode=Root and StaticWebAssetBasePath=/ when it
+    sees <UseMaui>true</UseMaui>, mounting all wwwroot/ files at the bundle
+    root and breaking _content/Kmila.Shared/... references in the host page.
+    Re-applying the values here, BeforeTargets the SWA pipeline reads them,
+    routes Kmila.Shared/wwwroot under _content/Kmila.Shared/ in the bundle
+    just like NuGet RCLs (Blazor.Bootstrap, BlazorMonaco) — which the
+    MainPage.xaml's `wwwroot/index.html` is already wired to expect.
+
+    Web (net9.0) doesn't run these targets — the Razor SDK has already set
+    the same values in ResolveStaticWebAssetsConfiguration; this override is
+    a no-op for that target.
+  -->
+  <Target Name="_KmilaSharedForceRclSwa"
+          BeforeTargets="ResolveStaticWebAssetsConfiguration;ComputeReferenceStaticWebAssetItems;DefineStaticWebAssets;ConvertStaticWebAssetsToMauiAssets;_GenerateStaticWebAssetsBuildManifest">
+    <PropertyGroup>
+      <StaticWebAssetProjectMode>Default</StaticWebAssetProjectMode>
+      <StaticWebAssetBasePath>_content/Kmila.Shared</StaticWebAssetBasePath>
+    </PropertyGroup>
+  </Target>
 
 </Project>

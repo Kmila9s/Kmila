@@ -168,7 +168,9 @@ public class Projects : IRepository<Project>
         LastError = string.Empty;
         try
         {
-            return await _applicationDbContext.Projects.ToListAsync();
+            var list = await _applicationDbContext.Projects.ToListAsync();
+            foreach (var p in list) await RehomeIfStaleAsync(p);
+            return list;
         }
         catch (Exception ex)
         {
@@ -196,6 +198,10 @@ public class Projects : IRepository<Project>
             {
                 LastError = "Project not found";
             }
+            else
+            {
+                await RehomeIfStaleAsync(project);
+            }
             // Return the found project or an empty default if not found
             return project ?? new();
         }
@@ -204,6 +210,46 @@ public class Projects : IRepository<Project>
             LastError = ex.Message;
         }
         return null!;
+    }
+
+    /// <summary>
+    /// Repairs sandbox-container drift. On iOS/Android (and macCatalyst in some cases),
+    /// the app's data-container UUID changes after a reinstall, so the absolute
+    /// <see cref="Project.BasePath"/> stored in the DB stops resolving even though the
+    /// project folder still lives under the new container at the same relative location
+    /// (<c>{AppDataDirectory}/Projects/{folder}</c>). When that's the case we rewrite the
+    /// row to point at the live path. No-op when the stored path already exists.
+    /// </summary>
+    private async Task RehomeIfStaleAsync(Project project)
+    {
+        if (project == null || string.IsNullOrEmpty(project.BasePath)) return;
+        if (Directory.Exists(project.BasePath)) return;
+
+        var folder = Path.GetFileName(project.BasePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (string.IsNullOrEmpty(folder)) return;
+
+        string root;
+#if WINDOWS || MACCATALYST || ANDROID || IOS
+        root = Microsoft.Maui.Storage.FileSystem.AppDataDirectory;
+#else
+        root = Path.Combine(
+            System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData),
+            "KmilaData");
+#endif
+        var candidate = Path.Combine(root, "Projects", folder);
+        if (!Directory.Exists(candidate)) return;
+
+        var stale = project.BasePath;
+        project.BasePath = candidate;
+        try
+        {
+            await _applicationDbContext.UpdateAsync(project);
+            _logger.LogInformation($"[Projects] Rehomed '{project.Name}': '{stale}' -> '{candidate}'");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning($"[Projects] Failed to persist rehomed BasePath for '{project.Name}': {ex.Message}");
+        }
     }
     /// <summary>
     /// Releases the resources used by the <see cref="Projects"/> class.

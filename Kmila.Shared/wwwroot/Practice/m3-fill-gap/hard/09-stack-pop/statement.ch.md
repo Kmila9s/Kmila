@@ -1,4 +1,6 @@
-## ⚠ 翻译待补 — Stack pop with empty-guard — fill the gap
+## Stack pop with empty-guard — fill the gap
+
+⚠ 翻译未完成 — 描述以英文显示。
 
 A simple stack pointer with the push branch and empty flag
 already wired. Decrement `sp` on pop, but only when not empty.

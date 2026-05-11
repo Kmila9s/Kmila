@@ -168,7 +168,7 @@
     background-color: rgba(255, 255, 255, 0.15);
     color: #ffffff;
     border-radius: var(--radius-pill);
-    font-size: 10px;
+    font-size: var(--fs-xs);
     font-weight: var(--fw-semibold);
     font-family: var(--font-sans);
     letter-spacing: 0;
@@ -176,6 +176,14 @@
 
 
 /* --- Nav items --- */
+
+/* Sidebar nav items follow Family 15 (underline-on-hover · persistent
+   when active) but rotated 90° for the vertical sidebar context: the
+   __indicator span on the left is the "underline" — it grows from 0% to
+   100% height on hover and stays at 100% when .is-active. No pill bg
+   highlight; just the indicator + accent tint. Dark-sidebar text colors
+   are kept (white-ish) since the standard --text-* tokens would be
+   illegible against the slate gradient bg. */
 
 .kmila-nav-item {
     position: relative;
@@ -193,15 +201,11 @@
     min-height: 40px;
     white-space: nowrap;
     overflow: hidden;
-    transition: background-color var(--duration-fast) var(--ease-standard),
-                color var(--duration-fast) var(--ease-standard);
+    transition: color var(--duration-fast) var(--ease-standard);
 }
 
-.kmila-nav-item:hover {
-    background-color: rgba(255, 255, 255, 0.08);
-    color: #ffffff;
-    text-decoration: none;
-}
+.kmila-nav-item:hover,
+.kmila-nav-item:focus-visible { color: #ffffff; text-decoration: none; }
 
 .kmila-nav-item:focus-visible {
     outline: 2px solid var(--kmila-accent);
@@ -209,10 +213,13 @@
 }
 
 .kmila-nav-item.is-active {
-    background-color: rgba(255, 255, 255, 0.12);
     color: #ffffff;
+    font-weight: var(--fw-semibold);
 }
 
+/* Vertical "underline" (Family 15 rotated): the indicator scales from
+   0 to full height on hover, persists at 100% when active. transform
+   instead of width avoids layout shift. */
 .kmila-nav-item__indicator {
     position: absolute;
     left: 0;
@@ -220,8 +227,10 @@
     bottom: 8px;
     width: 3px;
     border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
-    background-color: transparent;
-    transition: background-color var(--duration-fast) var(--ease-standard);
+    background-color: var(--kmila-accent);
+    transform: scaleY(0);
+    transform-origin: center top;
+    transition: transform var(--duration-base) var(--ease-standard);
 }
 
 [dir="rtl"] .kmila-nav-item__indicator {
@@ -230,12 +239,12 @@
     border-radius: var(--radius-xs) 0 0 var(--radius-xs);
 }
 
-.kmila-nav-item.is-active .kmila-nav-item__indicator {
-    background-color: var(--kmila-accent);
-}
+.kmila-nav-item:hover .kmila-nav-item__indicator,
+.kmila-nav-item:focus-visible .kmila-nav-item__indicator,
+.kmila-nav-item.is-active .kmila-nav-item__indicator { transform: scaleY(1); }
 
 .kmila-nav-item__icon {
-    font-size: 1.15rem;
+    font-size: var(--fs-md);
     width: 1.15rem;
     text-align: center;
     flex-shrink: 0;
@@ -466,7 +475,12 @@
 .kmila-topbar {
     position: sticky;
     top: 0;
-    z-index: var(--z-sticky);
+    /* Must outrank the bottom-sheet dock (--z-drawer = 1020) so the profile
+       menu / config-pill popovers — which inherit this stacking context —
+       paint above the dock on mobile. Stays below --z-sidebar (1030) so the
+       sidebar drawer still covers the topbar when open, and below --z-modal
+       (1050) so dialogs/backdrops cover everything. */
+    z-index: calc(var(--z-drawer) + 1);
     background-color: var(--surface-2);
     border-bottom: 1px solid var(--border-subtle);
     min-height: var(--topbar-height);
@@ -499,32 +513,10 @@
 
 /* --- Hamburger button (mobile only) --- */
 
-.kmila-topbar__menu-btn {
-    display: none;          /* shown via media query below */
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
-    border: 1px solid var(--border-subtle);
-    background-color: var(--surface-2);
-    color: var(--text-default);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    font-size: 1.1rem;
-    transition: background-color var(--duration-fast) var(--ease-standard),
-                color var(--duration-fast) var(--ease-standard);
-}
-
-.kmila-topbar__menu-btn:hover {
-    background-color: var(--surface-3);
-    color: var(--text-strong);
-}
-
-.kmila-topbar__menu-btn:focus-visible {
-    outline: 2px solid var(--kmila-accent);
-    outline-offset: 2px;
-}
-
+/* Visual styles come from .kmila-btn-icon (buttons.css). This selector is
+   reserved purely for the show/hide media-query gate that hides the
+   hamburger on desktop and reveals it on mobile. */
+.kmila-topbar__menu-btn { display: none; }
 @media (max-width: 640.98px) {
     .kmila-topbar__menu-btn { display: inline-flex; }
 }
@@ -595,7 +587,7 @@
     align-items: center;
     color: var(--text-subtle);
     padding: 0 var(--space-1);
-    font-size: 0.9rem;
+    font-size: var(--fs-sm);
 }
 
 [dir="rtl"] .kmila-breadcrumbs__sep .bi-chevron-right::before {
@@ -1159,7 +1151,7 @@
     border: none;
     border-radius: var(--radius-pill);
     cursor: pointer;
-    font-size: 0.75rem;
+    font-size: var(--fs-xs);
     transition: background-color var(--duration-fast) var(--ease-standard),
                 color var(--duration-fast) var(--ease-standard);
 }
@@ -1239,7 +1231,7 @@
     background-color: var(--kmila-accent-soft);
     color: var(--kmila-accent);
     border-radius: var(--radius-md);
-    font-size: 1.3rem;
+    font-size: var(--fs-lg);
     flex-shrink: 0;
 }
 
@@ -1421,7 +1413,7 @@
     background-color: var(--kmila-accent-soft);
     color: var(--kmila-accent);
     border-radius: var(--radius-pill);
-    font-size: 2rem;
+    font-size: var(--fs-xl);
     margin-bottom: var(--space-2);
 }
 
@@ -1532,9 +1524,13 @@
 
 .settings-card__head {
     display: flex;
-    align-items: flex-start;
-    gap: var(--space-3);
-    padding: var(--space-3) var(--space-4);
+    align-items: center;          /* center-align icon with title block on a
+                                     single-row head — looks tighter and stops
+                                     the icon hovering above an already-short
+                                     title + sub stack. */
+    gap: var(--space-2);          /* was --space-3; the icon-to-text gap was
+                                     reading as part of the padding budget. */
+    padding: var(--space-2) var(--space-3);  /* was --space-3 var(--space-4) */
     border-bottom: 1px solid var(--border-subtle);
     background-color: var(--surface-1);
 }
@@ -1564,7 +1560,7 @@
     width: 36px;
     height: 36px;
     border-radius: var(--radius-md);
-    font-size: 1.15rem;
+    font-size: var(--fs-md);
     flex-shrink: 0;
 }
 
@@ -1574,7 +1570,11 @@
 .settings-card__icon--warning { background-color: var(--warning-soft); color: var(--warning); }
 
 .settings-card__body {
-    padding: var(--space-3) var(--space-4);
+    /* Tightened from var(--space-3) var(--space-4). User feedback was that
+       the cards looked padding-heavy across desktop + mobile; aligning to
+       the head's smaller padding makes the rows feel like a continuation
+       of the header rather than a separate padded sub-card. */
+    padding: var(--space-2) var(--space-3);
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
@@ -1740,6 +1740,9 @@
         justify-self: stretch;
         max-width: none;
     }
+    /* (Card head/body padding is now tight by default — see the base
+       .settings-card__head and .settings-card__body rules above. No
+       per-viewport override needed any more.) */
 }
 
 
@@ -1861,7 +1864,7 @@
 
 .logs-row__category {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-xs);
     font-weight: var(--fw-semibold);
     letter-spacing: var(--tracking-wide);
     text-transform: uppercase;
@@ -2049,7 +2052,7 @@
 
 .editor-file-icon {
     color: var(--kmila-accent);
-    font-size: 1rem;
+    font-size: var(--fs-base);
     flex-shrink: 0;
 }
 
@@ -2424,7 +2427,7 @@
 }
 
 .kmila-simulation__status > .bi {
-    font-size: 1.4rem;
+    font-size: var(--fs-lg);
     flex-shrink: 0;
 }
 
@@ -2672,7 +2675,7 @@
 
 .resource-usage__note .bi {
     color: var(--kmila-accent);
-    font-size: 1.1rem;
+    font-size: var(--fs-md);
     flex-shrink: 0;
     margin-top: 2px;
 }
@@ -2736,7 +2739,7 @@
     background-color: var(--mx-bg);
     color: var(--mx-fg);
     border-radius: var(--radius-sm);
-    font-size: 1rem;
+    font-size: var(--fs-base);
     flex-shrink: 0;
 }
 
@@ -2766,7 +2769,7 @@
     background-color: var(--surface-3);
     color: var(--text-muted);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-xs);
     font-weight: var(--fw-semibold);
     letter-spacing: var(--tracking-wide);
     border-radius: var(--radius-pill);
@@ -2960,6 +2963,10 @@
        high zoom levels. */
     min-width: 0;
     min-height: 280px;
+    /* Containing block for the absolutely-positioned collapse toggle (which
+       used to sit inside the scrolling tab strip — moved out so it stays
+       reachable when 8 tabs overflow horizontally on phones). */
+    position: relative;
     transition: min-height var(--duration-base) var(--ease-standard);
 }
 
@@ -2993,17 +3000,16 @@
     display: none;
 }
 
-/* Collapse toggle lives at the far end of the tab strip. flex-push with
-   margin-left:auto (margin-inline-start would be cleaner but has spottier
-   support in older mobile WebViews). RTL override below. */
+/* Collapse toggle is now a sibling of .kmila-dock__tabs (was inside it, but
+   sticky-right-0 broke when 8 tabs overflowed on iOS WKWebView). Pinning it
+   absolutely to the top-right of .kmila-dock keeps it reachable on every
+   viewport and frees the scrolling tab strip from sharing horizontal space
+   with the chevron. */
 .kmila-dock__collapse {
-    margin-left: auto;
-    /* Stick to the right edge of the scrolling tab strip so the chevron stays
-       reachable even when there are enough tabs to overflow horizontally.
-       Without this the button scrolls out of view on narrow viewports and
-       looks broken ("the burger at the end doesn't do anything"). */
-    position: sticky;
-    right: 0;
+    position: absolute;
+    top: var(--space-2);
+    right: max(var(--space-2), env(safe-area-inset-right, 0px));
+    z-index: 4;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -3011,13 +3017,12 @@
     width: 32px;
     height: 32px;
     background-color: var(--surface-1);
-    border: none;
+    border: 1px solid var(--border-subtle);
     border-radius: var(--radius-sm);
     color: var(--text-muted);
     cursor: pointer;
-    font-size: 1rem;
-    align-self: center;
-    box-shadow: -8px 0 8px -8px rgba(0, 0, 0, 0.15);
+    font-size: var(--fs-base);
+    box-shadow: var(--shadow-1);
     transition: background-color var(--duration-fast) var(--ease-standard),
                 color var(--duration-fast) var(--ease-standard);
 }
@@ -3033,50 +3038,28 @@
 }
 
 [dir="rtl"] .kmila-dock__collapse {
-    margin-left: 0;
-    margin-right: auto;
+    right: auto;
+    left: max(var(--space-2), env(safe-area-inset-left, 0px));
 }
 
-.kmila-dock__tab {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-3);
-    background: transparent;
-    border: none;
-    border-bottom: 2px solid transparent;
-    color: var(--text-muted);
-    font-size: var(--fs-sm);
-    font-weight: var(--fw-medium);
-    cursor: pointer;
-    white-space: nowrap;
-    flex-shrink: 0;
-    transition: background-color var(--duration-fast) var(--ease-standard),
-                color var(--duration-fast) var(--ease-standard),
-                border-color var(--duration-fast) var(--ease-standard);
+/* Reserve room at the right edge of the tab strip so the rightmost tab
+   doesn't slide under the absolutely-positioned collapse button. */
+.kmila-dock__tabs {
+    padding-right: calc(32px + var(--space-3));
+}
+[dir="rtl"] .kmila-dock__tabs {
+    padding-right: var(--space-2);
+    padding-left: calc(32px + var(--space-3));
 }
 
-.kmila-dock__tab:hover {
-    color: var(--text-default);
-    background-color: var(--surface-3);
-}
+/* Tab visuals (color, hover underline, is-active state, count badge)
+   come from .kmila-btn-tab (buttons.css). This selector now only carries
+   dock-specific layout: flex-shrink so the strip doesn't compress. */
+.kmila-dock__tab { flex-shrink: 0; }
 
-.kmila-dock__tab:focus-visible {
-    outline: 2px solid var(--kmila-accent);
-    outline-offset: -2px;
-}
-
-.kmila-dock__tab.is-active {
-    color: var(--text-strong);
-    background-color: var(--surface-2);
-    border-bottom-color: var(--kmila-accent);
-}
-
-.kmila-dock__tab.is-active .bi {
-    color: var(--kmila-accent);
-}
-
-
+/* Count badge — same shape as .kmila-btn-tab__count but with the dock's
+   sticky color rules. The tab's `.is-active` cascade in buttons.css
+   tints the count to the accent automatically. */
 .kmila-dock__count {
     display: inline-flex;
     align-items: center;
@@ -3087,11 +3070,12 @@
     background-color: var(--surface-3);
     color: var(--text-muted);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-xs);
     font-weight: var(--fw-semibold);
     border-radius: var(--radius-pill);
+    transition: background-color var(--duration-fast) var(--ease-standard),
+                color var(--duration-fast) var(--ease-standard);
 }
-
 .kmila-dock__tab.is-active .kmila-dock__count {
     background-color: var(--kmila-accent-soft);
     color: var(--kmila-accent);
@@ -3178,7 +3162,7 @@
 }
 
 .kmila-export-section__title {
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -3187,7 +3171,7 @@
 }
 
 .kmila-export-form .form-label {
-    font-size: 0.78rem;
+    font-size: var(--fs-xs);
     font-weight: 600;
     color: var(--text-strong);
     margin-bottom: 4px;
@@ -3220,7 +3204,7 @@
     border-color: var(--border-subtle);
     background-color: var(--surface-1);
     color: var(--text-strong);
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
     line-height: 1.3;
     padding: 4px 28px 4px 10px;
     height: auto;
@@ -3309,7 +3293,7 @@
 }
 
 .kmila-export-scope__body strong {
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
     color: var(--text-strong);
     font-weight: 600;
     line-height: 1.25;
@@ -3317,7 +3301,7 @@
 
 .kmila-export-scope__body small {
     color: var(--text-muted);
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     line-height: 1.35;
     /* Two-line clamp so very long hints never bloat the modal. */
     display: -webkit-box;
@@ -3344,7 +3328,7 @@
     border: none;
     background: transparent;
     color: var(--text-muted);
-    font-size: 0.8rem;
+    font-size: var(--fs-xs);
     cursor: pointer;
     transition:
         background-color var(--duration-fast) var(--ease-standard),
@@ -3412,7 +3396,7 @@
 }
 
 .kmila-export-check__body strong {
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
     color: var(--text-strong);
     font-weight: 600;
     line-height: 1.25;
@@ -3420,7 +3404,7 @@
 
 .kmila-export-check__body small {
     color: var(--text-muted);
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     line-height: 1.35;
 }
 
@@ -3506,7 +3490,7 @@
     background-color: var(--surface-3);
     color: var(--text-subtle);
     border-radius: var(--radius-pill);
-    font-size: 1.6rem;
+    font-size: var(--fs-xl);
 }
 
 .kmila-dock__empty p {
@@ -3622,7 +3606,7 @@
     background-color: var(--surface-3);
     color: var(--text-subtle);
     border-radius: var(--radius-pill);
-    font-size: 1.3rem;
+    font-size: var(--fs-lg);
     margin-bottom: var(--space-1);
 }
 
@@ -3719,7 +3703,7 @@
     color: var(--warning);
     background-color: var(--surface-1);
     border-radius: 50%;
-    font-size: 10px;
+    font-size: var(--fs-xs);
     /* Subtle ring so the badge reads as detached even on dark/coloured
        icon backgrounds. Surface-1 matches the row hover surface, keeping
        the badge legible in both states. */
@@ -3788,7 +3772,7 @@
     align-items: center;
     padding: 1px 6px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-xs);
     font-weight: var(--fw-semibold);
     letter-spacing: var(--tracking-wide);
     color: var(--fr-fg);
@@ -4001,7 +3985,7 @@
 }
 
 .flow-diagram__empty .bi {
-    font-size: 2rem;
+    font-size: var(--fs-xl);
     opacity: 0.6;
 }
 
@@ -4153,7 +4137,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.1rem;
+    font-size: var(--fs-md);
     color: var(--sr-fg);
     flex-shrink: 0;
 }
@@ -4435,7 +4419,7 @@
 .run-bar__time-icon {
     padding: 0 8px 0 12px;
     color: var(--text-muted);
-    font-size: 0.95rem;
+    font-size: var(--fs-base);
 }
 
 .run-bar__time-input {
@@ -4760,7 +4744,7 @@
     color: var(--or-fg);
     display: inline-flex;
     align-items: center;
-    font-size: 0.95rem;
+    font-size: var(--fs-base);
 }
 
 .output-row__msg {
@@ -4832,7 +4816,7 @@
 
 .kmila-status-bar__lang {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-xs);
     font-weight: var(--fw-semibold);
     letter-spacing: var(--tracking-wide);
     text-transform: uppercase;
@@ -4988,7 +4972,7 @@
 
 .kmila-config-pill__chevron {
     color: rgba(255, 255, 255, 0.7);
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
     transition: transform var(--duration-fast) var(--ease-standard);
 }
 
@@ -5079,7 +5063,7 @@
 
 .kmila-config-pill__modified {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-xs);
     font-weight: var(--fw-semibold);
     letter-spacing: var(--tracking-wide);
     text-transform: uppercase;
@@ -5241,7 +5225,7 @@
     display: inline-flex;
     align-items: center;
     color: var(--success);
-    font-size: 1.1rem;
+    font-size: var(--fs-md);
     flex-shrink: 0;
 }
 
@@ -5263,7 +5247,7 @@
     background-color: var(--surface-3);
     color: var(--text-muted);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-xs);
     font-weight: var(--fw-semibold);
     letter-spacing: var(--tracking-wide);
     text-transform: uppercase;
@@ -5316,7 +5300,7 @@
 
 .port-moment__clock-note .bi {
     color: var(--kmila-accent);
-    font-size: 1.1rem;
+    font-size: var(--fs-md);
     flex-shrink: 0;
     margin-top: 2px;
 }
@@ -5366,7 +5350,7 @@
     display: flex;
     justify-content: space-between;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-xs);
     color: var(--text-subtle);
     letter-spacing: var(--tracking-wide);
 }
@@ -5397,7 +5381,7 @@
 .port-moment__grid-head {
     padding: 0 var(--space-2);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-xs);
     font-weight: var(--fw-semibold);
     letter-spacing: var(--tracking-wide);
     text-transform: uppercase;
@@ -5445,7 +5429,7 @@
     top: 50%;
     transform: translateY(-50%);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-xs);
     font-weight: var(--fw-semibold);
     color: var(--text-muted);
     background-color: var(--surface-3);
@@ -5604,31 +5588,9 @@
     margin-top: var(--space-3);
 }
 
-.home-hero__primary {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-3) var(--space-5);
-    font-weight: var(--fw-semibold);
-    box-shadow: var(--shadow-2);
-}
-
-.home-hero__secondary {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-3) var(--space-4);
-    color: var(--text-default);
-    font-weight: var(--fw-medium);
-    border-radius: var(--radius-sm);
-    text-decoration: none;
-}
-
-.home-hero__secondary:hover {
-    background-color: var(--surface-3);
-    color: var(--text-strong);
-    text-decoration: none;
-}
+/* .home-hero__primary, .home-hero__secondary — visual rules moved to
+   .kmila-btn (buttons.css). The class names stay in markup as semantic
+   anchors; no per-class styles needed any more. */
 
 .home-hero__art {
     position: relative;
@@ -5752,7 +5714,7 @@
     width: 44px;
     height: 44px;
     border-radius: var(--radius-md);
-    font-size: 1.4rem;
+    font-size: var(--fs-lg);
     margin-bottom: var(--space-2);
 }
 
@@ -5766,7 +5728,7 @@
     color: var(--kmila-accent);
     width: 56px;
     height: 56px;
-    font-size: 1.8rem;
+    font-size: var(--fs-xl);
     margin-bottom: 0;
 }
 
@@ -5812,22 +5774,16 @@
     align-items: center;
 }
 
-.home-cta__github {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-3);
-    color: rgba(255, 255, 255, 0.9);
-    font-weight: var(--fw-medium);
-    text-decoration: none;
-    border-radius: var(--radius-sm);
+/* Buttons inside the dark-gradient .home-cta panel must blend with that
+   surface — override the kmila-btn fill to transparent and force light
+   text (var(--surface-2) would read as a misplaced card on the gradient). */
+.home-cta .kmila-btn {
+    --kmila-btn-fill: transparent;
+    color: rgba(255, 255, 255, 0.92);
 }
-
-.home-cta__github:hover {
-    background-color: rgba(255, 255, 255, 0.12);
-    color: #ffffff;
-    text-decoration: none;
-}
+.home-cta .kmila-btn::after { background-color: transparent; }
+.home-cta .kmila-btn:hover,
+.home-cta .kmila-btn:focus-visible { color: #ffffff; }
 
 
 /* Home responsive */
@@ -5862,6 +5818,16 @@
     .home-bento__card,
     .home-bento__card--wide,
     .home-bento__card--highlight { grid-column: span 12; }
+
+    /* Single-column phones: cards stretch to full width and the surrounding
+       hero / overview / CTA already center-align on this breakpoint, so a
+       left-aligned bento card reads as a stranded paragraph. Match the rest
+       of the page layout — center the text and the icon. */
+    .home-bento__card {
+        align-items: center;
+        text-align: center;
+    }
+    .home-bento__card .home-bento__icon { margin-left: auto; margin-right: auto; }
 
     .home-bento__card--highlight { grid-template-columns: 1fr; text-align: center; }
     .home-bento__card--highlight .home-bento__icon--primary { margin: 0 auto var(--space-2); }
@@ -5949,6 +5915,60 @@
     color: var(--text-muted);
 }
 
+/* ---------------------------------------------------------------------------
+   Catalog filter chips (Learn + Practice).
+
+   Layout: a vertical stack of horizontal chip rows. Each row holds a small
+   inline label followed by a row of toggle chips. On narrow viewports
+   (mobile) the chip row scrolls horizontally — hiding the scrollbar via
+   `scrollbar-width: none` so the row reads as a single tappable strip.
+   --------------------------------------------------------------------------- */
+.catalog-filters {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-bottom: var(--space-5);
+}
+
+.catalog-filters__row {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: var(--space-2);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-block: var(--space-1);
+}
+.catalog-filters__row::-webkit-scrollbar { display: none; }
+
+.catalog-filters__label {
+    flex: 0 0 auto;
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    margin-inline-end: var(--space-1);
+}
+
+/* Filter chips: visuals delegated to .kmila-btn-tab (Family 15). The
+   local class only carries flex behavior so they don't shrink in the
+   horizontally-scrolling chip row. Difficulty variants now drive the
+   underline color via the --kmila-tab-color custom property instead of
+   border-color so the Family 15 underline still encodes difficulty. */
+.filter-chip { flex: 0 0 auto; }
+
+.filter-chip--beginner     { --kmila-tab-color: var(--success); }
+.filter-chip--easy         { --kmila-tab-color: var(--kmila-accent); }
+.filter-chip--intermediate { --kmila-tab-color: var(--kmila-accent); }
+.filter-chip--advanced     { --kmila-tab-color: var(--warning); }
+.filter-chip--expert       { --kmila-tab-color: var(--danger); }
+
+@media (max-width: 640px) {
+    .catalog-filters__label { display: none; }
+}
+
 .learn-track {
     /* margin-bottom intentionally absent — `.learn-page` uses flex `gap` to
        space sibling tracks. */
@@ -6010,7 +6030,7 @@
     width: 42px;
     height: 42px;
     border-radius: var(--radius-md);
-    font-size: 1.25rem;
+    font-size: var(--fs-lg);
 }
 
 .learn-card__icon--success { background-color: rgba(16, 185, 129, 0.12); color: var(--success); }
@@ -6116,7 +6136,7 @@
     border-radius: 50%;
     background-color: rgba(60, 130, 246, 0.12);
     color: var(--kmila-accent);
-    font-size: 1.5rem;
+    font-size: var(--fs-xl);
 }
 
 
@@ -6319,7 +6339,7 @@
     border-radius: var(--radius-md);
     background-color: rgba(60, 130, 246, 0.15);
     color: var(--kmila-accent);
-    font-size: 1.25rem;
+    font-size: var(--fs-lg);
 }
 
 .lesson-sample-cta__body h3 {
@@ -6919,7 +6939,7 @@
     top: calc(100% + var(--space-2));
     right: 0;
     left: auto;
-    z-index: 100;
+    z-index: var(--z-popover);
     width: min(360px, 92vw);
     padding: var(--space-3);
     background-color: var(--surface-2);
@@ -7006,31 +7026,14 @@
     gap: 4px;
 }
 
+/* Lang chips: visuals delegated to .kmila-btn-tab. The local class only
+   keeps the column layout (code on top, native name below) since the
+   default .kmila-btn-tab is row-based. */
 .kmila-profile-menu__lang-chip {
-    display: inline-flex;
     flex-direction: column;
-    align-items: center;
     gap: 2px;
     padding: 6px 4px;
-    background: var(--surface-1);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    font-size: var(--fs-xs);
-    color: var(--text-default);
-    transition: background-color var(--duration-fast) var(--ease-standard),
-                border-color var(--duration-fast) var(--ease-standard);
-}
-
-.kmila-profile-menu__lang-chip:hover {
-    background: var(--surface-3);
-    border-color: var(--border-default);
-}
-
-.kmila-profile-menu__lang-chip.is-active {
-    border-color: var(--kmila-accent);
-    background: var(--kmila-accent-soft);
-    color: var(--text-strong);
+    justify-content: center;
 }
 
 .kmila-profile-menu__lang-code {
@@ -7042,7 +7045,7 @@
 
 .kmila-profile-menu__lang-native {
     color: var(--text-muted);
-    font-size: 11px;
+    font-size: var(--fs-xs);
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -7060,62 +7063,19 @@
     gap: 4px;
 }
 
+/* Theme buttons: visuals delegated to .kmila-btn-tab. Local class only
+   carries the icon-on-top column layout. */
 .kmila-profile-menu__theme-btn {
-    display: inline-flex;
     flex-direction: column;
-    align-items: center;
     gap: 4px;
     padding: 8px 4px;
-    background: var(--surface-1);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    font-size: var(--fs-xs);
-    color: var(--text-default);
-    transition: background-color var(--duration-fast) var(--ease-standard),
-                border-color var(--duration-fast) var(--ease-standard);
+    justify-content: center;
 }
 
-.kmila-profile-menu__theme-btn:hover {
-    background: var(--surface-3);
-    border-color: var(--border-default);
-}
-
-.kmila-profile-menu__theme-btn.is-active {
-    border-color: var(--kmila-accent);
-    background: var(--kmila-accent-soft);
-    color: var(--text-strong);
-}
-
-/* Action rows — Settings, Sign in, Sign out. */
-.kmila-profile-menu__action {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-3);
-    background: transparent;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-sm);
-    color: var(--text-default);
-    font-size: var(--fs-sm);
-    cursor: pointer;
-    text-align: left;
-}
-
-.kmila-profile-menu__action:hover { background-color: var(--surface-1); }
-
-.kmila-profile-menu__action--primary {
-    background-color: var(--kmila-accent);
-    border-color: var(--kmila-accent);
-    color: #ffffff;
-}
-
-.kmila-profile-menu__action--primary:hover {
-    background-color: var(--kmila-accent);
-    filter: brightness(1.05);
-}
-
-.kmila-profile-menu__action--danger { color: var(--danger); }
+/* Action rows — Settings, Sign in, Sign out. Visuals from .kmila-btn;
+   local class only ensures the buttons stretch to fill the action
+   section's vertical column (the .kmila-btn default is inline-flex). */
+.kmila-profile-menu__action { width: 100%; justify-content: flex-start; }
 
 
 /* Device-flow modal layout. */
@@ -7370,7 +7330,7 @@
     align-items: center;
     justify-content: center;
     color: var(--kmila-accent);
-    font-size: 1.5rem;
+    font-size: var(--fs-xl);
     flex-shrink: 0;
 }
 
@@ -8064,23 +8024,10 @@
     padding: var(--space-2) var(--space-3);
     border-bottom: 1px solid var(--border-subtle);
 }
-.kmila-fpga-picker__chip {
-    padding: 2px var(--space-2);
-    background-color: var(--surface-1);
-    border: 1px solid var(--border-subtle);
-    border-radius: 999px;
-    font-size: var(--fs-2xs);
-    font-family: var(--font-mono);
-    color: var(--text-muted);
-    cursor: pointer;
-}
-.kmila-fpga-picker__chip:hover { border-color: var(--kmila-accent); color: var(--text-strong); }
-.kmila-fpga-picker__chip.is-active {
-    background-color: rgba(60, 130, 246, 0.15);
-    color: var(--kmila-accent);
-    border-color: var(--kmila-accent);
-    font-weight: var(--fw-semibold);
-}
+/* Manufacturer filter chips: visuals from .kmila-btn-tab. Local class
+   only adds the monospace face since manufacturer codes (Altera, Xilinx,
+   Lattice…) read better in mono than in the body sans. */
+.kmila-fpga-picker__chip { font-family: var(--font-mono); }
 
 .kmila-fpga-picker__option-main {
     display: inline-flex;
@@ -8186,7 +8133,7 @@
     display: inline-flex;
     align-items: center;
     color: var(--et-accent);
-    font-size: 1rem;
+    font-size: var(--fs-base);
     flex-shrink: 0;
 }
 
@@ -8264,6 +8211,21 @@
 .kmila-dock {
     min-height: var(--kmila-dock-height, 320px);
     height: var(--kmila-dock-height, 320px);
+}
+
+/* When collapsed, drop the custom height so the dock shrinks to just the tab
+   strip (the panel is already hidden via the `hidden` attribute). Without this,
+   the resize var keeps the box at its dragged size and the collapse only
+   looks like it hid the contents. `!important` is needed because the
+   `.kmila-dock` rule above also sets a `height` from the same custom property
+   and a single-class override otherwise loses on cascade in some scenarios
+   (scoped CSS suffixes, hot-reload re-injection). */
+.kmila-dock.kmila-dock--collapsed {
+    min-height: 0 !important;
+    height: auto !important;
+}
+.kmila-dock.kmila-dock--collapsed .kmila-dock__panel {
+    display: none !important;
 }
 
 .kmila-dock__grabber {
@@ -8654,36 +8616,56 @@
 
 
 /* ── Dock as bottom-sheet on mobile ──────────────────────────────────────── */
+/* The mobile editor stacks four fixed layers from bottom to top:
+   StatusBar (--statusbar-h) → Dock (--dock-h) → RunBar (--runbar-h) → TopBar.
+   They all read from these custom properties so a snap-class flip on
+   .kmila-dock relocates RunBar in lockstep — no per-component math. */
 @media (max-width: 768px) {
+    body {
+        --statusbar-h: 32px;
+        --runbar-h: 56px;
+        --dock-h: 18dvh;            /* peek by default — no JS needed */
+    }
+    body:has(.kmila-dock--snap-half) { --dock-h: 50dvh; }
+    body:has(.kmila-dock--snap-full) { --dock-h: 88dvh; }
+    body:has(.kmila-dock--collapsed) { --dock-h: 56px; }
+
     .kmila-dock {
         position: fixed;
         left: 0;
         right: 0;
-        bottom: 0;
+        bottom: calc(var(--statusbar-h) + env(safe-area-inset-bottom, 0px));
         z-index: var(--z-drawer);
         box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.18);
         border-top-left-radius: var(--radius-lg);
         border-top-right-radius: var(--radius-lg);
-        max-height: 90dvh;
+        /* Override the desktop default of `height: var(--kmila-dock-height, 320px)`
+           (pages.css:8200-8201) — that 320 px ate RunBar+StatusBar before the
+           snap-class controller ran, leaving Run/Build/Clock invisible until
+           the user dragged the grabber. */
+        height: var(--dock-h) !important;
+        min-height: 0 !important;
+        max-height: 88dvh;
         transition: height var(--duration-base) var(--ease-standard);
     }
-    .kmila-dock--snap-peek    { height: 18dvh !important; }
-    .kmila-dock--snap-peek .kmila-dock__panel { display: none; }
-    .kmila-dock--snap-half    { height: 50dvh !important; }
-    .kmila-dock--snap-full    { height: 88dvh !important; }
-    .kmila-dock--collapsed    { height: 64px !important; }
 
-    /* Make room at the bottom of the editor area so the dock doesn't cover
-       the last lines of code when the bottom-sheet is in peek/half. The
-       editor handles its own padding-bottom via this CSS variable. */
-    .kmila-shell__main {
-        --kmila-dock-spacer: 18dvh;
-        padding-bottom: var(--kmila-dock-spacer);
+    /* Default + peek: panel hidden, only the tab strip is visible.
+       Half/full reveal the panel; collapsed always hides it. */
+    .kmila-dock__panel { display: none; }
+    .kmila-dock--snap-half:not(.kmila-dock--collapsed) .kmila-dock__panel,
+    .kmila-dock--snap-full:not(.kmila-dock--collapsed) .kmila-dock__panel {
+        display: block;
     }
-    .kmila-dock--snap-half ~ .kmila-shell__main,
-    body:has(.kmila-dock--snap-half) .kmila-shell__main { --kmila-dock-spacer: 50dvh; }
-    body:has(.kmila-dock--snap-full) .kmila-shell__main { --kmila-dock-spacer: 88dvh; }
-    body:has(.kmila-dock--collapsed) .kmila-shell__main { --kmila-dock-spacer: 64px; }
+
+    /* Editor workbench needs room for RunBar + dock peek + StatusBar
+       so the bottom of Monaco isn't covered. */
+    .editor-page,
+    .kmila-shell__main {
+        padding-bottom: calc(
+            var(--dock-h) + var(--runbar-h) + var(--statusbar-h)
+            + env(safe-area-inset-bottom, 0px)
+        );
+    }
 }
 
 /* Beefier dock tab icons + tap targets on mobile */
@@ -8705,6 +8687,74 @@
     .kmila-dock__collapse {
         min-width: 44px;
         min-height: 44px;
+    }
+}
+
+
+/* ── RunBar pinned above the dock peek on mobile ─────────────────────────── */
+/* The bar would otherwise float in document flow under the fixed dock and
+   become invisible. Pinning to a coordinated bottom offset keeps Run/Build/
+   Clocks reachable as the dock snaps between peek/half/full. */
+@media (max-width: 768px) {
+    .run-bar {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: calc(
+            var(--dock-h) + var(--statusbar-h) + env(safe-area-inset-bottom, 0px)
+        );
+        z-index: calc(var(--z-drawer) - 1);
+        min-height: var(--runbar-h);
+        margin: 0;
+        padding-left: max(var(--space-2), env(safe-area-inset-left, 0px));
+        padding-right: max(var(--space-2), env(safe-area-inset-right, 0px));
+        background-color: var(--surface-1);
+        border-top: 1px solid var(--border-subtle);
+        box-shadow: 0 -4px 12px rgba(15, 23, 42, 0.10);
+        transition: bottom var(--duration-base) var(--ease-standard);
+    }
+    .run-bar__row {
+        flex-wrap: wrap;
+        gap: var(--space-2);
+        padding-block: var(--space-1);
+    }
+    /* Full-snap dock takes 88dvh — RunBar would land overlapping TopBar.
+       Slide it off-screen instead; the sheet content is what the user wants. */
+    body:has(.kmila-dock--snap-full) .run-bar {
+        transform: translateY(120%);
+        pointer-events: none;
+    }
+    /* Focus mode hides the dock entirely; RunBar/StatusBar should follow so
+       Monaco can take the full viewport as the existing rule intends. */
+    html[data-kmila-focus="1"] .run-bar {
+        display: none !important;
+    }
+}
+
+
+/* ── StatusBar pinned to viewport bottom on mobile ───────────────────────── */
+@media (max-width: 768px) {
+    .status-bar {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: var(--z-drawer);
+        min-height: var(--statusbar-h);
+        margin: 0;
+        padding-left: max(var(--space-3), env(safe-area-inset-left, 0px));
+        padding-right: max(var(--space-3), env(safe-area-inset-right, 0px));
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+        background-color: var(--surface-1);
+        border-top: 1px solid var(--border-subtle);
+    }
+    /* Full-snap dock occludes the bar; hide instead of fighting for pixels. */
+    body:has(.kmila-dock--snap-full) .status-bar {
+        transform: translateY(120%);
+        pointer-events: none;
+    }
+    html[data-kmila-focus="1"] .status-bar {
+        display: none !important;
     }
 }
 
@@ -8819,22 +8869,19 @@
 }
 
 
-/* ── TopBar: condensed two-row option on narrow viewports ─────────────────── */
+/* ── TopBar: tight single-row layout on narrow viewports ─────────────────── */
 @media (max-width: 640.98px) {
+    /* Single-row layout: hamburger + truncated breadcrumb + right-side pills.
+       The breadcrumbs already collapse to "last 2 crumbs only" + ellipsis at
+       this width (line 612), and the right cluster has flex-shrink: 0 so it
+       always stays inside the bar. A previous version forced both halves to
+       `flex: 1 1 100%` which wrapped onto two rows — but the <header>'s box
+       didn't grow with the wrap, so the right cluster visually leaked out
+       below the navy band onto the page body. */
     .kmila-topbar__inner {
-        flex-wrap: wrap;
-        row-gap: var(--space-2);
         padding: var(--space-2) var(--space-3);
     }
-    .kmila-topbar__start {
-        flex: 1 1 100%;
-        order: 1;
-    }
     .kmila-topbar__end {
-        flex: 1 1 100%;
-        order: 2;
-        justify-content: flex-end;
-        flex-wrap: wrap;
         gap: var(--space-2);
     }
     /* Account pill collapses to icon-only on the narrowest viewports. */
@@ -8899,9 +8946,13 @@
         width: 100% !important;
         min-height: 44px;
     }
-    .settings-card {
-        padding: var(--space-4);
-    }
+    /* Don't add OUTER padding to the card on phones — the
+       .settings-card__head and .settings-card__body each already carry
+       their own padding (tightened to var(--space-2) var(--space-3) in
+       the @media (max-width: 520px) block above). Stacking an additional
+       16px on the card itself produced a visible padding-heavy frame:
+       article px-4 (24px) + card outer (16px) + head/body inner (12px)
+       = ~52px from screen edge to text on a 320px viewport. */
 }
 
 
@@ -8914,11 +8965,10 @@
 }
 .lesson-markdown table,
 .markdown-content table {
-    display: block;
+    display: table;
     width: 100%;
     max-width: 100%;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+    table-layout: auto;
 }
 .lesson-markdown img,
 .markdown-content img {
@@ -8929,7 +8979,7 @@
     .lesson-markdown { font-size: var(--fs-sm); }
     .lesson-markdown pre,
     .markdown-content pre {
-        font-size: 0.8rem;
+        font-size: var(--fs-xs);
         padding: var(--space-3);
     }
     .lesson-crumb {
@@ -9062,13 +9112,30 @@ html[data-kmila-focus="1"] #editor {
 .practice-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    /* `1fr` row tells the grid the explicit row should fill the grid's
+       available height. Without this, implicit rows size to content
+       (max of items' intrinsic heights) — which means the row stays
+       at ~400px even after `min-height` makes the container taller,
+       and the editor pane never sees the extra space. */
+    grid-template-rows: 1fr;
     gap: var(--space-5);
     align-items: stretch;
+    /* Push the GRID CONTAINER up to the viewport's available height so
+       the 1fr row above can fill it. The 8rem subtracts the topbar +
+       article paddings + practice-page header (rough). The brief column
+       will show empty space below its content on short statements;
+       that's an acceptable trade for an editor that fills the viewport. */
+    min-height: calc(100dvh - var(--topbar-height) - 8rem);
 }
 
 @media (max-width: 1024px) {
     .practice-grid {
         grid-template-columns: minmax(0, 1fr);
+        /* Mobile / tablet stack: rows AND container size to natural
+           content height — the brief shouldn't be taller than its
+           markdown when stacked above the editor. */
+        grid-template-rows: auto;
+        min-height: 0;
     }
 }
 
@@ -9096,17 +9163,33 @@ html[data-kmila-focus="1"] #editor {
 }
 
 .practice-editor-frame {
+    /* Fills the editor pane's remaining vertical space in the flex column.
+       The parent .practice-pane--editor stretches to match the brief column
+       via the grid's `align-items: stretch`, so on Web the frame ends up
+       exactly matching the card height minus the actions row.
+       `min-height: min(320px, 50dvh)` keeps Monaco usable on tiny viewports
+       without forcing the frame to overflow a short pane (the previous
+       fixed `height: 60vh` and mobile `clamp(260px, 50dvh, 480px)` ignored
+       the pane's real height — leaving empty space on Web and overflowing
+       on phones). */
     flex: 1 1 auto;
-    min-height: 420px;
-    height: 60vh;
-    max-height: 720px;
+    min-height: min(320px, 50dvh);
     border-bottom: 1px solid var(--border-subtle);
     display: flex;
+    overflow: hidden;
 }
 
 .practice-monaco {
     flex: 1 1 auto;
     min-width: 0;
+    /* BlazorMonaco stamps `monaco-editor-container` on the outer div, which
+       picks up the global `height: 60dvh; min-height: 400px` rule meant for
+       the standalone Editor page. In PracticeView the editor lives in a flex
+       column inside a grid-stretched card, so the fixed dvh height left an
+       empty band at the bottom of the card on desktop. Force the practice
+       Monaco to fill its frame instead. */
+    height: 100% !important;
+    min-height: 0 !important;
 }
 
 .practice-actions {
@@ -9421,4 +9504,102 @@ html[data-kmila-focus="1"] #editor {
     background-color: var(--surface-2);
     color: var(--text-muted);
     border-color: var(--border-subtle);
+}
+
+.practice-status-chip--gated {
+    background-color: color-mix(in srgb, var(--text-muted) 12%, transparent);
+    color: var(--text-muted);
+    border-color: color-mix(in srgb, var(--text-muted) 35%, transparent);
+}
+
+/* Gated catalog card — slightly desaturated; hover still works so the
+   user can click through to read the explanation banner. */
+.learn-card--gated {
+    opacity: 0.78;
+}
+.learn-card--gated:hover {
+    opacity: 1;
+}
+
+/* Engine-gate banner inside PracticeView. */
+.practice-gate-banner {
+    display: flex;
+    gap: var(--space-3);
+    align-items: flex-start;
+    padding: var(--space-3);
+    border: 1px solid color-mix(in srgb, var(--warning) 40%, transparent);
+    background-color: color-mix(in srgb, var(--warning) 10%, transparent);
+    border-radius: var(--radius-md);
+    color: var(--text-strong);
+    margin-bottom: var(--space-3);
+}
+.practice-gate-banner__icon {
+    flex-shrink: 0;
+    color: var(--warning);
+    font-size: var(--fs-lg);
+}
+.practice-gate-banner__body strong { display: block; margin-bottom: 4px; }
+.practice-gate-banner__body p { margin: 0; }
+
+
+/* ============================================================================
+   Mobile UI bug-fix pass — addresses screenshots reported on 2026-05-08:
+     1) Safe-area insets on TopBar + Sidebar drawer (iPhone notch/Dynamic Island).
+     2) Profile-menu and ConfigurationsPill popovers — turn into edge-anchored
+        sheets on phones so they can never overflow the viewport, and rank
+        above the editor dock.
+     3) Practice IDE editor frame — drop the 420px floor on phones so Monaco
+        fills the visible card without a blank gap below the code.
+   (Rendered-markdown table fix lives at line 8996 — `display: table` instead
+    of `block`, so the existing `width: 100%` actually stretches the columns.)
+   ============================================================================ */
+
+@media (max-width: 640.98px) {
+
+    /* 1) TopBar safe-area is handled by the pre-existing
+          `<div class="status-bar-safe-area">` in index.html (styles in
+          Kmila.Shared/wwwroot/app.css). Its background was changed to
+          --surface-2 to match the TopBar so the two read as a single
+          continuous surface. No TopBar override needed here. */
+
+    /* 1) Sidebar drawer — fixed at top:0 with height:100dvh, so border-box
+          + padding gives the contents the inset without changing the box. */
+    .kmila-sidebar {
+        padding-top: env(safe-area-inset-top, 0px);
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+        box-sizing: border-box;
+    }
+
+    /* 2) Both top-bar popovers become full-width sheets pinned under the
+          TopBar on phones. This avoids two separate failure modes:
+          - Profile menu overflowing the bottom of the viewport and being
+            painted under the editor dock.
+          - ConfigurationsPill panel extending past the left edge of the
+            screen because its right-anchored width was wider than the
+            distance from the summary back to x=0. */
+    .kmila-profile-menu__panel,
+    .kmila-config-pill__panel {
+        position: fixed;
+        top: calc(var(--topbar-height) + env(safe-area-inset-top, 0px) + var(--space-2));
+        right: var(--space-2);
+        left: var(--space-2);
+        width: auto;
+        max-width: none;
+        max-height: calc(100dvh - var(--topbar-height) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - var(--space-4));
+        z-index: var(--z-popover);
+    }
+
+    [dir="rtl"] .kmila-profile-menu__panel,
+    [dir="rtl"] .kmila-config-pill__panel {
+        right: var(--space-2);
+        left: var(--space-2);
+    }
+
+    /* Practice IDE on mobile: rule removed. The new default
+       (`flex: 1 1 auto; min-height: min(320px, 50dvh)`) already does the
+       right thing on phones — the editor pane has its natural height in
+       a single-column layout, the frame fills it, and Monaco respects
+       it. The previous fixed `height: clamp(260, 50dvh, 480)` ignored the
+       pane's real height and was the source of the overflow the user
+       reported on phones + the empty space on Web. */
 }

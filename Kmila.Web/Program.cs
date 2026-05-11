@@ -295,6 +295,9 @@ public class Program
         // ApplicationDbContext. One row per Submit click, plus the
         // aggregate progress chip data.
         builder.Services.AddScoped<Kmila.Shared.Services.Practice.PracticeAttemptStore>();
+        // Session export — scoped sibling that reads the store and emits
+        // a Markdown report or a ZIP bundle for download.
+        builder.Services.AddScoped<Kmila.Shared.Services.Practice.PracticeSessionExportService>();
 
         // Sidebar MRU — scoped so it reads from the same per-circuit
         // ApplicationDbContext the rest of the UI is using.
@@ -327,25 +330,45 @@ public class Program
         var app = builder.Build();
 
         // Apply the saved library-build mode (Settings → Build mode) to the
-        // singleton LibraryCompiler. Reading from a fresh DbContext scope
-        // here means the FIRST build of a session already honours the
-        // user's choice — without this we'd default to Persistent and only
-        // pick up the saved value once the Settings page mounted and the
-        // user touched the dropdown.
+        // singleton LibraryCompiler. Pushed onto a thread-pool thread so
+        // the same code path can be shared with the MAUI host without
+        // sync-over-async deadlocking the UI startup thread there. The
+        // user's first build will use the default Persistent policy if the
+        // hydration loses the race; the Settings page re-applies on mount.
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = app.Services.CreateScope();
+                var db       = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                var compiler = app.Services.GetRequiredService<LibraryCompiler.Services.LibraryCompiler>();
+                var raw      = await db.GetSettingAsync(AppSettings.KEY_LIBRARY_BUILD_MODE);
+                var policy   = LibraryBuildModeExtensions.ParseToken(raw);
+                compiler.Orchestrator.Policy = LibraryBuildModeExtensions.ToPolicy(policy);
+            }
+            catch
+            {
+                // First-launch path: AppSettings table may not exist yet.
+            }
+        });
+
+        // Keep the LibraryCompiler's resolver in sync with disk: every time
+        // UserAssetStore notifies a change (Settings import / delete, or an
+        // external file mutation under UserLibrariesDir), reconcile the
+        // resolver's user-vendor entries against the current listing. Without
+        // this, a deleted plugin would still pass the "library not found"
+        // check and produce a confusing fallback warning at build time.
         try
         {
-            using var scope = app.Services.CreateScope();
-            var db       = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            var compiler = app.Services.GetRequiredService<LibraryCompiler.Services.LibraryCompiler>();
-            var raw      = db.GetSettingAsync(AppSettings.KEY_LIBRARY_BUILD_MODE).GetAwaiter().GetResult();
-            var policy   = LibraryBuildModeExtensions.ParseToken(raw);
-            compiler.Orchestrator.Policy = LibraryBuildModeExtensions.ToPolicy(policy);
+            var compiler   = app.Services.GetRequiredService<LibraryCompiler.Services.LibraryCompiler>();
+            var userAssets = app.Services.GetRequiredService<UserAssetStore>();
+            userAssets.OnChange += () => userAssets.SyncResolver(compiler.Resolver);
         }
         catch
         {
-            // First-launch path: AppSettings table may not exist yet. The
-            // singleton compiler keeps its default Persistent policy until
-            // the Settings page applies a stored choice on first load.
+            // Subscription is best-effort. Settings UI also calls
+            // SyncResolver directly after each import / delete as a belt-
+            // and-braces fallback.
         }
 
         // Redirect Console.Out into an ILogger so that Console.WriteLine calls

@@ -6,6 +6,7 @@
 @inject PracticeCatalog Catalog
 @inject PracticeEvaluator Evaluator
 @inject PracticeAttemptStore Attempts
+@inject PracticeSessionExportService ExportService
 @inject NavigationManager Nav
 @implements IDisposable
 <PageTitle>@(_titleForTab ?? Traductor.T("PRACTICE_TITLE"))</PageTitle>
@@ -51,7 +52,7 @@
         <div class="learn-empty">
             <div class="learn-empty__icon"><Icon Name="IconName.FileEarmarkX" /></div>
             <h2>@Traductor.T("PRACTICE_NOT_FOUND")</h2>
-            <a class="btn btn-primary" href="/practice">@Traductor.T("PRACTICE_BACK_CATALOG")</a>
+            <a class="kmila-btn kmila-btn--accent" href="/practice">@Traductor.T("PRACTICE_BACK_CATALOG")</a>
         </div>
     }
     else
@@ -59,6 +60,18 @@
         <div class="practice-grid">
             @* ── Left column: statement + visible test + verdict ───────── *@
             <article class="practice-pane practice-pane--brief">
+                @if (!string.IsNullOrEmpty(_exercise.RequiresEngine))
+                {
+                    <div class="practice-gate-banner">
+                        <div class="practice-gate-banner__icon">
+                            <Icon Name="IconName.LockFill" />
+                        </div>
+                        <div class="practice-gate-banner__body">
+                            <strong>@Traductor.T("PRACTICE_GATED_BANNER_TITLE")</strong>
+                            <p>@string.Format(Traductor.T("PRACTICE_GATED_BANNER_FMT"), GateReason(_exercise.RequiresEngine))</p>
+                        </div>
+                    </div>
+                }
                 <div class="lesson-markdown">
                     @MarkdownRenderer.Render(PracticeCatalog.Localize(_exercise.Statements, _lang, string.Empty))
                 </div>
@@ -182,7 +195,7 @@
                                     <span class="practice-history__verdict">@VerdictLabel(a.Verdict)</span>
                                     <span class="practice-history__time">@a.TotalDurationMs ms</span>
                                     <button type="button"
-                                            class="btn btn-sm btn-ghost practice-history__load"
+                                            class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm practice-history__load"
                                             @onclick="() => LoadAttemptAsync(a)"
                                             disabled="@(_grading || !_monacoReady)">
                                         <Icon Name="IconName.BoxArrowUpRight" />
@@ -245,19 +258,32 @@
                                           OnDidChangeModelContent="OnEditorChanged" />
                 </div>
                 <div class="practice-actions">
-                    <button type="button" class="btn btn-outline-secondary"
+                    <button type="button" class="kmila-btn kmila-btn--ghost"
+                            @onclick="OpenExportModalAsync"
+                            disabled="@(_grading || _pastAttempts.Count == 0)"
+                            title="@(_pastAttempts.Count == 0 ? Traductor.T("PRACTICE_EXPORT_NO_ATTEMPTS") : null)">
+                        <Icon Name="IconName.BoxArrowUp" />
+                        <span>@Traductor.T("PRACTICE_EXPORT")</span>
+                    </button>
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary"
                             @onclick="ResetCodeAsync"
                             disabled="@_grading">
                         <Icon Name="IconName.ArrowCounterclockwise" />
                         <span>@Traductor.T("PRACTICE_RESET_CODE")</span>
                     </button>
-                    <button type="button" class="btn btn-primary practice-actions__submit"
+                    <button type="button" class="kmila-btn kmila-btn--accent practice-actions__submit"
                             @onclick="SubmitAsync"
-                            disabled="@_grading">
+                            disabled="@(_grading || !string.IsNullOrEmpty(_exercise?.RequiresEngine))"
+                            title="@(string.IsNullOrEmpty(_exercise?.RequiresEngine) ? null : Traductor.T("PRACTICE_GATED_CHIP"))">
                         @if (_grading)
                         {
                             <Spinner Type="SpinnerType.Border" Size="SpinnerSize.Small" />
                             <span>@Traductor.T("PRACTICE_GRADING")</span>
+                        }
+                        else if (!string.IsNullOrEmpty(_exercise?.RequiresEngine))
+                        {
+                            <Icon Name="IconName.LockFill" />
+                            <span>@Traductor.T("PRACTICE_GATED_CHIP")</span>
                         }
                         else
                         {
@@ -271,6 +297,8 @@
     }
 </section>
 
+<Modal @ref="_exportModal" />
+
 @code {
     [Parameter] public string ExerciseId { get; set; } = string.Empty;
 
@@ -283,6 +311,8 @@
     private bool _solved;
     private PracticeAttemptVerdict? _verdict;
     private List<PracticeAttempt> _pastAttempts = new();
+
+    private Modal _exportModal = new();
 
     /// <summary>
     /// True once Monaco has reported <c>OnDidInit</c>. Until then any
@@ -390,6 +420,11 @@
     private async Task SubmitAsync()
     {
         if (_exercise == null || _monaco == null || !_monacoReady || _grading) return;
+        // Gated exercises can't run — surface that explicitly instead of silently doing nothing.
+        if (!string.IsNullOrEmpty(_exercise.RequiresEngine))
+        {
+            return;
+        }
         _grading = true;
         _verdict = null;
         StateHasChanged();
@@ -494,6 +529,16 @@
         _ => "easy"
     };
 
+    /// <summary>
+    /// Translates an engine-gate token into a localized human reason. Add
+    /// new cases as new gate tokens land in the manifest.
+    /// </summary>
+    private string GateReason(string? key) => key switch
+    {
+        "numeric_std-sim" => Traductor.T("PRACTICE_GATED_REASON_NUMERIC_STD"),
+        _ => key ?? string.Empty
+    };
+
     private string VerdictLabel(PracticeVerdictKind k) => k switch
     {
         PracticeVerdictKind.Solved       => Traductor.T("PRACTICE_VERDICT_SOLVED"),
@@ -523,6 +568,58 @@
         PracticeVerdictKind.Timeout      => "to",
         _ => "wa"
     };
+
+    /// <summary>
+    /// Opens the practice-session export modal. The modal collects format
+    /// + content toggles; on submit we hand the request to
+    /// <see cref="PracticeSessionExportService"/> and pipe the resulting
+    /// payload through the shared JS download helpers.
+    /// </summary>
+    private async Task OpenExportModalAsync()
+    {
+        if (_exercise == null || _pastAttempts.Count == 0) return;
+        var parameters = new Dictionary<string, object>
+        {
+            { "AttemptCount", _pastAttempts.Count },
+            { "OnSubmit", EventCallback.Factory.Create<PracticeSessionExportRequest>(this, HandleExportSubmitAsync) },
+            { "OnCancel", EventCallback.Factory.Create(this, () => _exportModal.HideAsync()) },
+        };
+        await _exportModal.ShowAsync<ExportPracticeSessionModal>(
+            Traductor.T("PRACTICE_EXPORT_TITLE"), null, parameters);
+    }
+
+    /// <summary>
+    /// Builds the export payload via the service, then dispatches to the
+    /// right JS download helper. ZIP bytes are base64-encoded for transport
+    /// across the JS interop boundary; both targets (MAUI WebView and
+    /// Web/Blazor) decode and download identically.
+    /// </summary>
+    private async Task HandleExportSubmitAsync(PracticeSessionExportRequest req)
+    {
+        if (_exercise == null) return;
+        await _exportModal.HideAsync();
+        try
+        {
+            var payload = await ExportService.BuildAsync(_exercise, _lang, req);
+            if (payload == null) return;
+            if (payload.TextContent != null)
+            {
+                await JS.InvokeVoidAsync("kmilaDownloadText",
+                    payload.FileName, payload.MimeType, payload.TextContent);
+            }
+            else if (payload.BinaryContent != null)
+            {
+                var b64 = Convert.ToBase64String(payload.BinaryContent);
+                await JS.InvokeVoidAsync("kmilaDownloadBytes",
+                    payload.FileName, payload.MimeType, b64);
+            }
+        }
+        catch (Exception)
+        {
+            // Surfaces in /logs via the ToastService elsewhere; keep the UI
+            // alive so the user can retry.
+        }
+    }
 
     public void Dispose()
     {

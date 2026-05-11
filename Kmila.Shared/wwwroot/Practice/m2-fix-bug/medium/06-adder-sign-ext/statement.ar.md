@@ -1,4 +1,6 @@
-## ⚠ ترجمة قيد الإنجاز — Mixed-width signed adder, sign extension bug
+## Mixed-width signed adder, sign extension bug
+
+⚠ الترجمة معلقة — الوصف معروض بالإنجليزية.
 
 `a` is 4-bit two's-complement (−8…+7), `b` is 8-bit two's-complement. `sum = a + b` is 8 bits.
 

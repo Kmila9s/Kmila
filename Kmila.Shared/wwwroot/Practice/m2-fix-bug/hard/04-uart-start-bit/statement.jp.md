@@ -1,4 +1,6 @@
-## ⚠ Translation pending — UART start-bit timing fix
+## UART start-bit timing fix
+
+⚠ 翻訳待ち — 説明は英語で表示されます。
 
 This minimal UART receive FSM has four states: `IDLE`, `START`,
 `DATA`, `STOP` (encoded `00`, `01`, `10`, `11` on `state`). With

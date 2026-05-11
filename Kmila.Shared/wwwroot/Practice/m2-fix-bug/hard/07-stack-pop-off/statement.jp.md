@@ -1,4 +1,6 @@
-## ⚠ Translation pending — Stack empty off-by-one fix
+## Stack empty off-by-one fix
+
+⚠ 翻訳待ち — 説明は英語で表示されます。
 
 A simple stack reports its `empty` status one clock cycle late.
 After a push, `empty` stays `'1'` for an extra cycle; after the

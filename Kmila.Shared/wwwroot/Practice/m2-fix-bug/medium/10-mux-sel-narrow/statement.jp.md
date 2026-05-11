@@ -1,4 +1,6 @@
-## ⚠ 翻訳作業中 — 4-to-1 mux, selector under-decoded
+## 4-to-1 mux, selector under-decoded
+
+⚠ 翻訳待ち — 説明は英語で表示されます。
 
 A 4-to-1 mux with 2-bit `sel`: `00→a`, `01→b`, `10→c`, `11→d`.
 
