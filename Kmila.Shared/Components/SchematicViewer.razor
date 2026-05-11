@@ -39,7 +39,21 @@
 @inject Microsoft.JSInterop.IJSRuntime JS
 @implements IDisposable
 
-@if (Entity == null || _layout == null)
+@if (_synthesisError != null)
+{
+    @* Synthesis or layout threw. Render an inline error card instead of
+       letting the exception bubble up to the global blazor-error-ui
+       ("Reload window") bar — that bar is shared by the whole shell and
+       a Schemas-pane failure shouldn't take the rest of the app with it.
+       The exact exception is logged via ILogger so it surfaces in the
+       Logs page and AutoErrorReporter pipeline. *@
+    <div class="schematic-empty" role="alert">
+        <Icon Name="IconName.ExclamationTriangle" />
+        <p>@Traductor.T("SCHEMATIC_EMPTY")</p>
+        <pre style="white-space:pre-wrap;font-size:.8rem;opacity:.7;margin-top:.5rem;">@_synthesisError</pre>
+    </div>
+}
+else if (Entity == null || _layout == null)
 {
     <div class="schematic-empty">
         <Icon Name="IconName.Diagram3" />
@@ -433,11 +447,21 @@ else
         }
     }
 
+    /// <summary>
+    /// Non-null when the last synthesis attempt failed. Drives the inline
+    /// error card at the top of the component so the failure is visible to
+    /// the user instead of escalating to the shell-wide
+    /// <c>#blazor-error-ui</c> bar ("Reload window"). Cleared on the next
+    /// successful synthesis.
+    /// </summary>
+    private string? _synthesisError;
+
     protected override void OnParametersSet()
     {
         if (Entity == null)
         {
             _layout = null;
+            _synthesisError = null;
             return;
         }
         if (!ReferenceEquals(_lastEntity, Entity))
@@ -445,11 +469,29 @@ else
             // Re-synthesise only when the entity reference actually changes.
             // Re-renders triggered by zoom / mode / selection changes go
             // straight to render without paying the synthesis cost.
-            var netlist = Synthesizer.Synthesize(Entity);
-            _layout = LayeredLayout.Layout(netlist);
-            BuildLookups();
-            RegenerateColours(reseed: true);
-            ClearSelection();
+            try
+            {
+                var netlist = Synthesizer.Synthesize(Entity);
+                _layout = LayeredLayout.Layout(netlist);
+                BuildLookups();
+                RegenerateColours(reseed: true);
+                ClearSelection();
+                _synthesisError = null;
+            }
+            catch (Exception ex)
+            {
+                // A synthesizer / layout failure used to bubble all the way
+                // to the global error UI. On Blazor Server (Web) the
+                // SignalR circuit re-rendered around it; on MAUI's
+                // BlazorWebView the failure pinned the "Reload window"
+                // bar app-wide. Contain it here, log it, and let the user
+                // keep using the rest of the editor.
+                _layout = null;
+                _synthesisError = $"{ex.GetType().Name}: {ex.Message}";
+                Logger.LogError(ex,
+                    "[SchematicViewer] Synthesis/layout failed for entity {Entity}",
+                    Entity?.Name ?? "(unknown)");
+            }
             _lastEntity = Entity;
         }
     }

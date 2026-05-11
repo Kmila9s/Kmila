@@ -159,9 +159,28 @@
             <SchematicContent>
                 @* Renders the first entity with an architecture; deeper
                    designs (multiple entities) are rare in TT1 and out of
-                   scope for this view. *@
-                <SchematicViewer Entity="@(Builder.Parser?.Entities.FirstOrDefault(e => e.Architecture != null))"
-                                 Waveform="_waveformData" />
+                   scope for this view.
+
+                   The ErrorBoundary is critical: SchematicViewer builds
+                   inline SVG via MarkupString and indexes into several
+                   layout lookups. Any render-time miss used to escalate
+                   to the global #blazor-error-ui bar — on MAUI's
+                   BlazorWebView that meant a stale schematic dropped the
+                   whole shell into the "Reload window" state. Containing
+                   the failure here keeps the rest of the dock usable. *@
+                <ErrorBoundary>
+                    <ChildContent>
+                        <SchematicViewer Entity="@(Builder.Parser?.Entities.FirstOrDefault(e => e.Architecture != null))"
+                                         Waveform="_waveformData" />
+                    </ChildContent>
+                    <ErrorContent Context="ex">
+                        <div class="schematic-empty" role="alert">
+                            <Icon Name="IconName.ExclamationTriangle" />
+                            <p>@Traductor.T("SCHEMATIC_EMPTY")</p>
+                            <pre style="white-space:pre-wrap;font-size:.8rem;opacity:.7;margin-top:.5rem;">@ex.GetType().Name: @ex.Message</pre>
+                        </div>
+                    </ErrorContent>
+                </ErrorBoundary>
             </SchematicContent>
 
             <FlowContent>

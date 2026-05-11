@@ -9603,3 +9603,414 @@ html[data-kmila-focus="1"] #editor {
        pane's real height and was the source of the overflow the user
        reported on phones + the empty space on Web. */
 }
+
+/* ============================================================================
+   SchematicViewer — moved here from the (now-empty)
+   Kmila.Shared/Components/SchematicViewer.razor.css scoped stylesheet.
+
+   Why the move: MAUI BlazorWebView's static-web-assets pipeline does not
+   aggregate referenced RCLs' scoped-CSS bundles into the host's `.styles.css`
+   (it shipped only Blazor.Bootstrap's bundle, never Kmila.Shared's). The
+   result: the Schemas dock rendered visibly unstyled on Desktop while Web
+   was fine. EntityView, ResourceMetricBox, and the button system already
+   migrated for the same reason — see the comments at the top of those
+   *.razor.css files. Keeping schematic styles in this shared sheet (which
+   both hosts already link from <head>) makes them load identically on
+   MAUI + Web and survives the scoped-CSS aggregation gap.
+   ============================================================================ */
+
+/* Fullscreen mode — pins the viewer to the viewport so a tall schematic can
+   be read without fighting the dock height. The toolbar stays at the top so
+   the user can keep clicking modes / export / exit-fullscreen while expanded.
+   z-index sits below the modal layer so confirm dialogs still pop above. */
+.schematic-viewer.is-fullscreen {
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--z-modal, 1050) - 5);
+    background: var(--bs-body-bg, #fff);
+    border-radius: 0;
+    padding: 0;
+    margin: 0;
+    box-shadow: 0 0 40px rgba(0,0,0,0.15);
+}
+
+.schematic-viewer.is-fullscreen .schematic-viewer__body {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.schematic-viewer {
+    --schematic-cell-bg: var(--bs-body-bg, #fff);
+    --schematic-cell-stroke: var(--text-strong, #1e293b);
+    --schematic-cell-fg: var(--text-strong, #1e293b);
+    --schematic-group-bg: rgba(60, 130, 246, 0.06);
+    --schematic-group-stroke: rgba(60, 130, 246, 0.4);
+    --schematic-debug-fg: #10b981;
+    --schematic-select: #ef4444;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    height: 100%;
+    width: 100%;
+    max-width: 100%;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+    contain: inline-size;
+}
+
+.schematic-viewer__toolbar {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .25rem .5rem;
+    border-bottom: 1px solid var(--border-subtle, rgba(0,0,0,.08));
+    flex-wrap: wrap;
+}
+
+.schematic-viewer__title {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+}
+
+.schematic-viewer__chip {
+    display: inline-block;
+    padding: 0 .4rem;
+    border-radius: 999px;
+    background: var(--bg-subtle, rgba(0,0,0,.05));
+    font-size: .75rem;
+    color: var(--text-muted, #64748b);
+}
+
+.schematic-viewer__modes {
+    display: inline-flex;
+    gap: .25rem;
+    margin-left: auto;
+}
+
+.schematic-mode {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-muted, #64748b);
+    padding: .15rem .5rem;
+    border-radius: 6px;
+    font-size: .8rem;
+    cursor: pointer;
+}
+
+.schematic-mode.is-active {
+    background: var(--bg-subtle, rgba(60,130,246,.08));
+    border-color: var(--brand-accent, rgba(60,130,246,.5));
+    color: var(--text-strong, #1e293b);
+}
+
+.schematic-viewer__actions {
+    display: inline-flex;
+    gap: .25rem;
+}
+
+.schematic-diagnostics {
+    list-style: none;
+    margin: 0;
+    padding: .25rem .5rem;
+    display: flex;
+    flex-direction: column;
+    gap: .15rem;
+    font-size: .75rem;
+}
+
+.schematic-diagnostics__item {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    color: var(--text-muted, #64748b);
+}
+
+.schematic-diagnostics__item--blackboxprocess {
+    color: #b45309;
+}
+
+.schematic-viewer__body {
+    flex: 1 1 0;
+    width: 100%;
+    max-width: 100%;
+    min-height: 0;
+    min-width: 0;
+    overflow: auto;
+    padding: 1rem;
+    position: relative;
+    contain: inline-size;
+}
+
+.schematic-svg {
+    display: block;
+    cursor: default;
+}
+
+.schematic-cell,
+.schematic-wire,
+.schematic-port {
+    transition: opacity .15s ease, stroke-width .15s ease;
+    cursor: pointer;
+}
+
+.schematic-svg.has-selection .schematic-cell.is-dimmed,
+.schematic-svg.has-selection .schematic-wire.is-dimmed,
+.schematic-svg.has-selection .schematic-port.is-dimmed {
+    opacity: 0.15;
+}
+
+.schematic-svg.has-selection .schematic-cell.is-traced,
+.schematic-svg.has-selection .schematic-wire.is-traced,
+.schematic-svg.has-selection .schematic-port.is-traced {
+    opacity: 1;
+}
+
+.schematic-cell.is-hidden,
+.schematic-wire.is-hidden,
+.schematic-port.is-hidden {
+    display: none;
+}
+
+.schematic-toolbar__count {
+    display: inline-block;
+    margin-left: .3rem;
+    padding: 0 .35rem;
+    border-radius: 999px;
+    background: #6366f1;
+    color: #fff;
+    font-size: .65rem;
+    font-weight: 600;
+    line-height: 1.4;
+    min-width: 1.2rem;
+    text-align: center;
+}
+
+.schematic-cell.is-multi-selected > path:first-child {
+    stroke: #6366f1;
+    stroke-width: 2.5;
+}
+.schematic-wire.is-multi-selected {
+    stroke: #6366f1 !important;
+    stroke-width: 4 !important;
+}
+.schematic-port.is-multi-selected circle {
+    stroke: #6366f1;
+    stroke-width: 3;
+}
+
+.schematic-basket {
+    position: absolute;
+    bottom: 1rem;
+    right: 1rem;
+    min-width: 240px;
+    background: var(--bs-body-bg, #fff);
+    border: 1px solid var(--border-subtle, rgba(0,0,0,.12));
+    border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(0,0,0,.08);
+    padding: .5rem;
+    font-size: .8rem;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+}
+
+.schematic-basket__head {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    font-family: ui-monospace, Menlo, monospace;
+    color: var(--text-strong, #1e293b);
+}
+
+.schematic-basket__hint {
+    margin-left: auto;
+    color: var(--text-muted, #64748b);
+    font-weight: 400;
+    font-size: .7rem;
+}
+
+.schematic-basket__counts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+}
+
+.schematic-basket__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    padding: .15rem .4rem;
+    border-radius: 999px;
+    background: rgba(99, 102, 241, 0.12);
+    color: var(--text-strong, #1e293b);
+    font-family: ui-monospace, Menlo, monospace;
+}
+
+.schematic-basket__chip small {
+    color: var(--text-muted, #64748b);
+}
+
+.schematic-basket__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: .25rem;
+}
+
+.schematic-cell.is-traced > path:first-child {
+    stroke-width: 2;
+}
+
+.schematic-wire.is-traced {
+    stroke-width: 3.5;
+}
+
+.schematic-cell.is-selected > path:first-child {
+    stroke: var(--schematic-select);
+    stroke-width: 3;
+}
+
+.schematic-wire.is-selected {
+    stroke: var(--schematic-select) !important;
+    stroke-width: 4 !important;
+}
+
+.schematic-port.is-selected circle {
+    stroke: var(--schematic-select);
+    stroke-width: 3;
+}
+
+.schematic-cell:hover > path:first-child {
+    stroke: var(--schematic-select);
+}
+
+.schematic-wire:hover {
+    stroke: var(--schematic-select);
+}
+
+.schematic-info {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    width: 320px;
+    max-height: calc(100% - 2rem);
+    overflow: auto;
+    background: var(--bs-body-bg, #fff);
+    border: 1px solid var(--border-subtle, rgba(0,0,0,.12));
+    border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(0,0,0,.08);
+    padding: .5rem;
+    font-size: .8rem;
+    z-index: 5;
+}
+
+.schematic-info__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    padding-bottom: .25rem;
+    margin-bottom: .25rem;
+    border-bottom: 1px solid var(--border-subtle, rgba(0,0,0,.08));
+    font-family: ui-monospace, Menlo, monospace;
+}
+
+.schematic-info__body {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: .25rem .75rem;
+    margin: 0;
+}
+
+.schematic-info__body dt {
+    color: var(--text-muted, #64748b);
+    font-weight: 500;
+}
+
+.schematic-info__body dd {
+    margin: 0;
+    font-family: ui-monospace, Menlo, monospace;
+    word-break: break-all;
+}
+
+.schematic-info__doc {
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+    padding-bottom: .35rem;
+    margin-bottom: .35rem;
+    border-bottom: 1px solid var(--border-subtle, rgba(0,0,0,.08));
+}
+
+.schematic-info__doc-summary {
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--text-strong, #1e293b);
+    margin: 0;
+    line-height: 1.35;
+}
+
+.schematic-info__doc-body {
+    font-size: .75rem;
+    color: var(--text-muted, #475569);
+    margin: 0;
+    line-height: 1.45;
+}
+
+.schematic-info__truth {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: .72rem;
+    border-collapse: collapse;
+    margin: .15rem 0;
+    width: auto;
+    color: var(--text-strong, #1e293b);
+}
+
+.schematic-info__truth th,
+.schematic-info__truth td {
+    padding: 1px 8px;
+    border: 1px solid var(--border-subtle, rgba(0,0,0,.12));
+    text-align: center;
+}
+
+.schematic-info__truth th {
+    background: var(--bg-subtle, rgba(0,0,0,.04));
+    font-weight: 600;
+}
+
+.schematic-info__vhdl {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: .72rem;
+    background: var(--bg-subtle, rgba(0,0,0,.04));
+    padding: .35rem .5rem;
+    border-radius: 4px;
+    margin: .1rem 0 0 0;
+    overflow-x: auto;
+    white-space: pre;
+    color: var(--text-strong, #1e293b);
+}
+
+.schematic-info__note {
+    font-size: .7rem;
+    color: var(--text-muted, #64748b);
+    margin: .15rem 0 0 0;
+    display: flex;
+    gap: .3rem;
+    align-items: flex-start;
+    line-height: 1.4;
+}
+
+.schematic-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-muted, #64748b);
+    gap: .5rem;
+}
