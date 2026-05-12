@@ -379,14 +379,76 @@ window.downloadFile = function (fileName, content) {
     const handles = new Map();
     let nextId = 1;
 
+    function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
+
+    // Re-reads the target's natural (pre-transform) box. clientWidth/Height
+    // ignore CSS transforms, so they're the right primitive here. SVG elements
+    // expose those in modern browsers; fall back to bounding-rect-divided-by-
+    // scale when they're 0 (older WebKit on iOS sometimes reports 0 for SVG).
+    function measureNatural(state) {
+        let w = state.target.clientWidth || 0;
+        let h = state.target.clientHeight || 0;
+        if (!w || !h) {
+            const prev = state.target.style.transform;
+            state.target.style.transform = '';
+            const r = state.target.getBoundingClientRect();
+            state.target.style.transform = prev;
+            w = r.width / (state.scale || 1);
+            h = r.height / (state.scale || 1);
+        }
+        if (w > 0) state.naturalW = w;
+        if (h > 0) state.naturalH = h;
+    }
+
+    // Keeps at least MIN_VIS pixels of content inside the root on each axis.
+    // Without this, a fast swipe / pinch on mobile can translate the whole
+    // content offscreen — the schematic or waveform appears to "vanish" and
+    // the user has no obvious way to recover (reported on Android + iOS).
+    function clampPan(state) {
+        if (state.naturalW <= 0 || state.naturalH <= 0) return;
+        const rect = state.root.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return;
+        const cw = state.naturalW * state.scale;
+        const ch = state.naturalH * state.scale;
+        const MIN_VIS = 80;
+        // Account for any layout offset of target relative to root (padding
+        // on .schematic-viewer__body etc.) so the clamp uses the same origin
+        // the transform is composed against.
+        const ox = state.target.offsetLeft || 0;
+        const oy = state.target.offsetTop || 0;
+        state.tx = clamp(state.tx, MIN_VIS - cw - ox, rect.width - MIN_VIS - ox);
+        state.ty = clamp(state.ty, MIN_VIS - ch - oy, rect.height - MIN_VIS - oy);
+    }
+
     function applyTransform(state) {
         if (!state.target) return;
+        clampPan(state);
         state.target.style.transformOrigin = '0 0';
         state.target.style.transform =
             `translate3d(${state.tx}px, ${state.ty}px, 0) scale(${state.scale})`;
     }
 
-    function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
+    // Fit-to-view: scale content so it fills the root (with a small padding),
+    // then translate so it sits centered. Used by the schematic on first
+    // attach because its natural canvas (≥1000 px wide) only shows the
+    // top-left corner inside a mobile body — felt "too far from the
+    // schematic" per user feedback.
+    function fitToView(state) {
+        measureNatural(state);
+        if (state.naturalW <= 0 || state.naturalH <= 0) return false;
+        const rect = state.root.getBoundingClientRect();
+        if (rect.width <= 20 || rect.height <= 20) return false;
+        const pad = 16;
+        const sx = (rect.width  - pad * 2) / state.naturalW;
+        const sy = (rect.height - pad * 2) / state.naturalH;
+        state.scale = clamp(Math.min(sx, sy), state.minScale, state.maxScale);
+        const ox = state.target.offsetLeft || 0;
+        const oy = state.target.offsetTop  || 0;
+        state.tx = (rect.width  - state.naturalW * state.scale) / 2 - ox;
+        state.ty = (rect.height - state.naturalH * state.scale) / 2 - oy;
+        applyTransform(state);
+        return true;
+    }
 
     function dist(a, b) {
         const dx = a.x - b.x, dy = a.y - b.y;
@@ -421,7 +483,16 @@ window.downloadFile = function (fileName, content) {
             // Pan state
             panAnchorX: 0, panAnchorY: 0,
             panStartTx: 0, panStartTy: 0,
-            panning: false
+            panning: false,
+            // Natural (pre-transform) content size — measured at attach and
+            // re-measured on resize. Used to clamp pan and to fit-to-view.
+            naturalW: 0, naturalH: 0,
+            // Initial framing strategy. fitOnAttach=true centers and scales
+            // the content into the root (schematic); false keeps the
+            // identity transform so the user starts at the top-left of the
+            // natural layout (waveform's horizontally-scrolling timeline).
+            fitOnAttach: !!opts.fitOnAttach,
+            needsFit: !!opts.fitOnAttach
         };
 
         function onPointerDown(e) {
@@ -544,9 +615,15 @@ window.downloadFile = function (fileName, content) {
 
         function onDblClick(e) {
             if (e.target.closest('button, input, select, textarea, a')) return;
-            // Quick reset on desktop.
-            state.tx = 0; state.ty = 0; state.scale = 1;
-            applyTransform(state);
+            // Quick reset on desktop — fit-to-view when that was the attach
+            // strategy, otherwise plain identity. Either way the user gets a
+            // known-good frame back if pan/zoom got away from them.
+            if (state.fitOnAttach) {
+                fitToView(state);
+            } else {
+                state.tx = 0; state.ty = 0; state.scale = 1;
+                applyTransform(state);
+            }
         }
 
         root.addEventListener('pointerdown', onPointerDown);
@@ -558,6 +635,34 @@ window.downloadFile = function (fileName, content) {
         root.style.touchAction = 'none';
         root.__kmilaPanZoomId = id;
 
+        // Initial framing. The schematic asks for fit-to-view because its
+        // SVG renders at canvas-pixel size — on a phone the user otherwise
+        // only sees the top-left corner. fitToView returns false until
+        // layout has settled (e.g. dock collapsed at attach time); the
+        // ResizeObserver below retries once dimensions become available.
+        measureNatural(state);
+        if (state.needsFit && fitToView(state)) {
+            state.needsFit = false;
+        }
+
+        // ResizeObserver re-runs the clamp/fit whenever the root or target
+        // change size — covers dock collapse/expand, orientation change,
+        // toolbar zoom (which changes the SVG `width`/`height` attribute and
+        // therefore clientWidth/Height), and waveform _zoomWidth bumps.
+        let ro = null;
+        try {
+            ro = new ResizeObserver(() => {
+                measureNatural(state);
+                if (state.needsFit) {
+                    if (fitToView(state)) state.needsFit = false;
+                } else {
+                    applyTransform(state);
+                }
+            });
+            ro.observe(target);
+            ro.observe(root);
+        } catch (_) { /* ResizeObserver missing — clamp still works on gesture */ }
+
         handles.set(id, {
             state,
             teardown() {
@@ -567,6 +672,7 @@ window.downloadFile = function (fileName, content) {
                 root.removeEventListener('pointercancel', onPointerUp);
                 root.removeEventListener('wheel', onWheel);
                 root.removeEventListener('dblclick', onDblClick);
+                if (ro) { try { ro.disconnect(); } catch (_) {} }
                 if (target) target.style.transform = '';
                 root.style.touchAction = '';
                 delete root.__kmilaPanZoomId;
@@ -600,10 +706,17 @@ window.downloadFile = function (fileName, content) {
     function reset(id) {
         const h = handles.get(id);
         if (!h) return;
-        h.state.tx = 0;
-        h.state.ty = 0;
-        h.state.scale = 1;
-        applyTransform(h.state);
+        if (h.state.fitOnAttach) {
+            // Schematic-style reset: re-fit + re-center. Gives users a clear
+            // recovery path when toolbar "Reset" is the affordance they
+            // reach for after panning into the void.
+            fitToView(h.state);
+        } else {
+            h.state.tx = 0;
+            h.state.ty = 0;
+            h.state.scale = 1;
+            applyTransform(h.state);
+        }
     }
 
     window.kmilaAttachPanZoom = attach;

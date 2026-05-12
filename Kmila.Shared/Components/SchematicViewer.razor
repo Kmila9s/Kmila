@@ -437,7 +437,7 @@ else
             }
             _panZoomId = await JS.InvokeAsync<int>("kmilaAttachPanZoom",
                 ".schematic-viewer__body",
-                new { targetSelector = ".schematic-svg", minScale = 0.2, maxScale = 6 });
+                new { targetSelector = ".schematic-svg", minScale = 0.2, maxScale = 6, fitOnAttach = true });
             _panZoomBoundLayout = _layout;
         }
         catch
@@ -527,9 +527,19 @@ else
         StateHasChanged();
     }
 
-    private void ResetZoom()
+    private async Task ResetZoom()
     {
         _zoom = 1.0;
+        // Toolbar zoom drives the SVG `width`/`height` attribute; gesture
+        // zoom drives a CSS transform on top via kmilaAttachPanZoom. Resetting
+        // _zoom alone leaves any prior pan/pinch hanging — visible as a
+        // schematic still pushed offscreen even after the user hit "reset".
+        // Reset the JS gesture state too so this is a real "back to default".
+        if (_panZoomId > 0)
+        {
+            try { await JS.InvokeVoidAsync("kmilaPanZoomReset", _panZoomId); }
+            catch { /* JS not ready (prerender / sandbox) — toolbar reset still applied */ }
+        }
         StateHasChanged();
     }
 
