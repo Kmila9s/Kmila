@@ -355,11 +355,10 @@
     // -------------------------------------------------------------------------
     // 9) Restore the saved dock snap point on first paint (mobile only).
     //
-    //    The CSS already defaults the dock to 18dvh (peek) on mobile without
-    //    a snap class, so the user *always* sees a usable peek state on first
-    //    load — even before this JS runs. This handler only restores a
-    //    previously-chosen 'half' or 'full' so reload doesn't reset the user's
-    //    last sheet position.
+    //    The CSS now defaults the dock to half-sheet (50dvh) on mobile so a
+    //    first-time visitor sees panel content immediately. This handler
+    //    restores a previously-chosen 'peek' / 'half' / 'full' so reload
+    //    doesn't reset the user's last sheet position.
     //
     //    The dock element is rendered by Blazor after first paint, so we wait
     //    for it via a MutationObserver instead of querying once on DOMReady.
@@ -372,13 +371,13 @@
         if (!dock) return;
         try {
             var saved = localStorage.getItem("kmila-dock-snap");
-            if (saved === "half" || saved === "full") {
+            if (saved === "peek" || saved === "half" || saved === "full") {
                 if (window.kmilaSetDockSnap) {
                     window.kmilaSetDockSnap(saved);
                     _kmilaDockSnapApplied = true;
                 }
             } else {
-                // No saved value or 'peek' — CSS default already shows peek;
+                // No saved value — CSS default (half) already shows content;
                 // mark applied so we don't keep observing.
                 _kmilaDockSnapApplied = true;
             }

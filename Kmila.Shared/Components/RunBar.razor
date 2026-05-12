@@ -167,7 +167,9 @@
         @* Visible file actions — Save and New file. Styled as outline ghost
            buttons (matching the Build/Run trio) instead of the previous
            muted-text variant which felt visually disconnected from the rest
-           of the bar. *@
+           of the bar. Hidden on mobile (≤768px); see the overflow burger
+           below, which surfaces Build / Save / New File in a dropdown so
+           the bar doesn't wrap onto three rows on phones. *@
         <button type="button"
                 class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm run-bar__file-btn run-bar__file-btn--save"
                 @onclick="() => OnSaveClickedCallback.InvokeAsync()"
@@ -185,10 +187,43 @@
             <span class="run-bar__file-btn-label">@Traductor.T("EDITOR_NEW_FILE")</span>
         </button>
 
-        @* Previous burger overflow menu was removed — its only items were
-           duplicates of Save / New File which already live on the bar. When
-           there's a real cross-cutting action (Export VCD…) we'll bring it
-           back with actual content. *@
+        @* Mobile-only burger overflow — surfaces Build + Save + New File so
+           the bar doesn't wrap on small screens. CSS keeps Run (primary CTA)
+           and Stop inline so the user never has to dig through a menu to
+           react to a running simulation. *@
+        <div class="run-bar__overflow @(_overflowOpen ? "is-open" : "")">
+            <button type="button"
+                    class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm run-bar__overflow-btn"
+                    @onclick="ToggleOverflow"
+                    aria-haspopup="menu"
+                    aria-expanded="@_overflowOpen"
+                    aria-label="@Traductor.T("EDITOR_MORE_ACTIONS")"
+                    title="@Traductor.T("EDITOR_MORE_ACTIONS")">
+                <Icon Name="IconName.List" />
+            </button>
+            @if (_overflowOpen)
+            {
+                <div class="run-bar__overflow-backdrop" @onclick="CloseOverflow" aria-hidden="true"></div>
+                <div class="run-bar__overflow-panel" role="menu">
+                    <button type="button" role="menuitem" class="run-bar__overflow-item"
+                            disabled="@BuildDisabled"
+                            @onclick="OnBuildFromMenuAsync">
+                        <Icon Name="IconName.Tools" />
+                        <span>@Traductor.T("SIM_BUILD")</span>
+                    </button>
+                    <button type="button" role="menuitem" class="run-bar__overflow-item"
+                            @onclick="OnSaveFromMenuAsync">
+                        <Icon Name="IconName.Floppy2" />
+                        <span>@Traductor.T("EDITOR_SAVE_FILE")</span>
+                    </button>
+                    <button type="button" role="menuitem" class="run-bar__overflow-item"
+                            @onclick="OnNewFileFromMenuAsync">
+                        <Icon Name="IconName.FilePlus" />
+                        <span>@Traductor.T("EDITOR_NEW_FILE")</span>
+                    </button>
+                </div>
+            }
+        </div>
     </div>
 
     @* Progress line — only rendered while running, fills left-to-right *@
@@ -245,6 +280,31 @@
 
     // Guard against double-click races during transient transitions
     private bool _suppressClicks;
+
+    // Mobile overflow burger — Blazor-driven so we don't depend on the native
+    // <details> toggle behaviour (which doesn't auto-close when an item is
+    // clicked, and is awkward to drive declaratively from C#).
+    private bool _overflowOpen;
+    private void ToggleOverflow() => _overflowOpen = !_overflowOpen;
+    private void CloseOverflow() => _overflowOpen = false;
+
+    private async Task OnBuildFromMenuAsync()
+    {
+        CloseOverflow();
+        await OnBuildClickAsync();
+    }
+
+    private async Task OnSaveFromMenuAsync()
+    {
+        CloseOverflow();
+        await OnSaveClickedCallback.InvokeAsync();
+    }
+
+    private async Task OnNewFileFromMenuAsync()
+    {
+        CloseOverflow();
+        await OnNewFileClickedCallback.InvokeAsync();
+    }
 
     protected override void OnInitialized()
     {

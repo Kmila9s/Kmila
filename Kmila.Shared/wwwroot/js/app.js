@@ -627,27 +627,6 @@ window.kmilaHaptic = function (kind) {
 };
 
 
-/* ─── Editor focus mode toggle (mobile) ──────────────────────────────────────
- * Adds/removes `data-kmila-focus="1"` on <html> so CSS can hide the sidebar
- * drawer + topbar to give Monaco the full viewport on phones. Persisted to
- * localStorage so it survives soft reloads. */
-window.kmilaSetFocusMode = function (on) {
-    try {
-        if (on) {
-            document.documentElement.setAttribute('data-kmila-focus', '1');
-            localStorage.setItem('kmila-focus', '1');
-        } else {
-            document.documentElement.removeAttribute('data-kmila-focus');
-            localStorage.removeItem('kmila-focus');
-        }
-    } catch (_) {}
-};
-window.kmilaGetFocusMode = function () {
-    try { return localStorage.getItem('kmila-focus') === '1'; }
-    catch (_) { return false; }
-};
-
-
 /* ─── Bottom-sheet dock controller (mobile) ──────────────────────────────────
  * Below 768px we treat the dock as a 3-snap-point bottom sheet. Snap points
  * are stored as data attributes on the dock element (peek/half/full) so CSS
@@ -664,6 +643,39 @@ window.kmilaSetDockSnap = function (point) {
         dock.classList.add('kmila-dock--snap-' + point);
         try { localStorage.setItem('kmila-dock-snap', point); } catch (_) {}
     }
+};
+
+/* Called from EditorDock after a tab tap on mobile so the bottom-sheet
+ * auto-opens to reveal the panel content (entities / schematic / flow /
+ * ports / …). Without this the default peek state shows the tab strip but
+ * keeps `.kmila-dock__panel` at `display: none`, so the user sees nothing
+ * happen on tap.
+ *
+ *   wasActive=true   tap re-hit the already-active tab → close to peek
+ *                    (gives the user a way to dismiss the sheet without
+ *                    digging for the chevron)
+ *   wasActive=false  tab changed (or dock was peek/collapsed) → snap to half
+ *                    if not already half/full. Already at full?  leave alone
+ *                    so we don't shrink a deliberately-maximised sheet. */
+window.kmilaDockToggleForTab = function (wasActive) {
+    if (!window.matchMedia('(max-width: 768px)').matches) return;
+    // Defer to the next tick so the class flip runs *after* Blazor's pending
+    // re-render (triggered by SetActive). If we ran synchronously and the
+    // user was previously collapsed, Blazor would rewrite the dock's class
+    // attribute and wipe the snap class we just added.
+    setTimeout(function () {
+        const dock = document.querySelector('.kmila-dock');
+        if (!dock) return;
+        const isHalf = dock.classList.contains('kmila-dock--snap-half');
+        const isFull = dock.classList.contains('kmila-dock--snap-full');
+        if (wasActive && (isHalf || isFull)) {
+            window.kmilaSetDockSnap('peek');
+            return;
+        }
+        if (!isHalf && !isFull) {
+            window.kmilaSetDockSnap('half');
+        }
+    }, 0);
 };
 
 

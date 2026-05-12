@@ -41,7 +41,7 @@
                     aria-controls="@($"dock-panel-{tab.Id}")"
                     id="@($"dock-tab-{tab.Id}")"
                     class="kmila-btn-tab kmila-btn-tab--accent kmila-dock__tab @(isActive ? "is-active" : "")"
-                    @onclick="() => DockState.SetActive(tab.Id)">
+                    @onclick="() => OnTabClickAsync(tab.Id)">
                 <Icon Name="@tab.Icon" />
                 <span class="kmila-dock__tab-label">@Traductor.T(tab.LabelKey)</span>
                 @{ var count = CountFor(tab.Id); var ready = ReadyFor(tab.Id); }
@@ -240,6 +240,21 @@
     {
         DockState.ToggleCollapsed();
         await PersistAsync();
+    }
+
+    // On phones the dock defaults to a peek state with the panel hidden, so
+    // a plain SetActive looks broken — the user taps a tab and nothing visible
+    // changes. Auto-snap to half on the first tap and toggle back to peek when
+    // the active tab is tapped again, so the dock behaves like a bottom sheet.
+    private async Task OnTabClickAsync(EditorTab id)
+    {
+        var wasActive = DockState.Active == id && !DockState.IsCollapsed;
+        DockState.SetActive(id);
+        try
+        {
+            await JS.InvokeVoidAsync("kmilaDockToggleForTab", wasActive);
+        }
+        catch { /* JS missing — no-op */ }
     }
 
     private void OnStateChanged()

@@ -4497,24 +4497,28 @@
 }
 
 
-/* Overflow menu */
+/* Overflow burger menu — hidden on desktop (the inline Save / New File /
+   Build buttons cover this), shown ≤768 px so the bar fits one row on
+   phones. A Blazor-driven `.is-open` toggle replaces the older details/
+   summary pattern so we can close the menu from C# after each item action. */
 .run-bar__overflow {
     position: relative;
     flex-shrink: 0;
+    display: none;          /* mobile-only; overridden in the @media block */
 }
 
-.run-bar__overflow > summary {
-    list-style: none;
-    cursor: pointer;
-    padding: 6px 8px;
-}
-
-.run-bar__overflow > summary::-webkit-details-marker,
-.run-bar__overflow > summary::marker { display: none; content: ""; }
-
-.run-bar__overflow[open] > summary {
+.run-bar__overflow.is-open .run-bar__overflow-btn {
     background-color: var(--surface-3);
     color: var(--text-strong);
+}
+
+/* Transparent click-catcher behind the menu so tapping anywhere outside
+   closes it. Sits below the panel but above everything else on screen. */
+.run-bar__overflow-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--z-dropdown) - 1);
+    background: transparent;
 }
 
 .run-bar__overflow-panel {
@@ -4613,6 +4617,35 @@
         justify-content: center;
     }
     .run-bar__spacer { display: none; }
+}
+
+/* Mobile: collapse Build + Save + New File into the overflow burger so the
+   bar fits one row. Run + Stop stay inline (primary CTAs you want one tap
+   away from a running simulation). The RunBar itself is pinned to the
+   viewport bottom (above the dock) on mobile, so the menu is anchored as
+   `position: fixed` just above the bar — the previous `bottom: 100%`
+   anchor depended on the burger's flex-wrap row, which could place the
+   panel off-screen when the row wrapped onto a fresh line. */
+@media (max-width: 768px) {
+    .run-bar__overflow { display: inline-flex; }
+    /* `.kmila-btn` (buttons.css, loaded after pages.css) sets
+       `display: inline-flex` at the same specificity, so we need a
+       compound selector to win the cascade and actually hide the inline
+       Build / Save / New File buttons on phones. */
+    .run-bar .run-bar__build,
+    .run-bar .run-bar__file-btn { display: none; }
+    .run-bar__overflow-panel {
+        position: fixed;
+        top: auto;
+        left: max(var(--space-3), env(safe-area-inset-left, 0px));
+        right: max(var(--space-3), env(safe-area-inset-right, 0px));
+        bottom: calc(
+            var(--dock-h) + var(--runbar-h)
+            + env(safe-area-inset-bottom, 0px) + 4px
+        );
+        min-width: 0;
+        max-width: none;
+    }
 }
 
 
@@ -8520,7 +8553,6 @@
      • Settings rows: stacked controls below 640px
      • Markdown / Lesson code blocks: horizontal scroll containment
      • Logs: ellipsis on entries
-     • Focus mode: hide chrome when data-kmila-focus is set
      • Hover-only effects: gated behind @media (hover: hover) where critical
    ============================================================================ */
 
@@ -8622,10 +8654,14 @@
    .kmila-dock relocates RunBar in lockstep — no per-component math. */
 @media (max-width: 768px) {
     body {
-        --statusbar-h: 32px;
+        /* StatusBar is hidden on mobile (see .kmila-status-bar rule below),
+           so the dock + RunBar can use the full bottom of the viewport. */
+        --statusbar-h: 0px;
         --runbar-h: 56px;
-        --dock-h: 18dvh;            /* peek by default — no JS needed */
+        --dock-h: 50dvh;            /* half by default so content is visible
+                                       on first paint — drag down for peek */
     }
+    body:has(.kmila-dock--snap-peek) { --dock-h: 18dvh; }
     body:has(.kmila-dock--snap-half) { --dock-h: 50dvh; }
     body:has(.kmila-dock--snap-full) { --dock-h: 88dvh; }
     body:has(.kmila-dock--collapsed) { --dock-h: 56px; }
@@ -8649,13 +8685,11 @@
         transition: height var(--duration-base) var(--ease-standard);
     }
 
-    /* Default + peek: panel hidden, only the tab strip is visible.
-       Half/full reveal the panel; collapsed always hides it. */
-    .kmila-dock__panel { display: none; }
-    .kmila-dock--snap-half:not(.kmila-dock--collapsed) .kmila-dock__panel,
-    .kmila-dock--snap-full:not(.kmila-dock--collapsed) .kmila-dock__panel {
-        display: block;
-    }
+    /* Default + half + full: panel visible (the half-height default lets
+       a first-time visitor see content without tapping anything). Peek is
+       an explicit opt-in via the grabber-drag snap, and only there do we
+       hide the panel so the tab strip alone is shown. */
+    .kmila-dock--snap-peek .kmila-dock__panel { display: none; }
 
     /* Editor workbench needs room for RunBar + dock peek + StatusBar
        so the bottom of Monaco isn't covered. */
@@ -8724,38 +8758,21 @@
         transform: translateY(120%);
         pointer-events: none;
     }
-    /* Focus mode hides the dock entirely; RunBar/StatusBar should follow so
-       Monaco can take the full viewport as the existing rule intends. */
-    html[data-kmila-focus="1"] .run-bar {
-        display: none !important;
-    }
 }
 
 
-/* ── StatusBar pinned to viewport bottom on mobile ───────────────────────── */
+/* ── StatusBar: hidden on mobile to give the dock the bottom ────────────────
+   The bar shows build status / resource % / sim status / line+column. On
+   phones the build state is already visible next to the Compilar button,
+   the per-pane header above the editor shows line+column, and resource %
+   is one tab away in the Entities panel — so the bar is duplicated info
+   eating 32 px the dock could use. Hiding it also fixes a long-standing
+   class-name mismatch (the previous rule targeted `.status-bar` but the
+   component renders `.kmila-status-bar`, so the bar was never actually
+   pinned to the viewport — it floated in document flow under the fixed
+   dock and the 32 px below the dock was empty reservation). */
 @media (max-width: 768px) {
-    .status-bar {
-        position: fixed;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        z-index: var(--z-drawer);
-        min-height: var(--statusbar-h);
-        margin: 0;
-        padding-left: max(var(--space-3), env(safe-area-inset-left, 0px));
-        padding-right: max(var(--space-3), env(safe-area-inset-right, 0px));
-        padding-bottom: env(safe-area-inset-bottom, 0px);
-        background-color: var(--surface-1);
-        border-top: 1px solid var(--border-subtle);
-    }
-    /* Full-snap dock occludes the bar; hide instead of fighting for pixels. */
-    body:has(.kmila-dock--snap-full) .status-bar {
-        transform: translateY(120%);
-        pointer-events: none;
-    }
-    html[data-kmila-focus="1"] .status-bar {
-        display: none !important;
-    }
+    .kmila-status-bar { display: none; }
 }
 
 
@@ -9023,42 +9040,34 @@
 }
 
 
-/* ── Focus mode (mobile) — hides chrome to give Monaco the screen ─────────── */
-html[data-kmila-focus="1"] .kmila-topbar,
-html[data-kmila-focus="1"] .kmila-sidebar,
-html[data-kmila-focus="1"] .kmila-sidebar__backdrop,
-html[data-kmila-focus="1"] .kmila-dock {
-    display: none !important;
-}
-html[data-kmila-focus="1"] .kmila-shell {
-    grid-template-columns: 1fr !important;
-}
-html[data-kmila-focus="1"] .content {
-    padding: 0 !important;
-    max-width: none !important;
-}
-html[data-kmila-focus="1"] .monaco-editor-container,
-html[data-kmila-focus="1"] #editor {
-    height: 100dvh !important;
-    border-radius: 0 !important;
-}
-
-.kmila-focus-toggle {
-    position: fixed;
-    bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
-    right: calc(var(--space-3) + env(safe-area-inset-right, 0px));
-    z-index: var(--z-popover);
-    width: 48px;
-    height: 48px;
-    border-radius: 999px;
-    border: 1px solid var(--border-default);
-    background-color: var(--surface-2);
-    color: var(--text-strong);
-    box-shadow: var(--shadow-2);
-    display: none; /* opt-in via JS / Editor.razor when on mobile */
-}
+/* ── Mobile: schematic fullscreen must escape the dock's stacking context ──
+   The dock is `position: fixed; z-index: var(--z-drawer)` on phones, which
+   creates a stacking context. A child `.schematic-viewer.is-fullscreen` with
+   z-index: calc(--z-modal - 5) is therefore trapped inside the dock's 1020
+   layer, painted under the topbar (1021) and notch — toolbar buttons land
+   unreachable. When the schematic enters fullscreen we promote the dock
+   itself above every chrome layer and let it fill the viewport, and we pad
+   the toolbar past the safe-area inset so the exit/mode buttons sit below
+   the device notch. */
 @media (max-width: 768px) {
-    .kmila-focus-toggle.is-available { display: inline-flex; align-items: center; justify-content: center; }
+    body:has(.schematic-viewer.is-fullscreen) .kmila-dock {
+        z-index: calc(var(--z-modal) + 5) !important;
+        inset: 0 !important;
+        bottom: 0 !important;
+        height: 100dvh !important;
+        max-height: none !important;
+        border-radius: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    body:has(.schematic-viewer.is-fullscreen) .run-bar,
+    body:has(.schematic-viewer.is-fullscreen) .status-bar {
+        display: none !important;
+    }
+    .schematic-viewer.is-fullscreen .schematic-viewer__toolbar {
+        padding-top: calc(var(--space-2) + env(safe-area-inset-top, 0px));
+        padding-left: calc(var(--space-2) + env(safe-area-inset-left, 0px));
+        padding-right: calc(var(--space-2) + env(safe-area-inset-right, 0px));
+    }
 }
 
 
@@ -9087,8 +9096,15 @@ html[data-kmila-focus="1"] #editor {
 
 
 /* ── Honor safe-area-inset on bottom drawer / sticky footers ──────────────── */
-.kmila-dock {
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+/* Desktop has no notch / home-indicator so this is a no-op there. On mobile
+   the dock sits above the StatusBar (which already accounts for safe-area
+   via its own padding-bottom) — adding the inset here too created an empty
+   strip of ~34 px inside the dock under the panel content, so we scope the
+   padding to viewports wider than the mobile dock breakpoint. */
+@media (min-width: 769px) {
+    .kmila-dock {
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
 }
 
 

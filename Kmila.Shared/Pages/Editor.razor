@@ -245,37 +245,10 @@
                    Line="_cursorLine"
                    Column="_cursorColumn"
                    Language="@_currentLanguage" />
-
-    @* Floating focus-mode toggle — only displayed on touch / phone-sized
-       viewports via the .is-available class + the @media rule in pages.css.
-       Hides every shell chrome element so Monaco gets the full screen. *@
-    <button type="button"
-            class="kmila-focus-toggle is-available"
-            @onclick="ToggleFocusModeAsync"
-            aria-pressed="@_focusMode"
-            aria-label="@Traductor.T(_focusMode ? "EDITOR_FOCUS_EXIT" : "EDITOR_FOCUS_ENTER")"
-            title="@Traductor.T(_focusMode ? "EDITOR_FOCUS_EXIT" : "EDITOR_FOCUS_ENTER")">
-        <Icon Name="@(_focusMode ? IconName.FullscreenExit : IconName.ArrowsFullscreen)" />
-    </button>
 }
 </section>
 <Modal @ref="_multiUseModal" />
 @code {
-    /// <summary>
-    /// Mobile focus-mode flag. Persisted to localStorage on the JS side via
-    /// kmilaSetFocusMode so a refresh keeps the same state. Mirrored to the
-    /// <html data-kmila-focus> attribute that drives the chrome-hiding CSS.
-    /// </summary>
-    private bool _focusMode;
-
-    /// <summary>Toggle the chrome-hiding focus mode; persists across reloads.</summary>
-    private async Task ToggleFocusModeAsync()
-    {
-        _focusMode = !_focusMode;
-        try { await JS.InvokeVoidAsync("kmilaSetFocusMode", _focusMode); }
-        catch { /* circuit gone or no JS — irrelevant */ }
-    }
-
     /// <summary>
     /// Gets or sets the project identifier.
     /// </summary>
