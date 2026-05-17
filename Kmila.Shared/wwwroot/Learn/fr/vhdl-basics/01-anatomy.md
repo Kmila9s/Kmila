@@ -60,16 +60,16 @@ Le corps entre `begin` et `end architecture` est là où les signaux et les port
 
 Le parseur VHDL de Kmila lit ton fichier de haut en bas et construit un arbre :
 
-```
-File
-├── library IEEE
-├── use IEEE.STD_LOGIC_1164.ALL
-└── entity my_design
-    ├── port a (in, std_logic)
-    ├── port b (in, std_logic)
-    ├── port y (out, std_logic)
-    └── architecture rtl
-        └── concurrent: y <= a and b
+```mermaid
+flowchart TD
+    File["Fichier"] --> Lib["library IEEE"]
+    File --> Use["use IEEE.STD_LOGIC_1164.ALL"]
+    File --> Ent["entity my_design"]
+    Ent --> Pa["port a (in, std_logic)"]
+    Ent --> Pb["port b (in, std_logic)"]
+    Ent --> Py["port y (out, std_logic)"]
+    Ent --> Arch["architecture rtl"]
+    Arch --> Conc["concurrent: y &lt;= a and b"]
 ```
 
 Quand tu cliques sur **Build**, les ports deviennent les entrées dans l'onglet **Ports** du dock, l'entité devient l'entrée dans **Entities**, et les assignations dans l'architecture deviennent le câblage que le simulateur exécute.

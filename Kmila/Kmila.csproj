@@ -97,6 +97,19 @@
          FileSystem.OpenAppPackageFileAsync ("Practice/manifest.json",
          "Practice/{folder}/solution.vhdl", etc). -->
     <MauiAsset Include="..\Kmila.Shared\wwwroot\Practice\**\*" LogicalName="Practice\%(RecursiveDir)%(Filename)%(Extension)" />
+
+    <!-- Concepts catalog: execution-models mini-curriculum. Manifest +
+         per-language markdown bodies + per-language timeline JSON sidecars.
+         Same LogicalName pattern so ConceptCatalog can open them via
+         FileSystem.OpenAppPackageFileAsync ("Concepts/manifest.json",
+         "Concepts/{lang}/{moduleId}/{lessonId}.md", etc). -->
+    <MauiAsset Include="..\Kmila.Shared\wwwroot\Concepts\**\*" LogicalName="Concepts\%(RecursiveDir)%(Filename)%(Extension)" />
+
+    <!-- Self-hosted JS libraries (currently: Blockly for /concepts/exercise/*).
+         Without this glob the MAUI bundle won't ship blockly.min.js and the
+         exercise editor breaks offline. The Web build picks these up
+         automatically via the RCL static-web-assets pipeline. -->
+    <MauiAsset Include="..\Kmila.Shared\wwwroot\lib\**\*" LogicalName="lib\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

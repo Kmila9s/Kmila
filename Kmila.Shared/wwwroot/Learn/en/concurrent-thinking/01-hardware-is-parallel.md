@@ -19,10 +19,15 @@ In a software language, you'd read this as three sequential steps. In VHDL, all 
 
 The synthesizer builds:
 
-```
-   a ─┬─ AND ─── y1 ──┐
-      │               XOR ── y3
-   b ─┴─ OR  ── y2 ───┘
+```mermaid
+flowchart LR
+    A([a]) --> AND["AND"]
+    B([b]) --> AND
+    A --> OR["OR"]
+    B --> OR
+    AND -- y1 --> XOR["XOR"]
+    OR  -- y2 --> XOR
+    XOR --> Y3([y3])
 ```
 
 All three gates are powered up at the same time. When `a` or `b` changes, the output `y3` settles to its new value after a small propagation delay through whichever path is longest. There is no "first" and "second".

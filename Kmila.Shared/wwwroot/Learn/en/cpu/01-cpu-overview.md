@@ -2,11 +2,9 @@
 
 Look inside any CPU — from a tiny 8-bit microcontroller to a modern GPU shader core — and you'll find the same five stages, doing the same five jobs:
 
-```
-  ┌─────┐   ┌──────┐   ┌────────┐   ┌─────────┐   ┌──────────┐
-  │ IF  │──▶│ ID   │──▶│ EX     │──▶│ MEM     │──▶│ WB       │
-  │fetch│   │decode│   │execute │   │ memory  │   │writeback │
-  └─────┘   └──────┘   └────────┘   └─────────┘   └──────────┘
+```mermaid
+flowchart LR
+    IF["IF<br/>fetch"] --> ID["ID<br/>decode"] --> EX["EX<br/>execute"] --> MEM["MEM<br/>memory"] --> WB["WB<br/>writeback"]
 ```
 
 ## The five classic stages

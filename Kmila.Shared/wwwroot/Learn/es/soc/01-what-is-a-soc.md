@@ -8,14 +8,12 @@ Un **System-on-Chip** (SoC) es exactamente lo que dice su nombre: un sistema ent
 2. **Periféricos**: UART, SPI, I²C, GPIO, controladores de DMA, temporizadores.
 3. **Un interconector**: AMBA **AXI4** y **AXI4-Lite** son los estándares de facto en la industria FPGA/ASIC.
 
-```
-┌─────────┐   ┌──────────┐   ┌──────────┐
-│ CPU     │◄─►│          │◄─►│ UART     │
-└─────────┘   │  AXI     │   └──────────┘
-              │  Inter-  │
-┌─────────┐   │  connect │   ┌──────────┐
-│ Memoria │◄─►│          │◄─►│ GPIO     │
-└─────────┘   └──────────┘   └──────────┘
+```mermaid
+flowchart LR
+    CPU["CPU"] <--> AXI(["AXI<br/>Interconect"])
+    Memoria["Memoria"] <--> AXI
+    AXI <--> UART["UART"]
+    AXI <--> GPIO["GPIO"]
 ```
 
 ## AXI4 en un párrafo

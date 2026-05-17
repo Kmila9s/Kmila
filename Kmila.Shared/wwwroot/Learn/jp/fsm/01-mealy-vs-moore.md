@@ -10,10 +10,11 @@
 
 ## ムーア: 出力は状態のみに依存
 
-```
- input → [ next-state ] → [ state reg ] → [ outputs ]
-                                       ↑
-                                     (that's all)
+```mermaid
+flowchart LR
+    IN([input]) --> NS["next-state"]
+    NS --> SR["state reg"]
+    SR --> OUT["outputs"]
 ```
 
 状態が与えられると、出力は固定されます。`S_GREEN` にいるなら、`green = '1'`。常に。入力がどんなふうでも。
@@ -28,12 +29,13 @@
 
 ## ミーリ: 出力は状態 + 入力に依存
 
-```
- input ──→ [ next-state ] ──→ [ state reg ]
-   │                               │
-   └───→ [ output logic ] ←────────┘
-                │
-             outputs
+```mermaid
+flowchart LR
+    IN([input]) --> NS["next-state"]
+    NS --> SR["state reg"]
+    IN --> OL["output logic"]
+    SR --> OL
+    OL --> OUT([outputs])
 ```
 
 出力は現在の状態 **と** 現在の入力の関数です。クロックエッジ間でも変化できます。

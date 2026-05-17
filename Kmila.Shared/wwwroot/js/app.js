@@ -177,6 +177,38 @@ window.downloadFile = function (fileName, content) {
     window.kmilaGetFileDrag = function () { return kmilaFileDragId; };
     window.kmilaClearFileDrag = function () { kmilaFileDragId = null; };
 
+    /* Pin the drag ghost to the row being dragged. Two layered problems:
+     *   1. Default browser ghost for `.file-row` (grid item, position:relative,
+     *      gap:2px) snapshots more than the row — looks like the whole card.
+     *   2. Passing the live row to setDragImage isn't enough either: Blink/WebKit
+     *      rasterizes the element's *paint layer*, and `.file-row` doesn't
+     *      establish its own (no transform/opacity/isolation), so the snapshot
+     *      still picks up sibling rows from the shared <ul> layer.
+     * Fix: clone the row, mount it offscreen on <body> (its own paint context),
+     * use the clone as the drag image, then remove it on the next tick — the
+     * browser has already taken the bitmap by then. Capture phase so we win the
+     * race against Blazor re-renders. */
+    document.addEventListener('dragstart', function (e) {
+        const t = e.target;
+        const row = (t && t.closest) ? t.closest('.file-row[draggable="true"]') : null;
+        if (!row || !e.dataTransfer) return;
+        try {
+            const r = row.getBoundingClientRect();
+            const ox = Math.min(Math.max(0, e.clientX - r.left), r.width);
+            const oy = Math.min(Math.max(0, e.clientY - r.top), r.height);
+            const clone = row.cloneNode(true);
+            clone.style.position = 'fixed';
+            clone.style.top = '-10000px';
+            clone.style.left = '0';
+            clone.style.width = r.width + 'px';
+            clone.style.margin = '0';
+            clone.style.pointerEvents = 'none';
+            document.body.appendChild(clone);
+            e.dataTransfer.setDragImage(clone, ox, oy);
+            setTimeout(function () { clone.remove(); }, 0);
+        } catch (_) { /* fall back to browser default */ }
+    }, true);
+
     /* ─── Kebab popover positioning ────────────────────────────────────────
      * Blazor owns the open/close state for the FilesCard kebab. When the user
      * clicks a trigger, FilesCard asks for the trigger button's rect via
@@ -196,6 +228,16 @@ window.downloadFile = function (fileName, content) {
         return window.innerWidth || document.documentElement.clientWidth;
     };
 
+    /**
+     * Sibling of kmilaViewportWidth — returns the current viewport height so
+     * C# placement code can flip popovers upward when there isn't room below.
+     * Used by FilesCard's file-row burger menu to keep the dropdown in view
+     * for low rows (see [[project_file_menu_overflow]]).
+     */
+    window.kmilaViewportHeight = function () {
+        return window.innerHeight || document.documentElement.clientHeight;
+    };
+
     /* Export the rendered Flow-diagram SVG as either an SVG file or a PNG
        raster. Mermaid replaces our <pre.mermaid> with an inline <svg>; we
        grab that, inline the computed CSS so the saved file looks identical
@@ -206,55 +248,127 @@ window.downloadFile = function (fileName, content) {
        ratio (visibly crisper on a Retina display) and toBlob the result.
        Failures get logged to the console — the caller swallows the JS
        exception so the editor stays usable. */
+    // Locates the mermaid-rendered SVG inside `container` (a CSS selector or
+    // id), inlines its computed background and width/height attributes, and
+    // returns a {svg, w, h, bg, ok} record. Shared by serialize/download
+    // entry points so the SVG-discovery + cloning logic lives in one place.
+    function _kmilaPrepFlowSvg(container) {
+        let root = null;
+        if (typeof container === 'string') {
+            if (container.startsWith('.') || container.startsWith('#') || container.includes(' ')) {
+                root = document.querySelector(container);
+            } else {
+                root = document.getElementById(container) || document.querySelector(container);
+            }
+        }
+        let svg = root && root.querySelector('svg');
+        if (!svg) {
+            svg = document.querySelector('.flow-diagram__body pre.mermaid svg')
+               || document.querySelector('pre.mermaid svg');
+        }
+        if (!svg) return { ok: false };
+
+        const clone = svg.cloneNode(true);
+        const cs = getComputedStyle(svg);
+        const bg = cs.backgroundColor && cs.backgroundColor !== 'rgba(0, 0, 0, 0)'
+            ? cs.backgroundColor : '#ffffff';
+        // Strip the pan-zoom CSS transform the in-app viewer applies to the
+        // live SVG root. Without this, the cloned SVG inherits the inline
+        // translate/scale and the rasterised image draws content off-canvas
+        // (reported: PNG export comes out completely blank). The export must
+        // capture the *unzoomed* diagram, not the user's current pan/zoom.
+        clone.style.transform = '';
+        clone.style.transformOrigin = '';
+        clone.removeAttribute('transform');
+        // Resolve natural (pre-transform) dimensions. Prefer the viewBox so we
+        // get the diagram's authoring-coordinate size; fall back to the SVG's
+        // own width/height attributes; only use the live bounding rect as a
+        // last resort (since that rect reflects the active pan-zoom).
+        let w = 0, h = 0;
+        const vb = svg.viewBox && svg.viewBox.baseVal;
+        if (vb && vb.width > 0 && vb.height > 0) {
+            w = vb.width; h = vb.height;
+        } else if (svg.width && svg.width.baseVal && svg.width.baseVal.value > 0) {
+            w = svg.width.baseVal.value;
+            h = svg.height.baseVal.value;
+        } else {
+            const rect = svg.getBoundingClientRect();
+            w = rect.width; h = rect.height;
+        }
+        w = Math.max(1, Math.round(w));
+        h = Math.max(1, Math.round(h));
+        clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+        clone.setAttribute('width', w);
+        clone.setAttribute('height', h);
+        clone.style.background = bg;
+
+        const xml = new XMLSerializer().serializeToString(clone);
+        const svgWithDecl = '<?xml version="1.0" encoding="UTF-8"?>\n' + xml;
+        return { ok: true, svg: svgWithDecl, w, h, bg };
+    }
+
+    // Returns the serialized SVG text. Used by FlowDiagramViewer's export
+    // path so the bytes flow through IFileExportService → MauiFileExportService
+    // on MAUI (writes to ~/Documents/Kmila/SVG/) instead of the browser-only
+    // anchor download (which iOS/macCatalyst WebViews drop on the floor).
+    window.kmilaSerializeFlowSvg = function (container) {
+        try {
+            const r = _kmilaPrepFlowSvg(container);
+            return r.ok ? r.svg : '';
+        } catch (e) {
+            console.error('[kmilaSerializeFlowSvg]', e);
+            return '';
+        }
+    };
+
+    // Rasterises the mermaid SVG to a PNG and returns base64 bytes. Counterpart
+    // to kmilaSerializeFlowSvg for the PNG export path. Resolves '' on failure.
+    window.kmilaSerializeFlowPng = async function (container) {
+        try {
+            const prep = _kmilaPrepFlowSvg(container);
+            if (!prep.ok) return '';
+            const dpr = Math.max(1, window.devicePixelRatio || 1) * 2;
+            const canvas = document.createElement('canvas');
+            canvas.width  = prep.w * dpr;
+            canvas.height = prep.h * dpr;
+            const ctx = canvas.getContext('2d');
+            ctx.scale(dpr, dpr);
+            ctx.fillStyle = prep.bg;
+            ctx.fillRect(0, 0, prep.w, prep.h);
+
+            const img = new Image();
+            const dataUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(prep.svg);
+            await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = dataUrl; });
+            ctx.drawImage(img, 0, 0, prep.w, prep.h);
+            return await new Promise((res) => canvas.toBlob(function (blob) {
+                if (!blob) { res(''); return; }
+                const reader = new FileReader();
+                reader.onloadend = function () {
+                    const result = reader.result || '';
+                    const comma = String(result).indexOf(',');
+                    res(comma >= 0 ? String(result).substring(comma + 1) : '');
+                };
+                reader.onerror = function () { res(''); };
+                reader.readAsDataURL(blob);
+            }, 'image/png'));
+        } catch (e) {
+            console.error('[kmilaSerializeFlowPng]', e);
+            return '';
+        }
+    };
+
+    // Legacy anchor-download path. Kept for the Web target (browser sandbox)
+    // where IFileExportService delegates back to a download. FlowDiagramViewer
+    // now prefers the serialize-then-IFileExportService route on all targets.
     window.kmilaDownloadFlowDiagram = async function (container, fileName, format) {
         try {
-            // Accepts either an id (legacy) or a CSS selector. We also fall
-            // back to the most recent rendered mermaid SVG anywhere on the
-            // page so a misconfigured selector still produces a download.
-            let root = null;
-            if (typeof container === 'string') {
-                if (container.startsWith('.') || container.startsWith('#') || container.includes(' ')) {
-                    root = document.querySelector(container);
-                } else {
-                    root = document.getElementById(container) || document.querySelector(container);
-                }
-            }
-            // Find the SVG: prefer one inside the container; fall back to the
-            // mermaid output anywhere on the page if the container query fails.
-            let svg = root && root.querySelector('svg');
-            if (!svg) {
-                console.warn('[kmilaDownloadFlowDiagram] container empty/missing for', container,
-                    '— falling back to the first pre.mermaid svg on the page');
-                svg = document.querySelector('.flow-diagram__body pre.mermaid svg')
-                   || document.querySelector('pre.mermaid svg');
-            }
-            if (!svg) {
-                console.error('[kmilaDownloadFlowDiagram] no rendered mermaid svg found anywhere');
+            const prep = _kmilaPrepFlowSvg(container);
+            if (!prep.ok) {
+                console.error('[kmilaDownloadFlowDiagram] no rendered mermaid svg found');
                 return false;
             }
-            // Inline computed background so the saved file isn't transparent
-            // over a different host. Mermaid leaves the <svg> background
-            // unset by default.
-            const clone = svg.cloneNode(true);
-            const cs = getComputedStyle(svg);
-            const bg = cs.backgroundColor && cs.backgroundColor !== 'rgba(0, 0, 0, 0)'
-                ? cs.backgroundColor : '#ffffff';
-            // Make sure width/height attributes exist on the SVG — some
-            // mermaid builds rely on viewBox + CSS-only sizing which doesn't
-            // round-trip into a standalone file.
-            const rect = svg.getBoundingClientRect();
-            const w = Math.max(1, Math.round(rect.width));
-            const h = Math.max(1, Math.round(rect.height));
-            clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-            clone.setAttribute('width', w);
-            clone.setAttribute('height', h);
-            clone.style.background = bg;
-
-            const xml = new XMLSerializer().serializeToString(clone);
-            const svgWithDecl = '<?xml version="1.0" encoding="UTF-8"?>\n' + xml;
-
             if (format === 'svg') {
-                const blob = new Blob([svgWithDecl], { type: 'image/svg+xml;charset=utf-8' });
+                const blob = new Blob([prep.svg], { type: 'image/svg+xml;charset=utf-8' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url; a.download = fileName;
@@ -262,23 +376,18 @@ window.downloadFile = function (fileName, content) {
                 URL.revokeObjectURL(url);
                 return true;
             }
-
-            // PNG path — rasterize via a 2× canvas.
             const dpr = Math.max(1, window.devicePixelRatio || 1) * 2;
             const canvas = document.createElement('canvas');
-            canvas.width  = w * dpr;
-            canvas.height = h * dpr;
+            canvas.width  = prep.w * dpr;
+            canvas.height = prep.h * dpr;
             const ctx = canvas.getContext('2d');
             ctx.scale(dpr, dpr);
-            ctx.fillStyle = bg;
-            ctx.fillRect(0, 0, w, h);
-
+            ctx.fillStyle = prep.bg;
+            ctx.fillRect(0, 0, prep.w, prep.h);
             const img = new Image();
-            const dataUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgWithDecl);
-            await new Promise((res, rej) => {
-                img.onload = res; img.onerror = rej; img.src = dataUrl;
-            });
-            ctx.drawImage(img, 0, 0, w, h);
+            const dataUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(prep.svg);
+            await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = dataUrl; });
+            ctx.drawImage(img, 0, 0, prep.w, prep.h);
             await new Promise((res) => canvas.toBlob((blob) => {
                 if (!blob) return res(false);
                 const url = URL.createObjectURL(blob);
@@ -500,6 +609,10 @@ window.downloadFile = function (fileName, content) {
             // inputs in the toolbar). The root's own pointer handler still
             // wins because we only attach to the body, not the toolbar.
             if (e.target.closest('button, input, select, textarea, a')) return;
+            // Suppress browser-side selection/drag for non-interactive
+            // targets so the user can't accidentally drag-select clipped
+            // SVG <text> labels while panning.
+            try { e.preventDefault(); } catch (_) {}
             pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
             // Intentionally NOT calling setPointerCapture here. Capturing on
             // pointerdown forces the subsequent click event to fire on root
@@ -549,6 +662,11 @@ window.downloadFile = function (fileName, content) {
                 // clicks still hit child elements (wires, gates, ports).
                 if (!state.pointerCaptured) {
                     try { root.setPointerCapture(e.pointerId); state.pointerCaptured = true; } catch (_) {}
+                    // Wipe any selection that the browser may have started
+                    // before the threshold was crossed; otherwise the user
+                    // sees a "ghost" highlight on clipped SVG text after the
+                    // pan completes.
+                    try { window.getSelection()?.removeAllRanges(); } catch (_) {}
                 }
                 state.tx = state.panStartTx + dx;
                 state.ty = state.panStartTy + dy;
@@ -613,6 +731,40 @@ window.downloadFile = function (fileName, content) {
             applyTransform(state);
         }
 
+        // WebKit (Safari, iOS WebView, macCatalyst BlazorWebView) fires
+        // gesturestart/gesturechange/gestureend for trackpad pinch instead of
+        // the synthetic wheel+ctrlKey other browsers use. Without these
+        // handlers, pinching over the canvas zooms the entire WebView page
+        // — the schematic appears to "pop out" of layout. We translate the
+        // gesture's `scale` into the same transform state the wheel handler
+        // drives, anchored at the gesture's screen midpoint.
+        let gestureStartScale = 1;
+        let gestureCenter = { x: 0, y: 0 };
+        function onGestureStart(e) {
+            if (e.target.closest('button, input, select, textarea, a')) return;
+            e.preventDefault();
+            gestureStartScale = state.scale;
+            gestureCenter = { x: e.clientX, y: e.clientY };
+        }
+        function onGestureChange(e) {
+            if (e.target.closest('button, input, select, textarea, a')) return;
+            e.preventDefault();
+            const newScale = clamp(gestureStartScale * (e.scale || 1), state.minScale, state.maxScale);
+            const rect = root.getBoundingClientRect();
+            const cx = gestureCenter.x - rect.left;
+            const cy = gestureCenter.y - rect.top;
+            const worldX = (cx - state.tx) / state.scale;
+            const worldY = (cy - state.ty) / state.scale;
+            state.scale = newScale;
+            state.tx = cx - worldX * state.scale;
+            state.ty = cy - worldY * state.scale;
+            applyTransform(state);
+        }
+        function onGestureEnd(e) {
+            if (e.target.closest('button, input, select, textarea, a')) return;
+            e.preventDefault();
+        }
+
         function onDblClick(e) {
             if (e.target.closest('button, input, select, textarea, a')) return;
             // Quick reset on desktop — fit-to-view when that was the attach
@@ -632,6 +784,11 @@ window.downloadFile = function (fileName, content) {
         root.addEventListener('pointercancel', onPointerUp);
         root.addEventListener('wheel', onWheel, { passive: false });
         root.addEventListener('dblclick', onDblClick);
+        // WebKit-only events; other engines ignore the addEventListener call
+        // for an unknown type and we pay nothing for the listener slot.
+        root.addEventListener('gesturestart', onGestureStart, { passive: false });
+        root.addEventListener('gesturechange', onGestureChange, { passive: false });
+        root.addEventListener('gestureend', onGestureEnd, { passive: false });
         root.style.touchAction = 'none';
         root.__kmilaPanZoomId = id;
 
@@ -672,6 +829,9 @@ window.downloadFile = function (fileName, content) {
                 root.removeEventListener('pointercancel', onPointerUp);
                 root.removeEventListener('wheel', onWheel);
                 root.removeEventListener('dblclick', onDblClick);
+                root.removeEventListener('gesturestart', onGestureStart);
+                root.removeEventListener('gesturechange', onGestureChange);
+                root.removeEventListener('gestureend', onGestureEnd);
                 if (ro) { try { ro.disconnect(); } catch (_) {} }
                 if (target) target.style.transform = '';
                 root.style.touchAction = '';
@@ -876,5 +1036,72 @@ window.kmilaPracticeClearLock = function () {
             editor.deltaDecorations(prev, []);
             _kmilaPracticeDecos.set(editor, []);
         }
+    }
+};
+
+/* ── Concepts ExecutionPlayer: pre-recorded line highlights ────────────────
+ * The Concepts track plays a hardcoded execution timeline against a read-only
+ * Monaco editor (see Pages/ConceptView.razor + Components/ExecutionPlayer).
+ * Each step in the timeline lists the 1-based line numbers that should glow
+ * "running now". We apply Monaco line decorations the same way Practice does,
+ * keyed by a WeakMap so multiple players on the same page don't trample each
+ * other's state.
+ *
+ * The editor instance is located by walking up the DOM from each Monaco
+ * editor's root and looking for the `.kmila-exec-monaco` ancestor — the
+ * ExecutionPlayer component sets that class on its <StandaloneCodeEditor>
+ * wrapper. If no such editor is mounted yet (prerender, hybrid boot), this
+ * is a no-op and the next call will succeed once Monaco has finished.   */
+const _kmilaExecDecos = new WeakMap();
+
+function _kmilaFindExecEditor() {
+    if (typeof monaco === 'undefined' || !monaco.editor) return null;
+    const editors = monaco.editor.getEditors();
+    if (!editors || editors.length === 0) return null;
+    // Skip orphaned editors. When the user navigates between Concepts lessons,
+    // BlazorMonaco may leave a stale editor instance whose DOM node is no
+    // longer attached to the document — picking it would route decorations to
+    // a ghost and leave the visible lesson static. `dom.isConnected` is a
+    // standard DOM property that returns true only for live nodes.
+    return editors.find(e => {
+        const dom = e.getDomNode && e.getDomNode();
+        if (!dom || !dom.isConnected) return false;
+        return dom.closest && dom.closest('.kmila-exec-monaco');
+    }) || null;
+}
+
+window.kmilaExecHighlightLines = function (lineNumbers) {
+    const editor = _kmilaFindExecEditor();
+    if (!editor) return;
+    const model = editor.getModel();
+    if (!model) return;
+
+    const maxLine = model.getLineCount();
+    const safe = (Array.isArray(lineNumbers) ? lineNumbers : [])
+        .filter(n => Number.isInteger(n) && n >= 1 && n <= maxLine);
+
+    const newDecos = safe.map(ln => ({
+        range: new monaco.Range(ln, 1, ln, 1),
+        options: { isWholeLine: true, className: 'kmila-exec-highlight' }
+    }));
+
+    const prev = _kmilaExecDecos.get(editor) || [];
+    const next = editor.deltaDecorations(prev, newDecos);
+    _kmilaExecDecos.set(editor, next);
+
+    // Auto-scroll the first highlighted line into view so the user always sees
+    // what's executing — Monaco's reveal-line uses smooth scroll by default.
+    if (safe.length > 0) {
+        try { editor.revealLineInCenterIfOutsideViewport(safe[0]); } catch { }
+    }
+};
+
+window.kmilaExecClearHighlights = function () {
+    const editor = _kmilaFindExecEditor();
+    if (!editor) return;
+    const prev = _kmilaExecDecos.get(editor) || [];
+    if (prev.length > 0) {
+        editor.deltaDecorations(prev, []);
+        _kmilaExecDecos.set(editor, []);
     }
 };

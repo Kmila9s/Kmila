@@ -640,5 +640,246 @@
         }
     });
 
-    console.log('[Kmila] VHDL language support registered (providers: hover, completion, definition, references, documentSymbols, signatureHelp)');
+    // -------------------------------------------------------------------------
+    // 11. Live linter — fast pattern-pass diagnostics that run on every edit.
+    //
+    // The C# Build path (Editor.razor → Builder.BuildAsync → Parser → exceptions
+    // → kmilaSetMonacoMarkers) only fires when the student clicks Run/Build.
+    // For surface-level typos that should surface immediately (unknown port
+    // types, missing `;` between ports), waiting for a Build round-trip is
+    // poor UX — and the round-trip itself has a long chain of failure modes
+    // (Monaco→disk sync, two parser stacks, Token.Col being a token-index
+    // not a char offset, JS interop scoping). Linting in JS bypasses all of
+    // that: reads Monaco's authoritative buffer, emits markers with exact
+    // character ranges, no .NET round-trip.
+    //
+    // Marker ownership: this writer uses owner "kmila-vhdl-live". The C#
+    // Build path uses "kmila-vhdl". Different owners coexist on the same
+    // model — Build markers persist until the next Build, live-lint markers
+    // refresh on every keystroke (debounced 250 ms).
+    //
+    // Scope (v1): unknown port types with Levenshtein-≤-2 typo suggestions,
+    // and missing `;` between port declarations. Mirrors the strictness in
+    // VariableSyntetizer.cs / PortsParser.cs but client-side.
+    // -------------------------------------------------------------------------
+
+    var KMILA_KNOWN_VHDL_TYPES = [
+        'std_logic', 'std_logic_vector', 'std_ulogic', 'std_ulogic_vector',
+        'bit', 'bit_vector', 'boolean', 'integer', 'natural', 'positive',
+        'character', 'string', 'unsigned', 'signed', 'real', 'time'
+    ];
+
+    function kmilaLevenshtein(a, b) {
+        if (a === b) return 0;
+        if (!a) return b.length;
+        if (!b) return a.length;
+        var m = a.length, n = b.length;
+        var prev = new Array(n + 1);
+        var curr = new Array(n + 1);
+        for (var j = 0; j <= n; j++) prev[j] = j;
+        for (var i = 1; i <= m; i++) {
+            curr[0] = i;
+            for (var k = 1; k <= n; k++) {
+                var cost = a.charCodeAt(i - 1) === b.charCodeAt(k - 1) ? 0 : 1;
+                curr[k] = Math.min(curr[k - 1] + 1, prev[k] + 1, prev[k - 1] + cost);
+            }
+            var tmp = prev; prev = curr; curr = tmp;
+        }
+        return prev[n];
+    }
+
+    // Returns the closest canonical type name within Levenshtein distance 2,
+    // or null when no close match exists. Mirrors Constants.FindTypoSuggestion.
+    function kmilaFindTypoSuggestion(unknown) {
+        if (!unknown) return null;
+        var lower = unknown.toLowerCase();
+        if (KMILA_KNOWN_VHDL_TYPES.indexOf(lower) >= 0) return null;
+        var best = null;
+        var bestDist = 3; // strictly less than 3 → distance ≤ 2 → typo
+        for (var i = 0; i < KMILA_KNOWN_VHDL_TYPES.length; i++) {
+            var d = kmilaLevenshtein(lower, KMILA_KNOWN_VHDL_TYPES[i]);
+            if (d < bestDist) { bestDist = d; best = KMILA_KNOWN_VHDL_TYPES[i]; }
+        }
+        return best;
+    }
+
+    // Single regex that captures the type identifier on a port-list line.
+    // Matches: optional leading whitespace, comma-separated identifier(s),
+    // a colon, optional direction, then the type identifier we want to lint.
+    // Anything after the type (vector ranges, defaults) is ignored — we only
+    // need to find the type token for the typo check.
+    var KMILA_PORT_LINE_RE = /^\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\s*,\s*[a-zA-Z_][a-zA-Z0-9_]*)*)\s*:\s*(?:in|out|inout|buffer)?\s+([a-zA-Z_][a-zA-Z0-9_]*)/i;
+
+    function kmilaLintVhdl(text) {
+        var markers = [];
+        if (!text) return markers;
+
+        var lines = text.split(/\r?\n/);
+        var inEntity = false;
+        var inPortList = false;
+        var parenDepth = 0;
+
+        for (var i = 0; i < lines.length; i++) {
+            var raw = lines[i];
+            // Strip line comments (--…) so commented-out typos don't fire.
+            var commentIdx = raw.indexOf('--');
+            var stripped = commentIdx >= 0 ? raw.substring(0, commentIdx) : raw;
+            var lower = stripped.trim().toLowerCase();
+
+            if (lower.length === 0) continue;
+
+            if (!inEntity) {
+                if (/^entity\s+[a-z_][a-z0-9_]*\s+is\b/.test(lower)) inEntity = true;
+                continue;
+            }
+            // Inside entity: watch for end, generic, port.
+            if (/^end\b/.test(lower)) {
+                inEntity = false; inPortList = false; parenDepth = 0; continue;
+            }
+            if (!inPortList && /^port\s*\(/.test(lower)) {
+                inPortList = true; parenDepth = 0;
+                // Count parens on this line — `port (` opens, `);` on the
+                // same line would close immediately.
+                for (var c = 0; c < stripped.length; c++) {
+                    if (stripped[c] === '(') parenDepth++;
+                    else if (stripped[c] === ')') parenDepth--;
+                }
+                if (parenDepth <= 0) inPortList = false;
+                continue;
+            }
+            if (!inPortList) continue;
+
+            // Track paren depth on every port-list line. Once we close the
+            // outer paren, the port list is done.
+            for (var c2 = 0; c2 < stripped.length; c2++) {
+                if (stripped[c2] === '(') parenDepth++;
+                else if (stripped[c2] === ')') parenDepth--;
+            }
+            if (parenDepth <= 0) { inPortList = false; continue; }
+
+            // Port-declaration line: extract type name and lint.
+            var m = KMILA_PORT_LINE_RE.exec(stripped);
+            if (!m) continue;
+            var typeName = m[2];
+            var typeNameLower = typeName.toLowerCase();
+
+            // Don't flag generic-list direction-less syntax false positives:
+            // the regex requires whitespace after `:`/direction so a malformed
+            // line still has to look port-shaped to be linted.
+            if (KMILA_KNOWN_VHDL_TYPES.indexOf(typeNameLower) < 0) {
+                var suggestion = kmilaFindTypoSuggestion(typeName);
+                if (suggestion) {
+                    // Find typeName's char column in `raw` (not `stripped`) so
+                    // the squiggle lands on the visible text. Search starting
+                    // after `:` to avoid hitting a same-named identifier
+                    // earlier on the line.
+                    var colonIdx = raw.indexOf(':');
+                    var typeIdx = raw.indexOf(typeName, colonIdx >= 0 ? colonIdx : 0);
+                    if (typeIdx >= 0) {
+                        markers.push({
+                            severity: monaco.MarkerSeverity.Error,
+                            startLineNumber: i + 1,
+                            startColumn: typeIdx + 1,
+                            endLineNumber: i + 1,
+                            endColumn: typeIdx + 1 + typeName.length,
+                            message: "Unknown port type '" + typeName + "'. Did you mean '" + suggestion + "'?",
+                            source: 'Kmila VHDL',
+                            code: 'VHD-UNKNOWN-TYPE'
+                        });
+                    }
+                }
+            }
+
+            // Missing-`;` check: only flag when the line lacks both `;` and
+            // a trailing `,` AND the next non-blank line looks like another
+            // port declaration. Avoids false positives for the final port
+            // (whose `;` is omitted by some styles) and for continuation
+            // lines of multi-line declarations.
+            var strippedRight = stripped.replace(/\s+$/, '');
+            if (strippedRight.length > 0 &&
+                strippedRight[strippedRight.length - 1] !== ';' &&
+                strippedRight[strippedRight.length - 1] !== ',')
+            {
+                // Look ahead for the next non-blank, non-comment line.
+                var j = i + 1;
+                while (j < lines.length) {
+                    var peekRaw = lines[j];
+                    var peekStripped = (peekRaw.indexOf('--') >= 0
+                        ? peekRaw.substring(0, peekRaw.indexOf('--'))
+                        : peekRaw).trim();
+                    if (peekStripped.length > 0) break;
+                    j++;
+                }
+                if (j < lines.length) {
+                    var nextLine = lines[j];
+                    var nextStripped = (nextLine.indexOf('--') >= 0
+                        ? nextLine.substring(0, nextLine.indexOf('--'))
+                        : nextLine).trim();
+                    // Heuristic: another port declaration starts with
+                    // identifier(s) followed by `:`.
+                    if (/^[a-zA-Z_][a-zA-Z0-9_]*(?:\s*,\s*[a-zA-Z_][a-zA-Z0-9_]*)*\s*:/.test(nextStripped)) {
+                        // Mark the "missing ;" position one past the last
+                        // visible character — same convention Monaco uses
+                        // for missing-token errors in TS/JS. Monaco renders
+                        // markers in the virtual-whitespace gutter past EOL.
+                        var endCol = raw.replace(/\s+$/, '').length + 1;
+                        markers.push({
+                            severity: monaco.MarkerSeverity.Error,
+                            startLineNumber: i + 1,
+                            startColumn: endCol,
+                            endLineNumber: i + 1,
+                            endColumn: endCol + 1,
+                            message: "Missing ';' at end of port declaration.",
+                            source: 'Kmila VHDL',
+                            code: 'VHD-MISSING-SEMICOLON'
+                        });
+                    }
+                }
+            }
+        }
+
+        return markers;
+    }
+
+    // Per-model debounce timers so rapid typing doesn't spam the lint pass.
+    // WeakMap is keyed by model so disposal clears the entry automatically.
+    var kmilaLintTimers = new WeakMap();
+
+    function kmilaScheduleLint(model) {
+        var prev = kmilaLintTimers.get(model);
+        if (prev) clearTimeout(prev);
+        kmilaLintTimers.set(model, setTimeout(function () {
+            try {
+                if (model.isDisposed && model.isDisposed()) return;
+                var markers = kmilaLintVhdl(model.getValue());
+                monaco.editor.setModelMarkers(model, 'kmila-vhdl-live', markers);
+            } catch (e) {
+                console.warn('[kmila live-lint]', e);
+            }
+        }, 250));
+    }
+
+    // Hook every VHDL model — both ones that already exist (BlazorMonaco may
+    // create the model before vhdl.js finishes loading) and future ones.
+    monaco.editor.onDidCreateModel(function (model) {
+        if (model.getLanguageId && model.getLanguageId() === 'vhdl') {
+            kmilaScheduleLint(model);
+            model.onDidChangeContent(function () { kmilaScheduleLint(model); });
+        }
+    });
+    var existing = monaco.editor.getModels ? monaco.editor.getModels() : [];
+    for (var em = 0; em < existing.length; em++) {
+        var emodel = existing[em];
+        if (emodel.getLanguageId && emodel.getLanguageId() === 'vhdl') {
+            kmilaScheduleLint(emodel);
+            (function (mm) {
+                mm.onDidChangeContent(function () { kmilaScheduleLint(mm); });
+            })(emodel);
+        }
+    }
+
+    // Expose the lint function for tests and ad-hoc debugging from devtools.
+    window.kmilaLintVhdl = kmilaLintVhdl;
+
+    console.log('[Kmila] VHDL language support registered (providers: hover, completion, definition, references, documentSymbols, signatureHelp, live-lint)');
 })();

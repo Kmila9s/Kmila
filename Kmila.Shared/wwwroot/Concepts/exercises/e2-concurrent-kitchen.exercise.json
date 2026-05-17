@@ -1,0 +1,184 @@
+{
+  "version": 1,
+  "toolbox": {
+    "kind": "flyoutToolbox",
+    "contents": [
+      { "kind": "block", "type": "kmila_recipe_step" }
+    ]
+  },
+  "compositions": [
+    {
+      "fingerprint": "kmila_recipe_step:STEP=chop|kmila_recipe_step:STEP=marinate|kmila_recipe_step:STEP=fry|kmila_recipe_step:STEP=boil",
+      "label": {
+        "en": "Concurrent kitchen brigade",
+        "es": "Brigada de cocina concurrente"
+      },
+      "timeline": {
+        "code": "1. Chop the vegetables\n2. Marinate the meat\n3. Fry the eggs\n4. Boil the pasta",
+        "language": "plaintext",
+        "signalOrder": ["veggies", "meat", "eggs", "pasta", "elapsed"],
+        "steps": [
+          {
+            "t": 0,
+            "highlightLines": [],
+            "signals": { "veggies": "raw", "meat": "raw", "eggs": "raw", "pasta": "raw", "elapsed": "0 min" },
+            "note": {
+              "en": "Cold start. Four cooks are standing at four stations, each ready to begin.",
+              "es": "Inicio en frío. Cuatro cocineros en cuatro estaciones, listos para empezar."
+            }
+          },
+          {
+            "t": 1,
+            "highlightLines": [1, 2, 3, 4],
+            "signals": { "veggies": "in progress", "meat": "in progress", "eggs": "in progress", "pasta": "in progress", "elapsed": "1 min" },
+            "note": {
+              "en": "ALL FOUR steps fire at the same instant. This is what concurrent means: source order is irrelevant.",
+              "es": "LOS CUATRO pasos se disparan al mismo instante. Esto es lo concurrente: el orden del código es irrelevante."
+            }
+          },
+          {
+            "t": 2,
+            "highlightLines": [1, 2, 3, 4],
+            "signals": { "veggies": "in progress", "meat": "in progress", "eggs": "in progress", "pasta": "in progress", "elapsed": "5 min" },
+            "note": {
+              "en": "Five minutes in — the four tasks are STILL happening in parallel. Sequential would have taken much longer.",
+              "es": "A los cinco minutos — las cuatro tareas SIGUEN ocurriendo en paralelo. Lo secuencial habría tardado mucho más."
+            }
+          },
+          {
+            "t": 3,
+            "highlightLines": [],
+            "signals": { "veggies": "done", "meat": "done", "eggs": "done", "pasta": "done", "elapsed": "10 min" },
+            "note": {
+              "en": "Delta cycle ends — all four results commit together. In one delta the simulator handled the whole concurrent block.",
+              "es": "Termina el ciclo delta — los cuatro resultados se confirman juntos. En un solo delta el simulador atendió todo el bloque concurrente."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fingerprint": "kmila_recipe_step:STEP=boil|kmila_recipe_step:STEP=fry|kmila_recipe_step:STEP=marinate|kmila_recipe_step:STEP=chop",
+      "label": {
+        "en": "Reversed brigade — same outcome",
+        "es": "Brigada invertida — mismo resultado"
+      },
+      "timeline": {
+        "code": "1. Boil the pasta\n2. Fry the eggs\n3. Marinate the meat\n4. Chop the vegetables",
+        "language": "plaintext",
+        "signalOrder": ["pasta", "eggs", "meat", "veggies", "elapsed"],
+        "steps": [
+          {
+            "t": 0,
+            "highlightLines": [],
+            "signals": { "pasta": "raw", "eggs": "raw", "meat": "raw", "veggies": "raw", "elapsed": "0 min" },
+            "note": {
+              "en": "You stacked the steps in reverse order from the canonical hint. Watch what happens — concurrent semantics don't care.",
+              "es": "Apilaste los pasos en orden inverso al de la pista canónica. Mira qué pasa — la semántica concurrente no se preocupa por eso."
+            }
+          },
+          {
+            "t": 1,
+            "highlightLines": [1, 2, 3, 4],
+            "signals": { "pasta": "in progress", "eggs": "in progress", "meat": "in progress", "veggies": "in progress", "elapsed": "1 min" },
+            "note": {
+              "en": "All four still fire in the same delta. The pasta block being first only changed how you arranged the source — not when each task starts.",
+              "es": "Las cuatro siguen disparándose en el mismo delta. Que el bloque de pasta vaya primero solo cambió cómo arreglaste el código — no cuándo arranca cada tarea."
+            }
+          },
+          {
+            "t": 2,
+            "highlightLines": [],
+            "signals": { "pasta": "done", "eggs": "done", "meat": "done", "veggies": "done", "elapsed": "10 min" },
+            "note": {
+              "en": "Same total time, same outcome. That's the proof: in a concurrent block, source order is purely cosmetic.",
+              "es": "Mismo tiempo total, mismo resultado. Esa es la prueba: en un bloque concurrente, el orden del código es puramente cosmético."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fingerprint": "kmila_recipe_step:STEP=boil|kmila_recipe_step:STEP=marinate|kmila_recipe_step:STEP=chop|kmila_recipe_step:STEP=fry",
+      "label": {
+        "en": "Pasta-first ordering",
+        "es": "Ordenamiento con pasta primero"
+      },
+      "timeline": {
+        "code": "1. Boil the pasta\n2. Marinate the meat\n3. Chop the vegetables\n4. Fry the eggs",
+        "language": "plaintext",
+        "signalOrder": ["pasta", "meat", "veggies", "eggs", "elapsed"],
+        "steps": [
+          {
+            "t": 0,
+            "highlightLines": [],
+            "signals": { "pasta": "raw", "meat": "raw", "veggies": "raw", "eggs": "raw", "elapsed": "0 min" },
+            "note": {
+              "en": "You'd start with the pasta because it takes the longest — that's sequential thinking. In a concurrent kitchen, that intuition isn't wrong, just irrelevant.",
+              "es": "Empezarías con la pasta porque toma más tiempo — eso es pensamiento secuencial. En una cocina concurrente, esa intuición no está mal, simplemente es irrelevante."
+            }
+          },
+          {
+            "t": 1,
+            "highlightLines": [1, 2, 3, 4],
+            "signals": { "pasta": "in progress", "meat": "in progress", "veggies": "in progress", "eggs": "in progress", "elapsed": "1 min" },
+            "note": {
+              "en": "Same delta, four cooks working. The pasta block at the top of the file doesn't get a head start — they all begin together.",
+              "es": "Mismo delta, cuatro cocineros trabajando. El bloque de pasta arriba del archivo no obtiene ventaja — todos empiezan juntos."
+            }
+          },
+          {
+            "t": 2,
+            "highlightLines": [],
+            "signals": { "pasta": "done", "meat": "done", "veggies": "done", "eggs": "done", "elapsed": "10 min" },
+            "note": {
+              "en": "All done together. The longest task sets the wall-clock duration regardless of source position.",
+              "es": "Todo listo a la vez. La tarea más larga marca la duración total sin importar la posición en el código."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fingerprint": "kmila_recipe_step:STEP=chop|kmila_recipe_step:STEP=fry|kmila_recipe_step:STEP=boil",
+      "label": {
+        "en": "Mini-brigade (3 tasks)",
+        "es": "Brigada reducida (3 tareas)"
+      },
+      "timeline": {
+        "code": "1. Chop the vegetables\n2. Fry the eggs\n3. Boil the pasta",
+        "language": "plaintext",
+        "signalOrder": ["veggies", "eggs", "pasta", "elapsed"],
+        "steps": [
+          {
+            "t": 0,
+            "highlightLines": [],
+            "signals": { "veggies": "raw", "eggs": "raw", "pasta": "raw", "elapsed": "0 min" },
+            "note": {
+              "en": "A smaller brigade with three concurrent tasks. The model is identical — fewer cooks, same delta-cycle semantics.",
+              "es": "Una brigada más pequeña con tres tareas concurrentes. El modelo es idéntico — menos cocineros, misma semántica de ciclo delta."
+            }
+          },
+          {
+            "t": 1,
+            "highlightLines": [1, 2, 3],
+            "signals": { "veggies": "in progress", "eggs": "in progress", "pasta": "in progress", "elapsed": "1 min" },
+            "note": {
+              "en": "All three lines fire together. The marinade station stays idle — that's fine, the architecture body can have any number of concurrent statements.",
+              "es": "Las tres líneas se disparan juntas. La estación de marinado se queda inactiva — está bien, el cuerpo de la arquitectura puede tener cualquier número de sentencias concurrentes."
+            }
+          },
+          {
+            "t": 2,
+            "highlightLines": [],
+            "signals": { "veggies": "done", "eggs": "done", "pasta": "done", "elapsed": "10 min" },
+            "note": {
+              "en": "Three done. Adding or removing concurrent statements doesn't change the delta-cycle rule — they just add or remove evaluations from the queue.",
+              "es": "Tres listos. Agregar o quitar sentencias concurrentes no cambia la regla del ciclo delta — solo agregan o quitan evaluaciones de la cola."
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

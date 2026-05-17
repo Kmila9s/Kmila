@@ -1441,14 +1441,42 @@ else
 
         try
         {
+            FileExportResult result;
             if (req.Format == SchematicExportFormat.Svg)
-                await JS.InvokeVoidAsync("kmilaDownloadText", fileName, "image/svg+xml", svg);
+            {
+                result = await Export.SaveTextAsync(ExportCategory.Svg, fileName, "image/svg+xml", svg);
+            }
             else
-                await JS.InvokeAsync<bool>("kmilaDownloadPng", fileName, svg, req.PngScale);
+            {
+                // Rasterise on the JS side (canvas is the only portable SVG→PNG
+                // path that works inside both real browsers and the MAUI WebView),
+                // then push the bytes through Export so the file lands in
+                // ~/Documents/Kmila/PNG/ on MAUI or downloads on Web.
+                var base64 = await JS.InvokeAsync<string>("kmilaSvgToPngBase64", svg, req.PngScale);
+                if (string.IsNullOrEmpty(base64))
+                {
+                    Logger.LogError("[SchematicViewer] PNG rasterisation returned empty payload");
+                    return;
+                }
+                var bytes = Convert.FromBase64String(base64);
+                result = await Export.SaveBytesAsync(ExportCategory.Png, fileName, "image/png", bytes);
+            }
+
+            if (result.Saved)
+            {
+                var msg = result.Path != null ? $"Saved: {result.Path}" : "Schematic exported.";
+                ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), msg, ToastType.Success));
+            }
+            else
+            {
+                ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                    result.Error ?? "Export failed.", ToastType.Danger));
+            }
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "[SchematicViewer] Export download failed");
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
         }
     }
 

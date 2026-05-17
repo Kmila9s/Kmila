@@ -10,10 +10,11 @@ La manière dont la logique de sortie cherche ses entrées divise les FSM en deu
 
 ## Moore : les sorties dépendent uniquement de l'état
 
-```
- entrée → [ état suivant ] → [ reg. d'état ] → [ sorties ]
-                                          ↑
-                                      (c'est tout)
+```mermaid
+flowchart LR
+    IN([entrée]) --> NS["état suivant"]
+    NS --> SR["reg. d'état"]
+    SR --> OUT["sorties"]
 ```
 
 Étant donné un état, la sortie est fixe. Si tu es en `S_GREEN`, `green = '1'`. Toujours. Peu importe ce que fait l'entrée.
@@ -28,12 +29,13 @@ La manière dont la logique de sortie cherche ses entrées divise les FSM en deu
 
 ## Mealy : les sorties dépendent de l'état + de l'entrée
 
-```
- entrée ──→ [ état suivant ] ──→ [ reg. d'état ]
-   │                                  │
-   └───→ [ logique de sortie ] ←──────┘
-                  │
-              sorties
+```mermaid
+flowchart LR
+    IN([entrée]) --> NS["état suivant"]
+    NS --> SR["reg. d'état"]
+    IN --> OL["logique de sortie"]
+    SR --> OL
+    OL --> OUT([sorties])
 ```
 
 Les sorties sont une fonction de l'état courant **et** de l'entrée courante. Elles peuvent changer entre deux fronts d'horloge.

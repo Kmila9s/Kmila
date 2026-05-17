@@ -1,0 +1,79 @@
+{
+  "code": "architecture mixed of demo is\n  signal sum, cout : std_logic;\n  signal count     : unsigned(3 downto 0) := \"0000\";\nbegin\n  -- Concurrent: half-adder\n  sum  <= a xor b;    -- line 7\n  cout <= a and b;    -- line 8\n\n  -- Sequential: 4-bit counter\n  process(clk)\n  begin\n    if rising_edge(clk) then\n      count <= count + 1;\n    end if;\n  end process;\nend architecture;",
+  "language": "vhdl",
+  "signalOrder": ["a", "b", "clk", "sum", "cout", "count"],
+  "steps": [
+    {
+      "t": 0,
+      "highlightLines": [],
+      "signals": { "a": "0", "b": "0", "clk": "0", "sum": "0", "cout": "0", "count": "0000" },
+      "note": {
+        "en": "Cold start. Everything's at 0. Two independent regions: the half-adder block and the counter process.",
+        "es": "Inicio en frío. Todo en 0. Dos regiones independientes: el medio-sumador y el proceso del contador."
+      }
+    },
+    {
+      "t": 1,
+      "highlightLines": [],
+      "signals": { "a": "1", "b": "1", "clk": "0", "sum": "0", "cout": "0", "count": "0000" },
+      "note": {
+        "en": "Inputs a and b change to 1. The half-adder is concurrent code reading a and b, so it activates.",
+        "es": "Las entradas a y b cambian a 1. El medio-sumador es código concurrente que lee a y b, así que se activa."
+      }
+    },
+    {
+      "t": 2,
+      "highlightLines": [7, 8],
+      "signals": { "a": "1", "b": "1", "clk": "0", "sum": "0", "cout": "0", "count": "0000" },
+      "note": {
+        "en": "Both concurrent assignments fire together: sum <= a xor b (=0), cout <= a and b (=1). Same delta cycle.",
+        "es": "Las dos asignaciones concurrentes se disparan juntas: sum <= a xor b (=0), cout <= a and b (=1). Mismo ciclo delta."
+      }
+    },
+    {
+      "t": 3,
+      "highlightLines": [],
+      "signals": { "a": "1", "b": "1", "clk": "0", "sum": "0", "cout": "1", "count": "0000" },
+      "note": {
+        "en": "Delta closes. sum=0 (1 xor 1), cout=1 (1 and 1). The counter hasn't moved — its process is sensitive to clk, not to a/b.",
+        "es": "Cierra el delta. sum=0 (1 xor 1), cout=1 (1 and 1). El contador no se ha movido — su proceso es sensible a clk, no a a/b."
+      }
+    },
+    {
+      "t": 4,
+      "highlightLines": [10],
+      "signals": { "a": "1", "b": "1", "clk": "1", "sum": "0", "cout": "1", "count": "0000" },
+      "note": {
+        "en": "clk rises from 0 to 1. The counter process wakes — clk is in its sensitivity list.",
+        "es": "clk sube de 0 a 1. El proceso del contador se despierta — clk está en su lista de sensibilidad."
+      }
+    },
+    {
+      "t": 5,
+      "highlightLines": [12],
+      "signals": { "a": "1", "b": "1", "clk": "1", "sum": "0", "cout": "1", "count": "0000" },
+      "note": {
+        "en": "Line 12: if rising_edge(clk). True — this is a 0→1 transition. We enter the if-body.",
+        "es": "Línea 12: if rising_edge(clk). Cierto — es una transición 0→1. Entramos al cuerpo del if."
+      }
+    },
+    {
+      "t": 6,
+      "highlightLines": [13],
+      "signals": { "a": "1", "b": "1", "clk": "1", "sum": "0", "cout": "1", "count": "0000" },
+      "note": {
+        "en": "Line 13: count <= count + 1. Schedules the new value. Still 0000 for now — the signal hasn't committed.",
+        "es": "Línea 13: count <= count + 1. Programa el nuevo valor. Sigue en 0000 — la señal aún no se confirma."
+      }
+    },
+    {
+      "t": 7,
+      "highlightLines": [],
+      "signals": { "a": "1", "b": "1", "clk": "1", "sum": "0", "cout": "1", "count": "0001" },
+      "note": {
+        "en": "Process exits, delta closes. count is now 0001. Sequential model captured one tick; concurrent model already settled.",
+        "es": "El proceso termina, cierra el delta. count ahora es 0001. El modelo secuencial capturó un tick; el concurrente ya se asentó."
+      }
+    }
+  ]
+}

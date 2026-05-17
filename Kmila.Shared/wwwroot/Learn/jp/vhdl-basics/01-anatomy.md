@@ -60,16 +60,16 @@ use IEEE.NUMERIC_STD.ALL;
 
 Kmila の VHDL パーサはファイルを上から下へ読み、ツリーを構築します:
 
-```
-File
-├── library IEEE
-├── use IEEE.STD_LOGIC_1164.ALL
-└── entity my_design
-    ├── port a (in, std_logic)
-    ├── port b (in, std_logic)
-    ├── port y (out, std_logic)
-    └── architecture rtl
-        └── concurrent: y <= a and b
+```mermaid
+flowchart TD
+    File["ファイル"] --> Lib["library IEEE"]
+    File --> Use["use IEEE.STD_LOGIC_1164.ALL"]
+    File --> Ent["entity my_design"]
+    Ent --> Pa["port a (in, std_logic)"]
+    Ent --> Pb["port b (in, std_logic)"]
+    Ent --> Py["port y (out, std_logic)"]
+    Ent --> Arch["architecture rtl"]
+    Arch --> Conc["concurrent: y &lt;= a and b"]
 ```
 
 **Build** をクリックすると、ポートは **Ports** ドックタブのエントリになり、エンティティは **Entities** のエントリになり、アーキテクチャ内の代入はシミュレータが実行する配線になります。

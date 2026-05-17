@@ -2,11 +2,9 @@
 
 どんな CPU でも — 小さな 8 ビットマイクロコントローラから最新の GPU シェーダコアまで — 内部を覗くと、同じ 5 つのステージが同じ 5 つの仕事をしているのが見えます:
 
-```
-  ┌─────┐   ┌──────┐   ┌────────┐   ┌─────────┐   ┌──────────┐
-  │ IF  │──▶│ ID   │──▶│ EX     │──▶│ MEM     │──▶│ WB       │
-  │fetch│   │decode│   │execute │   │ memory  │   │writeback │
-  └─────┘   └──────┘   └────────┘   └─────────┘   └──────────┘
+```mermaid
+flowchart LR
+    IF["IF<br/>fetch"] --> ID["ID<br/>decode"] --> EX["EX<br/>execute"] --> MEM["MEM<br/>memory"] --> WB["WB<br/>writeback"]
 ```
 
 ## 古典的な 5 ステージ

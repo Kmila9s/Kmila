@@ -227,7 +227,7 @@
     <div class="file-row__menu-backdrop" @onclick="CloseMenu"></div>
     <div class="file-row__menu-panel"
          role="menu"
-         style="top: @(_menuTop.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))px; left: @(_menuLeft!.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))px;"
+         style="@BuildMenuPanelStyle()"
          @onclick:stopPropagation="true">
         @{
             var k = _openMenuKey;
@@ -342,6 +342,11 @@
     private string? _openMenuKey;
     private double? _menuTop;
     private double? _menuLeft;
+    // Inline caps applied to the panel after placement so it scrolls instead
+    // of overflowing the viewport when the actual menu is taller/wider than
+    // our estimates (lots of move-to-folder items, long folder names, etc.).
+    private double? _menuMaxHeight;
+    private double? _menuMaxWidth;
 
     // Modal state
     private string _pendingNewFileDir = string.Empty;
@@ -805,27 +810,76 @@
         try
         {
             var rect = await JS.InvokeAsync<MenuRect?>("kmilaGetButtonRectByKey", key);
-            const double panelWidth = 200; // matches CSS min-width plus padding
+            const double panelWidth = 200;      // matches CSS min-width plus padding
+            const double panelHeightEstimate = 240; // ~5 menu items + padding; the CSS cap below
+                                                    //  (`max-height: 80vh`) is the safety net for taller menus.
             const double margin = 6;
+            const double edgePad = 4;
             double left, top;
+            double? maxHeight = null;
+            double? maxWidth = null;
             if (rect != null)
             {
-                left = rect.Right - panelWidth;
-                top = rect.Bottom + margin;
-                // Clamp to viewport
                 var vw = await JS.InvokeAsync<double>("kmilaViewportWidth");
-                if (left + panelWidth > vw - 4) left = Math.Max(4, vw - panelWidth - 4);
-                if (left < 4) left = 4;
+                var vh = await JS.InvokeAsync<double>("kmilaViewportHeight");
+
+                // Default: right-align panel under the trigger (matches the
+                // LTR layout where the kebab sits at the right edge of the row
+                // and the menu flows leftward). If that puts the panel's left
+                // off-screen — which is what happens in RTL because the kebab
+                // sits near the LEFT edge of the row — flip to left-aligning
+                // under the trigger so the panel stays adjacent to the button
+                // instead of getting clamped to the viewport corner.
+                var rightAligned = rect.Right - panelWidth;
+                if (rightAligned >= edgePad)
+                {
+                    left = rightAligned;
+                }
+                else
+                {
+                    left = Math.Max(edgePad, rect.Left);
+                }
+                // Final clamp so the panel never paints past the viewport edge.
+                if (left + panelWidth > vw - edgePad) left = Math.Max(edgePad, vw - panelWidth - edgePad);
+                if (left < edgePad) left = edgePad;
+                // Cap actual width to whatever room is left from `left` to the
+                // viewport edge — the static panelWidth estimate misses cases
+                // where the rendered menu grows wider (long folder names in
+                // "Move to: ..." items).
+                maxWidth = Math.Max(120, vw - left - edgePad);
+
+                // Vertical placement: prefer below the button, but flip above
+                // when there isn't enough room. Daniel filed this in
+                // [[project_file_menu_overflow]] — bottom-row file kebabs
+                // were rendering past the viewport bottom with their items
+                // unreachable. Match the BlazorBootstrap flip behaviour by
+                // hand because the panel is rendered via inline `top/left`.
+                double spaceBelow = vh - rect.Bottom;
+                double spaceAbove = rect.Top;
+                if (spaceBelow >= panelHeightEstimate + margin || spaceBelow >= spaceAbove)
+                {
+                    top = rect.Bottom + margin;          // below trigger
+                    maxHeight = Math.Max(120, vh - top - edgePad);
+                }
+                else
+                {
+                    // Flip above. Anchor the panel's bottom just over the
+                    // trigger and let max-height/overflow handle long lists.
+                    maxHeight = Math.Max(120, spaceAbove - margin - edgePad);
+                    top = Math.Max(edgePad, rect.Top - margin - maxHeight.Value);
+                }
             }
             else
             {
                 // Fallback: anchor near the click point if the lookup failed
-                left = Math.Max(4, e.ClientX - panelWidth + 16);
+                left = Math.Max(edgePad, e.ClientX - panelWidth + 16);
                 top = e.ClientY + margin;
             }
             _openMenuKey = key;
             _menuTop = top;
             _menuLeft = left;
+            _menuMaxHeight = maxHeight;
+            _menuMaxWidth = maxWidth;
         }
         catch
         {
@@ -843,6 +897,21 @@
         _openMenuKey = null;
         _menuTop = null;
         _menuLeft = null;
+        _menuMaxHeight = null;
+        _menuMaxWidth = null;
+    }
+
+    private string BuildMenuPanelStyle()
+    {
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        var sb = new System.Text.StringBuilder();
+        sb.Append("top: ").Append((_menuTop ?? 0).ToString("0.##", ci)).Append("px; ");
+        sb.Append("left: ").Append((_menuLeft ?? 0).ToString("0.##", ci)).Append("px;");
+        if (_menuMaxHeight.HasValue)
+            sb.Append(" max-height: ").Append(_menuMaxHeight.Value.ToString("0.##", ci)).Append("px;");
+        if (_menuMaxWidth.HasValue)
+            sb.Append(" max-width: ").Append(_menuMaxWidth.Value.ToString("0.##", ci)).Append("px;");
+        return sb.ToString();
     }
 
     /// <summary>Closes the menu, then runs the chosen item's async action.</summary>

@@ -288,20 +288,23 @@ else
 
     private async Task ExportAsync(SimulationSnapshot snap)
     {
-        // Ship the full row as a JSON download via the shared
-        // kmilaDownloadText helper registered on the host pages.
+        // Ship the full row as a JSON file. On Web the IFileExportService
+        // routes through the kmilaDownloadText JS helper; on MAUI it writes
+        // to ~/Documents/Kmila/Runs/.
         var payload = System.Text.Json.JsonSerializer.Serialize(snap,
             new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
         var safe = SanitizeFile(snap.Label);
-        try
+        var fileName = $"kmila-run-{snap.Id}-{safe}.json";
+        var result = await Export.SaveTextAsync(ExportCategory.Runs, fileName, "application/json", payload);
+        if (result.Saved)
         {
-            await JS.InvokeVoidAsync("kmilaDownloadText",
-                $"kmila-run-{snap.Id}-{safe}.json", "application/json", payload);
+            var msg = result.Path != null ? $"Saved: {result.Path}" : Traductor.T("RUNS_EXPORT_OK");
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), msg, ToastType.Success));
         }
-        catch
+        else
         {
             ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
-                Traductor.T("RUNS_EXPORT_FAILED"), ToastType.Danger));
+                result.Error ?? Traductor.T("RUNS_EXPORT_FAILED"), ToastType.Danger));
         }
     }
 

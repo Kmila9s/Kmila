@@ -19,10 +19,15 @@ Dans un langage logiciel, tu lirais ça comme trois étapes séquentielles. En V
 
 Le synthétiseur construit :
 
-```
-   a ─┬─ AND ─── y1 ──┐
-      │               XOR ── y3
-   b ─┴─ OR  ── y2 ───┘
+```mermaid
+flowchart LR
+    A([a]) --> AND["AND"]
+    B([b]) --> AND
+    A --> OR["OR"]
+    B --> OR
+    AND -- y1 --> XOR["XOR"]
+    OR  -- y2 --> XOR
+    XOR --> Y3([y3])
 ```
 
 Les trois portes sont alimentées en même temps. Quand `a` ou `b` change, la sortie `y3` se stabilise à sa nouvelle valeur après un petit délai de propagation le long du chemin le plus long. Il n'y a pas de « premier » ni de « second ».

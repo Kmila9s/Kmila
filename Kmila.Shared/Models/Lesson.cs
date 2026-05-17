@@ -124,6 +124,17 @@ public class Lesson
     /// </summary>
     [JsonPropertyName("sample")]
     public LessonSample? Sample { get; set; }
+
+    /// <summary>
+    /// When <c>true</c>, the lesson view tries to load a sidecar
+    /// <c>{lessonId}.timeline.json</c> alongside the Markdown body and
+    /// renders the shared <c>ExecutionPlayer</c> inline between the body
+    /// and the sample CTA. Backport of the Concepts-track player to
+    /// regular Learn lessons; opt-in so existing lessons keep their
+    /// current shape until an author explicitly authors a timeline.
+    /// </summary>
+    [JsonPropertyName("inlinePlayer")]
+    public bool InlinePlayer { get; set; } = false;
 }
 
 /// <summary>

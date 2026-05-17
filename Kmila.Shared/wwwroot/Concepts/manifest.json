@@ -1,0 +1,401 @@
+{
+  "version": 1,
+  "modules": [
+    {
+      "id": "m-execution-models",
+      "icon": "Diagram3",
+      "order": 1,
+      "level": "Beginner",
+      "titles": {
+        "en": "Execution Models",
+        "es": "Modelos de ejecución",
+        "fr": "⚠ Execution Models",
+        "de": "⚠ Execution Models",
+        "ch": "⚠ Execution Models",
+        "jp": "⚠ Execution Models",
+        "ar": "⚠ Execution Models"
+      },
+      "summaries": {
+        "en": "Sequential, concurrent, and why true parallel doesn't exist in VHDL — with a step-by-step execution player.",
+        "es": "Secuencial, concurrente y por qué el paralelismo real no existe en VHDL — con un reproductor de ejecución paso a paso.",
+        "fr": "⚠ Sequential, concurrent, and why true parallel doesn't exist in VHDL — with a step-by-step execution player.",
+        "de": "⚠ Sequential, concurrent, and why true parallel doesn't exist in VHDL — with a step-by-step execution player.",
+        "ch": "⚠ Sequential, concurrent, and why true parallel doesn't exist in VHDL — with a step-by-step execution player.",
+        "jp": "⚠ Sequential, concurrent, and why true parallel doesn't exist in VHDL — with a step-by-step execution player.",
+        "ar": "⚠ Sequential, concurrent, and why true parallel doesn't exist in VHDL — with a step-by-step execution player."
+      },
+      "lessons": [
+        {
+          "id": "01-what-does-run-mean",
+          "kind": "Player",
+          "level": "Beginner",
+          "estimatedMinutes": 8,
+          "titles": {
+            "en": "What does \"run\" mean?",
+            "es": "¿Qué significa \"ejecutar\"?",
+            "fr": "⚠ What does \"run\" mean?",
+            "de": "⚠ What does \"run\" mean?",
+            "ch": "⚠ What does \"run\" mean?",
+            "jp": "⚠ What does \"run\" mean?",
+            "ar": "⚠ What does \"run\" mean?"
+          },
+          "summaries": {
+            "en": "Three execution models compared side-by-side: sequential, concurrent, and parallel.",
+            "es": "Tres modelos de ejecución comparados lado a lado: secuencial, concurrente y paralelo.",
+            "fr": "⚠ Three execution models compared side-by-side: sequential, concurrent, and parallel.",
+            "de": "⚠ Three execution models compared side-by-side: sequential, concurrent, and parallel.",
+            "ch": "⚠ Three execution models compared side-by-side: sequential, concurrent, and parallel.",
+            "jp": "⚠ Three execution models compared side-by-side: sequential, concurrent, and parallel.",
+            "ar": "⚠ Three execution models compared side-by-side: sequential, concurrent, and parallel."
+          },
+          "quizlet": {
+            "question": {
+              "en": "Which model actually happens at the same wall-clock nanosecond?",
+              "es": "¿Qué modelo ocurre realmente en el mismo nanosegundo de tiempo real?"
+            },
+            "options": [
+              {
+                "id": "a",
+                "label": {
+                  "en": "Sequential code inside a process body",
+                  "es": "Código secuencial dentro de un proceso"
+                },
+                "correct": false,
+                "explanation": {
+                  "en": "Sequential = one statement at a time, top to bottom. It's the opposite of 'at the same instant'.",
+                  "es": "Secuencial = una sentencia a la vez, de arriba abajo. Es lo opuesto a 'al mismo instante'."
+                }
+              },
+              {
+                "id": "b",
+                "label": {
+                  "en": "Concurrent assignments in an architecture body",
+                  "es": "Asignaciones concurrentes en el cuerpo de una arquitectura"
+                },
+                "correct": false,
+                "explanation": {
+                  "en": "Concurrent fire in the same *delta cycle* — that's simulation time, not wall-clock time. The simulator still walks one event at a time.",
+                  "es": "Lo concurrente se dispara en el mismo *ciclo delta* — eso es tiempo de simulación, no tiempo real. El simulador sigue procesando un evento a la vez."
+                }
+              },
+              {
+                "id": "c",
+                "label": {
+                  "en": "Real hardware on an FPGA",
+                  "es": "Hardware real en una FPGA"
+                },
+                "correct": true,
+                "explanation": {
+                  "en": "Exactly. Every gate settles in parallel as electrons flow through the silicon. Simulation can only approximate that with delta cycles.",
+                  "es": "Exacto. Cada compuerta se asienta en paralelo mientras los electrones recorren el silicio. La simulación solo puede aproximarse con ciclos delta."
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "02-sequential",
+          "kind": "Player",
+          "level": "Beginner",
+          "estimatedMinutes": 10,
+          "titles": {
+            "en": "Sequential: one step at a time",
+            "es": "Secuencial: un paso a la vez",
+            "fr": "⚠ Sequential: one step at a time",
+            "de": "⚠ Sequential: one step at a time",
+            "ch": "⚠ Sequential: one step at a time",
+            "jp": "⚠ Sequential: one step at a time",
+            "ar": "⚠ Sequential: one step at a time"
+          },
+          "summaries": {
+            "en": "Watch a VHDL process body execute top-to-bottom, one statement at a time.",
+            "es": "Observa cómo el cuerpo de un proceso VHDL se ejecuta de arriba hacia abajo, una sentencia a la vez.",
+            "fr": "⚠ Watch a VHDL process body execute top-to-bottom, one statement at a time.",
+            "de": "⚠ Watch a VHDL process body execute top-to-bottom, one statement at a time.",
+            "ch": "⚠ Watch a VHDL process body execute top-to-bottom, one statement at a time.",
+            "jp": "⚠ Watch a VHDL process body execute top-to-bottom, one statement at a time.",
+            "ar": "⚠ Watch a VHDL process body execute top-to-bottom, one statement at a time."
+          }
+        },
+        {
+          "id": "03-concurrent",
+          "kind": "Player",
+          "level": "Beginner",
+          "estimatedMinutes": 10,
+          "titles": {
+            "en": "Concurrent: everything fires together",
+            "es": "Concurrente: todo se dispara a la vez",
+            "fr": "⚠ Concurrent: everything fires together",
+            "de": "⚠ Concurrent: everything fires together",
+            "ch": "⚠ Concurrent: everything fires together",
+            "jp": "⚠ Concurrent: everything fires together",
+            "ar": "⚠ Concurrent: everything fires together"
+          },
+          "summaries": {
+            "en": "Multiple signal assignments evaluate in the same delta cycle — order doesn't matter.",
+            "es": "Múltiples asignaciones de señal se evalúan en el mismo ciclo delta — el orden no importa.",
+            "fr": "⚠ Multiple signal assignments evaluate in the same delta cycle — order doesn't matter.",
+            "de": "⚠ Multiple signal assignments evaluate in the same delta cycle — order doesn't matter.",
+            "ch": "⚠ Multiple signal assignments evaluate in the same delta cycle — order doesn't matter.",
+            "jp": "⚠ Multiple signal assignments evaluate in the same delta cycle — order doesn't matter.",
+            "ar": "⚠ Multiple signal assignments evaluate in the same delta cycle — order doesn't matter."
+          },
+          "quizlet": {
+            "question": {
+              "en": "You swap two concurrent signal assignments in the source file. What changes in the simulated result?",
+              "es": "Intercambias dos asignaciones de señal concurrentes en el código fuente. ¿Qué cambia en el resultado simulado?"
+            },
+            "options": [
+              {
+                "id": "a",
+                "label": {
+                  "en": "Nothing — concurrent fire is order-independent",
+                  "es": "Nada — las asignaciones concurrentes son independientes del orden"
+                },
+                "correct": true,
+                "explanation": {
+                  "en": "Right. Both statements fire in the same delta cycle; their position in the file is purely cosmetic.",
+                  "es": "Correcto. Ambas sentencias se disparan en el mismo ciclo delta; su posición en el archivo es puramente cosmética."
+                }
+              },
+              {
+                "id": "b",
+                "label": {
+                  "en": "The outputs swap values",
+                  "es": "Las salidas se intercambian"
+                },
+                "correct": false,
+                "explanation": {
+                  "en": "That would be the case in C — but VHDL evaluates concurrent assignments independently, so reordering the lines doesn't reroute them.",
+                  "es": "Eso pasaría en C — pero VHDL evalúa las asignaciones concurrentes de forma independiente, así que reordenarlas no las re-cablea."
+                }
+              },
+              {
+                "id": "c",
+                "label": {
+                  "en": "Only the second one is honored",
+                  "es": "Solo se respeta la segunda"
+                },
+                "correct": false,
+                "explanation": {
+                  "en": "That's the rule for repeated assignments to the SAME signal inside a process. Concurrent statements drive different signals here — both run.",
+                  "es": "Esa es la regla para asignaciones repetidas a la MISMA señal dentro de un proceso. Aquí las sentencias concurrentes manejan señales distintas — ambas corren."
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "04-why-not-parallel",
+          "kind": "Reading",
+          "level": "Easy",
+          "estimatedMinutes": 7,
+          "titles": {
+            "en": "Why VHDL can't do true parallel",
+            "es": "Por qué VHDL no puede hacer paralelismo real",
+            "fr": "⚠ Why VHDL can't do true parallel",
+            "de": "⚠ Why VHDL can't do true parallel",
+            "ch": "⚠ Why VHDL can't do true parallel",
+            "jp": "⚠ Why VHDL can't do true parallel",
+            "ar": "⚠ Why VHDL can't do true parallel"
+          },
+          "summaries": {
+            "en": "Simulation vs. hardware, delta cycles, and what \"parallel\" really means in an FPGA.",
+            "es": "Simulación vs. hardware, ciclos delta y lo que realmente significa \"paralelo\" en una FPGA.",
+            "fr": "⚠ Simulation vs. hardware, delta cycles, and what \"parallel\" really means in an FPGA.",
+            "de": "⚠ Simulation vs. hardware, delta cycles, and what \"parallel\" really means in an FPGA.",
+            "ch": "⚠ Simulation vs. hardware, delta cycles, and what \"parallel\" really means in an FPGA.",
+            "jp": "⚠ Simulation vs. hardware, delta cycles, and what \"parallel\" really means in an FPGA.",
+            "ar": "⚠ Simulation vs. hardware, delta cycles, and what \"parallel\" really means in an FPGA."
+          }
+        },
+        {
+          "id": "05-sensitivity-deltas",
+          "kind": "Player",
+          "level": "Easy",
+          "estimatedMinutes": 10,
+          "titles": {
+            "en": "Sensitivity lists & delta cycles",
+            "es": "Listas de sensibilidad y ciclos delta",
+            "fr": "⚠ Sensitivity lists & delta cycles",
+            "de": "⚠ Sensitivity lists & delta cycles",
+            "ch": "⚠ Sensitivity lists & delta cycles",
+            "jp": "⚠ Sensitivity lists & delta cycles",
+            "ar": "⚠ Sensitivity lists & delta cycles"
+          },
+          "summaries": {
+            "en": "Why a process wakes — and why a transaction posted now becomes visible at the next delta.",
+            "es": "Por qué se despierta un proceso — y por qué una transacción registrada ahora se hace visible en el siguiente delta.",
+            "fr": "⚠ Why a process wakes — and why a transaction posted now becomes visible at the next delta.",
+            "de": "⚠ Why a process wakes — and why a transaction posted now becomes visible at the next delta.",
+            "ch": "⚠ Why a process wakes — and why a transaction posted now becomes visible at the next delta.",
+            "jp": "⚠ Why a process wakes — and why a transaction posted now becomes visible at the next delta.",
+            "ar": "⚠ Why a process wakes — and why a transaction posted now becomes visible at the next delta."
+          },
+          "quizlet": {
+            "question": {
+              "en": "Inside `process(a, b)`, you write `out1 <= a; out2 <= b and out1;`. What value does `out2` commit when the delta ends?",
+              "es": "Dentro de `process(a, b)`, escribes `out1 <= a; out2 <= b and out1;`. ¿Qué valor confirma `out2` al cerrar el delta?"
+            },
+            "options": [
+              {
+                "id": "a",
+                "label": {
+                  "en": "The new value of out1, ANDed with b",
+                  "es": "El nuevo valor de out1, combinado con b mediante AND"
+                },
+                "correct": false,
+                "explanation": {
+                  "en": "Tempting, but the assignment to out1 only POSTS a transaction. Reading out1 on the next line still returns the old value until the delta closes.",
+                  "es": "Tentador, pero la asignación a out1 solo REGISTRA una transacción. Leer out1 en la siguiente línea sigue dando el valor viejo hasta que cierre el delta."
+                }
+              },
+              {
+                "id": "b",
+                "label": {
+                  "en": "The old value of out1 (or U if uninitialized), ANDed with b",
+                  "es": "El viejo valor de out1 (o U si está sin inicializar), combinado con b mediante AND"
+                },
+                "correct": true,
+                "explanation": {
+                  "en": "Exactly. Signal transactions are scheduled, not committed. The fix is either using a variable, or adding out1 to the sensitivity list so the process wakes a second time.",
+                  "es": "Exacto. Las transacciones de señal se programan, no se confirman. Se arregla usando una variable, o agregando out1 a la lista de sensibilidad para que el proceso despierte una segunda vez."
+                }
+              },
+              {
+                "id": "c",
+                "label": {
+                  "en": "Whatever value `a` has at that moment, ANDed with b",
+                  "es": "Lo que valga `a` en ese momento, combinado con b mediante AND"
+                },
+                "correct": false,
+                "explanation": {
+                  "en": "Close, but the second line reads `out1`, not `a`. And the just-scheduled `out1 <= a` hasn't committed yet — so out1 is still its old value.",
+                  "es": "Cerca, pero la segunda línea lee `out1`, no `a`. Y `out1 <= a` recién programado aún no se ha confirmado — así que out1 sigue con su valor viejo."
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "06-putting-it-together",
+          "kind": "Player",
+          "level": "Easy",
+          "estimatedMinutes": 12,
+          "titles": {
+            "en": "Putting it together",
+            "es": "Juntándolo todo",
+            "fr": "⚠ Putting it together",
+            "de": "⚠ Putting it together",
+            "ch": "⚠ Putting it together",
+            "jp": "⚠ Putting it together",
+            "ar": "⚠ Putting it together"
+          },
+          "summaries": {
+            "en": "A half-adder + a counter side by side — see concurrent and sequential code coexist.",
+            "es": "Un medio-sumador y un contador lado a lado — observa cómo conviven el código concurrente y el secuencial.",
+            "fr": "⚠ A half-adder + a counter side by side — see concurrent and sequential code coexist.",
+            "de": "⚠ A half-adder + a counter side by side — see concurrent and sequential code coexist.",
+            "ch": "⚠ A half-adder + a counter side by side — see concurrent and sequential code coexist.",
+            "jp": "⚠ A half-adder + a counter side by side — see concurrent and sequential code coexist.",
+            "ar": "⚠ A half-adder + a counter side by side — see concurrent and sequential code coexist."
+          }
+        }
+      ],
+      "exercises": [
+        {
+          "id": "e1-sequential-pizza",
+          "kind": "Recipe",
+          "estimatedMinutes": 8,
+          "titles": {
+            "en": "Sequential pizza recipe",
+            "es": "Receta secuencial: pizza",
+            "fr": "⚠ Sequential pizza recipe",
+            "de": "⚠ Sequential pizza recipe",
+            "ch": "⚠ Sequential pizza recipe",
+            "jp": "⚠ Sequential pizza recipe",
+            "ar": "⚠ Sequential pizza recipe"
+          },
+          "summaries": {
+            "en": "Drag the steps into the right order. The recipe executes top-to-bottom — sequential semantics in action.",
+            "es": "Arrastra los pasos en el orden correcto. La receta se ejecuta de arriba hacia abajo — semántica secuencial en acción.",
+            "fr": "⚠ Drag the steps into the right order. The recipe executes top-to-bottom — sequential semantics in action.",
+            "de": "⚠ Drag the steps into the right order. The recipe executes top-to-bottom — sequential semantics in action.",
+            "ch": "⚠ Drag the steps into the right order. The recipe executes top-to-bottom — sequential semantics in action.",
+            "jp": "⚠ Drag the steps into the right order. The recipe executes top-to-bottom — sequential semantics in action.",
+            "ar": "⚠ Drag the steps into the right order. The recipe executes top-to-bottom — sequential semantics in action."
+          }
+        },
+        {
+          "id": "e2-concurrent-kitchen",
+          "kind": "Recipe",
+          "estimatedMinutes": 8,
+          "titles": {
+            "en": "Concurrent kitchen",
+            "es": "Cocina concurrente",
+            "fr": "⚠ Concurrent kitchen",
+            "de": "⚠ Concurrent kitchen",
+            "ch": "⚠ Concurrent kitchen",
+            "jp": "⚠ Concurrent kitchen",
+            "ar": "⚠ Concurrent kitchen"
+          },
+          "summaries": {
+            "en": "Same blocks, different semantics: every task starts at the same instant. Watch a delta-cycle kitchen.",
+            "es": "Mismos bloques, semántica distinta: cada tarea inicia al mismo instante. Observa una cocina en un ciclo delta.",
+            "fr": "⚠ Same blocks, different semantics: every task starts at the same instant. Watch a delta-cycle kitchen.",
+            "de": "⚠ Same blocks, different semantics: every task starts at the same instant. Watch a delta-cycle kitchen.",
+            "ch": "⚠ Same blocks, different semantics: every task starts at the same instant. Watch a delta-cycle kitchen.",
+            "jp": "⚠ Same blocks, different semantics: every task starts at the same instant. Watch a delta-cycle kitchen.",
+            "ar": "⚠ Same blocks, different semantics: every task starts at the same instant. Watch a delta-cycle kitchen."
+          }
+        },
+        {
+          "id": "e3-half-adder",
+          "kind": "Logic",
+          "estimatedMinutes": 10,
+          "titles": {
+            "en": "Build a half-adder in blocks",
+            "es": "Arma un medio-sumador con bloques",
+            "fr": "⚠ Build a half-adder in blocks",
+            "de": "⚠ Build a half-adder in blocks",
+            "ch": "⚠ Build a half-adder in blocks",
+            "jp": "⚠ Build a half-adder in blocks",
+            "ar": "⚠ Build a half-adder in blocks"
+          },
+          "summaries": {
+            "en": "Drag XOR + AND gate blocks, wire them to inputs a and b, and assign sum and cout. Concurrent fire.",
+            "es": "Arrastra compuertas XOR y AND, conéctalas a las entradas a y b, y asigna sum y cout. Disparo concurrente.",
+            "fr": "⚠ Drag XOR + AND gate blocks, wire them to inputs a and b, and assign sum and cout. Concurrent fire.",
+            "de": "⚠ Drag XOR + AND gate blocks, wire them to inputs a and b, and assign sum and cout. Concurrent fire.",
+            "ch": "⚠ Drag XOR + AND gate blocks, wire them to inputs a and b, and assign sum and cout. Concurrent fire.",
+            "jp": "⚠ Drag XOR + AND gate blocks, wire them to inputs a and b, and assign sum and cout. Concurrent fire.",
+            "ar": "⚠ Drag XOR + AND gate blocks, wire them to inputs a and b, and assign sum and cout. Concurrent fire."
+          }
+        },
+        {
+          "id": "e4-counter",
+          "kind": "Clocked",
+          "estimatedMinutes": 10,
+          "titles": {
+            "en": "Build a counter in blocks",
+            "es": "Arma un contador con bloques",
+            "fr": "⚠ Build a counter in blocks",
+            "de": "⚠ Build a counter in blocks",
+            "ch": "⚠ Build a counter in blocks",
+            "jp": "⚠ Build a counter in blocks",
+            "ar": "⚠ Build a counter in blocks"
+          },
+          "summaries": {
+            "en": "Drop an increment block inside an 'on rising_edge(clk)' wrapper — sequential execution inside a clocked process.",
+            "es": "Coloca un bloque de incremento dentro de un 'on rising_edge(clk)' — ejecución secuencial en un proceso con reloj.",
+            "fr": "⚠ Drop an increment block inside an 'on rising_edge(clk)' wrapper — sequential execution inside a clocked process.",
+            "de": "⚠ Drop an increment block inside an 'on rising_edge(clk)' wrapper — sequential execution inside a clocked process.",
+            "ch": "⚠ Drop an increment block inside an 'on rising_edge(clk)' wrapper — sequential execution inside a clocked process.",
+            "jp": "⚠ Drop an increment block inside an 'on rising_edge(clk)' wrapper — sequential execution inside a clocked process.",
+            "ar": "⚠ Drop an increment block inside an 'on rising_edge(clk)' wrapper — sequential execution inside a clocked process."
+          }
+        }
+      ]
+    }
+  ]
+}

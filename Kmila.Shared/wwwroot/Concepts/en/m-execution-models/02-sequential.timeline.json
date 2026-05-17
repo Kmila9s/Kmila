@@ -1,0 +1,70 @@
+{
+  "code": "-- Variables update immediately; signals wait until end of delta.\nprocess(a, b)\n  variable tmp : integer := 0;\nbegin\n  tmp := a + 1;        -- line 5: variable updates RIGHT NOW\n  tmp := tmp * 2;      -- line 6: reads the new tmp\n  result <= tmp + b;   -- line 7: signal scheduled, NOT visible yet\nend process;",
+  "language": "vhdl",
+  "signalOrder": ["a", "b", "tmp", "result"],
+  "steps": [
+    {
+      "t": 0,
+      "highlightLines": [],
+      "signals": { "a": "0", "b": "5", "tmp": "0", "result": "U" },
+      "note": {
+        "en": "Cold start. tmp is a variable initialized to 0; signals a, b, result start with whatever they had before.",
+        "es": "Inicio en frío. tmp es una variable inicializada en 0; las señales a, b y result conservan lo que tuvieran antes."
+      }
+    },
+    {
+      "t": 1,
+      "highlightLines": [2],
+      "signals": { "a": "3", "b": "5", "tmp": "0", "result": "U" },
+      "note": {
+        "en": "Input a just changed to 3. The sensitivity list says 'wake on a or b' — so the process wakes.",
+        "es": "La entrada a acaba de cambiar a 3. La lista de sensibilidad dice 'despierta con a o b' — el proceso se despierta."
+      }
+    },
+    {
+      "t": 2,
+      "highlightLines": [5],
+      "signals": { "a": "3", "b": "5", "tmp": "4", "result": "U" },
+      "note": {
+        "en": "Line 5: tmp := a + 1. Variables update IMMEDIATELY — tmp is now 4 and the next statement sees the new value.",
+        "es": "Línea 5: tmp := a + 1. Las variables se actualizan INMEDIATAMENTE — tmp ahora es 4 y la siguiente sentencia ve el nuevo valor."
+      }
+    },
+    {
+      "t": 3,
+      "highlightLines": [6],
+      "signals": { "a": "3", "b": "5", "tmp": "8", "result": "U" },
+      "note": {
+        "en": "Line 6: tmp := tmp * 2. Reads the new tmp (4), multiplies by 2 → tmp is now 8. This is what 'sequential' really means.",
+        "es": "Línea 6: tmp := tmp * 2. Lee el nuevo tmp (4), lo multiplica por 2 → tmp ahora es 8. Esto es lo que realmente significa 'secuencial'."
+      }
+    },
+    {
+      "t": 4,
+      "highlightLines": [7],
+      "signals": { "a": "3", "b": "5", "tmp": "8", "result": "U" },
+      "note": {
+        "en": "Line 7: result <= tmp + b = 8 + 5 = 13. But result is a SIGNAL — we only posted a transaction. result still reads as U.",
+        "es": "Línea 7: result <= tmp + b = 8 + 5 = 13. Pero result es una SEÑAL — solo registramos una transacción. result aún se lee como U."
+      }
+    },
+    {
+      "t": 5,
+      "highlightLines": [8],
+      "signals": { "a": "3", "b": "5", "tmp": "8", "result": "U" },
+      "note": {
+        "en": "Process exits. The body ran 5 → 6 → 7 in strict source order. Swap any two lines and the result would change.",
+        "es": "El proceso termina. El cuerpo se ejecutó 5 → 6 → 7 en orden estricto del código. Intercambia dos líneas y el resultado cambiaría."
+      }
+    },
+    {
+      "t": 6,
+      "highlightLines": [],
+      "signals": { "a": "3", "b": "5", "tmp": "8", "result": "13" },
+      "note": {
+        "en": "Delta cycle ends. NOW result commits to 13. The signal's new value is finally visible to the outside world.",
+        "es": "Termina el ciclo delta. AHORA result se confirma en 13. El nuevo valor de la señal por fin es visible al exterior."
+      }
+    }
+  ]
+}

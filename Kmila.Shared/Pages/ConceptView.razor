@@ -1,0 +1,288 @@
+@page "/concepts/{ModuleId}/{LessonId}"
+@using Kmila.Shared.Models
+@using Kmila.Shared.Services
+@using Kmila.Shared.Components
+@inject ConceptCatalog Catalog
+@inject ConceptProgressStore Progress
+@implements IDisposable
+<PageTitle>@(_lessonTitle ?? Traductor.T("CONCEPTS_TITLE"))</PageTitle>
+
+@*
+    ConceptView — one Concepts lesson page.
+
+    Mirrors LessonView.razor's shape (chrome + body + footer) but swaps the
+    sample-VHDL CTA for an optional embedded ExecutionPlayer driven by the
+    lesson's pre-recorded timeline JSON.
+*@
+
+<section class="lesson-page">
+    <div class="lesson-page__chrome">
+        <a href="/concepts" class="lesson-crumb">
+            <Icon Name="IconName.ArrowLeft" />
+            <span>@Traductor.T("CONCEPTS_ALL_CONCEPTS")</span>
+        </a>
+
+        @if (_module != null && _concept != null)
+        {
+            <div class="lesson-chip-row">
+                <span class="learn-card__chip learn-card__chip--@LevelClass(_concept.Level)">@LevelLabel(_concept.Level)</span>
+                <span class="lesson-chip lesson-chip--kind">
+                    <Icon Name="@KindIcon(_concept.Kind)" />
+                    @KindLabel(_concept.Kind)
+                </span>
+                <span class="lesson-chip lesson-chip--time">
+                    <Icon Name="IconName.ClockHistory" />
+                    ~@_concept.EstimatedMinutes @Traductor.T("CONCEPTS_MINUTES_SHORT")
+                </span>
+                @if (_completed)
+                {
+                    <span class="lesson-chip lesson-chip--done">
+                        <Icon Name="IconName.CheckCircleFill" />
+                        @Traductor.T("CONCEPTS_DONE")
+                    </span>
+                }
+            </div>
+        }
+    </div>
+
+    @if (_loading)
+    {
+        <div class="learn-empty">
+            <Spinner Type="SpinnerType.Border" Color="SpinnerColor.Primary" />
+        </div>
+    }
+    else if (_module == null || _concept == null)
+    {
+        <div class="learn-empty">
+            <div class="learn-empty__icon"><Icon Name="IconName.FileEarmarkX" /></div>
+            <h2>@Traductor.T("CONCEPTS_LESSON_NOT_FOUND")</h2>
+            <p>@Traductor.T("CONCEPTS_LESSON_NOT_FOUND_BODY")</p>
+            <a class="kmila-btn kmila-btn--accent" href="/concepts">@Traductor.T("CONCEPTS_BACK_CATALOG")</a>
+        </div>
+    }
+    else
+    {
+        <article class="lesson-body">
+            @if (_fellBackToEnglish)
+            {
+                <div class="lesson-fallback-banner">
+                    <Icon Name="IconName.Translate" />
+                    <span>@Traductor.T("CONCEPTS_FALLBACK_TO_EN")</span>
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(_body))
+            {
+                <div class="lesson-markdown">
+                    @MarkdownRenderer.Render(_body)
+                </div>
+            }
+            else
+            {
+                <div class="lesson-missing">
+                    <Icon Name="IconName.ExclamationTriangleFill" />
+                    <span>@Traductor.T("CONCEPTS_LESSON_BODY_MISSING")</span>
+                </div>
+            }
+
+            @if (_timeline != null && _timeline.Steps.Count > 0)
+            {
+                <ExecutionPlayer Doc="_timeline" Lang="_lang" />
+            }
+
+            @if (_concept.Quizlet != null && _concept.Quizlet.Options.Count > 0)
+            {
+                <QuizletPanel Quizlet="_concept.Quizlet"
+                              Lang="_lang"
+                              OnPassed="OnQuizletPassedAsync" />
+            }
+        </article>
+
+        <footer class="lesson-footer">
+            <button type="button"
+                    class="kmila-btn @(_completed ? "kmila-btn--ghost kmila-btn--primary" : "kmila-btn--success")"
+                    @onclick="ToggleCompletedAsync">
+                <Icon Name="@(_completed ? IconName.ArrowCounterclockwise : IconName.CheckCircleFill)" />
+                <span>@Traductor.T(_completed ? "CONCEPTS_MARK_INCOMPLETE" : "CONCEPTS_MARK_COMPLETE")</span>
+            </button>
+
+            <div class="lesson-footer__nav">
+                @if (_prev != null)
+                {
+                    <a class="lesson-nav-btn lesson-nav-btn--prev" href="@PrevHref()">
+                        <Icon Name="IconName.ArrowLeft" />
+                        <div>
+                            <small>@Traductor.T("CONCEPTS_PREV")</small>
+                            <span>@LocalizedConceptTitle(_prev)</span>
+                        </div>
+                    </a>
+                }
+                else
+                {
+                    <span class="lesson-nav-btn lesson-nav-btn--disabled" aria-hidden="true"></span>
+                }
+
+                @if (_next != null)
+                {
+                    <a class="lesson-nav-btn lesson-nav-btn--next" href="@NextHref()">
+                        <div>
+                            <small>@Traductor.T("CONCEPTS_NEXT")</small>
+                            <span>@LocalizedConceptTitle(_next)</span>
+                        </div>
+                        <Icon Name="IconName.ArrowRight" />
+                    </a>
+                }
+                else
+                {
+                    <span class="lesson-nav-btn lesson-nav-btn--disabled" aria-hidden="true"></span>
+                }
+            </div>
+        </footer>
+    }
+</section>
+
+@code {
+    [Parameter] public string ModuleId { get; set; } = string.Empty;
+    [Parameter] public string LessonId { get; set; } = string.Empty;
+
+    private ConceptModule? _module;
+    private Concept? _concept;
+    private Concept? _prev;
+    private Concept? _next;
+    private string? _body;
+    private string? _lessonTitle;
+    private ExecutionTimelineDoc? _timeline;
+    private bool _completed;
+    private bool _loading = true;
+    private string _lang = "en";
+    private bool _fellBackToEnglish;
+
+    protected override void OnInitialized()
+    {
+        Traductor.StaticOnLangChanged += OnLangChanged;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await ReloadAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (string.IsNullOrEmpty(_body)) return;
+        // Kick Mermaid in case the body contains diagrams. Same pattern as
+        // LessonView — safe to call even when the global isn't loaded yet.
+        try { await JS.InvokeVoidAsync("kmilaMermaidRun"); }
+        catch { /* prerender / WebView boot — fine */ }
+        // Match LessonView: feed fenced code blocks through Monaco's
+        // tokenizer so the body's snippets look identical to the Editor.
+        try { await JS.InvokeVoidAsync("kmilaColorizeLessonCode", ".lesson-markdown"); }
+        catch { /* monaco not loaded yet — fine */ }
+    }
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        _lang = Traductor.Lang ?? "en";
+
+        var pair = await Catalog.GetConceptAsync(ModuleId, LessonId);
+        if (pair is null)
+        {
+            _module = null;
+            _concept = null;
+            _body = null;
+            _timeline = null;
+            _loading = false;
+            return;
+        }
+
+        _module = pair.Value.Module;
+        _concept = pair.Value.Concept;
+        _lessonTitle = ConceptCatalog.Localize(_concept.Titles, _lang, _concept.Id);
+
+        var idx = _module.Lessons.FindIndex(l =>
+            string.Equals(l.Id, _concept.Id, StringComparison.OrdinalIgnoreCase));
+        _prev = idx > 0 ? _module.Lessons[idx - 1] : null;
+        _next = idx >= 0 && idx < _module.Lessons.Count - 1 ? _module.Lessons[idx + 1] : null;
+
+        var bodyInfo = await Catalog.GetConceptBodyWithSourceAsync(_module.Id, _concept.Id, _lang);
+        _body = bodyInfo.Body;
+        _fellBackToEnglish = bodyInfo.FellBack;
+        _completed = await Progress.IsCompletedAsync(_module.Id, _concept.Id);
+
+        // Only load a timeline when the lesson advertises one. Reading-kind
+        // lessons skip the network/file round-trip and render markdown-only.
+        _timeline = _concept.Kind == ConceptKind.Player
+            ? await Catalog.GetTimelineAsync(_module.Id, _concept.Id, _lang)
+            : null;
+
+        _ = Progress.TouchLastOpenedAsync(_module.Id, _concept.Id);
+
+        _loading = false;
+    }
+
+    private async Task ToggleCompletedAsync()
+    {
+        if (_module == null || _concept == null) return;
+        if (_completed)
+            await Progress.MarkIncompleteAsync(_module.Id, _concept.Id);
+        else
+            await Progress.MarkCompletedAsync(_module.Id, _concept.Id);
+        _completed = !_completed;
+    }
+
+    /// <summary>
+    /// Fired by QuizletPanel when the student picks the correct option.
+    /// We auto-mark the lesson complete so the validation gate doubles as
+    /// the "I'm done" button for this lesson.
+    /// </summary>
+    private async Task OnQuizletPassedAsync()
+    {
+        if (_module == null || _concept == null || _completed) return;
+        await Progress.MarkCompletedAsync(_module.Id, _concept.Id);
+        _completed = true;
+        StateHasChanged();
+    }
+
+    private void OnLangChanged()
+    {
+        InvokeAsync(async () =>
+        {
+            await ReloadAsync();
+            StateHasChanged();
+        });
+    }
+
+    private string LocalizedConceptTitle(Concept l) => ConceptCatalog.Localize(l.Titles, _lang, l.Id);
+
+    private string PrevHref() => _prev == null || _module == null ? "/concepts" : $"/concepts/{_module.Id}/{_prev.Id}";
+    private string NextHref() => _next == null || _module == null ? "/concepts" : $"/concepts/{_module.Id}/{_next.Id}";
+
+    private string LevelLabel(ConceptLevel l) => l switch
+    {
+        ConceptLevel.Beginner     => Traductor.T("LEARN_LEVEL_BEGINNER"),
+        ConceptLevel.Easy         => Traductor.T("LEARN_LEVEL_EASY"),
+        ConceptLevel.Intermediate => Traductor.T("LEARN_LEVEL_INTERMEDIATE"),
+        ConceptLevel.Advanced     => Traductor.T("LEARN_LEVEL_ADVANCED"),
+        ConceptLevel.Expert       => Traductor.T("LEARN_LEVEL_EXPERT"),
+        _                         => l.ToString()
+    };
+    private string LevelClass(ConceptLevel l) => l.ToString().ToLowerInvariant();
+
+    private IconName KindIcon(ConceptKind k) => k switch
+    {
+        ConceptKind.Reading => IconName.BookHalf,
+        ConceptKind.Player  => IconName.PlayCircle,
+        _                   => IconName.BookHalf
+    };
+    private string KindLabel(ConceptKind k) => k switch
+    {
+        ConceptKind.Reading => Traductor.T("CONCEPTS_KIND_READING"),
+        ConceptKind.Player  => Traductor.T("CONCEPTS_KIND_PLAYER"),
+        _                   => k.ToString()
+    };
+
+    public void Dispose()
+    {
+        Traductor.StaticOnLangChanged -= OnLangChanged;
+    }
+}

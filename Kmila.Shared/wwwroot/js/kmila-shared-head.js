@@ -89,6 +89,50 @@
 
 
     // -------------------------------------------------------------------------
+    // 3b) Page-wide pinch-zoom guard.
+    //
+    //     BlazorWebView on iOS / macCatalyst (WebKit) and BlazorWebView on
+    //     Windows (Chromium) both inherit the browser's built-in pinch-to-
+    //     zoom on the *whole document*, which turns a casual trackpad pinch
+    //     over the editor or the schematic into a page-zoom that strands
+    //     toolbars off-screen. We swallow those events at the document level
+    //     when the target is outside any input — the SVG canvas surfaces
+    //     (.schematic-viewer__body, .waveform-viewer__body, .flow-diagram__body)
+    //     attach their own pan-zoom controllers in app.js, so this guard
+    //     never starves them: addEventListener at document level fires AFTER
+    //     the canvas listener has already run + preventDefaulted the event.
+    //     We only act when the canvas DIDN'T (i.e. user pinched elsewhere).
+    //
+    //     Three event families to cover all engines:
+    //       • WebKit  : gesturestart / gesturechange / gestureend
+    //       • others  : wheel with ctrlKey (Chrome/Firefox synthesise this
+    //                   for trackpad pinch)
+    // -------------------------------------------------------------------------
+    function _kmilaIsTextInput(el) {
+        return !!(el && el.closest && el.closest("input, textarea, select, [contenteditable=true], .monaco-editor"));
+    }
+    function _kmilaIsCanvasSurface(el) {
+        return !!(el && el.closest && el.closest(".schematic-viewer__body, .waveform-viewer__body, .flow-diagram__body"));
+    }
+    document.addEventListener("wheel", function (e) {
+        if (!e.ctrlKey) return;
+        if (_kmilaIsTextInput(e.target)) return;
+        if (_kmilaIsCanvasSurface(e.target)) return; // canvas owns it
+        e.preventDefault();
+    }, { passive: false });
+    document.addEventListener("gesturestart", function (e) {
+        if (_kmilaIsTextInput(e.target)) return;
+        if (_kmilaIsCanvasSurface(e.target)) return;
+        e.preventDefault();
+    }, { passive: false });
+    document.addEventListener("gesturechange", function (e) {
+        if (_kmilaIsTextInput(e.target)) return;
+        if (_kmilaIsCanvasSurface(e.target)) return;
+        e.preventDefault();
+    }, { passive: false });
+
+
+    // -------------------------------------------------------------------------
     // 4) Native <details> popovers — auto-close on outside click + Escape.
     //    Opt out per-popover with the `data-no-auto-close` attribute when
     //    the popover wraps a long-running flow you don't want collapsing.
@@ -135,17 +179,43 @@
     // 6) Push parser diagnostics into Monaco. Editor.razor calls this after
     //    every Build so red/yellow squiggles appear on offending lines;
     //    passing an empty array clears all Kmila-owned markers.
+    //
+    //    Targets only editors mounted under `.editor-monaco` so a build that
+    //    errors on the user's VHDL doesn't tag unrelated editors elsewhere on
+    //    the page (Practice's `.practice-monaco`, the Concepts ExecutionPlayer
+    //    under `.kmila-exec-monaco`). Filters by `dom.isConnected` so
+    //    orphaned editors from prior route navigations don't get hit either
+    //    — same pattern the Concepts highlight bridge uses in js/app.js.
     // -------------------------------------------------------------------------
     window.kmilaSetMonacoMarkers = function (markers) {
         try {
             if (!window.monaco || !window.monaco.editor) return;
-            var models = window.monaco.editor.getModels();
-            for (var i = 0; i < models.length; i++) {
-                window.monaco.editor.setModelMarkers(
-                    models[i],
-                    "kmila-vhdl",
-                    markers || []
-                );
+            // Defensive: C# callers must wrap their array in (object) so
+            // IJSRuntime's params-args binding doesn't splat it. If a caller
+            // forgets, `markers` arrives as a single object — coerce to an
+            // empty array rather than passing garbage to setModelMarkers.
+            var safe = Array.isArray(markers) ? markers : [];
+            var editors = (window.monaco.editor.getEditors && window.monaco.editor.getEditors()) || [];
+            var hits = 0;
+            for (var i = 0; i < editors.length; i++) {
+                var e = editors[i];
+                var dom = e.getDomNode && e.getDomNode();
+                if (!dom || !dom.isConnected) continue;
+                if (!dom.closest || !dom.closest(".editor-monaco")) continue;
+                var model = e.getModel && e.getModel();
+                if (!model) continue;
+                window.monaco.editor.setModelMarkers(model, "kmila-vhdl", safe);
+                hits++;
+            }
+            // Fall back to the old all-models behaviour when no editor in
+            // .editor-monaco was found — covers tests / future-proofing.
+            // Safe because the owner string ("kmila-vhdl") namespaces our
+            // markers so unrelated models can't be permanently dirtied.
+            if (hits === 0) {
+                var models = window.monaco.editor.getModels();
+                for (var j = 0; j < models.length; j++) {
+                    window.monaco.editor.setModelMarkers(models[j], "kmila-vhdl", safe);
+                }
             }
         } catch (e) {
             console.warn("[kmilaSetMonacoMarkers]", e);
@@ -289,6 +359,61 @@
     //     (works in MAUI WebView and modern Chromium/WebKit alike).
     //     Returns a Promise resolving true/false.
     // -------------------------------------------------------------------------
+    // Rasterise an SVG to PNG bytes and return them as a base64 string.
+    // Used by SchematicViewer/WaveformViewer PNG export, which pipes the
+    // result through IFileExportService.SaveBytesAsync so the same code
+    // path works on Web (anchor download) and MAUI (Documents/Kmila/PNG/).
+    // Returns a Promise<string> — empty string on failure.
+    window.kmilaSvgToPngBase64 = function (svgText, scale) {
+        return new Promise(function (resolve) {
+            try {
+                var s = (typeof scale === "number" && scale > 0) ? scale : 2;
+                var widthMatch = /\bwidth="(\d+)"/.exec(svgText);
+                var heightMatch = /\bheight="(\d+)"/.exec(svgText);
+                var w = widthMatch ? parseInt(widthMatch[1], 10) : 1200;
+                var h = heightMatch ? parseInt(heightMatch[1], 10) : 400;
+
+                var canvas = document.createElement("canvas");
+                canvas.width = Math.max(1, Math.floor(w * s));
+                canvas.height = Math.max(1, Math.floor(h * s));
+                var ctx = canvas.getContext("2d");
+                ctx.scale(s, s);
+
+                var img = new Image();
+                img.onload = function () {
+                    try {
+                        ctx.drawImage(img, 0, 0);
+                        canvas.toBlob(function (blob) {
+                            if (!blob) { resolve(""); return; }
+                            var reader = new FileReader();
+                            reader.onloadend = function () {
+                                var result = reader.result || "";
+                                var comma = result.indexOf(",");
+                                resolve(comma >= 0 ? result.substring(comma + 1) : "");
+                            };
+                            reader.onerror = function () { resolve(""); };
+                            reader.readAsDataURL(blob);
+                        }, "image/png");
+                    } catch (drawErr) {
+                        console.error("[kmilaSvgToPngBase64] draw failed", drawErr);
+                        resolve("");
+                    }
+                };
+                img.onerror = function (e) {
+                    console.error("[kmilaSvgToPngBase64] image load failed", e);
+                    resolve("");
+                };
+                var svgBlob = new Blob([svgText], {
+                    type: "image/svg+xml;charset=utf-8"
+                });
+                img.src = URL.createObjectURL(svgBlob);
+            } catch (e) {
+                console.error("[kmilaSvgToPngBase64] failed", e);
+                resolve("");
+            }
+        });
+    };
+
     window.kmilaDownloadPng = function (fileName, svgText, scale) {
         return new Promise(function (resolve) {
             try {

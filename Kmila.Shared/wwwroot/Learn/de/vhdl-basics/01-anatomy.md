@@ -60,16 +60,16 @@ Der Rumpf zwischen `begin` und `end architecture` ist, wo Signale und Gatter tat
 
 Kmilas VHDL-Parser liest deine Datei von oben nach unten und baut einen Baum:
 
-```
-File
-├── library IEEE
-├── use IEEE.STD_LOGIC_1164.ALL
-└── entity my_design
-    ├── port a (in, std_logic)
-    ├── port b (in, std_logic)
-    ├── port y (out, std_logic)
-    └── architecture rtl
-        └── concurrent: y <= a and b
+```mermaid
+flowchart TD
+    File["Datei"] --> Lib["library IEEE"]
+    File --> Use["use IEEE.STD_LOGIC_1164.ALL"]
+    File --> Ent["entity my_design"]
+    Ent --> Pa["port a (in, std_logic)"]
+    Ent --> Pb["port b (in, std_logic)"]
+    Ent --> Py["port y (out, std_logic)"]
+    Ent --> Arch["architecture rtl"]
+    Arch --> Conc["concurrent: y &lt;= a and b"]
 ```
 
 Wenn du auf **Build** klickst, werden die Ports zu den Einträgen im **Ports**-Dock-Tab, die Entity zum Eintrag in **Entities**, und die Zuweisungen innerhalb der Architecture zur Verdrahtung, die der Simulator ausführt.

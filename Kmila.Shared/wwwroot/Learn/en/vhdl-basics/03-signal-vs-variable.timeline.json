@@ -1,0 +1,61 @@
+{
+  "code": "process(a, b)\n  variable tmp : integer := 0;\nbegin\n  tmp := a + 1;       -- variable: immediate\n  tmp := tmp * 2;     -- reads the new tmp\n  result <= tmp + b;  -- signal: delayed to end of delta\nend process;",
+  "language": "vhdl",
+  "signalOrder": ["a", "b", "tmp", "result"],
+  "steps": [
+    {
+      "t": 0,
+      "highlightLines": [],
+      "signals": { "a": "0", "b": "5", "tmp": "0", "result": "U" },
+      "note": {
+        "en": "Cold start. tmp is a variable (initial 0); result is a signal (uninitialised).",
+        "es": "Inicio en frío. tmp es variable (inicial 0); result es señal (sin inicializar)."
+      }
+    },
+    {
+      "t": 1,
+      "highlightLines": [1],
+      "signals": { "a": "3", "b": "5", "tmp": "0", "result": "U" },
+      "note": {
+        "en": "a changes to 3 — process wakes (a is in the sensitivity list).",
+        "es": "a cambia a 3 — el proceso se despierta (a está en la lista de sensibilidad)."
+      }
+    },
+    {
+      "t": 2,
+      "highlightLines": [4],
+      "signals": { "a": "3", "b": "5", "tmp": "4", "result": "U" },
+      "note": {
+        "en": "Line 4: tmp := a + 1. VARIABLE assignment — tmp updates immediately to 4.",
+        "es": "Línea 4: tmp := a + 1. Asignación de VARIABLE — tmp se actualiza inmediatamente a 4."
+      }
+    },
+    {
+      "t": 3,
+      "highlightLines": [5],
+      "signals": { "a": "3", "b": "5", "tmp": "8", "result": "U" },
+      "note": {
+        "en": "Line 5: tmp := tmp * 2. Reads the NEW tmp (4), multiplies — tmp is now 8.",
+        "es": "Línea 5: tmp := tmp * 2. Lee el NUEVO tmp (4), multiplica — tmp ahora es 8."
+      }
+    },
+    {
+      "t": 4,
+      "highlightLines": [6],
+      "signals": { "a": "3", "b": "5", "tmp": "8", "result": "U" },
+      "note": {
+        "en": "Line 6: result <= tmp + b. SIGNAL assignment — schedules 13, but result still reads as U.",
+        "es": "Línea 6: result <= tmp + b. Asignación de SEÑAL — programa 13, pero result aún se lee como U."
+      }
+    },
+    {
+      "t": 5,
+      "highlightLines": [],
+      "signals": { "a": "3", "b": "5", "tmp": "8", "result": "13" },
+      "note": {
+        "en": "Delta cycle ends. result commits to 13. Variables = right-now; signals = end of delta.",
+        "es": "Termina el ciclo delta. result se confirma en 13. Variables = ahora mismo; señales = fin del delta."
+      }
+    }
+  ]
+}

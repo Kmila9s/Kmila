@@ -19,10 +19,15 @@ end architecture rtl;
 
 综合器会生成：
 
-```
-   a ─┬─ AND ─── y1 ──┐
-      │               XOR ── y3
-   b ─┴─ OR  ── y2 ───┘
+```mermaid
+flowchart LR
+    A([a]) --> AND["AND"]
+    B([b]) --> AND
+    A --> OR["OR"]
+    B --> OR
+    AND -- y1 --> XOR["XOR"]
+    OR  -- y2 --> XOR
+    XOR --> Y3([y3])
 ```
 
 三个门同时上电。每当 `a` 或 `b` 变化时，输出 `y3` 经过最长路径的传播延迟后就会稳定到新值。不存在"先"和"后"。

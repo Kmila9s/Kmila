@@ -10,10 +10,11 @@ De dónde toma sus entradas la lógica de salida divide a las FSM en dos familia
 
 ## Moore: salidas dependen solo del estado
 
-```
- entrada → [ siguiente ] → [ reg. estado ] → [ salidas ]
-                                         ↑
-                                       (eso es todo)
+```mermaid
+flowchart LR
+    IN([entrada]) --> NS["siguiente estado"]
+    NS --> SR["reg. estado"]
+    SR --> OUT["salidas"]
 ```
 
 Dado un estado, la salida está fija. Si estás en `S_GREEN`, `green = '1'`. Siempre. Sin importar cómo se vea la entrada.
@@ -28,12 +29,13 @@ Dado un estado, la salida está fija. Si estás en `S_GREEN`, `green = '1'`. Sie
 
 ## Mealy: salidas dependen de estado + entrada
 
-```
- entrada ──→ [ siguiente ] ──→ [ reg. estado ]
-    │                               │
-    └───→ [ lógica salida ] ←───────┘
-                  │
-               salidas
+```mermaid
+flowchart LR
+    IN([entrada]) --> NS["siguiente estado"]
+    NS --> SR["reg. estado"]
+    IN --> OL["lógica salida"]
+    SR --> OL
+    OL --> OUT([salidas])
 ```
 
 Las salidas son función del estado **y** la entrada actuales. Pueden cambiar entre flancos.

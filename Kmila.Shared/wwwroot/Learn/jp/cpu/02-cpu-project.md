@@ -4,28 +4,15 @@
 
 ## 機械
 
-```
-            ┌──────────┐
-            │  PC (4b) │ ◀── reset = "0000"
-            └────┬─────┘
-                 │ addr
-                 ▼
-            ┌──────────┐
-            │   ROM    │   (16 bytes, preloaded at synth time)
-            │  16×8    │
-            └────┬─────┘
-                 │ instr (8 bits)
-                 ▼
-  ┌──────────────┴──────────────┐
-  │  opcode = instr(7..4)       │
-  │  imm4   = instr(3..0)       │
-  └──────┬───────────────┬──────┘
-         │               │
-         ▼               ▼
-   [decode/exec]    [PC next logic]
-         │               │
-         ▼               ▼
-     R0 (8b)          PC_next
+```mermaid
+flowchart TD
+    RST(["reset = 0000"]) -.-> PC["PC (4 bits)"]
+    PC -- addr --> ROM["ROM<br/>16 × 8 bytes<br/>(preloaded at synth time)"]
+    ROM -- "instr (8 bits)" --> SPLIT{{"opcode = instr(7..4)<br/>imm4 = instr(3..0)"}}
+    SPLIT --> DECEXE["decode / execute"]
+    SPLIT --> PCNXT["PC next logic"]
+    DECEXE --> R0["R0 (8 bits)"]
+    PCNXT --> PCN["PC_next"]
 ```
 
 ## スキャフォールドが提供するもの

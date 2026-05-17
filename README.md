@@ -1817,9 +1817,40 @@ flowchart TD
 
 ---
 
+## 19.ter. Polish pass (2026-05-17)
+
+Six tasks shipped in one sweep — see `Documentacion/CHANGELOG_concepts_module_2026-05-17.md` for the full per-task breakdown. Highlights from an App-perspective:
+
+### `ExecutionPlayer` reuse beyond `/concepts`
+
+The Concepts-track `Components/ExecutionPlayer.razor` is now reused by two more surfaces:
+
+- **`/learn` lessons that opt in.** A new `inlinePlayer: bool` on `Lesson` makes the catalog load a sidecar `Learn/{lang}/{moduleId}/{lessonId}.timeline.json` and render the player between the Markdown body and the sample CTA. Currently enabled on `concurrent-thinking/02-delta-cycles`, `vhdl-basics/03-signal-vs-variable`, `combinational/01-concurrent-statements`, and `sequential/01-processes`.
+- **`/editor/{id}` Replay dock tab.** After every Run, `Services/ReplayBuilder` converts `WaveformData` → `ExecutionTimelineDoc` (≤200 frames, cursor-cached signal evaluation), `Services/ReplayState` (scoped) holds the doc, and `Components/StepReplayPanel.razor` subscribes + renders the player. `EditorTab.Replay` is the new enum entry; `EditorDock` got a `ReplayContent` `RenderFragment` param and a `TabDef` in the strip.
+
+### Visual identity
+
+- **Blockly slate-brand theme.** `wwwroot/js/concepts-blocks.js` defines `KmilaLightTheme` + `KmilaDarkTheme` via `Blockly.Theme.defineTheme`. Picks by `data-bs-theme` at inject time; `kmilaBlocklyApplyThemeAll()` exposes runtime swap. All block defs use `setStyle('kmila_*_style')` — zero remaining `setColour` calls.
+
+### Bugs caught
+
+- **Parser strictness** (`Parser/Repositories/PortsParser`): rejects unknown port types via `Constants.FindTypoSuggestion` (Levenshtein ≤ 2) — catches `STDLOGIC` / `STD_LGIC` slips — and surfaces missing `;` between ports as a `ParserException` instead of letting it cascade into "expected )" downstream. Pre-existing case-mismatch in `Constants.GetDatatype` (`case "INTEGER"` / `"NATURAL"` were uppercase against a lowercased value) fixed at the same time.
+- **Monaco markers leak** (`wwwroot/js/kmila-shared-head.js#kmilaSetMonacoMarkers`): now filters via `getEditors()` + `dom.isConnected` + `.editor-monaco` ancestor so build errors no longer paint into Practice's `.practice-monaco` or the Concepts `.kmila-exec-monaco`. Defensive fallback to the all-models behaviour when no `.editor-monaco` is found.
+- **File-row burger overflow** (`Components/FilesCard.razor#ToggleMenuAsync`): vertical viewport-clamp with flip-above. New `kmilaViewportHeight()` JS helper. CSS gets `max-height: 80vh; overflow-y: auto; max-width: calc(100vw - 16px)` as a safety net.
+
+### Test status across the polish pass
+
+Parser 40/40 + **2/2 new negative fixtures** (`test_negative_unknown_type.vhdl`, `test_negative_missing_port_semi.vhdl`). Interpreter sweep 54/54. Interpreter `--test-delta` 135/135. TimeMachine 23/23. Debugger exit 0. `dotnet build Kmila.Web` clean. No module regressed.
+
+### Open questions parked for review
+
+`memory/project_polish_pass_2026-05-17_open_questions.md` lists 10 deliberate decisions left for Daniel — most notably the trade-off between vendoring more JS libraries vs accepting CDN dependencies (see the dependency audit conversation that follows this pass).
+
+---
+
 ## 20. Contact
 
 For questions, support, or feedback, please open an issue on our GitHub repository or contact the development team through the project page.
 
 ---
-*Last Updated: 2026-05-01*
+*Last Updated: 2026-05-17 (polish pass + step-replay + Blockly slate-brand theme + parser strictness)*

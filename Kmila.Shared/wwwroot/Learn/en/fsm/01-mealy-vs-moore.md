@@ -10,10 +10,11 @@ Where the output logic looks for its inputs splits FSMs into two families.
 
 ## Moore: outputs depend on state only
 
-```
- input → [ next-state ] → [ state reg ] → [ outputs ]
-                                       ↑
-                                     (that's all)
+```mermaid
+flowchart LR
+    IN([input]) --> NS["next-state"]
+    NS --> SR["state reg"]
+    SR --> OUT["outputs"]
 ```
 
 Given a state, the output is fixed. If you're in `S_GREEN`, `green = '1'`. Always. Regardless of what the input looks like.
@@ -28,12 +29,13 @@ Given a state, the output is fixed. If you're in `S_GREEN`, `green = '1'`. Alway
 
 ## Mealy: outputs depend on state + input
 
-```
- input ──→ [ next-state ] ──→ [ state reg ]
-   │                               │
-   └───→ [ output logic ] ←────────┘
-                │
-             outputs
+```mermaid
+flowchart LR
+    IN([input]) --> NS["next-state"]
+    NS --> SR["state reg"]
+    IN --> OL["output logic"]
+    SR --> OL
+    OL --> OUT([outputs])
 ```
 
 Outputs are a function of the current state **and** the current input. They can change between clock edges.

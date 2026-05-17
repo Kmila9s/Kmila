@@ -24,7 +24,7 @@
 @inject ProgramBuilder Builder
 @inject IJSRuntime JS
 
-<div class="flow-diagram">
+<div class="flow-diagram @(_isFullscreen ? "is-fullscreen" : "")">
     @if (string.IsNullOrEmpty(_mermaidSource))
     {
         <div class="flow-diagram__empty">
@@ -54,6 +54,13 @@
                     title="@Traductor.T("FLOW_EXPORT_PNG")">
                 <Icon Name="IconName.FileEarmarkImage" />
                 <span>PNG</span>
+            </button>
+            <button type="button"
+                    class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm @(_isFullscreen ? "is-active" : "")"
+                    @onclick="ToggleFullscreen"
+                    title="@Traductor.T(_isFullscreen ? "SCHEMATIC_FULLSCREEN_EXIT" : "SCHEMATIC_FULLSCREEN_ENTER")"
+                    aria-label="@Traductor.T(_isFullscreen ? "SCHEMATIC_FULLSCREEN_EXIT" : "SCHEMATIC_FULLSCREEN_ENTER")">
+                <Icon Name="@(_isFullscreen ? IconName.FullscreenExit : IconName.ArrowsFullscreen)" />
             </button>
             <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
                     @onclick="OnRefreshClicked"
@@ -86,6 +93,13 @@
     private string _mermaidSource = string.Empty;
     private int _entityCount;
     private Guid _renderKey = Guid.NewGuid();
+    private bool _isFullscreen;
+
+    private void ToggleFullscreen()
+    {
+        _isFullscreen = !_isFullscreen;
+        StateHasChanged();
+    }
 
     protected override void OnInitialized()
     {
@@ -109,6 +123,41 @@
     {
         if (firstRender && !string.IsNullOrEmpty(_mermaidSource))
             await KickMermaidAsync();
+        // (Re)attach pan-zoom whenever the body re-renders. AttachPanZoomAsync
+        // is idempotent — the JS side detaches the previous handle on the
+        // same root before binding new listeners.
+        await AttachPanZoomAsync();
+    }
+
+    private int _panZoomId = -1;
+
+    /// <summary>
+    /// Hands the rendered mermaid SVG to <c>kmilaAttachPanZoom</c> so trackpad
+    /// pinch and 2-finger touch gestures zoom the diagram itself instead of
+    /// the entire WebView page. Re-runs after every render: mermaid replaces
+    /// the inner element on theme/source changes, so the previous handle
+    /// becomes stale. Safe to call before mermaid has finished — the JS
+    /// helper returns -1 when no target SVG is present yet.
+    /// </summary>
+    private async Task AttachPanZoomAsync()
+    {
+        if (string.IsNullOrEmpty(_mermaidSource)) return;
+        try
+        {
+            if (_panZoomId > 0)
+            {
+                try { await JS.InvokeVoidAsync("kmilaDetachPanZoom", _panZoomId); } catch { }
+                _panZoomId = -1;
+            }
+            _panZoomId = await JS.InvokeAsync<int>("kmilaAttachPanZoom",
+                ".flow-diagram__body",
+                new { targetSelector = "svg", minScale = 0.2, maxScale = 6, fitOnAttach = true });
+        }
+        catch
+        {
+            // Prerender or missing helper — toolbar zoom isn't part of this
+            // viewer; gestures simply unavailable until next render.
+        }
     }
 
     private void OnLangChanged() => InvokeAsync(StateHasChanged);
@@ -116,33 +165,84 @@
     public void Dispose()
     {
         Traductor.StaticOnLangChanged -= OnLangChanged;
+        if (_panZoomId > 0)
+        {
+            // Fire-and-forget — Dispose can't await, and the JS-side teardown
+            // is synchronous from its own perspective (handle map cleanup).
+            try { _ = JS.InvokeVoidAsync("kmilaDetachPanZoom", _panZoomId); } catch { }
+            _panZoomId = -1;
+        }
     }
 
     /// <summary>Manual refresh button — reads whatever the Builder has now.</summary>
     private async Task OnRefreshClicked() => await RefreshAsync();
 
     /// <summary>
-    /// Hands the rendered SVG to <c>kmilaDownloadFlowDiagram</c> which
-    /// serializes the SVG element produced by mermaid and triggers a
-    /// browser download. Suffix decides .svg vs .png.
+    /// Serializes the mermaid-rendered SVG on the JS side, then writes the
+    /// payload through <see cref="IFileExportService"/>. On MAUI that lands
+    /// the file in ~/Documents/Kmila/SVG/ (visible in Finder / Files.app);
+    /// on Web the platform implementation falls back to an anchor download.
+    /// Previous versions called <c>kmilaDownloadFlowDiagram</c> directly,
+    /// which only worked in real browsers — iOS / macCatalyst WebViews drop
+    /// the anchor click and the user never saw the file.
     /// </summary>
     private async Task ExportSvgAsync()
     {
         var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-        // Pass a CSS selector instead of an element id — earlier versions
-        // generated a per-instance GUID id, but the prerendered HTML and the
-        // interactive component instance produced different GUIDs on the
-        // running editor, so the JS lookup found nothing. Class selector is
-        // unambiguous: there's only ever one .flow-diagram__body on screen.
-        try { await JS.InvokeVoidAsync("kmilaDownloadFlowDiagram", ".flow-diagram__body", $"kmila-flow-{stamp}.svg", "svg"); }
-        catch { /* helper missing / mermaid hadn't rendered yet */ }
+        var fileName = $"kmila-flow-{stamp}.svg";
+        try
+        {
+            var svg = await JS.InvokeAsync<string>("kmilaSerializeFlowSvg", ".flow-diagram__body");
+            if (string.IsNullOrEmpty(svg))
+            {
+                ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                    "Mermaid diagram not ready yet.", ToastType.Danger));
+                return;
+            }
+            var result = await Export.SaveTextAsync(ExportCategory.Svg, fileName, "image/svg+xml", svg);
+            NotifyExportResult(result);
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
     }
 
     private async Task ExportPngAsync()
     {
         var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-        try { await JS.InvokeVoidAsync("kmilaDownloadFlowDiagram", ".flow-diagram__body", $"kmila-flow-{stamp}.png", "png"); }
-        catch { /* helper missing / mermaid hadn't rendered yet */ }
+        var fileName = $"kmila-flow-{stamp}.png";
+        try
+        {
+            var base64 = await JS.InvokeAsync<string>("kmilaSerializeFlowPng", ".flow-diagram__body");
+            if (string.IsNullOrEmpty(base64))
+            {
+                ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                    "Mermaid diagram not ready yet.", ToastType.Danger));
+                return;
+            }
+            var bytes = Convert.FromBase64String(base64);
+            var result = await Export.SaveBytesAsync(ExportCategory.Png, fileName, "image/png", bytes);
+            NotifyExportResult(result);
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+    }
+
+    private void NotifyExportResult(FileExportResult result)
+    {
+        if (result.Saved)
+        {
+            var msg = result.Path != null ? $"Saved: {result.Path}" : "Flow diagram exported.";
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), msg, ToastType.Success));
+        }
+        else
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                result.Error ?? "Export failed.", ToastType.Danger));
+        }
     }
 
     /// <summary>

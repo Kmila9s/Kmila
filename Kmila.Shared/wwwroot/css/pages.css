@@ -515,10 +515,12 @@
 
 /* Visual styles come from .kmila-btn-icon (buttons.css). This selector is
    reserved purely for the show/hide media-query gate that hides the
-   hamburger on desktop and reveals it on mobile. */
-.kmila-topbar__menu-btn { display: none; }
+   hamburger on desktop and reveals it on mobile.
+   Chain with .kmila-btn-icon so we beat its own display:inline-flex
+   regardless of which stylesheet loads first. */
+.kmila-btn-icon.kmila-topbar__menu-btn { display: none; }
 @media (max-width: 640.98px) {
-    .kmila-topbar__menu-btn { display: inline-flex; }
+    .kmila-btn-icon.kmila-topbar__menu-btn { display: inline-flex; }
 }
 
 
@@ -3819,10 +3821,16 @@
 .file-row__menu-panel {
     /* Position is set inline via Blazor — top/left come from JS interop after
        the user clicks a trigger. Fixed positioning lets the panel escape any
-       ancestor with overflow:hidden (dock card, scroll container, etc.). */
+       ancestor with overflow:hidden (dock card, scroll container, etc.).
+       max-height + overflow caps very long menus (rare, but a safety net for
+       when the C#-side flip-up calc estimates short and the panel actually
+       grows past the viewport). See [[project_file_menu_overflow]]. */
     position: fixed;
     z-index: var(--z-popover);
     min-width: 180px;
+    max-width: calc(100vw - 16px);
+    max-height: 80vh;
+    overflow-y: auto;
     padding: 4px;
     background-color: var(--surface-2);
     border: 1px solid var(--border-subtle);
@@ -3846,9 +3854,24 @@
     font-size: var(--fs-sm);
     text-align: left;
     cursor: pointer;
-    white-space: nowrap;
+    /* Long translations (de/fr/ar "Move to: <long folder>" etc.) need to wrap
+       inside the capped panel width — `nowrap` clipped them off-screen. */
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: var(--lh-snug, 1.3);
     transition: background-color var(--duration-fast) var(--ease-standard);
 }
+
+.file-row__menu-item > span {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.file-row__menu-item > .bi {
+    flex-shrink: 0;
+}
+
+[dir="rtl"] .file-row__menu-item { text-align: right; }
 
 .file-row__menu-item:hover {
     background-color: var(--surface-3);
@@ -8778,13 +8801,24 @@
 
 /* ── Schematic / Waveform: gesture cues + responsive info ────────────────── */
 .schematic-viewer__body,
-.waveform-viewer__body {
+.waveform-viewer__body,
+.flow-diagram__body {
     /* Pointer events handle the drag; native scroll competes otherwise. */
     touch-action: none;
     cursor: grab;
+    /* Suppress text selection while panning. SVG <text> nodes inside gates,
+       ports and wire labels were otherwise picked up by the browser's
+       drag-to-select when the user held a click before the 2px pan threshold
+       fired, leaving a visible "shadow" highlight over content that's clipped
+       out of view. */
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-user-drag: none;
 }
 .schematic-viewer__body:active,
-.waveform-viewer__body:active { cursor: grabbing; }
+.waveform-viewer__body:active,
+.flow-diagram__body:active { cursor: grabbing; }
 
 /* Hover-only feedback in the schematic stays for desktop, but on touch we
    move it to the active state so taps still get visual confirmation. */
@@ -9050,7 +9084,8 @@
    the toolbar past the safe-area inset so the exit/mode buttons sit below
    the device notch. */
 @media (max-width: 768px) {
-    body:has(.schematic-viewer.is-fullscreen) .kmila-dock {
+    body:has(.schematic-viewer.is-fullscreen) .kmila-dock,
+    body:has(.flow-diagram.is-fullscreen) .kmila-dock {
         z-index: calc(var(--z-modal) + 5) !important;
         inset: 0 !important;
         bottom: 0 !important;
@@ -9060,13 +9095,35 @@
         padding-bottom: 0 !important;
     }
     body:has(.schematic-viewer.is-fullscreen) .run-bar,
-    body:has(.schematic-viewer.is-fullscreen) .status-bar {
+    body:has(.schematic-viewer.is-fullscreen) .status-bar,
+    body:has(.flow-diagram.is-fullscreen) .run-bar,
+    body:has(.flow-diagram.is-fullscreen) .status-bar {
         display: none !important;
     }
-    .schematic-viewer.is-fullscreen .schematic-viewer__toolbar {
+    .schematic-viewer.is-fullscreen .schematic-viewer__toolbar,
+    .flow-diagram.is-fullscreen .flow-diagram__head {
         padding-top: calc(var(--space-2) + env(safe-area-inset-top, 0px));
         padding-left: calc(var(--space-2) + env(safe-area-inset-left, 0px));
         padding-right: calc(var(--space-2) + env(safe-area-inset-right, 0px));
+    }
+}
+
+
+/* ── Mobile: Bootstrap modals declared inside the dock must escape it ──────
+   FilesCard renders <Modal> instances inline (create-file, file details,
+   delete-confirm). On phones the dock is `position: fixed; overflow: hidden;
+   z-index: var(--z-drawer)` (1020) and so forms a stacking context. Bootstrap
+   appends `.modal-backdrop` to <body> at z-index 1050, which then paints on
+   top of the entire dock — including the .modal-dialog trapped inside it.
+   iOS WebKit additionally clips the position-fixed dialog to the dock's
+   overflow box, so the user only sees the dark backdrop with no reachable
+   UI to dismiss it.
+   When any backdrop is visible, lift the dock above the modal layer and
+   drop its overflow clip so the dialog renders normally. */
+@media (max-width: 768px) {
+    body:has(.modal-backdrop.show) .kmila-dock {
+        z-index: calc(var(--z-modal) + 5) !important;
+        overflow: visible !important;
     }
 }
 
@@ -9655,6 +9712,29 @@
     min-height: 0;
 }
 
+/* Flow diagram fullscreen — mirrors the schematic block above. The flow
+   container itself doesn't have an explicit flex layout (it's a thin wrapper
+   around a single .flow-diagram__body), but pinning it to the viewport with
+   the same z-index/background rules gives parity with SchematicViewer. */
+.flow-diagram.is-fullscreen {
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--z-modal, 1050) - 5);
+    background: var(--bs-body-bg, #fff);
+    border-radius: 0;
+    padding: 0;
+    margin: 0;
+    box-shadow: 0 0 40px rgba(0,0,0,0.15);
+    display: flex;
+    flex-direction: column;
+}
+
+.flow-diagram.is-fullscreen .flow-diagram__body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+}
+
 .schematic-viewer {
     --schematic-cell-bg: var(--bs-body-bg, #fff);
     --schematic-cell-stroke: var(--text-strong, #1e293b);
@@ -10029,4 +10109,334 @@
     height: 100%;
     color: var(--text-muted, #64748b);
     gap: .5rem;
+}
+
+/* ── Concepts track + ExecutionPlayer ──────────────────────────────────────
+   The Concepts mini-curriculum teaches sequential vs concurrent vs why
+   "true parallel" doesn't exist in VHDL. Its keystone is the ExecutionPlayer:
+   a read-only Monaco editor that highlights one or more lines per step from
+   a pre-recorded JSON timeline, with a live signal table and tape transport.
+
+   Highlight class is applied via monaco.editor.deltaDecorations from
+   window.kmilaExecHighlightLines (see js/app.js). Keep the rule lightweight
+   — Monaco re-applies it on every model change.                            */
+
+.kmila-exec-highlight {
+    background-color: color-mix(in srgb, var(--kmila-accent, #4f8cff) 22%, transparent);
+    box-shadow: inset 3px 0 0 var(--kmila-accent, #4f8cff);
+}
+
+/* ExecutionPlayer container. Two-column on desktop, stacks on narrow. */
+.kmila-exec-player {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    gap: var(--space-3);
+    margin: var(--space-3) 0;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background-color: var(--surface-1);
+    padding: var(--space-3);
+}
+
+@media (max-width: 880px) {
+    .kmila-exec-player {
+        grid-template-columns: 1fr;
+    }
+}
+
+.kmila-exec-player__code {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-width: 0;
+}
+
+.kmila-exec-monaco {
+    height: 320px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.kmila-exec-player__side {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-width: 0;
+}
+
+.kmila-exec-player__note {
+    background-color: color-mix(in srgb, var(--kmila-accent, #4f8cff) 8%, var(--surface-2));
+    border-left: 3px solid var(--kmila-accent, #4f8cff);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-3);
+    font-size: 0.92rem;
+    line-height: 1.4;
+    min-height: 4.5em;
+}
+
+.kmila-exec-player__note-empty {
+    color: var(--text-muted, #64748b);
+    font-style: italic;
+}
+
+.kmila-exec-signals {
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface-2);
+    overflow: hidden;
+}
+
+.kmila-exec-signals__header {
+    padding: var(--space-2) var(--space-3);
+    background-color: var(--surface-3, var(--surface-2));
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text-muted, #64748b);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.kmila-exec-signals__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: 0.9rem;
+}
+
+.kmila-exec-signals__table th,
+.kmila-exec-signals__table td {
+    padding: 0.3rem var(--space-3);
+    text-align: left;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.kmila-exec-signals__table th {
+    width: 38%;
+    color: var(--text-muted, #64748b);
+    font-weight: 500;
+}
+
+.kmila-exec-signals__value {
+    font-weight: 600;
+}
+
+/* Soft flash when a signal value changes from the previous step.
+   prefers-reduced-motion users get a static highlight color and skip the
+   animation entirely so we don't violate the OS accessibility setting. */
+.kmila-exec-signals__value--changed {
+    background-color: color-mix(in srgb, var(--success, #10b981) 22%, transparent);
+    border-radius: 3px;
+    padding: 0 .25rem;
+    animation: kmila-exec-pulse 700ms ease-out;
+}
+
+@keyframes kmila-exec-pulse {
+    from { background-color: color-mix(in srgb, var(--success, #10b981) 38%, transparent); }
+    to   { background-color: color-mix(in srgb, var(--success, #10b981) 0%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .kmila-exec-signals__value--changed {
+        animation: none;
+    }
+}
+
+/* Tape transport: ⏮ ◀ ▶ ⏸ ▶▶ ⟲ + speed picker */
+.kmila-exec-tape {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.kmila-exec-tape__progress {
+    flex: 1 1 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--text-muted, #64748b);
+    font-size: 0.85rem;
+}
+
+.kmila-exec-tape__progress-track {
+    flex: 1;
+    height: 6px;
+    background-color: var(--surface-3, var(--surface-2));
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.kmila-exec-tape__progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--kmila-accent, #4f8cff), var(--success, #10b981));
+    transition: width 200ms ease-out;
+}
+
+.kmila-exec-tape__speed {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    font-size: 0.85rem;
+    color: var(--text-muted, #64748b);
+}
+
+.kmila-exec-tape__speed select {
+    background-color: var(--surface-2);
+    color: inherit;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: .15rem .4rem;
+    font: inherit;
+}
+
+/* ── Concepts Scratch-style exercise board ─────────────────────────────────
+   ConceptExercise.razor wraps a Blockly workspace + actions + the same
+   ExecutionPlayer used by the lessons (matched timeline). The Blockly
+   workspace is mounted by JS, so .kmila-block-editor__canvas needs an
+   explicit height — Blockly otherwise collapses to 0px and stays empty. */
+
+.kmila-exercise-board {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    margin-top: var(--space-3);
+}
+
+.kmila-block-editor {
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    background-color: var(--surface-1);
+}
+
+.kmila-block-editor__canvas {
+    height: 420px;
+    width: 100%;
+}
+
+@media (max-width: 720px) {
+    .kmila-block-editor__canvas { height: 320px; }
+}
+
+.kmila-exercise-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.kmila-exercise-match {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-3);
+    background-color: var(--surface-2);
+}
+
+.kmila-exercise-match > div { display: flex; flex-direction: column; }
+.kmila-exercise-match strong { display: block; line-height: 1.3; }
+.kmila-exercise-match span { color: var(--text-muted, #64748b); font-size: 0.9rem; }
+
+.kmila-exercise-match--ok {
+    border-color: color-mix(in srgb, var(--success, #10b981) 60%, var(--border-subtle));
+    background-color: color-mix(in srgb, var(--success, #10b981) 8%, var(--surface-2));
+}
+
+.kmila-exercise-match--miss {
+    border-color: color-mix(in srgb, var(--warning, #f59e0b) 60%, var(--border-subtle));
+    background-color: color-mix(in srgb, var(--warning, #f59e0b) 8%, var(--surface-2));
+}
+
+/* ── End-of-lesson micro-quiz ───────────────────────────────────────────── */
+
+.kmila-quizlet {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background-color: var(--surface-1);
+    padding: var(--space-3);
+    margin-top: var(--space-3);
+}
+
+.kmila-quizlet__header {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    color: var(--text-muted, #64748b);
+    text-transform: uppercase;
+    font-size: 0.78rem;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+}
+
+.kmila-quizlet__question {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 500;
+    line-height: 1.4;
+}
+
+.kmila-quizlet__options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1, .4rem);
+    border: 0;
+    padding: 0;
+    margin: 0;
+}
+
+.kmila-quizlet__option {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface-2);
+    cursor: pointer;
+    transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.kmila-quizlet__option:hover {
+    border-color: color-mix(in srgb, var(--kmila-accent, #4f8cff) 40%, var(--border-subtle));
+}
+
+.kmila-quizlet__option input { margin-top: .25rem; }
+
+.kmila-quizlet__option--correct {
+    border-color: color-mix(in srgb, var(--success, #10b981) 60%, var(--border-subtle));
+    background-color: color-mix(in srgb, var(--success, #10b981) 10%, var(--surface-2));
+}
+
+.kmila-quizlet__option--wrong {
+    border-color: color-mix(in srgb, var(--danger, #ef4444) 60%, var(--border-subtle));
+    background-color: color-mix(in srgb, var(--danger, #ef4444) 10%, var(--surface-2));
+}
+
+.kmila-quizlet__feedback {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-3);
+    margin-top: var(--space-2);
+}
+
+.kmila-quizlet__feedback strong { display: block; margin-bottom: .2rem; }
+.kmila-quizlet__feedback p { margin: 0; line-height: 1.4; }
+
+.kmila-quizlet__feedback--ok {
+    border-color: color-mix(in srgb, var(--success, #10b981) 60%, var(--border-subtle));
+    background-color: color-mix(in srgb, var(--success, #10b981) 8%, var(--surface-2));
+}
+
+.kmila-quizlet__feedback--miss {
+    border-color: color-mix(in srgb, var(--danger, #ef4444) 60%, var(--border-subtle));
+    background-color: color-mix(in srgb, var(--danger, #ef4444) 8%, var(--surface-2));
 }

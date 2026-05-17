@@ -19,10 +19,15 @@ En software leerías esto como tres pasos secuenciales. En VHDL, las tres línea
 
 El sintetizador construye:
 
-```
-   a ─┬─ AND ─── y1 ──┐
-      │               XOR ── y3
-   b ─┴─ OR  ── y2 ───┘
+```mermaid
+flowchart LR
+    A([a]) --> AND["AND"]
+    B([b]) --> AND
+    A --> OR["OR"]
+    B --> OR
+    AND -- y1 --> XOR["XOR"]
+    OR  -- y2 --> XOR
+    XOR --> Y3([y3])
 ```
 
 Las tres compuertas están encendidas al mismo tiempo. Cuando `a` o `b` cambia, la salida `y3` se estabiliza en su nuevo valor tras un pequeño retraso de propagación por el camino más largo. No hay "primero" ni "segundo".

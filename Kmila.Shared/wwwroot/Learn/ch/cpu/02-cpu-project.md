@@ -4,28 +4,15 @@
 
 ## 这台机器
 
-```
-            ┌──────────┐
-            │  PC (4b) │ ◀── reset = "0000"
-            └────┬─────┘
-                 │ addr
-                 ▼
-            ┌──────────┐
-            │   ROM    │   (16 字节，在综合时预加载)
-            │  16×8    │
-            └────┬─────┘
-                 │ instr (8 位)
-                 ▼
-  ┌──────────────┴──────────────┐
-  │  opcode = instr(7..4)       │
-  │  imm4   = instr(3..0)       │
-  └──────┬───────────────┬──────┘
-         │               │
-         ▼               ▼
-   [译码/执行]      [PC 下一值逻辑]
-         │               │
-         ▼               ▼
-     R0 (8b)          PC_next
+```mermaid
+flowchart TD
+    RST(["reset = 0000"]) -.-> PC["PC (4 位)"]
+    PC -- addr --> ROM["ROM<br/>16 × 8 字节<br/>(综合时预加载)"]
+    ROM -- "instr (8 位)" --> SPLIT{{"opcode = instr(7..4)<br/>imm4 = instr(3..0)"}}
+    SPLIT --> DECEXE["译码 / 执行"]
+    SPLIT --> PCNXT["PC 下一值逻辑"]
+    DECEXE --> R0["R0 (8 位)"]
+    PCNXT --> PCN["PC_next"]
 ```
 
 ## 脚手架给你的部分

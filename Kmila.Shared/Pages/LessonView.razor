@@ -82,7 +82,7 @@
             @if (!string.IsNullOrEmpty(_body))
             {
                 @* Rendered via Markdig (UseAdvancedExtensions) — pipe tables,
-                   fenced code blocks, task lists, and ASCII-art diagrams all
+                   fenced code blocks, task lists, and ```mermaid diagrams all
                    render reliably, unlike BlazorBootstrap's regex parser. *@
                 <div class="lesson-markdown">
                     @MarkdownRenderer.Render(_body)
@@ -90,10 +90,21 @@
             }
             else
             {
+                @* Only fires when the body file itself is empty/absent — not
+                   when the (optional) ExecutionPlayer timeline is absent. *@
                 <div class="lesson-missing">
                     <Icon Name="IconName.ExclamationTriangleFill" />
                     <span>@Traductor.T("LEARN_LESSON_BODY_MISSING")</span>
                 </div>
+            }
+
+            @if (_timeline != null && _timeline.Steps.Count > 0)
+            {
+                @* Inline ExecutionPlayer — opt-in via Lesson.InlinePlayer in
+                   the manifest. Reuses the Concepts-track component verbatim;
+                   timeline JSON sits alongside the Markdown body at
+                   Learn/{lang}/{moduleId}/{lessonId}.timeline.json. *@
+                <ExecutionPlayer Doc="_timeline" Lang="_lang" />
             }
 
             @if (_lesson.Sample != null)
@@ -183,6 +194,7 @@
     private Lesson? _next;
     private string? _body;
     private string? _lessonTitle;
+    private ExecutionTimelineDoc? _timeline;
     private bool _completed;
     private bool _loading = true;
     private bool _openingSample;
@@ -214,6 +226,11 @@
         if (string.IsNullOrEmpty(_body)) return;
         try { await JS.InvokeVoidAsync("kmilaMermaidRun"); }
         catch { /* not available during prerender / WebView boot — fine */ }
+        // Pipe fenced code blocks through Monaco's tokenizer so VHDL snippets
+        // in the body look identical to the Editor. Idempotent — skips blocks
+        // already colorized for the current theme. See lesson-code.js.
+        try { await JS.InvokeVoidAsync("kmilaColorizeLessonCode", ".lesson-markdown"); }
+        catch { /* monaco not loaded yet (prerender) — fine */ }
     }
 
     private async Task ReloadAsync()
@@ -244,6 +261,13 @@
         _body = bodyInfo.Body;
         _fellBackToEnglish = bodyInfo.FellBack;
         _completed = await Progress.IsCompletedAsync(_module.Id, _lesson.Id);
+
+        // Optional inline ExecutionPlayer — only fetch when the lesson opts
+        // in. Skips the I/O entirely for the (current) majority of lessons
+        // that have no timeline JSON next to their Markdown body.
+        _timeline = _lesson.InlinePlayer
+            ? await Catalog.GetTimelineAsync(_module.Id, _lesson.Id, _lang)
+            : null;
 
         // Record this as "last opened" so the catalog's Continue banner can
         // resume from here next time — fire-and-forget on purpose, the page

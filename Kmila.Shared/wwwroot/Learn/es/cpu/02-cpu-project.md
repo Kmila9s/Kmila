@@ -4,28 +4,15 @@ Este es el capstone. Vas a ensamblar todo lo aprendido — una ROM, un registro,
 
 ## La máquina
 
-```
-            ┌──────────┐
-            │  PC (4b) │ ◀── reset = "0000"
-            └────┬─────┘
-                 │ addr
-                 ▼
-            ┌──────────┐
-            │   ROM    │   (16 bytes, precargada al sintetizar)
-            │  16×8    │
-            └────┬─────┘
-                 │ instr (8 bits)
-                 ▼
-  ┌──────────────┴──────────────┐
-  │  opcode = instr(7..4)       │
-  │  imm4   = instr(3..0)       │
-  └──────┬───────────────┬──────┘
-         │               │
-         ▼               ▼
-   [decode/exec]    [lógica siguiente PC]
-         │               │
-         ▼               ▼
-     R0 (8b)          PC_next
+```mermaid
+flowchart TD
+    RST(["reset = 0000"]) -.-> PC["PC (4 bits)"]
+    PC -- addr --> ROM["ROM<br/>16 × 8 bytes<br/>(precargada al sintetizar)"]
+    ROM -- "instr (8 bits)" --> SPLIT{{"opcode = instr(7..4)<br/>imm4 = instr(3..0)"}}
+    SPLIT --> DECEXE["decode / execute"]
+    SPLIT --> PCNXT["lógica siguiente PC"]
+    DECEXE --> R0["R0 (8 bits)"]
+    PCNXT --> PCN["PC_next"]
 ```
 
 ## Qué te da el andamiaje

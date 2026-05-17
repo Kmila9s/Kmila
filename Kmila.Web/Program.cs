@@ -1,5 +1,6 @@
 using Kmila.Web.Components;
 using Kmila.Shared.Services;
+using Kmila.Shared.Services.Export;
 using Kmila.Web.Services;
 using Kmila.Shared.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -254,6 +255,55 @@ public class Program
         // in-memory cache layered over the shared AppSettings table.
         builder.Services.AddScoped<LessonProgressStore>();
 
+        // Concepts catalog — execution-models mini-curriculum, sibling to
+        // LessonCatalog. Same file-resolution strategy so the manifest +
+        // per-language markdown + per-language timeline JSON all load from
+        // the RCL's wwwroot/Concepts/ tree.
+        builder.Services.AddSingleton<ConceptCatalog>(provider =>
+        {
+            var env = provider.GetRequiredService<IWebHostEnvironment>();
+            var logger = provider.GetRequiredService<ILoggerFactory>()
+                                 .CreateLogger<ConceptCatalog>();
+            return new ConceptCatalog(async path =>
+            {
+                var pathsToTry = new List<string>
+                {
+                    Path.Combine(env.ContentRootPath, "..", "Kmila.Shared", "wwwroot", path),
+                    Path.Combine(Directory.GetCurrentDirectory(), "..", "Kmila.Shared", "wwwroot", path)
+                };
+                if (!string.IsNullOrEmpty(env.WebRootPath) && Directory.Exists(env.WebRootPath))
+                {
+                    pathsToTry.Add(Path.Combine(env.WebRootPath, "_content", "Kmila.Shared", path));
+                    pathsToTry.Add(Path.Combine(env.WebRootPath, path));
+                }
+                foreach (var candidate in pathsToTry)
+                {
+                    try
+                    {
+                        var normalized = Path.GetFullPath(candidate);
+                        if (File.Exists(normalized)) return File.OpenRead(normalized);
+                    }
+                    catch { /* try next */ }
+                }
+                throw new FileNotFoundException($"Concept asset not found: {path}");
+            }, logger);
+        });
+
+        // Concept progress — scoped sibling to LessonProgressStore, distinct
+        // key prefix so the two tracks never collide in AppSettings.
+        builder.Services.AddScoped<ConceptProgressStore>();
+
+        // BlockProgram — pure function over Blockly workspace JSON; safe to
+        // register as a singleton.
+        builder.Services.AddSingleton<BlockProgram>();
+
+        // ReplayState — scoped slot for the most recent step-replay timeline,
+        // produced after each simulation in /editor/{id}. The dock's new
+        // "Replay" tab subscribes here and rerenders the ExecutionPlayer
+        // when a new doc lands. Scoped per circuit so two projects open in
+        // two tabs don't trample each other.
+        builder.Services.AddScoped<ReplayState>();
+
         // Practice — coding-challenge catalog + grader. Singletons: the
         // catalog is read-only after manifest load, and the evaluator's
         // expected-waveform cache is fine to share across circuits since
@@ -310,6 +360,11 @@ public class Program
         // .kmila project bundle export / import. Scoped so the inner
         // repositories resolve to the current circuit's DB context.
         builder.Services.AddScoped<ProjectBundleService>();
+
+        // Cross-platform file export — Web target delegates to the JS
+        // anchor-tag download helpers (kmila-shared-head.js). MAUI targets
+        // get a filesystem-writing implementation registered in MauiProgram.
+        builder.Services.AddScoped<IFileExportService, WebFileExportService>();
 
         // Per-project editor session — open tabs, active index, split
         // state. Stored in browser localStorage keyed by project id.

@@ -2,11 +2,9 @@
 
 Schau in eine beliebige CPU — von einem kleinen 8-Bit-Mikrocontroller bis zu einem modernen GPU-Shader-Kern — und du wirst dieselben fünf Stufen finden, die dieselben fünf Aufgaben erledigen:
 
-```
-  ┌─────┐   ┌──────┐   ┌────────┐   ┌─────────┐   ┌──────────┐
-  │ IF  │──▶│ ID   │──▶│ EX     │──▶│ MEM     │──▶│ WB       │
-  │fetch│   │decode│   │execute │   │ memory  │   │writeback │
-  └─────┘   └──────┘   └────────┘   └─────────┘   └──────────┘
+```mermaid
+flowchart LR
+    IF["IF<br/>fetch"] --> ID["ID<br/>decode"] --> EX["EX<br/>execute"] --> MEM["MEM<br/>Speicher"] --> WB["WB<br/>writeback"]
 ```
 
 ## Die fünf klassischen Stufen

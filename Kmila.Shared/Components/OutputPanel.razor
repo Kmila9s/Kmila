@@ -88,16 +88,17 @@ else
             sb.AppendLine($"{e.Timestamp:HH:mm:ss.fff} [{e.Level.ToString().ToUpperInvariant()}] {e.Message}");
         }
         var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-        try
+        var result = await Export.SaveTextAsync(ExportCategory.Logs,
+            $"kmila-build-{stamp}.log", "text/plain", sb.ToString());
+        if (result.Saved)
         {
-            await JS.InvokeVoidAsync("kmilaDownloadText",
-                $"kmila-build-{stamp}.log", "text/plain", sb.ToString());
+            var msg = result.Path != null ? $"Saved: {result.Path}" : "Log downloaded.";
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), msg, ToastType.Success));
         }
-        catch
+        else
         {
-            // kmilaDownloadText is wired in both hosts; if absent (sandboxed
-            // iframe / disabled JS) we fail silently — the in-app log is still
-            // fully readable.
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                result.Error ?? "Export failed.", ToastType.Danger));
         }
     }
 

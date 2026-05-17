@@ -101,6 +101,10 @@
                 @if (RunsContent != null) { @RunsContent }
                 else { @RenderEmpty(IconName.ClockHistory, "EDITOR_EMPTY_RUNS") }
                 break;
+            case EditorTab.Replay:
+                @if (ReplayContent != null) { @ReplayContent }
+                else { @RenderEmpty(IconName.PlayCircle, "EDITOR_EMPTY_REPLAY") }
+                break;
             case EditorTab.Files:
                 @if (FilesContent != null) { @FilesContent }
                 else { @RenderEmpty(IconName.Folder2Open, "EDITOR_EMPTY_FILES") }
@@ -120,6 +124,7 @@
     [Parameter] public RenderFragment? PortsContent { get; set; }
     [Parameter] public RenderFragment? WaveformsContent { get; set; }
     [Parameter] public RenderFragment? RunsContent { get; set; }
+    [Parameter] public RenderFragment? ReplayContent { get; set; }
     [Parameter] public RenderFragment? FilesContent { get; set; }
     [Parameter] public RenderFragment? OutputContent { get; set; }
 
@@ -142,6 +147,7 @@
         new TabDef(EditorTab.Ports,     IconName.Plugin,           "EDITOR_TAB_PORTS"),
         new TabDef(EditorTab.Waveforms, IconName.GraphUp,          "EDITOR_WAVEFORMS"),
         new TabDef(EditorTab.Runs,      IconName.ClockHistory,     "EDITOR_TAB_RUNS"),
+        new TabDef(EditorTab.Replay,    IconName.PlayCircle,       "EDITOR_TAB_REPLAY"),
         new TabDef(EditorTab.Files,     IconName.Folder2Open,      "EDITOR_FILES"),
         new TabDef(EditorTab.Output,    IconName.TerminalFill,     "EDITOR_TAB_OUTPUT")
     };

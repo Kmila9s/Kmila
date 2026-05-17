@@ -749,11 +749,10 @@ else if (Data != null && Data.Signals.Count > 0)
 
     /// <summary>
     /// Receives the validated request from the modal, paginates the range,
-    /// and renders + downloads each page. SVG goes through kmilaDownloadText;
-    /// PNG goes through kmilaDownloadPng (canvas rasterisation, scale set
-    /// in the modal). Multi-page exports just emit consecutive numbered
-    /// files — sequential downloads work in MAUI WebView and any modern
-    /// browser, so we avoid pulling in a JS zip lib for v1.
+    /// and renders + writes each page through IFileExportService. SVG pages
+    /// go to Documents/Kmila/SVG/; PNG pages are rasterised on the JS side
+    /// (canvas, scale set in the modal) then routed through SaveBytesAsync
+    /// so they land in Documents/Kmila/PNG/ on MAUI or download on Web.
     /// </summary>
     private async Task HandleExportSubmitAsync(WaveformExportRequest req)
     {
@@ -773,6 +772,7 @@ else if (Data != null && Data.Signals.Count > 0)
         string baseName = SanitizeFileName($"kmila-waveform_{FormatRangeForFilename(req.FromNs, req.ToNs)}");
         string ext = req.Format == WaveformExportFormat.Svg ? "svg" : "png";
 
+        FileExportResult? lastResult = null;
         try
         {
             for (int i = 0; i < pages.Count; i++)
@@ -789,17 +789,39 @@ else if (Data != null && Data.Signals.Count > 0)
 
                 if (req.Format == WaveformExportFormat.Svg)
                 {
-                    await JS.InvokeVoidAsync("kmilaDownloadText", fileName, "image/svg+xml", svg);
+                    lastResult = await Export.SaveTextAsync(ExportCategory.Svg, fileName, "image/svg+xml", svg);
                 }
                 else
                 {
-                    await JS.InvokeAsync<bool>("kmilaDownloadPng", fileName, svg, req.PngScale);
+                    var base64 = await JS.InvokeAsync<string>("kmilaSvgToPngBase64", svg, req.PngScale);
+                    if (string.IsNullOrEmpty(base64))
+                    {
+                        lastResult = FileExportResult.Failure("PNG rasterisation failed.");
+                        continue;
+                    }
+                    var bytes = Convert.FromBase64String(base64);
+                    lastResult = await Export.SaveBytesAsync(ExportCategory.Png, fileName, "image/png", bytes);
                 }
+            }
+
+            if (lastResult is { Saved: true })
+            {
+                var folder = req.Format == WaveformExportFormat.Svg ? "SVG" : "PNG";
+                var msg = lastResult.Path != null
+                    ? (pages.Count == 1 ? $"Saved: {lastResult.Path}" : $"Saved {pages.Count} pages to /{folder}/")
+                    : $"Waveform exported ({pages.Count} page{(pages.Count == 1 ? "" : "s")}).";
+                ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), msg, ToastType.Success));
+            }
+            else if (lastResult != null)
+            {
+                ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                    lastResult.Error ?? "Export failed.", ToastType.Danger));
             }
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "[WaveformViewer] Export failed");
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
         }
     }
 

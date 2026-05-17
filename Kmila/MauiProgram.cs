@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using Kmila.Shared.Services;
+using Kmila.Shared.Services.Export;
 using Kmila.Shared.Data;
 using Kmila.Shared.Repositories;
 using Kmila.Shared.Models;
@@ -200,6 +201,38 @@ public static class MauiProgram
         // the hydrated cache but a cold start still reads from SQLite.
         builder.Services.AddScoped<LessonProgressStore>();
 
+        // Concepts catalog — execution-models mini-curriculum. Reads its
+        // manifest + per-language markdown + timeline JSON from the bundled
+        // app package via FileSystem.OpenAppPackageFileAsync — same pattern
+        // as LessonCatalog. The MauiAsset glob in Kmila.csproj is what
+        // actually ships the files into the bundle.
+        builder.Services.AddSingleton<ConceptCatalog>(provider =>
+            new ConceptCatalog(
+                async path =>
+                {
+                    try
+                    {
+                        return await FileSystem.OpenAppPackageFileAsync(path);
+                    }
+                    catch (FileNotFoundException)
+                    {
+                        throw new FileNotFoundException($"Concept asset not found: {path}");
+                    }
+                },
+                provider.GetRequiredService<ILoggerFactory>().CreateLogger<ConceptCatalog>()));
+
+        // Concept progress — scoped sibling to LessonProgressStore.
+        builder.Services.AddScoped<ConceptProgressStore>();
+
+        // BlockProgram — pure function over Blockly workspace JSON; safe to
+        // register as a singleton.
+        builder.Services.AddSingleton<BlockProgram>();
+
+        // ReplayState — scoped slot for the most recent step-replay timeline,
+        // populated after each Editor simulation run. The dock's "Replay"
+        // tab subscribes here.
+        builder.Services.AddScoped<ReplayState>();
+
         // Practice — coding-challenge catalog + grader. The catalog reads
         // its manifest + per-exercise assets from the bundled app package
         // (`Practice/manifest.json`, `Practice/{folder}/*.{vhdl,json,md}`)
@@ -238,6 +271,12 @@ public static class MauiProgram
 
         // Single-file .kmila project bundle — export/import all state in one JSON blob.
         builder.Services.AddScoped<ProjectBundleService>();
+
+        // Cross-platform file export — MAUI heads write to
+        // ~/Documents/Kmila/<Category>/ on macOS, iOS, and Android (via
+        // MediaStore on API 29+). Web target registers WebFileExportService
+        // in Kmila.Web/Program.cs which delegates to the JS download helpers.
+        builder.Services.AddSingleton<IFileExportService, MauiFileExportService>();
 
         // Per-project editor session — open tabs, active index, split state.
         // Stored in localStorage (browser/WebView) keyed by project id.

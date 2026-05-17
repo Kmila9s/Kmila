@@ -1,12 +1,30 @@
 ﻿<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-    <!-- See https://aka.ms/maui-publish-app-store#add-entitlements for more information about adding entitlements.-->
+    <!-- See https://aka.ms/maui-publish-app-store#add-entitlements for more information about adding entitlements. -->
     <dict>
-        <!-- App Sandbox must be enabled to distribute a MacCatalyst app through the Mac App Store. -->
+        <!-- App Sandbox is intentionally DISABLED on Mac Catalyst so the file
+             export service (IFileExportService -> MauiFileExportService)
+             writes to the real ~/Documents/Kmila/<Category>/ instead of the
+             per-app container at
+             ~/Library/Containers/kmila/Data/Documents/Kmila/. With the
+             sandbox on, Environment.GetFolderPath(SpecialFolder.MyDocuments)
+             returns the container path and the user can't see exports in
+             Finder under their home Documents folder.
+
+             Tradeoff: a non-sandboxed Mac Catalyst app cannot be distributed
+             through the Mac App Store. For thesis-prototype distribution
+             (direct download / dev signing) this is fine. If App Store
+             distribution becomes a goal, re-enable the sandbox and replace
+             the direct File.WriteAll* path with a one-time NSOpenPanel
+             "pick your Kmila exports folder" prompt + security-scoped
+             bookmark (com.apple.security.files.user-selected.read-write
+             entitlement). -->
         <key>com.apple.security.app-sandbox</key>
-        <true/>
-        <!-- When App Sandbox is enabled, this value is required to open outgoing network connections. -->
+        <false/>
+        <!-- Outgoing network is harmless without the sandbox but explicit is
+             cheaper than rediscovering the requirement later if the sandbox
+             ever returns. -->
         <key>com.apple.security.network.client</key>
         <true/>
     </dict>

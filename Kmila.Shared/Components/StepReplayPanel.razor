@@ -1,0 +1,53 @@
+@*
+    StepReplayPanel — Editor dock content for the new "Replay" tab.
+
+    Subscribes to ReplayState; when there's a replay document (the user
+    has run at least one simulation), renders the shared ExecutionPlayer
+    with the captured signal trajectory + the user's VHDL source. Empty
+    state otherwise.
+
+    Phase A of the live-simulation playback work; line-highlight column
+    is intentionally empty in this phase (see ReplayBuilder docs). The
+    component itself only knows how to consume an ExecutionTimelineDoc
+    — Phase B can add line-highlight metadata without touching this
+    file.
+*@
+
+@inject ReplayState Replay
+@implements IDisposable
+
+@if (Replay.Current is { Steps.Count: > 0 } doc)
+{
+    <div class="kmila-replay">
+        <header class="kmila-replay__header">
+            <Icon Name="IconName.PlayCircle" />
+            <span class="kmila-replay__title">@Traductor.T("EDITOR_REPLAY_TITLE")</span>
+            <span class="kmila-replay__meta">
+                @string.Format(Traductor.T("EDITOR_REPLAY_FRAMES_FMT"), doc.Steps.Count)
+            </span>
+        </header>
+        <ExecutionPlayer Doc="doc" Lang="@(Traductor.Lang ?? "en")" />
+    </div>
+}
+else
+{
+    <div class="kmila-replay-empty">
+        <div class="kmila-replay-empty__icon"><Icon Name="IconName.PlayCircle" /></div>
+        <h3>@Traductor.T("EDITOR_REPLAY_EMPTY_TITLE")</h3>
+        <p>@Traductor.T("EDITOR_REPLAY_EMPTY_BODY")</p>
+    </div>
+}
+
+@code {
+    protected override void OnInitialized()
+    {
+        Replay.OnChange += OnReplayChanged;
+    }
+
+    private void OnReplayChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Replay.OnChange -= OnReplayChanged;
+    }
+}

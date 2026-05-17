@@ -786,35 +786,36 @@
     }
 
     /// <summary>
-    /// Triggers a browser download of the FPGA starter template. Uses the
-    /// shared <c>window.kmilaDownloadText</c> helper so the same flow works
-    /// on Web and MAUI without touching the file system.
+    /// Exports the FPGA starter template. Web downloads via the JS helper;
+    /// MAUI writes to Documents/Kmila/Settings/.
     /// </summary>
     private async Task DownloadFpgaTemplate()
     {
-        try
-        {
-            await JS.InvokeVoidAsync("kmilaDownloadText",
-                "fpga-template.json", "application/json",
-                UserAssetStore.BuildFpgaTemplate());
-        }
-        catch (Exception ex)
-        {
-            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
-        }
+        var result = await Export.SaveTextAsync(ExportCategory.Settings,
+            "fpga-template.json", "application/json",
+            UserAssetStore.BuildFpgaTemplate());
+        NotifyExport(result);
     }
 
     private async Task DownloadLanguageTemplate()
     {
-        try
+        var result = await Export.SaveTextAsync(ExportCategory.Languages,
+            "language-template.json", "application/json",
+            UserAssetStore.BuildLanguageTemplate());
+        NotifyExport(result);
+    }
+
+    private void NotifyExport(FileExportResult result)
+    {
+        if (result.Saved)
         {
-            await JS.InvokeVoidAsync("kmilaDownloadText",
-                "language-template.json", "application/json",
-                UserAssetStore.BuildLanguageTemplate());
+            var msg = result.Path != null ? $"Saved: {result.Path}" : Traductor.T("SETTINGS_TEMPLATE_DOWNLOADED");
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), msg, ToastType.Success));
         }
-        catch (Exception ex)
+        else
         {
-            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                result.Error ?? Traductor.T("COMMON_ERROR"), ToastType.Danger));
         }
     }
 
@@ -979,8 +980,9 @@
         {
             var json = await Bundles.ExportAsync(proj);
             var safeName = proj.Name.Replace(' ', '_');
-            await JS.InvokeVoidAsync("kmilaDownloadText",
+            var result = await Export.SaveTextAsync(ExportCategory.Projects,
                 $"{safeName}.kmila", "application/json", json);
+            NotifyExport(result);
         }
         catch (Exception ex)
         {

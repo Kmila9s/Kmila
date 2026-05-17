@@ -1,0 +1,70 @@
+{
+  "code": "-- A tiny process. Reads a and b; writes sum.\nprocess(a, b)\nbegin\n  if a = '1' then\n    sum <= b;\n  else\n    sum <= '0';\n  end if;\nend process;",
+  "language": "vhdl",
+  "signalOrder": ["a", "b", "sum"],
+  "steps": [
+    {
+      "t": 0,
+      "highlightLines": [],
+      "signals": { "a": "U", "b": "U", "sum": "U" },
+      "note": {
+        "en": "We start cold. All signals are 'U' (uninitialized). Nothing is running yet — the process is asleep.",
+        "es": "Empezamos en frío. Todas las señales están en 'U' (no inicializadas). Nada se ejecuta aún — el proceso está dormido."
+      }
+    },
+    {
+      "t": 1,
+      "highlightLines": [2],
+      "signals": { "a": "1", "b": "0", "sum": "U" },
+      "note": {
+        "en": "Input a just changed to '1'. The sensitivity list says 'wake up when a or b changes' — so the process wakes.",
+        "es": "La entrada a acaba de cambiar a '1'. La lista de sensibilidad dice 'despierta cuando cambien a o b' — así que el proceso se despierta."
+      }
+    },
+    {
+      "t": 2,
+      "highlightLines": [4],
+      "signals": { "a": "1", "b": "0", "sum": "U" },
+      "note": {
+        "en": "Sequential execution begins inside the process body. We evaluate the if-condition: is a = '1'? Yes.",
+        "es": "Comienza la ejecución secuencial dentro del cuerpo del proceso. Evaluamos la condición del if: ¿es a = '1'? Sí."
+      }
+    },
+    {
+      "t": 3,
+      "highlightLines": [5],
+      "signals": { "a": "1", "b": "0", "sum": "U" },
+      "note": {
+        "en": "We schedule sum <= b. KEY INSIGHT: sum has NOT changed yet. We only posted a transaction; the value becomes visible after the delta cycle ends.",
+        "es": "Programamos sum <= b. IDEA CLAVE: sum AÚN no cambia. Solo registramos una transacción; el valor se hace visible al cerrar el ciclo delta."
+      }
+    },
+    {
+      "t": 4,
+      "highlightLines": [9],
+      "signals": { "a": "1", "b": "0", "sum": "U" },
+      "note": {
+        "en": "We exit the process. The body ran top-to-bottom, in source order — that's the sequential model.",
+        "es": "Salimos del proceso. El cuerpo se ejecutó de arriba hacia abajo, en el orden del código fuente — ese es el modelo secuencial."
+      }
+    },
+    {
+      "t": 5,
+      "highlightLines": [],
+      "signals": { "a": "1", "b": "0", "sum": "0" },
+      "note": {
+        "en": "Delta cycle ends. NOW the transaction commits and sum becomes '0'. This is the difference between simulation time and wall-clock time.",
+        "es": "Termina el ciclo delta. AHORA la transacción se confirma y sum pasa a ser '0'. Esta es la diferencia entre tiempo de simulación y tiempo real."
+      }
+    },
+    {
+      "t": 6,
+      "highlightLines": [],
+      "signals": { "a": "1", "b": "1", "sum": "0" },
+      "note": {
+        "en": "Input b just changed to '1'. The process will wake again — try stepping forward and watch the same dance repeat.",
+        "es": "La entrada b acaba de cambiar a '1'. El proceso se despertará otra vez — avanza paso a paso y observa cómo se repite la misma danza."
+      }
+    }
+  ]
+}

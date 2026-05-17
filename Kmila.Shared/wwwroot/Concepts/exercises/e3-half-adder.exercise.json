@@ -1,0 +1,217 @@
+{
+  "version": 1,
+  "toolbox": {
+    "kind": "flyoutToolbox",
+    "contents": [
+      { "kind": "block", "type": "kmila_output_assign" },
+      { "kind": "sep" },
+      { "kind": "block", "type": "kmila_gate_xor" },
+      { "kind": "block", "type": "kmila_gate_and" },
+      { "kind": "block", "type": "kmila_gate_or" },
+      { "kind": "sep" },
+      { "kind": "block", "type": "kmila_signal_in" }
+    ]
+  },
+  "compositions": [
+    {
+      "fingerprint": "kmila_output_assign:TARGET=sum(VALUE=kmila_gate_xor(LHS=kmila_signal_in:NAME=a)(RHS=kmila_signal_in:NAME=b))|kmila_output_assign:TARGET=cout(VALUE=kmila_gate_and(LHS=kmila_signal_in:NAME=a)(RHS=kmila_signal_in:NAME=b))",
+      "label": {
+        "en": "Half-adder: XOR for sum, AND for carry",
+        "es": "Medio-sumador: XOR para sum, AND para carry"
+      },
+      "timeline": {
+        "code": "sum  <= a xor b;   -- line 1\ncout <= a and b;   -- line 2",
+        "language": "vhdl",
+        "signalOrder": ["a", "b", "sum", "cout"],
+        "steps": [
+          {
+            "t": 0,
+            "highlightLines": [],
+            "signals": { "a": "0", "b": "0", "sum": "0", "cout": "0" },
+            "note": {
+              "en": "Cold start. Both inputs are 0; the half-adder has no work to do.",
+              "es": "Inicio en frío. Las dos entradas están en 0; el medio-sumador no tiene trabajo."
+            }
+          },
+          {
+            "t": 1,
+            "highlightLines": [],
+            "signals": { "a": "1", "b": "1", "sum": "0", "cout": "0" },
+            "note": {
+              "en": "Inputs change: a = 1, b = 1. Both concurrent statements are sensitive to a and b — both will fire.",
+              "es": "Las entradas cambian: a = 1, b = 1. Ambas sentencias concurrentes son sensibles a a y b — ambas se dispararán."
+            }
+          },
+          {
+            "t": 2,
+            "highlightLines": [1, 2],
+            "signals": { "a": "1", "b": "1", "sum": "0", "cout": "0" },
+            "note": {
+              "en": "BOTH lines fire in the same delta cycle. The order in the file doesn't matter — it's a parallel evaluation.",
+              "es": "AMBAS líneas se disparan en el mismo ciclo delta. El orden en el archivo no importa — es una evaluación paralela."
+            }
+          },
+          {
+            "t": 3,
+            "highlightLines": [],
+            "signals": { "a": "1", "b": "1", "sum": "0", "cout": "1" },
+            "note": {
+              "en": "Delta ends. 1 XOR 1 = 0, so sum = 0. 1 AND 1 = 1, so cout = 1. Standard binary addition: 1+1 = 10.",
+              "es": "Termina el delta. 1 XOR 1 = 0, así que sum = 0. 1 AND 1 = 1, así que cout = 1. Suma binaria estándar: 1+1 = 10."
+            }
+          },
+          {
+            "t": 4,
+            "highlightLines": [],
+            "signals": { "a": "1", "b": "0", "sum": "0", "cout": "1" },
+            "note": {
+              "en": "Now b flips to 0. Both lines wake again (sensitive to b). Old values still showing — transactions are scheduled, not committed.",
+              "es": "Ahora b cambia a 0. Ambas líneas se despiertan de nuevo (sensibles a b). Aún se muestran los valores viejos — transacciones programadas, no confirmadas."
+            }
+          },
+          {
+            "t": 5,
+            "highlightLines": [1, 2],
+            "signals": { "a": "1", "b": "0", "sum": "0", "cout": "1" },
+            "note": {
+              "en": "Both fire together again. Same delta, same evaluation moment.",
+              "es": "Ambas se disparan juntas otra vez. Mismo delta, mismo momento de evaluación."
+            }
+          },
+          {
+            "t": 6,
+            "highlightLines": [],
+            "signals": { "a": "1", "b": "0", "sum": "1", "cout": "0" },
+            "note": {
+              "en": "Delta ends. 1 XOR 0 = 1 → sum = 1. 1 AND 0 = 0 → cout = 0. The half-adder works on every input combination.",
+              "es": "Termina el delta. 1 XOR 0 = 1 → sum = 1. 1 AND 0 = 0 → cout = 0. El medio-sumador funciona en cada combinación de entrada."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fingerprint": "kmila_output_assign:TARGET=cout(VALUE=kmila_gate_and(LHS=kmila_signal_in:NAME=a)(RHS=kmila_signal_in:NAME=b))|kmila_output_assign:TARGET=sum(VALUE=kmila_gate_xor(LHS=kmila_signal_in:NAME=a)(RHS=kmila_signal_in:NAME=b))",
+      "label": {
+        "en": "Half-adder (cout-first variant)",
+        "es": "Medio-sumador (variante cout primero)"
+      },
+      "timeline": {
+        "code": "cout <= a and b;   -- line 1\nsum  <= a xor b;   -- line 2",
+        "language": "vhdl",
+        "signalOrder": ["a", "b", "cout", "sum"],
+        "steps": [
+          {
+            "t": 0,
+            "highlightLines": [],
+            "signals": { "a": "0", "b": "0", "cout": "0", "sum": "0" },
+            "note": {
+              "en": "Cold start. You put cout first this time — the result is identical because concurrent statements don't care about source order.",
+              "es": "Inicio en frío. Pusiste cout primero — el resultado es idéntico porque a las sentencias concurrentes no les importa el orden del código."
+            }
+          },
+          {
+            "t": 1,
+            "highlightLines": [1, 2],
+            "signals": { "a": "1", "b": "1", "cout": "0", "sum": "0" },
+            "note": {
+              "en": "Both lines fire together in the same delta. Order swap = same outcome.",
+              "es": "Ambas líneas se disparan juntas en el mismo delta. Cambiar el orden = mismo resultado."
+            }
+          },
+          {
+            "t": 2,
+            "highlightLines": [],
+            "signals": { "a": "1", "b": "1", "cout": "1", "sum": "0" },
+            "note": {
+              "en": "Delta closes. cout = 1, sum = 0 — identical to the canonical sum-first arrangement.",
+              "es": "Cierra el delta. cout = 1, sum = 0 — idéntico al arreglo canónico con sum primero."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fingerprint": "kmila_output_assign:TARGET=sum(VALUE=kmila_gate_xor(LHS=kmila_signal_in:NAME=b)(RHS=kmila_signal_in:NAME=a))|kmila_output_assign:TARGET=cout(VALUE=kmila_gate_and(LHS=kmila_signal_in:NAME=b)(RHS=kmila_signal_in:NAME=a))",
+      "label": {
+        "en": "Half-adder (b-first gate inputs)",
+        "es": "Medio-sumador (entradas con b primero)"
+      },
+      "timeline": {
+        "code": "sum  <= b xor a;   -- line 1\ncout <= b and a;   -- line 2",
+        "language": "vhdl",
+        "signalOrder": ["a", "b", "sum", "cout"],
+        "steps": [
+          {
+            "t": 0,
+            "highlightLines": [],
+            "signals": { "a": "0", "b": "0", "sum": "0", "cout": "0" },
+            "note": {
+              "en": "Cold start. You wired b first on both gates. XOR and AND are commutative — a XOR b = b XOR a — so the result is identical.",
+              "es": "Inicio en frío. Cableaste b primero en ambas compuertas. XOR y AND son conmutativas — a XOR b = b XOR a — así que el resultado es idéntico."
+            }
+          },
+          {
+            "t": 1,
+            "highlightLines": [1, 2],
+            "signals": { "a": "1", "b": "1", "sum": "0", "cout": "0" },
+            "note": {
+              "en": "Both fire in this delta. The order of inputs on a commutative gate is purely cosmetic.",
+              "es": "Ambas se disparan en este delta. El orden de las entradas en una compuerta conmutativa es puramente cosmético."
+            }
+          },
+          {
+            "t": 2,
+            "highlightLines": [],
+            "signals": { "a": "1", "b": "1", "sum": "0", "cout": "1" },
+            "note": {
+              "en": "Delta closes. Same outputs as the canonical arrangement — the half-adder doesn't care which input is on the left.",
+              "es": "Cierra el delta. Mismas salidas que el arreglo canónico — al medio-sumador no le importa qué entrada va a la izquierda."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fingerprint": "kmila_output_assign:TARGET=cout(VALUE=kmila_gate_and(LHS=kmila_signal_in:NAME=b)(RHS=kmila_signal_in:NAME=a))|kmila_output_assign:TARGET=sum(VALUE=kmila_gate_xor(LHS=kmila_signal_in:NAME=b)(RHS=kmila_signal_in:NAME=a))",
+      "label": {
+        "en": "Half-adder (cout-first + b-first gate inputs)",
+        "es": "Medio-sumador (cout primero + entradas b primero)"
+      },
+      "timeline": {
+        "code": "cout <= b and a;   -- line 1\nsum  <= b xor a;   -- line 2",
+        "language": "vhdl",
+        "signalOrder": ["a", "b", "cout", "sum"],
+        "steps": [
+          {
+            "t": 0,
+            "highlightLines": [],
+            "signals": { "a": "0", "b": "0", "cout": "0", "sum": "0" },
+            "note": {
+              "en": "Cold start. Both axes flipped from canonical — cout-first AND b-first inputs. Same circuit, just different keystrokes.",
+              "es": "Inicio en frío. Ambos ejes invertidos del canónico — cout primero Y entradas con b primero. Mismo circuito, distintas teclas."
+            }
+          },
+          {
+            "t": 1,
+            "highlightLines": [1, 2],
+            "signals": { "a": "1", "b": "1", "cout": "0", "sum": "0" },
+            "note": {
+              "en": "Both fire in this delta. Concurrent + commutative inputs = total freedom in how you arrange the source.",
+              "es": "Ambas se disparan en este delta. Concurrente + entradas conmutativas = libertad total para acomodar el código."
+            }
+          },
+          {
+            "t": 2,
+            "highlightLines": [],
+            "signals": { "a": "1", "b": "1", "cout": "1", "sum": "0" },
+            "note": {
+              "en": "Delta closes. cout = 1, sum = 0 — same as every other variant of this exercise. You've internalized the half-adder.",
+              "es": "Cierra el delta. cout = 1, sum = 0 — igual que cualquier otra variante de este ejercicio. Ya interiorizaste el medio-sumador."
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

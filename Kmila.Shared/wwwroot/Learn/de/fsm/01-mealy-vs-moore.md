@@ -10,10 +10,11 @@ Wo die Ausgangslogik ihre Eingaben bezieht, teilt FSMs in zwei Familien.
 
 ## Moore: Ausgänge hängen nur vom Zustand ab
 
-```
- input → [ Folgezustand ] → [ Zustandsreg. ] → [ Ausgänge ]
-                                             ↑
-                                          (mehr nicht)
+```mermaid
+flowchart LR
+    IN([Eingang]) --> NS["Folgezustand"]
+    NS --> SR["Zustandsreg."]
+    SR --> OUT["Ausgänge"]
 ```
 
 Bei gegebenem Zustand ist der Ausgang fest. Wenn du in `S_GREEN` bist, ist `green = '1'`. Immer. Egal, wie die Eingabe aussieht.
@@ -28,12 +29,13 @@ Bei gegebenem Zustand ist der Ausgang fest. Wenn du in `S_GREEN` bist, ist `gree
 
 ## Mealy: Ausgänge hängen von Zustand + Eingang ab
 
-```
- input ──→ [ Folgezustand ] ──→ [ Zustandsreg. ]
-   │                                 │
-   └───→ [ Ausgangslogik ] ←─────────┘
-                │
-             Ausgänge
+```mermaid
+flowchart LR
+    IN([Eingang]) --> NS["Folgezustand"]
+    NS --> SR["Zustandsreg."]
+    IN --> OL["Ausgangslogik"]
+    SR --> OL
+    OL --> OUT([Ausgänge])
 ```
 
 Ausgänge sind eine Funktion des aktuellen Zustands **und** des aktuellen Eingangs. Sie können sich zwischen Taktflanken ändern.

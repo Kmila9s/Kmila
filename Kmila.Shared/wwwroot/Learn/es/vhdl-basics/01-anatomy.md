@@ -60,16 +60,16 @@ El cuerpo entre `begin` y `end architecture` es donde realmente se describen las
 
 El parser de Kmila lee tu archivo de arriba abajo y construye un árbol:
 
-```
-Archivo
-├── library IEEE
-├── use IEEE.STD_LOGIC_1164.ALL
-└── entity my_design
-    ├── port a (in, std_logic)
-    ├── port b (in, std_logic)
-    ├── port y (out, std_logic)
-    └── architecture rtl
-        └── concurrente: y <= a and b
+```mermaid
+flowchart TD
+    File["Archivo"] --> Lib["library IEEE"]
+    File --> Use["use IEEE.STD_LOGIC_1164.ALL"]
+    File --> Ent["entity my_design"]
+    Ent --> Pa["port a (in, std_logic)"]
+    Ent --> Pb["port b (in, std_logic)"]
+    Ent --> Py["port y (out, std_logic)"]
+    Ent --> Arch["architecture rtl"]
+    Arch --> Conc["concurrente: y &lt;= a and b"]
 ```
 
 Al pulsar **Build**, los puertos se vuelven entradas en la pestaña **Puertos** del dock, la entidad aparece en **Entidades**, y las asignaciones dentro de la arquitectura se convierten en el cableado que ejecuta el simulador.

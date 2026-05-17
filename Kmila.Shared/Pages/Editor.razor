@@ -8,6 +8,7 @@
 @inject Kmila.Shared.Services.RecentProjectsTracker Recent
 @inject Kmila.Shared.Services.SimulationSnapshotStore Snapshots
 @inject Kmila.Shared.Services.EditorSessionStore Sessions
+@inject Kmila.Shared.Services.ReplayState Replay
 <PageTitle>@string.Format(Traductor.T("EDITOR_PAGE_TITLE"), _project?.Name ?? string.Empty)</PageTitle>
 @*
     The outer `<section class="editor-page">` wraps the route unconditionally
@@ -225,6 +226,12 @@
                            OnLoadSnapshot="LoadSnapshotAsync"
                            OnCompareSnapshots="OpenCompareAsync" />
             </RunsContent>
+
+            <ReplayContent>
+                @* Step-through playback of the last simulation run.
+                   ReplayState is fed in OnSimulationDataReady below. *@
+                <StepReplayPanel />
+            </ReplayContent>
 
             <FilesContent>
                 <FilesCard
@@ -625,6 +632,12 @@
         Log.Clear();
         _waveformData = null;
 
+        // Clear the step-replay state so the new project's Replay tab opens
+        // on its empty hint instead of showing the previous project's run.
+        // ReplayState is scoped per-circuit, so this only resets the slot we
+        // share between tabs, not anyone else's.
+        Replay.Set(null);
+
         // Drop every tab from the previous project — never carry buffers
         // across project switches. CloseAllTabsAsync handles model disposal
         // and clears the editor surface when Monaco is initialised.
@@ -1012,7 +1025,13 @@
         {
             // Known-shape parser error — synthesize an Error diagnostic from
             // the exception's line/column/message and also push it through.
-            Builder.Parser?.Diagnostics.Add(global::Parser.Models.Diagnostic.FromException(pex));
+            // Pass FileContent so the source-aware overload can rewrite the
+            // column from Token.Col (a per-line token index) to the real
+            // character offset of the offending identifier — without this,
+            // the squiggle lands on whitespace and looks like "not
+            // highlighting" to the student. See [[project_monaco_error_markers_missing]].
+            Builder.Parser?.Diagnostics.Add(
+                global::Parser.Models.Diagnostic.FromException(pex, Builder.Parser?.FileContent));
             await PublishDiagnosticsAsync();
             Sim.SetState(SimState.BuildError);
             Log.Error($"{Traductor.T("SIM_LOG_BUILD_FAILED")}: {pex.Message}");
@@ -1119,7 +1138,11 @@
                 source          = "Kmila VHDL"
             }).ToArray();
 
-            await JS.InvokeVoidAsync("kmilaSetMonacoMarkers", markers);
+            // Wrap in (object) so IJSRuntime's params-args binding doesn't
+            // splat the array — each element would otherwise arrive as a
+            // separate JS argument and the JS handler would see only the
+            // first marker as a bare object instead of an array.
+            await JS.InvokeVoidAsync("kmilaSetMonacoMarkers", (object)markers);
         }
         catch (Exception ex)
         {
@@ -1516,7 +1539,7 @@ end architecture behavioral;",
 
         // Wipe any stale parser markers — the content has moved, the squiggle
         // coordinates can't be trusted until the next Build.
-        try { await JS.InvokeVoidAsync("kmilaSetMonacoMarkers", new object[0]); }
+        try { await JS.InvokeVoidAsync("kmilaSetMonacoMarkers", (object)Array.Empty<object>()); }
         catch { /* Monaco not ready — fine */ }
 
         if (IsMarkdownFile)
@@ -1610,6 +1633,17 @@ end architecture behavioral;",
                     scale    : Sim.Scale.ToString(),
                     fpgaModel: SelectedFPGA?.FPGA?.Model);
             }
+
+            // Phase A of the live-simulation playback: convert the captured
+            // waveform into an ExecutionTimelineDoc and push it into the
+            // scoped ReplayState. The new "Replay" dock tab subscribes
+            // there and re-renders the ExecutionPlayer with this doc.
+            // Fire-and-forget on purpose — Monaco's GetValue is async and
+            // we don't want to block OnSimulationDataReady's main path.
+            if (wd != null && wd.Signals.Count > 0)
+            {
+                _ = BuildAndPushReplayAsync(wd);
+            }
             var sigs = wd?.Signals?.Count ?? 0;
             var samples = history?.TotalSamples ?? 0;
             Logger.LogInformation("[Editor] Waveform ready: {Signals} signals, {Samples} samples",
@@ -1630,6 +1664,37 @@ end architecture behavioral;",
             Log.Error($"Waveform build failed: {ex.Message}");
         }
         InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Builds the step-replay document from the just-finished simulation's
+    /// waveform plus the editor's current source code, then pushes it into
+    /// the scoped <see cref="ReplayState"/> so the Replay dock tab's
+    /// <c>StepReplayPanel</c> rerenders. Async so we can <c>await</c>
+    /// Monaco's <c>GetValue</c>; the caller invokes us fire-and-forget so
+    /// the main <c>OnSimulationDataReady</c> handler stays unblocked. All
+    /// failures are swallowed by design — replay is non-essential plumbing
+    /// and shouldn't kill the rest of the post-sim flow.
+    /// </summary>
+    private async Task BuildAndPushReplayAsync(WaveformData wd)
+    {
+        try
+        {
+            string source = string.Empty;
+            try
+            {
+                if (_pane?.Monaco != null)
+                    source = await _pane.Monaco.GetValue() ?? string.Empty;
+            }
+            catch { /* Monaco may not be mounted in headless / test paths */ }
+
+            var doc = Kmila.Shared.Services.ReplayBuilder.Build(wd, source);
+            Replay.Set(doc);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "[Editor] BuildAndPushReplayAsync failed");
+        }
     }
 
     /// <summary>

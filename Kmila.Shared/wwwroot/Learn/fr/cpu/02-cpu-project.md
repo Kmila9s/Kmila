@@ -4,28 +4,15 @@ C'est le point d'orgue. Tu vas assembler tout ce que tu as vu dans les modules p
 
 ## La machine
 
-```
-            ┌──────────┐
-            │  PC (4b) │ ◀── reset = "0000"
-            └────┬─────┘
-                 │ addr
-                 ▼
-            ┌──────────┐
-            │   ROM    │   (16 octets, préchargée à la synthèse)
-            │  16×8    │
-            └────┬─────┘
-                 │ instr (8 bits)
-                 ▼
-  ┌──────────────┴──────────────┐
-  │  opcode = instr(7..4)       │
-  │  imm4   = instr(3..0)       │
-  └──────┬───────────────┬──────┘
-         │               │
-         ▼               ▼
-   [decode/exec]    [logique PC next]
-         │               │
-         ▼               ▼
-     R0 (8b)          PC_next
+```mermaid
+flowchart TD
+    RST(["reset = 0000"]) -.-> PC["PC (4 bits)"]
+    PC -- addr --> ROM["ROM<br/>16 × 8 octets<br/>(préchargée à la synthèse)"]
+    ROM -- "instr (8 bits)" --> SPLIT{{"opcode = instr(7..4)<br/>imm4 = instr(3..0)"}}
+    SPLIT --> DECEXE["decode / execute"]
+    SPLIT --> PCNXT["logique PC next"]
+    DECEXE --> R0["R0 (8 bits)"]
+    PCNXT --> PCN["PC_next"]
 ```
 
 ## Ce que te donne le squelette

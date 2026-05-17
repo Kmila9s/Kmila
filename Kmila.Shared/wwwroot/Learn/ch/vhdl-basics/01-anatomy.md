@@ -60,16 +60,16 @@ architecture 是**实现**。一个 entity 可以有多个 architecture（对应
 
 Kmila 的 VHDL 解析器从上到下读你的文件并构建一棵树：
 
-```
-File
-├── library IEEE
-├── use IEEE.STD_LOGIC_1164.ALL
-└── entity my_design
-    ├── port a (in, std_logic)
-    ├── port b (in, std_logic)
-    ├── port y (out, std_logic)
-    └── architecture rtl
-        └── concurrent: y <= a and b
+```mermaid
+flowchart TD
+    File["文件"] --> Lib["library IEEE"]
+    File --> Use["use IEEE.STD_LOGIC_1164.ALL"]
+    File --> Ent["entity my_design"]
+    Ent --> Pa["port a (in, std_logic)"]
+    Ent --> Pb["port b (in, std_logic)"]
+    Ent --> Py["port y (out, std_logic)"]
+    Ent --> Arch["architecture rtl"]
+    Arch --> Conc["concurrent: y &lt;= a and b"]
 ```
 
 当你点击 **Build** 时，端口成为 **Ports** 面板标签里的条目，entity 成为 **Entities** 里的条目，而 architecture 内的赋值则成为仿真器要运行的连线。

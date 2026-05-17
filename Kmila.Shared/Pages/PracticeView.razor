@@ -334,6 +334,15 @@
         _lang = Traductor.Lang ?? "en";
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Pipe fenced code blocks in the exercise statement through Monaco's
+        // tokenizer so any VHDL snippet inside renders identically to the
+        // Editor below. Idempotent — already-colorized blocks are skipped.
+        try { await JS.InvokeVoidAsync("kmilaColorizeLessonCode", ".lesson-markdown"); }
+        catch { /* monaco not loaded yet — fine */ }
+    }
+
     protected override async Task OnParametersSetAsync()
     {
         var prevId = _exercise?.Id;
@@ -602,22 +611,33 @@
         {
             var payload = await ExportService.BuildAsync(_exercise, _lang, req);
             if (payload == null) return;
+
+            FileExportResult? result = null;
             if (payload.TextContent != null)
             {
-                await JS.InvokeVoidAsync("kmilaDownloadText",
+                result = await Export.SaveTextAsync(ExportCategory.Practices,
                     payload.FileName, payload.MimeType, payload.TextContent);
             }
             else if (payload.BinaryContent != null)
             {
-                var b64 = Convert.ToBase64String(payload.BinaryContent);
-                await JS.InvokeVoidAsync("kmilaDownloadBytes",
-                    payload.FileName, payload.MimeType, b64);
+                result = await Export.SaveBytesAsync(ExportCategory.Practices,
+                    payload.FileName, payload.MimeType, payload.BinaryContent);
+            }
+
+            if (result is { Saved: true })
+            {
+                var msg = result.Path != null ? $"Saved: {result.Path}" : "Practice session exported.";
+                ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), msg, ToastType.Success));
+            }
+            else if (result != null)
+            {
+                ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                    result.Error ?? "Export failed.", ToastType.Danger));
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Surfaces in /logs via the ToastService elsewhere; keep the UI
-            // alive so the user can retry.
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
         }
     }
 

@@ -10,10 +10,11 @@
 
 ## Moore：输出只依赖状态
 
-```
- input → [ next-state ] → [ state reg ] → [ outputs ]
-                                       ↑
-                                     (就这些)
+```mermaid
+flowchart LR
+    IN([输入]) --> NS["下一状态"]
+    NS --> SR["状态寄存器"]
+    SR --> OUT["输出"]
 ```
 
 给定状态，输出就固定了。如果你处于 `S_GREEN`，那么 `green = '1'`。永远如此，与输入无关。
@@ -28,12 +29,13 @@
 
 ## Mealy：输出依赖状态 + 输入
 
-```
- input ──→ [ next-state ] ──→ [ state reg ]
-   │                               │
-   └───→ [ output logic ] ←────────┘
-                │
-             outputs
+```mermaid
+flowchart LR
+    IN([输入]) --> NS["下一状态"]
+    NS --> SR["状态寄存器"]
+    IN --> OL["输出逻辑"]
+    SR --> OL
+    OL --> OUT([输出])
 ```
 
 输出是**当前状态与当前输入**的函数。它可以在时钟沿之间变化。

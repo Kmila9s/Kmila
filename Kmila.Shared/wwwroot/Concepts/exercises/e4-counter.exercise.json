@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "toolbox": {
+    "kind": "flyoutToolbox",
+    "contents": [
+      { "kind": "block", "type": "kmila_on_clock" },
+      { "kind": "block", "type": "kmila_increment_count" }
+    ]
+  },
+  "compositions": [
+    {
+      "fingerprint": "kmila_on_clock(BODY=kmila_increment_count)",
+      "label": {
+        "en": "Clocked counter: +1 every rising edge",
+        "es": "Contador con reloj: +1 en cada flanco de subida"
+      },
+      "timeline": {
+        "code": "process(clk)\nbegin\n  if rising_edge(clk) then\n    count <= count + 1;\n  end if;\nend process;",
+        "language": "vhdl",
+        "signalOrder": ["clk", "count"],
+        "steps": [
+          {
+            "t": 0,
+            "highlightLines": [],
+            "signals": { "clk": "0", "count": "0000" },
+            "note": {
+              "en": "Cold start. Clock is low; the counter holds at 0000.",
+              "es": "Inicio en frío. El reloj está en bajo; el contador se mantiene en 0000."
+            }
+          },
+          {
+            "t": 1,
+            "highlightLines": [1],
+            "signals": { "clk": "1", "count": "0000" },
+            "note": {
+              "en": "Clock rises 0 → 1. The process wakes because clk is in its sensitivity list.",
+              "es": "El reloj sube 0 → 1. El proceso se despierta porque clk está en su lista de sensibilidad."
+            }
+          },
+          {
+            "t": 2,
+            "highlightLines": [3],
+            "signals": { "clk": "1", "count": "0000" },
+            "note": {
+              "en": "Line 3: if rising_edge(clk). True — it was 0 last cycle, now it's 1. We enter the if-body.",
+              "es": "Línea 3: if rising_edge(clk). Cierto — antes era 0, ahora es 1. Entramos al cuerpo del if."
+            }
+          },
+          {
+            "t": 3,
+            "highlightLines": [4],
+            "signals": { "clk": "1", "count": "0000" },
+            "note": {
+              "en": "Line 4: count <= count + 1. Schedules count to become 0001. Not visible yet — it's a signal transaction.",
+              "es": "Línea 4: count <= count + 1. Programa que count sea 0001. Aún no visible — es una transacción de señal."
+            }
+          },
+          {
+            "t": 4,
+            "highlightLines": [],
+            "signals": { "clk": "1", "count": "0001" },
+            "note": {
+              "en": "Delta ends. count is now 0001. The register has captured one clock tick.",
+              "es": "Termina el delta. count ahora es 0001. El registro capturó un tick de reloj."
+            }
+          },
+          {
+            "t": 5,
+            "highlightLines": [],
+            "signals": { "clk": "0", "count": "0001" },
+            "note": {
+              "en": "Clock falls back to 0. The process wakes — but rising_edge is false, so we skip the body and the counter holds.",
+              "es": "El reloj vuelve a 0. El proceso se despierta — pero rising_edge es falso, así que saltamos el cuerpo y el contador se mantiene."
+            }
+          },
+          {
+            "t": 6,
+            "highlightLines": [1, 3, 4],
+            "signals": { "clk": "1", "count": "0001" },
+            "note": {
+              "en": "Next rising edge. Process wakes, rising_edge true, we schedule count + 1.",
+              "es": "Siguiente flanco de subida. El proceso se despierta, rising_edge es cierto, programamos count + 1."
+            }
+          },
+          {
+            "t": 7,
+            "highlightLines": [],
+            "signals": { "clk": "1", "count": "0010" },
+            "note": {
+              "en": "Delta ends. count = 0010. Each clock tick = one increment — that's a clocked counter.",
+              "es": "Termina el delta. count = 0010. Cada tick de reloj = un incremento — eso es un contador con reloj."
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

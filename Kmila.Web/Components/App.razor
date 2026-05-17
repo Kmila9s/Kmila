@@ -21,7 +21,7 @@
        ║   in sync automatically. Bump ?v= when the shared file changes.   ║
        ║   See memory: project_dual_host_pages.md.                         ║
        ╚═══════════════════════════════════════════════════════════════════╝ *@
-    <script src="_content/Kmila.Shared/js/kmila-shared-head.js?v=2"></script>
+    <script src="_content/Kmila.Shared/js/kmila-shared-head.js?v=5"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -57,7 +57,7 @@
        ╚═══════════════════════════════════════════════════════════════════╝ *@
     <link rel="stylesheet" href="_content/Kmila.Shared/css/tokens.css?v=8" />
     <link rel="stylesheet" href="_content/Kmila.Shared/app.css?v=8" />
-    <link rel="stylesheet" href="_content/Kmila.Shared/css/pages.css?v=8" />
+    <link rel="stylesheet" href="_content/Kmila.Shared/css/pages.css?v=10" />
     <link rel="stylesheet" href="_content/Kmila.Shared/css/buttons.css?v=8" />
     <link rel="stylesheet" href="Kmila.Web.styles.css" />
     <link rel="icon" type="image/png" href="_content/Kmila.Shared/favicon.png" />
@@ -74,6 +74,30 @@
     <!-- Add sortable.js reference if SortableList component is used in your application. -->
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
     <script src="_content/Blazor.Bootstrap/blazor.bootstrap.js"></script>
+
+    <!-- Blockly — visual-programming engine for the /concepts exercises.
+         Self-hosted so the Web build doesn't need a CDN. Load order matters:
+           1. blockly_compressed.js — the core (defines Blockly.inject, FieldDropdown, Blocks, …).
+           2. blocks_compressed.js  — standard block library.
+           3. msg/en.js             — i18n strings for default labels/tooltips.
+           4. concepts-blocks.js    — our custom block types + JS interop bridge.
+
+         Loaded *before* BlazorMonaco on purpose. Monaco's loader.js installs an
+         AMD `define()` global and triggers an async `require()` to bootstrap
+         its editor modules; if we set `define = undefined` after Monaco has
+         loaded (the previous shim approach), that async callback can fire
+         inside the shim window and Monaco's lazy module load throws silently,
+         leaving `monaco.editor.getEditors()` permanently empty. Loading
+         Blockly first — when `define` doesn't exist yet — lets the Blockly
+         UMD wrapper take its plain-browser branch (`root.Blockly = factory()`)
+         without any interference, and Monaco then owns `define` for the rest
+         of the page lifetime. See [[project_blockly_bundling_gotcha]] memory
+         entry for the full history; previous "shim" approach is now retired. -->
+    <script src="_content/Kmila.Shared/lib/blockly/blockly_compressed.js"></script>
+    <script src="_content/Kmila.Shared/lib/blockly/blocks_compressed.js"></script>
+    <script src="_content/Kmila.Shared/lib/blockly/en.js"></script>
+    <script src="_content/Kmila.Shared/js/concepts-blocks.js"></script>
+
     <script src="_content/BlazorMonaco/jsInterop.js"></script>
     <script src="_content/BlazorMonaco/lib/monaco-editor/min/vs/loader.js"></script>
     <script src="_content/BlazorMonaco/lib/monaco-editor/min/vs/editor/editor.main.js"></script>
@@ -87,6 +111,11 @@
     <script src="_content/Kmila.Shared/js/vhdl-data/vhdl-data.jp.js"></script>
     <script src="_content/Kmila.Shared/js/vhdl-data/vhdl-data.ar.js"></script>
     <script src="_content/Kmila.Shared/js/vhdl.js"></script>
+    <!-- Lesson-markdown colorizer — feeds Markdig's `<pre><code>` blocks
+         through Monaco's tokenizer so VHDL snippets in lessons look identical
+         to the Editor. Must load after vhdl.js (which registers the `vhdl`
+         language) and after editor.main.js (provides colorizeElement). -->
+    <script src="_content/Kmila.Shared/js/lesson-code.js"></script>
     <!-- Kmila app utilities (file download, etc.) -->
     <script src="_content/Kmila.Shared/js/app.js"></script>
 

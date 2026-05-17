@@ -2,11 +2,9 @@
 
 Regarde à l'intérieur de n'importe quel CPU — du minuscule microcontrôleur 8 bits au cœur de shader GPU moderne — et tu trouveras les mêmes cinq étages, faisant les mêmes cinq boulots :
 
-```
-  ┌─────┐   ┌──────┐   ┌────────┐   ┌─────────┐   ┌──────────┐
-  │ IF  │──▶│ ID   │──▶│ EX     │──▶│ MEM     │──▶│ WB       │
-  │fetch│   │decode│   │execute │   │ memory  │   │writeback │
-  └─────┘   └──────┘   └────────┘   └─────────┘   └──────────┘
+```mermaid
+flowchart LR
+    IF["IF<br/>fetch"] --> ID["ID<br/>decode"] --> EX["EX<br/>execute"] --> MEM["MEM<br/>mémoire"] --> WB["WB<br/>writeback"]
 ```
 
 ## Les cinq étages classiques

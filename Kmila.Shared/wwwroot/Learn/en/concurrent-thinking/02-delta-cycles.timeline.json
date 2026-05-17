@@ -1,0 +1,70 @@
+{
+  "code": "process(clk)\nbegin\n  if rising_edge(clk) then\n    a <= x;        -- line 4\n    b <= y;        -- line 5\n  end if;\nend process;",
+  "language": "vhdl",
+  "signalOrder": ["clk", "x", "y", "a", "b"],
+  "steps": [
+    {
+      "t": 0,
+      "highlightLines": [],
+      "signals": { "clk": "0", "x": "0", "y": "0", "a": "0", "b": "0" },
+      "note": {
+        "en": "δ₀ — cold start. Inputs and outputs all at 0. Process is asleep.",
+        "es": "δ₀ — inicio en frío. Entradas y salidas en 0. El proceso duerme."
+      }
+    },
+    {
+      "t": 1,
+      "highlightLines": [1],
+      "signals": { "clk": "1", "x": "1", "y": "1", "a": "0", "b": "0" },
+      "note": {
+        "en": "δ₀ — clock rises 0 → 1 and x, y already changed to 1. The process wakes because clk is in its sensitivity list.",
+        "es": "δ₀ — el reloj sube 0 → 1 y x, y ya cambiaron a 1. El proceso se despierta porque clk está en su lista de sensibilidad."
+      }
+    },
+    {
+      "t": 2,
+      "highlightLines": [3],
+      "signals": { "clk": "1", "x": "1", "y": "1", "a": "0", "b": "0" },
+      "note": {
+        "en": "Line 3: rising_edge(clk) is true (just went 0 → 1). We enter the if-body.",
+        "es": "Línea 3: rising_edge(clk) es cierto (acaba de pasar 0 → 1). Entramos al cuerpo del if."
+      }
+    },
+    {
+      "t": 3,
+      "highlightLines": [4],
+      "signals": { "clk": "1", "x": "1", "y": "1", "a": "0", "b": "0" },
+      "note": {
+        "en": "Line 4: schedule a <= x. Transaction posted at δ₀; a still reads as the OLD value (0) until the delta closes.",
+        "es": "Línea 4: programar a <= x. Transacción registrada en δ₀; a aún se lee con el valor VIEJO (0) hasta cerrar el delta."
+      }
+    },
+    {
+      "t": 4,
+      "highlightLines": [5],
+      "signals": { "clk": "1", "x": "1", "y": "1", "a": "0", "b": "0" },
+      "note": {
+        "en": "Line 5: schedule b <= y. Both transactions are queued for the SAME delta — they'll commit together.",
+        "es": "Línea 5: programar b <= y. Ambas transacciones están encoladas para el MISMO delta — se confirmarán juntas."
+      }
+    },
+    {
+      "t": 5,
+      "highlightLines": [6, 7],
+      "signals": { "clk": "1", "x": "1", "y": "1", "a": "0", "b": "0" },
+      "note": {
+        "en": "Process exits. Two transactions pending: a ← 1 and b ← 1. Real time has NOT advanced yet — only deltas have.",
+        "es": "El proceso termina. Dos transacciones pendientes: a ← 1 y b ← 1. El tiempo REAL aún no avanza — solo los deltas."
+      }
+    },
+    {
+      "t": 6,
+      "highlightLines": [],
+      "signals": { "clk": "1", "x": "1", "y": "1", "a": "1", "b": "1" },
+      "note": {
+        "en": "δ₁ — delta closes. Both a and b commit to 1 at exactly the same simulation instant. No race condition: the simulator gives both updates an identical timestamp.",
+        "es": "δ₁ — cierra el delta. Tanto a como b se confirman en 1 exactamente en el mismo instante de simulación. Sin condición de carrera: el simulador les da a ambas actualizaciones la misma marca de tiempo."
+      }
+    }
+  ]
+}

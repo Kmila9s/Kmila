@@ -19,10 +19,15 @@ In einer Software-Sprache würdest du das als drei sequentielle Schritte lesen. 
 
 Der Synthesizer baut:
 
-```
-   a ─┬─ AND ─── y1 ──┐
-      │               XOR ── y3
-   b ─┴─ OR  ── y2 ───┘
+```mermaid
+flowchart LR
+    A([a]) --> AND["AND"]
+    B([b]) --> AND
+    A --> OR["OR"]
+    B --> OR
+    AND -- y1 --> XOR["XOR"]
+    OR  -- y2 --> XOR
+    XOR --> Y3([y3])
 ```
 
 Alle drei Gatter sind gleichzeitig aktiv. Wenn sich `a` oder `b` ändert, stabilisiert sich der Ausgang `y3` auf seinem neuen Wert nach einer kleinen Laufzeitverzögerung durch den längsten Pfad. Es gibt kein "zuerst" und "danach".

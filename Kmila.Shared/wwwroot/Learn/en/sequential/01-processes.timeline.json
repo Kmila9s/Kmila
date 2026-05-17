@@ -1,0 +1,61 @@
+{
+  "code": "-- The sensitivity list is the contract: 'wake me when…'\nprocess(a, b)         -- line 2\nbegin\n  out1 <= a;\n  out2 <= b and out1; -- line 5: reads OLD out1\nend process;",
+  "language": "vhdl",
+  "signalOrder": ["a", "b", "out1", "out2"],
+  "steps": [
+    {
+      "t": 0,
+      "highlightLines": [],
+      "signals": { "a": "0", "b": "0", "out1": "U", "out2": "U" },
+      "note": {
+        "en": "Cold start. out1 and out2 begin uninitialised. Process is asleep.",
+        "es": "Inicio en frío. out1 y out2 empiezan sin inicializar. El proceso duerme."
+      }
+    },
+    {
+      "t": 1,
+      "highlightLines": [2],
+      "signals": { "a": "1", "b": "1", "out1": "U", "out2": "U" },
+      "note": {
+        "en": "a → 1, b → 1. Sensitivity list says wake on (a, b) — process wakes.",
+        "es": "a → 1, b → 1. La lista de sensibilidad dice despertar con (a, b) — el proceso se despierta."
+      }
+    },
+    {
+      "t": 2,
+      "highlightLines": [4],
+      "signals": { "a": "1", "b": "1", "out1": "U", "out2": "U" },
+      "note": {
+        "en": "Line 4: schedule out1 <= a. Transaction posted; out1 still reads as U during the delta.",
+        "es": "Línea 4: programar out1 <= a. Transacción registrada; out1 aún se lee como U durante el delta."
+      }
+    },
+    {
+      "t": 3,
+      "highlightLines": [5],
+      "signals": { "a": "1", "b": "1", "out1": "U", "out2": "U" },
+      "note": {
+        "en": "Line 5: out2 <= b and out1. Reads OLD out1 (= U). U and 1 = U. The classic trap.",
+        "es": "Línea 5: out2 <= b and out1. Lee el VIEJO out1 (= U). U and 1 = U. La trampa clásica."
+      }
+    },
+    {
+      "t": 4,
+      "highlightLines": [],
+      "signals": { "a": "1", "b": "1", "out1": "1", "out2": "U" },
+      "note": {
+        "en": "Delta closes. out1 = 1, out2 = U. out1 changed, but out1 is NOT in the sensitivity list — process does NOT wake again.",
+        "es": "Cierra el delta. out1 = 1, out2 = U. out1 cambió, pero out1 NO está en la lista de sensibilidad — el proceso NO se despierta otra vez."
+      }
+    },
+    {
+      "t": 5,
+      "highlightLines": [],
+      "signals": { "a": "1", "b": "1", "out1": "1", "out2": "U" },
+      "note": {
+        "en": "out2 stays U forever. Fix: either add out1 to the sensitivity list, or use a variable inside the process.",
+        "es": "out2 se queda en U para siempre. Solución: o agregar out1 a la lista de sensibilidad, o usar una variable dentro del proceso."
+      }
+    }
+  ]
+}

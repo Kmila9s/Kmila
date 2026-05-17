@@ -13,6 +13,7 @@ public enum EditorTab
     Ports,
     Waveforms,
     Runs,
+    Replay,
     Files,
     Output
 }

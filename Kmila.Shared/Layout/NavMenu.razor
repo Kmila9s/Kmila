@@ -18,6 +18,8 @@
 @inject Kmila.Shared.Services.RecentProjectsTracker Recent
 @inject Kmila.Shared.Services.LessonProgressStore LearnProgress
 @inject Kmila.Shared.Services.LessonCatalog LessonCatalog
+@inject Kmila.Shared.Services.ConceptProgressStore ConceptProgress
+@inject Kmila.Shared.Services.ConceptCatalog ConceptCatalog
 @inject Kmila.Shared.Services.SimulationParameters Sim
 @inject Kmila.Shared.Services.Practice.PracticeCatalog PracticeCatalog
 @inject Kmila.Shared.Services.Practice.PracticeAttemptStore PracticeAttempts
@@ -84,6 +86,21 @@
                 {
                     <span class="kmila-nav-item__badge" title="@string.Format(Traductor.T("PRACTICE_NAV_BADGE_FMT"), _practiceSolved, _practiceTotal)">
                         @_practiceSolved / @_practiceTotal
+                    </span>
+                }
+            </a>
+
+            <a href="/concepts"
+               class="kmila-nav-item @ActiveClass("/concepts", exact: false)"
+               @onclick="OnNavClicked"
+               data-tooltip="@Traductor.T("NAV_CONCEPTS")">
+                <span class="kmila-nav-item__indicator"></span>
+                <Icon Name="IconName.Diagram3" Class="kmila-nav-item__icon" />
+                <span class="kmila-nav-item__label">@Traductor.T("NAV_CONCEPTS")</span>
+                @if (_conceptTotal > 0)
+                {
+                    <span class="kmila-nav-item__badge" title="@string.Format(Traductor.T("CONCEPTS_NAV_BADGE_FMT"), _conceptDone, _conceptTotal)">
+                        @_conceptDone / @_conceptTotal
                     </span>
                 }
             </a>
@@ -201,6 +218,9 @@
     private int _practiceSolved;
     private int _practiceTotal;
 
+    private int _conceptDone;
+    private int _conceptTotal;
+
     private string _currentPath = "/";
 
     private string _rootClass =>
@@ -215,13 +235,41 @@
         Projects.OnListChanged += OnProjectListChanged;
         Recent.OnChange += OnRecentChanged;
         LearnProgress.OnChange += OnLearnProgressChanged;
+        ConceptProgress.OnChange += OnConceptProgressChanged;
         Sim.OnChange += OnSimChanged;
         PracticeAttempts.OnChange += OnPracticeChanged;
 
         _currentPath = new Uri(NavigationManager.Uri).AbsolutePath;
         await LoadProjectsAsync();
         await LoadLearnProgressAsync();
+        await LoadConceptProgressAsync();
         await LoadPracticeProgressAsync();
+    }
+
+    /// <summary>
+    /// Hydrates the Concepts done/total badge. Falls back to (0, 0) so a
+    /// missing manifest never breaks the nav.
+    /// </summary>
+    private async Task LoadConceptProgressAsync()
+    {
+        try
+        {
+            var manifest = await ConceptCatalog.GetManifestAsync();
+            _conceptTotal = manifest.Modules.Sum(m => m.Lessons.Count);
+            _conceptDone = await ConceptProgress.TotalCompletedAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[NavMenu] Failed to load concept progress");
+            _conceptTotal = 0;
+            _conceptDone = 0;
+        }
+    }
+
+    private async void OnConceptProgressChanged()
+    {
+        await LoadConceptProgressAsync();
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task LoadLearnProgressAsync()
@@ -409,6 +457,7 @@
         Projects.OnListChanged -= OnProjectListChanged;
         Recent.OnChange -= OnRecentChanged;
         LearnProgress.OnChange -= OnLearnProgressChanged;
+        ConceptProgress.OnChange -= OnConceptProgressChanged;
         Sim.OnChange -= OnSimChanged;
         PracticeAttempts.OnChange -= OnPracticeChanged;
     }

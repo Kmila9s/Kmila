@@ -60,16 +60,16 @@ use IEEE.NUMERIC_STD.ALL;
 
 مُفسِّر VHDL في Kmila يقرأ ملفك من الأعلى إلى الأسفل ويبني شجرة:
 
-```
-الملف
-├── library IEEE
-├── use IEEE.STD_LOGIC_1164.ALL
-└── entity my_design
-    ├── port a (in, std_logic)
-    ├── port b (in, std_logic)
-    ├── port y (out, std_logic)
-    └── architecture rtl
-        └── concurrent: y <= a and b
+```mermaid
+flowchart TD
+    File["الملف"] --> Lib["library IEEE"]
+    File --> Use["use IEEE.STD_LOGIC_1164.ALL"]
+    File --> Ent["entity my_design"]
+    Ent --> Pa["port a (in, std_logic)"]
+    Ent --> Pb["port b (in, std_logic)"]
+    Ent --> Py["port y (out, std_logic)"]
+    Ent --> Arch["architecture rtl"]
+    Arch --> Conc["concurrent: y &lt;= a and b"]
 ```
 
 عندما تنقر **Build**، تصبح المنافذ مدخلات في تبويب **Ports**، ويصبح الكيان مدخلًا في **Entities**، وتصبح الإسنادات داخل البنية المعمارية التوصيلات التي يُشغّلها المحاكي.

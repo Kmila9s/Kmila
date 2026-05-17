@@ -24,6 +24,7 @@ public class LessonCatalog
     private readonly SemaphoreSlim _loadGate = new(1, 1);
     private LessonManifest? _manifest;
     private readonly Dictionary<string, string> _bodyCache = new();
+    private readonly Dictionary<string, ExecutionTimelineDoc?> _timelineCache = new();
 
     public LessonCatalog(Func<string, Task<Stream>> openFileAsync,
                          ILogger<LessonCatalog>? logger = null)
@@ -131,6 +132,46 @@ public class LessonCatalog
             using var stream = await _open(path);
             using var reader = new StreamReader(stream);
             return await reader.ReadToEndAsync();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Loads the optional pre-recorded execution timeline for a lesson,
+    /// with EN fallback. Returns null when no <c>.timeline.json</c> sits
+    /// next to the lesson's Markdown body. Used by <c>LessonView</c> to
+    /// render an inline <c>ExecutionPlayer</c> when the lesson opts in
+    /// via <see cref="Lesson.InlinePlayer"/>.
+    /// </summary>
+    public async Task<ExecutionTimelineDoc?> GetTimelineAsync(string moduleId, string lessonId, string lang)
+    {
+        var key = $"{lang}|{moduleId}|{lessonId}";
+        if (_timelineCache.TryGetValue(key, out var cached)) return cached;
+
+        var doc = await TryReadTimelineAsync(moduleId, lessonId, lang)
+               ?? (lang != "en" ? await TryReadTimelineAsync(moduleId, lessonId, "en") : null);
+
+        _timelineCache[key] = doc;
+        return doc;
+    }
+
+    private async Task<ExecutionTimelineDoc?> TryReadTimelineAsync(string moduleId, string lessonId, string lang)
+    {
+        var path = $"Learn/{lang}/{moduleId}/{lessonId}.timeline.json";
+        try
+        {
+            using var stream = await _open(path);
+            return await JsonSerializer.DeserializeAsync<ExecutionTimelineDoc>(
+                stream,
+                new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                    ReadCommentHandling = JsonCommentHandling.Skip,
+                    AllowTrailingCommas = true
+                });
         }
         catch
         {
