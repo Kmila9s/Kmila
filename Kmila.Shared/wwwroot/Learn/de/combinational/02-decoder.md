@@ -1,6 +1,6 @@
 # Beispiel: 3-zu-8-Decoder
 
-Ein Decoder nimmt einen kleinen Binärcode und verwandelt ihn in einen **One-Hot**-Ausgang: genau ein Ausgang ist hoch, und seine Position entspricht dem Code.
+Ein Decoder nimmt einen kleinen Binärcode und verwandelt ihn in einen **One-Hot**-Ausgang: genau ein Ausgang ist high, und seine Position entspricht dem Code.
 
 ```
   sel  │  y
@@ -14,11 +14,11 @@ Ein Decoder nimmt einen kleinen Binärcode und verwandelt ihn in einen **One-Hot
   111  │  10000000
 ```
 
-Decoder stecken in jedem Speichersystem — die Adressleitungen treiben einen Decoder, und der "Row-Match"-Ausgang aktiviert genau eine Zeile. Wann immer du "Adress-Decoder" hörst, ist das, was darunter steckt.
+Decoder leben in jedem Speichersystem — die Adressleitungen treiben einen Decoder, und der „Row-Match"-Ausgang aktiviert genau eine Zeile. Wann immer du „Adressdecoder" hörst, das ist es darunter.
 
-## Der VHDL-Code
+## Das VHDL
 
-Ein Decoder ist ein Lehrbuchfall für `with/select`:
+Ein Decoder ist der Lehrbuchfall für `with/select`:
 
 ```vhdl
 with sel select
@@ -33,15 +33,15 @@ with sel select
     "10000000" when others;
 ```
 
-Beachte `when others` am Ende. `sel` ist ein `std_logic_vector(2 downto 0)` — 3 Bits — es gibt also 2³ = 8 Binärwerte; aber weil `std_logic` neun Zustände hat, braucht der Compiler das `others`-Glied, um jede Kombination abzudecken (es wird zum selben wie `"111"` synthetisiert).
+Beachte `when others` am Ende. `sel` ist ein `std_logic_vector(2 downto 0)` — 3 Bit — also gibt es 2³ = 8 Binärwerte, aber weil `std_logic` neun Zustände hat, braucht der Compiler die `others`-Klausel, um jede Kombination abzudecken (sie wird zum gleichen wie `"111"` synthetisiert).
 
-## Was das Beispiel macht
+## Was das Beispiel tut
 
-Das Beispiel durchläuft `sel` durch alle acht 3-Bit-Werte, jeweils 10 µs pro Wert. Auf dem Waveforms-Tab siehst du, wie die 8 Bits von `y` zu einer wandernden `'1'` werden — ein digitales "Lauflicht".
+Das Beispiel zyklt `sel` durch alle acht 3-Bit-Werte, 10 µs pro Wert. Auf dem Wellenform-Tab siehst du die 8 Bits von `y` zu einer wandernden `'1'` werden — ein digitaler „Licht-Chaser".
 
 ## Du bist dran
 
 Sobald es läuft:
 
-- Verbreitere den Decoder zu einer 4-zu-16-Version. Du kannst es von Hand machen, oder du schreibst den Rumpf um als `y <= std_logic_vector(shift_left(to_unsigned(1, 16), to_integer(unsigned(sel))));`. Beide synthetisieren identisch — wähle, was dir lesbarer erscheint.
-- Füge einen `enable`-Eingang hinzu. Wenn `enable = '0'`, sollen alle Ausgänge unabhängig von `sel` niedrig sein.
+- Erweitere den Decoder zu 4-zu-16. Per Hand oder schreib den Body um als `y <= std_logic_vector(shift_left(to_unsigned(1, 16), to_integer(unsigned(sel))));`. Beide synthetisieren identisch — nimm das, was du lesbarer findest.
+- Füge einen `enable`-Eingang hinzu. Wenn `enable = '0'`, sind alle Ausgänge low, unabhängig von `sel`.

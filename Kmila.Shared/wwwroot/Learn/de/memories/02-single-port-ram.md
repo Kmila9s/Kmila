@@ -1,6 +1,6 @@
 # Beispiel: Single-Port-RAM mit Write-First-Read
 
-Lese-Schreib-Speicher ist die andere Hälfte der "BRAM-Inferenz". Dasselbe `type…array…of`-Muster funktioniert, aber jetzt ist das Array ein **Signal**, und du schreibst an einigen Taktflanken und liest an anderen.
+Lese-Schreib-Speicher ist die andere Hälfte des „BRAM-Ableitens". Dasselbe `type…array…of`-Muster funktioniert, nur ist das Array jetzt ein **Signal**, und du schreibst auf einigen Taktflanken und liest auf den anderen.
 
 ## Die Vorlage
 
@@ -23,20 +23,20 @@ end process;
 
 ## Die drei Lesepolitiken
 
-Jedes synchrone RAM muss entscheiden, was `dout` **während eines Schreibzugriffs** tut. Drei Konventionen existieren:
+Jeder synchrone RAM muss entscheiden, was `dout` **während eines Schreibvorgangs** tut. Drei Konventionen:
 
-- **Write-first (oben gezeigt):** Bei einem Schreibzugriff zeigt `dout` die neu geschriebenen Daten. Sauberste Semantik — ein Lese- und Schreibzugriff auf dieselbe Adresse im selben Zyklus liefert dir den frischen Wert.
-- **Read-first:** Bei einem Schreibzugriff zeigt `dout` den **alten** Inhalt der Zelle. Die Registerdateien mancher CPUs verwenden das.
-- **No-change:** Bei einem Schreibzugriff wird `dout` nicht aktualisiert. Manche Low-Power-Designs.
+- **Write-first (oben gezeigt):** beim Schreiben zeigt `dout` die neu geschriebenen Daten. Sauberste Semantik — ein Read und ein Write auf dieselbe Adresse im selben Zyklus liefern dir den frischen Wert.
+- **Read-first:** beim Schreiben zeigt `dout` den **alten** Inhalt der Zelle. Manche CPU-Registerfiles nutzen das.
+- **No-change:** beim Schreiben aktualisiert `dout` nicht. Manche Low-Power-Designs.
 
-Alle drei werden auf jedem modernen FPGA auf Block-RAM abgebildet, aber der Synthesizer wählt den Modus basierend auf der genauen Form deines Prozesses. Die Write-first-Vorlage ist die portabelste — im Zweifelsfall schreibe sie.
+Alle drei mappen auf Block-RAM auf jedem modernen FPGA, aber der Synthesizer wählt den Modus basierend auf der genauen Form deines Prozesses. Die Write-First-Vorlage ist die portabelste — im Zweifel die nehmen.
 
-## Was das Beispiel macht
+## Was das Beispiel tut
 
-Während der ersten 30 µs schreibt die Simulation an drei Adressen (`0`, `1`, `2`) mit drei verschiedenen Bytemustern. Dann fällt `we` ab, und `addr` wird bei 40 µs auf 0 zurückgesetzt. Der Waveforms-Tab zeigt `dout`, das `din` während der Schreibzugriffe folgt, und dann den gespeicherten Wert zurückgibt, wenn du liest.
+In den ersten 30 µs schreibt die Sim auf drei Adressen (`0`, `1`, `2`) mit drei verschiedenen Byte-Mustern. Dann fällt `we`, und `addr` wird bei 40 µs zurück auf 0 gesetzt. Der Wellenform-Tab zeigt `dout`, das während des Schreibens `din` folgt, und dann beim Lesen den gespeicherten Wert wieder ausgibt.
 
 ## Du bist dran
 
-- **Rüste auf ein echtes Dual-Port-RAM auf.** Zwei vollständige Sätze von `addr`/`din`/`dout`/`we`, beide mit `clk` getaktet. Das ist das Muster, das jedem FIFOs und Dual-Clock-DPRAMs jedes Herstellers zugrunde liegt.
-- **Füge ein Ausgangsregister hinzu.** Block-RAM auf Xilinx unterstützt ein zweites Pipeline-Register nach dem Speicherarray. Füge `dout_reg <= dout;` in einem zweiten getakteten Block hinzu und beobachte, was sich in der Waveform ändert (Hinweis: ein Zyklus mehr Latenz, aber viel bessere Timing-Closure).
-- **Ändere den Anfangsinhalt.** Befülle die ersten Einträge mit einem erkennbaren Muster, indem du den Initialisierer von `signal mem` änderst. Nicht alle Synthesizer respektieren BRAM-Initialisierer in portablem VHDL — prüfe dein Ziel, bevor du dich in der Produktion darauf verlässt.
+- **Upgrade zu echtem Dual-Port-RAM.** Zwei volle Sätze `addr`/`din`/`dout`/`we`, beide auf `clk` getaktet. Das ist das Muster, das alle FIFOs und Dual-Clock-DPRAMs der Hersteller darunter verwenden.
+- **Füge ein Output-Register hinzu.** Block-RAM auf Xilinx unterstützt ein zweites Pipeline-Register nach dem Speicher-Array. Ergänze `dout_reg <= dout;` in einem zweiten getakteten Block und beobachte den Unterschied auf der Wellenform (Hinweis: ein Zyklus mehr Latenz, aber viel besseres Timing-Closure).
+- **Ändere den Anfangsinhalt.** Belege die ersten Einträge mit einem erkennbaren Muster, indem du den Initialwert von `signal mem` änderst. Nicht alle Synthesizer respektieren BRAM-Initialisierer in portablem VHDL — prüfe dein Target, bevor du dich in Produktion darauf verlässt.

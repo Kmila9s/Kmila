@@ -1,17 +1,17 @@
-# シグナル vs 変数
+# signal と variable
 
-これは VHDL で最も誤解されている区別です。学生は「変数は C のローカル変数のようなもの」と読み、間違った方向に走り出します。地に足を付けましょう。
+VHDL で最も誤解されている区別。学生は「variable は C のローカル変数のようなもの」と読んで間違った方向に走り出す。地に足を着けよう。
 
 ## VHDL の 2 種類の名前
 
-VHDL にはアーキテクチャレベルで `signal` で宣言される **シグナル**と、プロセス内で `variable` で宣言される **変数** があります。どちらも値を保持でき、どちらも代入できます。それらは **互換ではありません**。
+VHDL は **signal**(`signal` を使ってアーキテクチャレベルで宣言)と **variable**(`variable` を使って process 内で宣言)を持つ。両方とも値を保持できる。両方とも代入できる。両者は**交換可能ではない**。
 
 ## 黄金律
 
-- **シグナル代入は現在のシミュレーションティックの終わりに起こる。**
-- **変数代入はプロセス内で即座に起こる。**
+- **signal 代入は現在のシミュレーション tick の終わりに起きる。**
+- **variable 代入は即座に、process 内で起きる。**
 
-それだけです。シグナルと変数のすべての「落とし穴」は、この規則の言い換えです。
+それだけ。signal vs variable のあらゆる「落とし穴」はこのルールの言い換え。
 
 ## デモ
 
@@ -22,82 +22,82 @@ begin
   process(clk)
   begin
     if rising_edge(clk) then
-      s <= 1;           -- request: set s to 1 (not visible yet)
-      s <= 2;           -- request: set s to 2 (overrides the first)
-      -- what is s here?  Still 0. Neither assignment has taken effect.
+      s <= 1;           -- 要求:s を 1 に(まだ見えない)
+      s <= 2;           -- 要求:s を 2 に(最初を上書き)
+      -- ここで s は何?まだ 0。どちらの代入も効いていない。
     end if;
   end process;
 end architecture demo;
 ```
 
-クロックエッジが完了した後、`s` は **2** になります (同じティック内で複数の代入があるとき、最後の代入だけが「勝つ」)。プロセス内では、両方の代入の後でも `s` はまだ `0` です — プロセスが終わるまで新しい値は伝播しないからです。
+クロックエッジが完了したあと、`s` は **2** になる(同じ tick で複数起きると最後の代入だけが「勝つ」)。process 内部では、両代入後でも `s` はまだ `0` — 新しい値は process が終わるまで伝播しないから。
 
-変数でやると:
+variable を使うと:
 
 ```vhdl
 architecture demo of ex is
 begin
   process(clk)
-    variable v : integer := 0;   -- variable lives inside the process
+    variable v : integer := 0;   -- variable は process 内に生きる
   begin
     if rising_edge(clk) then
-      v := 1;           -- takes effect immediately
-      v := 2;           -- takes effect immediately
-      -- v is 2 here, right now, during this tick
+      v := 1;           -- 即座に効く
+      v := 2;           -- 即座に効く
+      -- v はここで、今、この tick の間、2
     end if;
   end process;
 end architecture demo;
 ```
 
-2 つのことに注目:
+2 つのことに注意:
 
-- 変数は `:=` を使い、シグナルは `<=` を使う。
-- 変数は単一のプロセスにローカル。
+- variable は `:=` を使う;signal は `<=`。
+- variable は 1 つの process にローカル。
 
-## なぜこれがハードウェアで重要か
+## なぜハードウェアにとって重要か
 
-シグナルは **ワイヤまたはフリップフロップをモデル化** します。同じ瞬間にワイヤの値を 2 回変えることはできません — 1 ティックの間にワイヤを駆動するものが何であれ、そのティックの終わりに 1 つの値に落ち着きます。
+signal は**線かフリップフロップをモデル化する**。線の値を同じ瞬間に 2 回変えられない — 1 tick の間に線を駆動するもの何であれ、その tick の終わりに 1 つの値に落ち着く。
 
-変数は **プロセス内部の一時的な計算をモデル化** します。シンセサイザはそれを組合せロジックとして実装したり、完全に最適化して消し去ったりできます。
+variable は process 内部の**一時的な計算をモデル化する**。シンセサイザはこれを組合せ論理として実装することも、完全に最適化で消すこともできる。
 
-## いつどちらを使うか
+## どちらをいつ使うか
 
-- **シグナル** — デフォルト。すべてのポート、すべてのレジスタ、波形ビューアで見るすべてのバス: シグナル。
-- **変数** — プロセス内部で C ライクなセマンティクスが欲しい、ローカルなループカウンタや中間的な算術結果用。
+- **signal** — デフォルト。あらゆるポート、あらゆるレジスタ、波形ビューアで見るあらゆるバス:signal。
+- **variable** — 1 つの process 内部のローカルなループカウンタや中間算術結果。その process 内で C のような意味論が欲しいとき。
 
 ## よくある罠
 
-一部の学生はこう書きます:
+ある学生はこう書く:
 
 ```vhdl
 process(clk)
 begin
   if rising_edge(clk) then
-    a <= b;    -- register 1
-    b <= a;    -- register 2 — "swaps" a and b
+    a <= b;    -- レジスタ 1
+    b <= a;    -- レジスタ 2 — a と b を「入れ替える」
   end if;
 end process;
 ```
 
-彼らはこれが `a` と `b` を入れ替えると期待します。シグナル代入はティックの終わりに起こるので、実際に **入れ替えます**: エッジで、`a` は `b` の **古い** 値を得て、`b` は `a` の **古い** 値を得ます。これが実は 1 サイクルで 2 つのレジスタを入れ替える慣用的な方法です。
+これで `a` と `b` を入れ替えるつもり。signal 代入は tick の終わりに起きるので、実際に**入れ替わる**:エッジで `a` は `b` の**古い**値を、`b` は `a` の**古い**値を取る。これは 1 サイクルで 2 つのレジスタを入れ替える慣用的な方法。
 
-しかし変数に切り替えるとセマンティクスが変わります:
+しかし variable に切り替えると意味論が変わる:
 
 ```vhdl
 process(clk)
   variable a, b : integer;
 begin
   if rising_edge(clk) then
-    a := b;    -- a now equals b
-    b := a;    -- b gets the NEW a — so b keeps its old value, and a changes
+    a := b;    -- a は今 b に等しい
+    b := a;    -- b は新しい a を取る — つまり b は古い値を保ち、a が変わる
   end if;
 end process;
 ```
 
-入れ替えなし。両方とも古い `b` に等しい。
+入れ替わらない。両方とも古い `b` に等しいだけ。
 
 ## 覚えておくべきこと
 
-- `signal`: ティックの終わりに更新。`<=` 代入。ワイヤとレジスタをモデル化。
-- `variable`: 即座に更新。`:=` 代入。プロセスにローカル。中間計算をモデル化。
-- 迷ったら — シグナルを使う。
+- `signal`:tick の終わりに更新。`<=` 代入。線とレジスタをモデル化。
+- `variable`:即座に更新。`:=` 代入。process にローカル。中間計算をモデル化。
+- 迷ったら — signal を使え。

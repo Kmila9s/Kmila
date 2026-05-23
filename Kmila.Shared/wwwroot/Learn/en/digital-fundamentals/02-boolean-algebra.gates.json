@@ -1,0 +1,204 @@
+{
+  "viewBox": "0 0 720 380",
+  "nodes": [
+    {
+      "id": "a",
+      "kind": "input",
+      "label": "A",
+      "x": 60,
+      "y": 80
+    },
+    {
+      "id": "b",
+      "kind": "input",
+      "label": "B",
+      "x": 60,
+      "y": 200
+    },
+    {
+      "id": "g_nand",
+      "kind": "nand",
+      "label": "NAND",
+      "x": 260,
+      "y": 60
+    },
+    {
+      "id": "g_not_a",
+      "kind": "not",
+      "label": "NOT A",
+      "x": 200,
+      "y": 200
+    },
+    {
+      "id": "g_not_b",
+      "kind": "not",
+      "label": "NOT B",
+      "x": 200,
+      "y": 290
+    },
+    {
+      "id": "g_or",
+      "kind": "or",
+      "label": "OR",
+      "x": 380,
+      "y": 220
+    },
+    {
+      "id": "y_nand",
+      "kind": "output",
+      "label": "NOT(A·B)",
+      "x": 540,
+      "y": 88
+    },
+    {
+      "id": "y_demorgan",
+      "kind": "output",
+      "label": "Ā + B̄",
+      "x": 540,
+      "y": 248
+    }
+  ],
+  "wires": [
+    {
+      "source": "a",
+      "from": "a",
+      "to": "g_nand.in1"
+    },
+    {
+      "source": "b",
+      "from": "b",
+      "to": "g_nand.in2"
+    },
+    {
+      "source": "y_nand",
+      "from": "g_nand.out",
+      "to": "y_nand"
+    },
+    {
+      "source": "a",
+      "from": "a",
+      "to": "g_not_a.in"
+    },
+    {
+      "source": "b",
+      "from": "b",
+      "to": "g_not_b.in"
+    },
+    {
+      "source": "not_a",
+      "from": "g_not_a.out",
+      "to": "g_or.in1"
+    },
+    {
+      "source": "not_b",
+      "from": "g_not_b.out",
+      "to": "g_or.in2"
+    },
+    {
+      "source": "y_demorgan",
+      "from": "g_or.out",
+      "to": "y_demorgan"
+    }
+  ],
+  "signalOrder": [
+    "a",
+    "b",
+    "y_nand",
+    "y_demorgan"
+  ],
+  "steps": [
+    {
+      "t": 0,
+      "values": {
+        "a": "0",
+        "b": "0",
+        "not_a": "1",
+        "not_b": "1",
+        "y_nand": "1",
+        "y_demorgan": "1"
+      },
+      "active": [],
+      "note": {
+        "en": "A=B=0. Both circuits output 1 — top via NAND (0·0=0, then NOT → 1), bottom via OR of inverted inputs (1+1=1). De Morgan claims they're identical for every input. We're about to walk all four rows of the truth table to confirm.",
+        "es": "A=B=0. Ambos circuitos dan 1 — arriba vía NAND (0·0=0, luego NOT → 1), abajo vía OR de las entradas invertidas (1+1=1). De Morgan afirma que son idénticos para toda entrada. Vamos a recorrer las cuatro filas de la tabla de verdad para confirmarlo.",
+        "ar": "A=B=0. كلا الدائرتَين تُخرج 1 — الأعلى عبر NAND (0·0=0 ثم NOT → 1)، والأسفل عبر OR لمدخلَين معكوسَين (1+1=1). يدَّعي دي مورغان أنهما متطابقتان لكل دخل. سنمشي عبر أربعة صفوف جدول الحقيقة للتأكيد.",
+        "ch": "A=B=0。两个电路都输出 1 — 上面通过 NAND (0·0=0,再 NOT → 1),下面通过反相输入的 OR (1+1=1)。德摩根说它们对任何输入都相等。我们要走遍真值表的四行来验证。",
+        "de": "A=B=0. Beide Schaltungen geben 1 aus — oben über NAND (0·0=0, dann NOT → 1), unten über OR der invertierten Eingänge (1+1=1). De Morgan behauptet, sie sind für jeden Eingang identisch. Wir gehen gleich alle vier Zeilen der Wahrheitstabelle durch, um das zu bestätigen.",
+        "fr": "A=B=0. Les deux circuits sortent 1 — en haut via NAND (0·0=0 puis NOT → 1), en bas via OR des entrées inversées (1+1=1). De Morgan affirme qu'ils sont identiques pour toute entrée. Nous allons parcourir les quatre lignes de la table de vérité pour confirmer.",
+        "jp": "A=B=0。両回路とも 1 を出力 — 上は NAND 経由(0·0=0、その NOT → 1)、下は反転入力の OR 経由(1+1=1)。ド・モルガンは、これらが任意の入力で同一だと主張する。これから真理値表の 4 行を巡って確認する。"
+      }
+    },
+    {
+      "t": 1,
+      "values": {
+        "a": "0",
+        "b": "1",
+        "not_a": "1",
+        "not_b": "0",
+        "y_nand": "1",
+        "y_demorgan": "1"
+      },
+      "active": [
+        "g_not_b"
+      ],
+      "note": {
+        "en": "B=1. NAND still outputs 1 because A·B = 0. Below, NOT B drops to 0, so the OR sees (1, 0) and still produces 1. Same answer, two different gate-level paths.",
+        "es": "B=1. La NAND sigue dando 1 porque A·B = 0. Abajo, NOT B baja a 0, así que la OR ve (1, 0) y sigue dando 1. Misma respuesta, dos caminos a nivel de compuertas distintos.",
+        "ar": "B=1. لا تزال NAND تُخرج 1 لأن A·B = 0. أسفل: NOT B ينزل إلى 0، فترى OR (1، 0) وتُخرج 1. الإجابة نفسها، مسارَا بوابات مختلفان.",
+        "ch": "B=1。NAND 仍输出 1,因为 A·B = 0。下面,NOT B 掉到 0,所以 OR 看到 (1, 0) 仍输出 1。同样的答案,门级两条不同路径。",
+        "de": "B=1. NAND gibt immer noch 1 aus, weil A·B = 0. Unten fällt NOT B auf 0, das OR sieht also (1, 0) und liefert immer noch 1. Gleiche Antwort, zwei verschiedene Gatter-Pfade.",
+        "fr": "B=1. Le NAND sort encore 1 parce que A·B = 0. En bas, NOT B descend à 0, donc le OR voit (1, 0) et produit encore 1. Même résultat, deux chemins de portes différents.",
+        "jp": "B=1。A·B = 0 なので NAND はまだ 1 を出力。下では NOT B が 0 に下がるので、OR は (1, 0) を見て依然 1 を出力。同じ答え、ゲートレベルで 2 つの異なる経路。"
+      }
+    },
+    {
+      "t": 2,
+      "values": {
+        "a": "1",
+        "b": "0",
+        "not_a": "0",
+        "not_b": "1",
+        "y_nand": "1",
+        "y_demorgan": "1"
+      },
+      "active": [
+        "g_not_a",
+        "g_not_b"
+      ],
+      "note": {
+        "en": "Swap inputs. Both circuits still output 1. The colours on the bottom branch tell the story: NOT A flipped one way, NOT B flipped the other, OR still sees a 1 somewhere — output stays high.",
+        "es": "Intercambia entradas. Ambos circuitos siguen en 1. Los colores en la rama de abajo cuentan la historia: NOT A cambió en un sentido, NOT B en el otro, la OR sigue viendo un 1 en algún lado — la salida se mantiene alta.",
+        "ar": "بدِّل الدخل. لا تزال كلتا الدائرتَين تُخرجان 1. تُروي الألوان في الفرع السفلي القصَّة: NOT A ينقلب في اتجاه، NOT B في الآخر، OR لا تزال ترى 1 في مكان ما — الخرج يبقى مرتفعًا.",
+        "ch": "对调输入。两个电路仍输出 1。下面这一支的颜色讲述了故事:NOT A 朝一边翻转,NOT B 朝另一边,OR 总有一处看到 1 — 输出保持高。",
+        "de": "Tausche die Eingänge. Beide Schaltungen geben weiterhin 1 aus. Die Farben im unteren Zweig erzählen die Geschichte: NOT A klappt in die eine, NOT B in die andere Richtung, OR sieht weiterhin irgendwo eine 1 — Ausgang bleibt high.",
+        "fr": "Inversez les entrées. Les deux circuits sortent toujours 1. Les couleurs sur la branche du bas racontent l'histoire : NOT A bascule d'un côté, NOT B de l'autre, le OR voit toujours un 1 quelque part — la sortie reste haute.",
+        "jp": "入力を入れ替える。両回路とも依然 1 を出力。下のブランチの色が物語る:NOT A は一方に、NOT B は反対に反転、OR はどこかで 1 を見続ける — 出力は High を維持。"
+      }
+    },
+    {
+      "t": 3,
+      "values": {
+        "a": "1",
+        "b": "1",
+        "not_a": "0",
+        "not_b": "0",
+        "y_nand": "0",
+        "y_demorgan": "0"
+      },
+      "active": [
+        "g_not_a",
+        "g_nand",
+        "g_or"
+      ],
+      "note": {
+        "en": "A=B=1. NAND: A·B = 1, NOT → 0. Bottom: both inverters output 0, OR sees (0, 0) → 0. The two circuits agree on every row of the truth table — that's De Morgan: not(A·B) = (not A) + (not B). Practical use: lets you swap a NAND for OR-of-inverters when one form is cheaper in your gate library.",
+        "es": "A=B=1. NAND: A·B = 1, NOT → 0. Abajo: ambos inversores salen 0, la OR ve (0, 0) → 0. Los dos circuitos concuerdan en cada fila de la tabla — eso es De Morgan: not(A·B) = (not A) + (not B). Uso práctico: te permite cambiar una NAND por OR-de-inversores cuando una forma es más barata en tu biblioteca de compuertas.",
+        "ar": "A=B=1. NAND: A·B = 1، NOT → 0. الأسفل: كلا المُعكِّسَين يُخرج 0، تُرى OR (0، 0) → 0. تتفق الدائرتان على كل صفّ من جدول الحقيقة — ذلك دي مورغان: not(A·B) = (not A) + (not B). الاستخدام العملي: يسمح لك باستبدال NAND بـ OR لمدخلَين معكوسَين حين تكون إحدى الصيغتَين أرخص في مكتبة بواباتك.",
+        "ch": "A=B=1。NAND:A·B = 1,NOT → 0。下方:两个反相器都输出 0,OR 看到 (0, 0) → 0。两个电路在真值表的每一行都一致 — 这就是德摩根:not(A·B) = (not A) + (not B)。实用价值:在某种形式在你的门库中更便宜时,可以用一个换成另一个。",
+        "de": "A=B=1. NAND: A·B = 1, NOT → 0. Unten: beide Inverter geben 0 aus, OR sieht (0, 0) → 0. Die beiden Schaltungen stimmen in jeder Zeile der Wahrheitstabelle überein — das ist De Morgan: not(A·B) = (not A) + (not B). Praktischer Nutzen: du kannst ein NAND durch ein OR aus invertierten Eingängen ersetzen, wenn eine Form in deiner Gatter-Bibliothek günstiger ist.",
+        "fr": "A=B=1. NAND : A·B = 1, NOT → 0. En bas : les deux inverseurs sortent 0, OR voit (0, 0) → 0. Les deux circuits s'accordent sur chaque ligne de la table de vérité — c'est De Morgan : not(A·B) = (not A) + (not B). Usage pratique : permet d'échanger un NAND pour OR-d'inverseurs quand une forme est moins coûteuse dans votre bibliothèque de portes.",
+        "jp": "A=B=1。NAND:A·B = 1、NOT → 0。下:両インバータが 0 を出力、OR は (0, 0) → 0 を見る。2 つの回路は真理値表のすべての行で一致 — これがド・モルガン:not(A·B) = (not A) + (not B)。実用的な使い道:ゲートライブラリで一方の形が安いときに、NAND と OR-of-inverters を入れ替えられる。"
+      }
+    }
+  ]
+}

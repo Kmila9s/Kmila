@@ -1,38 +1,38 @@
-# Lab: Wahrheitstabellen-Explorer
+# Labor: Wahrheitstabellen-Explorer
 
-Dieses Lab ist das erste Mal, dass du ein echtes VHDL-Design ansteuerst. Die Entity hat zwei Eingänge (`a`, `b`) und sechs Ausgänge — einen pro elementarem 2-Eingangs-Gatter.
+Dieses Labor ist das erste Mal, dass du ein echtes VHDL-Design treibst. Die Entity hat zwei Eingänge (`a`, `b`) und sechs Ausgänge — einen pro elementarem 2-Eingang-Gatter.
 
 ## Was passiert, wenn du *Im Editor öffnen* klickst
 
-1. Kmila erstellt ein Wegwerf-Projekt namens etwa "Lab: Wahrheitstabellen-Explorer".
-2. Es befüllt es mit `gates.vhd`, das die sechs nebenläufigen Zuweisungen enthält.
-3. Es lädt eine **Simulationskonfiguration**, die `a` und `b` durch jede Kombination stimuliert.
-4. Die Editor-Arbeitsfläche öffnet sich, mit der Konfiguration bereits in der Pille oben ausgewählt.
+1. Kmila erstellt ein Wegwerf-Projekt namens „Labor: Wahrheitstabellen-Explorer".
+2. Er füllt es mit `gates.vhd`, das die sechs nebenläufigen Zuweisungen enthält.
+3. Er lädt eine **Simulationskonfiguration**, die `a` und `b` durch jede Kombination stimuliert.
+4. Die Editor-Werkbank öffnet sich, mit der Config oben im Pill schon ausgewählt.
 
-Von dort aus:
+Von dort:
 
-- Klicke auf **Build**, um das Design zu parsen und zu elaborieren.
-- Klicke auf **Run**, um zu simulieren.
-- Wechsle zum **Waveforms**-Tab im Dock unten.
+- Klick **Build**, um das Design zu parsen und zu elaborieren.
+- Klick **Run**, um zu simulieren.
+- Wechsle im Dock unten zum **Wellenformen**-Tab.
 
-Du wirst sieben Zeilen Rechteckwellen sehen: deine zwei Eingänge oben und jeden Ausgang, der in Echtzeit reagiert.
+Du siehst sieben Zeilen Rechteckwellen: deine zwei Eingänge oben und jeden Ausgang in Echtzeit reagierend.
 
 ## Worauf achten
 
-Verwende die Bildlaufleiste oder die Tastatur, um die Eingangsflanken mit den Ausgangsübergängen auszurichten. Versuche, das Verhalten jedes Gatters zu verifizieren, ohne auf die Wahrheitstabellen zurückzuschauen:
+Nutze den Scrollbalken oder die Tastatur, um die Eingangsflanken mit den Ausgangsübergängen abzugleichen. Versuche, das Verhalten jedes Gatters zu verifizieren, ohne nochmal die Wahrheitstabellen anzuschauen:
 
-- `o_and`: bleibt niedrig, bis sowohl `a` als auch `b` 1 sind — dann springt es hoch.
-- `o_nand`: das Gegenteil. Es ist normalerweise hoch und geht nur dann auf low, wenn beide Eingänge 1 sind.
-- `o_xor`: hoch genau dann, wenn sich die beiden Eingänge unterscheiden.
+- `o_and`: bleibt low, bis sowohl `a` als auch `b` 1 sind — dann poppt es high.
+- `o_nand`: das Gegenteil. Es ist normalerweise high und geht nur low, wenn beide Eingänge 1 sind.
+- `o_xor`: high genau dann, wenn die zwei Eingänge widersprechen.
 
-Wenn einer davon nicht dem entspricht, was du erwartest, öffne den **Output**-Tab — Build-Warnungen landen dort.
+Falls eines nicht zu deiner Erwartung passt, öffne den **Output**-Tab — Build-Warnungen landen dort.
 
 ## Probier es selbst
 
-Sobald das Beispiel funktioniert, experimentiere:
+Sobald das Beispiel läuft, experimentiere:
 
-- Füge einen dritten Eingang `c` zur Entity hinzu und berechne `a xor b xor c` (Drei-Eingangs-Parität).
-- Benenne einen Ausgang um und baue neu — der **Ports**-Tab wird entsprechend aktualisiert.
-- Füge eine weitere Zeile zur Konfiguration hinzu: Kippe `a` und `b` gleichzeitig und sieh, welche Ausgänge sich ändern.
+- Füge der Entity einen dritten Eingang `c` hinzu und berechne `a xor b xor c` (3-Eingang-Parität).
+- Benenne einen Ausgang um und baue neu — der **Ports**-Tab updated sich passend.
+- Füge der Config eine weitere Zeile hinzu: flippe `a` und `b` gleichzeitig und sieh, welche Ausgänge sich ändern.
 
-Je mehr du diese Hebel vor dem Schreiben deines eigenen Designs bewegst, desto weniger fühlt sich VHDL wie Raten an.
+Je mehr du diese Hebel bewegst, bevor du dein eigenes Design schreibst, desto weniger fühlt sich VHDL wie Raten an.

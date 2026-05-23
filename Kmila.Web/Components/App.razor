@@ -37,13 +37,30 @@
         import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
         const isDark = () => document.documentElement.getAttribute('data-bs-theme') === 'dark';
         mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: isDark() ? 'dark' : 'default' });
+        // Mermaid replaces pre.mermaid's innerHTML with the rendered SVG on
+        // first run, which DESTROYS the original source. Re-running on a
+        // theme switch then tries to parse the SVG markup as mermaid syntax
+        // and fails — the diagram silently disappears. Stash the source in a
+        // data attribute the first time we see each pre so we can restore it
+        // before re-rendering. (Backlog #7.)
         window.kmilaMermaidRun = function () {
-            try { mermaid.run({ querySelector: 'pre.mermaid' }); } catch (e) { console.warn('[mermaid]', e); }
+            try {
+                document.querySelectorAll('pre.mermaid').forEach(function (el) {
+                    if (!el.hasAttribute('data-kmila-mermaid-src')) {
+                        el.setAttribute('data-kmila-mermaid-src', el.textContent || '');
+                    }
+                });
+                mermaid.run({ querySelector: 'pre.mermaid' });
+            } catch (e) { console.warn('[mermaid]', e); }
         };
         // Re-theme on Bootstrap theme changes so dark-mode diagrams don't glow.
         new MutationObserver(() => {
             mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: isDark() ? 'dark' : 'default' });
-            document.querySelectorAll('pre.mermaid').forEach(el => { el.removeAttribute('data-processed'); });
+            document.querySelectorAll('pre.mermaid').forEach(el => {
+                var src = el.getAttribute('data-kmila-mermaid-src');
+                if (src !== null) el.textContent = src;
+                el.removeAttribute('data-processed');
+            });
             window.kmilaMermaidRun();
         }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-bs-theme'] });
         window.addEventListener('load', () => window.kmilaMermaidRun());
@@ -57,7 +74,7 @@
        ╚═══════════════════════════════════════════════════════════════════╝ *@
     <link rel="stylesheet" href="_content/Kmila.Shared/css/tokens.css?v=8" />
     <link rel="stylesheet" href="_content/Kmila.Shared/app.css?v=8" />
-    <link rel="stylesheet" href="_content/Kmila.Shared/css/pages.css?v=10" />
+    <link rel="stylesheet" href="_content/Kmila.Shared/css/pages.css?v=14" />
     <link rel="stylesheet" href="_content/Kmila.Shared/css/buttons.css?v=8" />
     <link rel="stylesheet" href="Kmila.Web.styles.css" />
     <link rel="icon" type="image/png" href="_content/Kmila.Shared/favicon.png" />
@@ -115,9 +132,9 @@
          through Monaco's tokenizer so VHDL snippets in lessons look identical
          to the Editor. Must load after vhdl.js (which registers the `vhdl`
          language) and after editor.main.js (provides colorizeElement). -->
-    <script src="_content/Kmila.Shared/js/lesson-code.js"></script>
+    <script src="_content/Kmila.Shared/js/lesson-code.js?v=20260522a"></script>
     <!-- Kmila app utilities (file download, etc.) -->
-    <script src="_content/Kmila.Shared/js/app.js"></script>
+    <script src="_content/Kmila.Shared/js/app.js?v=20260522c"></script>
 
     @*
         Custom reconnect modal. Blazor Server auto-injects an unstyled fallback

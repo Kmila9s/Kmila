@@ -243,7 +243,10 @@ public class WaveformData
         // and alphabetically within each group
         foreach (var signal in trackedSignals.OrderBy(s => GetSortOrder(s)).ThenBy(s => s.Name))
         {
-            var rawHistory = history.GetSignalHistory(signal);
+            // Phase B+ Deep AST: pull the detailed history including per-
+            // transition source lines. Falls back to a 0 source line when
+            // the underlying recording wasn't tagged (synthetic / legacy).
+            var rawHistory = history.GetSignalHistoryDetailed(signal);
             if (rawHistory.Count == 0) continue;
 
             // Classify the signal for chart rendering
@@ -267,19 +270,21 @@ public class WaveformData
             string? prevLbl = null;
             foreach (var entry in rawHistory)
             {
-                ulong tick = (ulong)(entry.Item1 / 1000);
+                ulong tick = (ulong)(entry.TimeMoment / 1000);
                 long ns = (long)tick * timescaleNs;
-                double? val = ConvertToChartValue(entry.Item2, dataType, bitWidth);
-                string? lbl = (dataType != "std_logic" && entry.Item2 != null)
-                    ? FormatDisplayLabel(entry.Item2, dataType, bitWidth)
+                double? val = ConvertToChartValue(entry.Value, dataType, bitWidth);
+                string? lbl = (dataType != "std_logic" && entry.Value != null)
+                    ? FormatDisplayLabel(entry.Value, dataType, bitWidth)
                     : null;
+                int srcLine = entry.SourceLine;
 
                 if (lastTick == tick && transitions.Count > 0)
                 {
                     // Multiple deltas inside the same tick — keep only the last
                     // value (matches the previous tick→value dictionary's
-                    // last-write-wins semantics).
-                    transitions[^1] = new WaveformTransition(ns, val, lbl);
+                    // last-write-wins semantics). The source line from the
+                    // winning (last) delta wins too.
+                    transitions[^1] = new WaveformTransition(ns, val, lbl, srcLine);
                     prevVal = val;
                     prevLbl = lbl;
                     continue;
@@ -293,7 +298,7 @@ public class WaveformData
                     continue;
                 }
 
-                transitions.Add(new WaveformTransition(ns, val, lbl));
+                transitions.Add(new WaveformTransition(ns, val, lbl, srcLine));
                 lastTick = tick;
                 prevVal = val;
                 prevLbl = lbl;
@@ -528,4 +533,4 @@ public class WaveformSignal
 /// human-readable formatted label (hex / decimal) so the SVG can stamp it
 /// inside the plateau.
 /// </summary>
-public readonly record struct WaveformTransition(long TimeNs, double? Value, string? Label);
+public readonly record struct WaveformTransition(long TimeNs, double? Value, string? Label, int SourceLine = 0);

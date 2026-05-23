@@ -1,10 +1,10 @@
 # Process et listes de sensibilité
 
-Tout ce qui est hors d'un process en VHDL est concurrent — des fils et des portes. Dès que tu veux qu'un circuit **se souvienne** de quelque chose d'un cycle d'horloge au suivant, il te faut un process.
+Tout en VHDL hors d'un process est concurrent — des fils et des portes. Dès que tu veux qu'un circuit **se souvienne** de quelque chose d'un cycle d'horloge au suivant, il te faut un process.
 
 ## Ce qu'est un process
 
-Un `process` est un bloc de code séquentiel à l'intérieur d'une architecture VHDL. Ses lignes sont lues de haut en bas, comme en logiciel. Mais le process lui-même ne « s'exécute » que lorsque quelque chose dans sa **liste de sensibilité** change.
+Un `process` est un bloc de code séquentiel à l'intérieur d'une architecture VHDL. Ses lignes se lisent de haut en bas, comme du logiciel. Mais le process lui-même ne « tourne » que quand quelque chose dans sa **liste de sensibilité** change.
 
 ```vhdl
 process(clk, reset)
@@ -17,9 +17,9 @@ begin
 end process;
 ```
 
-Ce bloc signifie : « dès que `clk` ou `reset` change, ré-évalue mon corps ».
+Ce bloc veut dire : « chaque fois que `clk` ou `reset` change, réévalue mon corps ».
 
-## Deux formes que tu verras dans 99% des cas
+## Deux formes que tu vois 99 % du temps
 
 ### Process combinatoire
 
@@ -36,11 +36,11 @@ begin
 end process;
 ```
 
-Se synthétise en un mux 2 vers 1. Pas de mémoire.
+Synthétise un mux 2 vers 1. Aucune mémoire.
 
 ### Process cadencé (séquentiel)
 
-Liste de sensibilité = `(clk, reset)`. Les assignations ne se font qu'à l'intérieur de `rising_edge(clk)` (ou `falling_edge`, si tu n'as pas de chance). La sortie est **registrée** — elle ne change qu'aux fronts d'horloge.
+Liste de sensibilité = `(clk, reset)`. Les affectations n'ont lieu qu'à l'intérieur de `rising_edge(clk)` (ou `falling_edge`, si pas de chance). La sortie est **enregistrée** — elle ne change qu'aux fronts d'horloge.
 
 ```vhdl
 process(clk, reset)
@@ -53,16 +53,16 @@ begin
 end process;
 ```
 
-C'est le pattern classique du D flip-flop.
+C'est le motif classique de la bascule D.
 
 ## Le piège de la liste de sensibilité
 
-Si tu oublies de lister un signal lu dans le corps, simulation et synthèse divergent :
+Si tu oublies d'inscrire un signal que le corps lit, simulation et synthèse se contredisent :
 
-- **Simulation** : le process ne se réévaluera pas quand ce signal change. La forme d'onde paraît fausse.
+- **Simulation** : le process ne se réévaluera pas quand ce signal change. Le chronogramme a l'air faux.
 - **Synthèse** : l'outil lit le corps, voit chaque lecture, et construit quand même le bon matériel.
 
-Résultat : ton testbench passe, mais la carte ne marche pas — ou l'inverse. Le VHDL-2008 moderne te permet d'écrire `process(all)` pour éviter tout ça :
+Résultat : ton banc de test passe, mais la carte ne marche pas — ou l'inverse. VHDL-2008 te laisse écrire `process(all)` pour éviter ça :
 
 ```vhdl
 process(all)  -- inclut tout signal lu dans le corps
@@ -71,16 +71,16 @@ begin
 end process;
 ```
 
-Le parseur de Kmila accepte `process(all)`, et c'est ce que la plupart des équipes utilisent dans les nouveaux designs.
+Le parser de Kmila accepte `process(all)`, et c'est ce que la plupart des équipes utilisent dans les nouveaux designs.
 
 ## Règle empirique
 
-- Sensibilité = juste `(clk, reset)` → tu décris des **registres** (flip-flops).
-- Sensibilité = chaque entrée lue → tu décris de la **logique combinatoire**.
-- Sensibilité mélange signaux cadencés et non cadencés → tu as presque certainement un bug.
+- Sensibilité = juste `(clk, reset)` → tu décris des **registres** (bascules).
+- Sensibilité = toute entrée lue → tu décris de la **logique combinatoire**.
+- Sensibilité mélange signal d'horloge et non-horloge → tu as presque sûrement un bug.
 
 ## À retenir
 
 - Un process est l'unité de code séquentiel dans un fichier par ailleurs concurrent.
-- Les process cadencés (`rising_edge(clk)`) se synthétisent en flip-flops. C'est comme ça que tu obtiens de la mémoire.
-- Liste chaque signal que tu lis, ou utilise `process(all)` pour laisser l'outil le faire pour toi.
+- Les process cadencés (`rising_edge(clk)`) se synthétisent en bascules. C'est comme ça que tu as de la mémoire.
+- Liste chaque signal que tu lis, ou utilise `process(all)` pour laisser l'outil le faire.

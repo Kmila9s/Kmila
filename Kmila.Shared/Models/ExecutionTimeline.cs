@@ -72,6 +72,17 @@ public class ExecutionTimelineDoc
     [JsonPropertyName("signalOrder")]
     public List<string> SignalOrder { get; set; } = new();
 
+    /// <summary>
+    /// Phase D (2026-05-19): optional per-signal metadata used by the player's
+    /// filter / group UI on designs with many signals. Keys are signal names;
+    /// values are port-type strings (<c>IN</c>, <c>OUT</c>, <c>INOUT</c>,
+    /// <c>BUFFER</c>, <c>INTERNAL</c>). Hand-authored Concepts lessons leave
+    /// this empty — the filter UI hides itself when both the dict is empty
+    /// AND the signal count is small.
+    /// </summary>
+    [JsonPropertyName("signalMeta")]
+    public Dictionary<string, string> SignalMeta { get; set; } = new();
+
     /// <summary>The steps. Must contain at least one entry to be playable.</summary>
     [JsonPropertyName("steps")]
     public List<TimelineStep> Steps { get; set; } = new();

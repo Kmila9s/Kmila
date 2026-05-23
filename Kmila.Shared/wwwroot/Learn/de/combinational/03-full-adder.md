@@ -1,6 +1,6 @@
 # Beispiel: 4-Bit-Ripple-Carry-Addierer
 
-Zwei Binärzahlen zu addieren ist das "Hello World" der digitalen Arithmetik. Dieses Beispiel baut einen 4-Bit-Addierer mit Carry-in und Carry-out — genau die Zelle, die du in einer größeren ALU oder in der Adress-Inkrement-Logik einer CPU kachelst.
+Zwei Binärzahlen zu addieren ist das „hello world" der digitalen Arithmetik. Dieses Beispiel baut einen 4-Bit-Addierer mit Carry-in und Carry-out — genau die Zelle, die du in einer größeren ALU oder in der Adress-Inkrement-Logik einer CPU kachelst.
 
 ## Schnittstelle
 
@@ -14,7 +14,7 @@ port (
 );
 ```
 
-## Der Rumpf
+## Der Body
 
 ```vhdl
 signal t : unsigned(4 downto 0);
@@ -24,23 +24,23 @@ sum  <= std_logic_vector(t(3 downto 0));
 cout <= t(4);
 ```
 
-Was passiert hier:
+Was passiert:
 
-- `unsigned(a)` und `unsigned(b)` verwandeln die Vektoren in numerische Typen für den `+`-Operator.
-- `resize(…, 5)` füllt auf 5 Bits auf, damit die Summe ins oberste Bit überlaufen kann.
+- `unsigned(a)` und `unsigned(b)` machen aus den Vektoren numerische Typen für `+`.
+- `resize(…, 5)` polstert auf 5 Bit, damit die Summe in das oberste Bit überlaufen kann.
 - `("0000" & cin)` baut eine 5-Bit-Maske mit nur `cin` im LSB.
 - Nach der Addition ist `t(3 downto 0)` die Summe und `t(4)` der Carry-out.
 
-## Warum 5 Bits?
+## Warum 5 Bit?
 
-Die Addition zweier 4-Bit-Zahlen mit einem Carry-in kann ein Ergebnis von bis zu `1111 + 1111 + 1 = 11111` erzeugen — fünf Bits. Rechne die Addition in einem 4-Bit-Container und du verlierst das oberste Bit stillschweigend. `resize` ist die sichere Redewendung.
+Zwei 4-Bit-Zahlen plus Carry-in addiert ergibt höchstens `1111 + 1111 + 1 = 11111` — fünf Bit. Würdest du die Rechnung in einem 4-Bit-Container machen, würdest du das oberste Bit lautlos verlieren. Resize ist das sichere Idiom.
 
-## Was das Beispiel macht
+## Was das Beispiel tut
 
-Die Sim-Konfiguration treibt `a` und `b` durch vier Muster (`3+5 = 8`, dann ein Carry-erzeugendes `10 + 6 = 16`, dann `10 + 15 = 25`…). Die Waveform zeigt `sum` und `cout`, die sich kombinatorisch ändern — es wird kein Takt benötigt, weil dieses Design keine Register hat.
+Die Sim-Config treibt `a` und `b` durch vier Muster (`3+5 = 8`, dann einen carry-erzeugenden `10 + 6 = 16`, dann `10 + 15 = 25` …). Die Wellenform zeigt `sum` und `cout` kombinatorisch wechselnd — kein Takt nötig, weil das Design keine Register hat.
 
 ## Du bist dran
 
-- **Mach es parametrisch.** Füge ein `generic (N : integer := 4)` zur Entity hinzu und verwende `N` überall dort, wo die 4 vorkommt. Jetzt hast du einen `adder_N`, den du in beliebiger Breite instanziieren kannst.
-- **Baue einen Subtrahierer.** Invertiere `b` und addiere ein weiteres `+1` — das ist Zweierkomplement-Subtraktion. Keine zusätzliche Hardware außer einem NOT pro Bit.
-- **Verschalte zwei davon.** Platziere einen für das untere Nibble und einen für das obere, und du hast einen 8-Bit-Addierer mit Ripple-Carry zwischen ihnen.
+- **Mach es parametrisch.** Füge der Entity ein `generic (N : integer := 4)` hinzu und nutze `N` wo immer die 4 vorkommt. Jetzt hast du einen `adder_N`, den du auf jeder Breite instanziieren kannst.
+- **Bau einen Subtrahierer.** Flippe `b` und addiere noch eine `+1` — das ist Zweier-Komplement-Subtraktion. Keine Extra-Hardware außer einem NOT pro Bit.
+- **Verdrahte zwei davon.** Einer für das untere Nibble, einer für das obere — und du hast einen 8-Bit-Addierer mit Ripple-Carry zwischen ihnen.

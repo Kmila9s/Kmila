@@ -1,60 +1,133 @@
 {
   "code": "process(a, b)\n  variable tmp : integer := 0;\nbegin\n  tmp := a + 1;       -- variable: immediate\n  tmp := tmp * 2;     -- reads the new tmp\n  result <= tmp + b;  -- signal: delayed to end of delta\nend process;",
   "language": "vhdl",
-  "signalOrder": ["a", "b", "tmp", "result"],
+  "signalOrder": [
+    "a",
+    "b",
+    "tmp",
+    "result"
+  ],
   "steps": [
     {
       "t": 0,
       "highlightLines": [],
-      "signals": { "a": "0", "b": "5", "tmp": "0", "result": "U" },
+      "signals": {
+        "a": "0",
+        "b": "5",
+        "tmp": "0",
+        "result": "U"
+      },
       "note": {
         "en": "Cold start. tmp is a variable (initial 0); result is a signal (uninitialised).",
-        "es": "Inicio en frío. tmp es variable (inicial 0); result es señal (sin inicializar)."
+        "es": "Inicio en frío. tmp es variable (inicial 0); result es señal (sin inicializar).",
+        "ar": "بدء بارد. tmp متغيِّر (الأولي 0)؛ result إشارة (دون تهيئة).",
+        "ch": "冷启动。tmp 是 variable(初值 0);result 是 signal(未初始化)。",
+        "de": "Kaltstart. tmp ist eine Variable (initial 0); result ist ein Signal (uninitialisiert).",
+        "fr": "Démarrage à froid. tmp est une variable (valeur initiale 0) ; result est un signal (non initialisé).",
+        "jp": "コールドスタート。tmp は variable(初期値 0)、result は signal(未初期化)。"
       }
     },
     {
       "t": 1,
-      "highlightLines": [1],
-      "signals": { "a": "3", "b": "5", "tmp": "0", "result": "U" },
+      "highlightLines": [
+        1
+      ],
+      "signals": {
+        "a": "3",
+        "b": "5",
+        "tmp": "0",
+        "result": "U"
+      },
       "note": {
         "en": "a changes to 3 — process wakes (a is in the sensitivity list).",
-        "es": "a cambia a 3 — el proceso se despierta (a está en la lista de sensibilidad)."
+        "es": "a cambia a 3 — el proceso se despierta (a está en la lista de sensibilidad).",
+        "ar": "a يتغيَّر إلى 3 — تستيقظ المعالجة (a في قائمة الحساسيَّة).",
+        "ch": "a 变为 3 — process 醒来(a 在敏感列表中)。",
+        "de": "a wechselt auf 3 — der Prozess wacht auf (a steht in der Sensitivitätsliste).",
+        "fr": "a passe à 3 — le process se réveille (a est dans la liste de sensibilité).",
+        "jp": "a が 3 に変化 — process が起動(a は感度リストにある)。"
       }
     },
     {
       "t": 2,
-      "highlightLines": [4],
-      "signals": { "a": "3", "b": "5", "tmp": "4", "result": "U" },
+      "highlightLines": [
+        4
+      ],
+      "signals": {
+        "a": "3",
+        "b": "5",
+        "tmp": "4",
+        "result": "U"
+      },
       "note": {
         "en": "Line 4: tmp := a + 1. VARIABLE assignment — tmp updates immediately to 4.",
-        "es": "Línea 4: tmp := a + 1. Asignación de VARIABLE — tmp se actualiza inmediatamente a 4."
+        "es": "Línea 4: tmp := a + 1. Asignación de VARIABLE — tmp se actualiza inmediatamente a 4.",
+        "ar": "السطر 4: tmp := a + 1. إسناد متغيِّر — يتحدَّث tmp فورًا إلى 4.",
+        "ch": "第 4 行:tmp := a + 1。variable 赋值 — tmp 立即更新为 4。",
+        "de": "Zeile 4: tmp := a + 1. VARIABLE-Zuweisung — tmp aktualisiert sich sofort auf 4.",
+        "fr": "Ligne 4 : tmp := a + 1. Affectation de VARIABLE — tmp se met à jour immédiatement à 4.",
+        "jp": "行 4:tmp := a + 1。VARIABLE 代入 — tmp は即座に 4 に更新。"
       }
     },
     {
       "t": 3,
-      "highlightLines": [5],
-      "signals": { "a": "3", "b": "5", "tmp": "8", "result": "U" },
+      "highlightLines": [
+        5
+      ],
+      "signals": {
+        "a": "3",
+        "b": "5",
+        "tmp": "8",
+        "result": "U"
+      },
       "note": {
         "en": "Line 5: tmp := tmp * 2. Reads the NEW tmp (4), multiplies — tmp is now 8.",
-        "es": "Línea 5: tmp := tmp * 2. Lee el NUEVO tmp (4), multiplica — tmp ahora es 8."
+        "es": "Línea 5: tmp := tmp * 2. Lee el NUEVO tmp (4), multiplica — tmp ahora es 8.",
+        "ar": "السطر 5: tmp := tmp * 2. يقرأ tmp الجديد (4)، يضرب — tmp الآن 8.",
+        "ch": "第 5 行:tmp := tmp * 2。读到新的 tmp (4),乘以 2 — tmp 现在是 8。",
+        "de": "Zeile 5: tmp := tmp * 2. Liest das NEUE tmp (4), multipliziert — tmp ist jetzt 8.",
+        "fr": "Ligne 5 : tmp := tmp * 2. Lit le NOUVEAU tmp (4), multiplie — tmp vaut maintenant 8.",
+        "jp": "行 5:tmp := tmp * 2。新しい tmp (4) を読み、乗算 — tmp は今 8。"
       }
     },
     {
       "t": 4,
-      "highlightLines": [6],
-      "signals": { "a": "3", "b": "5", "tmp": "8", "result": "U" },
+      "highlightLines": [
+        6
+      ],
+      "signals": {
+        "a": "3",
+        "b": "5",
+        "tmp": "8",
+        "result": "U"
+      },
       "note": {
         "en": "Line 6: result <= tmp + b. SIGNAL assignment — schedules 13, but result still reads as U.",
-        "es": "Línea 6: result <= tmp + b. Asignación de SEÑAL — programa 13, pero result aún se lee como U."
+        "es": "Línea 6: result <= tmp + b. Asignación de SEÑAL — programa 13, pero result aún se lee como U.",
+        "ar": "السطر 6: result <= tmp + b. إسناد إشارة — يجدول 13، لكن result لا يزال يقرأ كـ U.",
+        "ch": "第 6 行:result <= tmp + b。signal 赋值 — 调度 13,但 result 仍读为 U。",
+        "de": "Zeile 6: result <= tmp + b. SIGNAL-Zuweisung — plant 13 ein, aber result wird immer noch als U gelesen.",
+        "fr": "Ligne 6 : result <= tmp + b. Affectation de SIGNAL — planifie 13, mais result se lit toujours comme U.",
+        "jp": "行 6:result <= tmp + b。SIGNAL 代入 — 13 をスケジュールするが、result はまだ U として読まれる。"
       }
     },
     {
       "t": 5,
       "highlightLines": [],
-      "signals": { "a": "3", "b": "5", "tmp": "8", "result": "13" },
+      "signals": {
+        "a": "3",
+        "b": "5",
+        "tmp": "8",
+        "result": "13"
+      },
       "note": {
         "en": "Delta cycle ends. result commits to 13. Variables = right-now; signals = end of delta.",
-        "es": "Termina el ciclo delta. result se confirma en 13. Variables = ahora mismo; señales = fin del delta."
+        "es": "Termina el ciclo delta. result se confirma en 13. Variables = ahora mismo; señales = fin del delta.",
+        "ar": "ينتهي دلتا-الدورة. يلتزم result بـ 13. متغيِّرات = الآن؛ إشارات = نهاية الدلتا.",
+        "ch": "delta 周期结束。result commit 到 13。variable = 此刻;signal = delta 结束。",
+        "de": "Delta-Zyklus endet. result committet auf 13. Variablen = sofort; Signale = Ende des Deltas.",
+        "fr": "Cycle delta terminé. result s'engage à 13. Variables = tout de suite ; signaux = fin du delta.",
+        "jp": "デルタサイクル終了。result は 13 にコミット。variable = 今すぐ;signal = デルタ終了時。"
       }
     }
   ]

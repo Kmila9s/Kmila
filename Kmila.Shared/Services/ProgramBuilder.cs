@@ -17,6 +17,15 @@ public class ProgramBuilder : IDisposable
     /// Occurs when the simulation has ended.
     /// </summary>
     public event Action<bool>? OnSimulationEnded;
+
+    /// <summary>
+    /// Phase B (2026-05-19): forwarded from
+    /// <see cref="Interpreter.Services.SimulationRunner.OnEngineReady"/> so
+    /// scoped consumers (Editor's Replay tab) can attach to the live engine
+    /// without taking a hard reference to the runner. Fires once per run,
+    /// right after the engine is initialised and before the first tick.
+    /// </summary>
+    public event Action<Interpreter.Services.DeltaCycleEngine>? OnEngineReady;
     /// <summary>
     /// Occurs when the simulation progress has advanced.
     /// </summary>
@@ -347,6 +356,7 @@ public class ProgramBuilder : IDisposable
         // partial waveform of whatever ran, instead of a blank Waveforms tab
         // after they hit Stop mid-simulation.
         _simulationRunner.OnProgressChanged += progress => OnProgressAdvanced?.Invoke(progress);
+        _simulationRunner.OnEngineReady += engine => OnEngineReady?.Invoke(engine);
         _simulationRunner.OnSimulationEnded += completed =>
         {
             // Stop the live-update timer first so its callback can't race

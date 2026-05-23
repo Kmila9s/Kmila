@@ -1,62 +1,62 @@
 # Mealy- vs. Moore-Automaten
 
-Ein endlicher Automat (FSM) ist Steuerlogik, die sich merkt, was sie gerade tut. Jede FSM hat:
+Ein endlicher Automat (FSM) ist Steuerlogik, die sich merkt, was sie gerade tut. Jeder FSM hat:
 
-- Ein **Zustandsregister** (eine Gruppe von Flipflops).
+- Ein **Zustandsregister** (eine Gruppe Flip-Flops).
 - **Folgezustandslogik** (kombinatorisch, entscheidet, was der Zustand bei der nächsten Taktflanke sein wird).
-- **Ausgangslogik** (kombinatorisch, entscheidet, was die Ausgänge gerade jetzt sind).
+- **Ausgangslogik** (kombinatorisch, entscheidet, was die Ausgänge jetzt sind).
 
-Wo die Ausgangslogik ihre Eingaben bezieht, teilt FSMs in zwei Familien.
+Wo die Ausgangslogik ihre Eingänge sucht, teilt FSMs in zwei Familien.
 
 ## Moore: Ausgänge hängen nur vom Zustand ab
 
 ```mermaid
 flowchart LR
-    IN([Eingang]) --> NS["Folgezustand"]
-    NS --> SR["Zustandsreg."]
-    SR --> OUT["Ausgänge"]
+    IN([input]) --> NS["next-state"]
+    NS --> SR["state reg"]
+    SR --> OUT["outputs"]
 ```
 
-Bei gegebenem Zustand ist der Ausgang fest. Wenn du in `S_GREEN` bist, ist `green = '1'`. Immer. Egal, wie die Eingabe aussieht.
+Bei gegebenem Zustand ist der Ausgang fix. Bist du in `S_GREEN`, dann `green = '1'`. Immer. Egal, wie der Eingang aussieht.
 
-**Vorteile**
+**Pros**
 - Ausgänge ändern sich nur an Taktflanken → keine Glitches.
-- Leicht zu durchdenken, leicht zu debuggen, leicht zu verifizieren.
+- Leicht nachzuvollziehen, leicht zu debuggen, leicht zu verifizieren.
 
-**Nachteile**
-- Mindestens ein Taktzyklus Latenz zwischen Eingang und Ausgang (der Zustand muss erst wechseln).
-- Manchmal brauchst du mehr Zustände, um dasselbe Verhalten wie eine Mealy-Maschine zu kodieren.
+**Cons**
+- Mindestens ein Taktzyklus Latenz zwischen Eingang und Ausgang (der Zustand muss zuerst wechseln).
+- Manchmal brauchst du mehr Zustände, um dasselbe Verhalten wie ein Mealy-Automat zu codieren.
 
-## Mealy: Ausgänge hängen von Zustand + Eingang ab
+## Mealy: Ausgänge hängen vom Zustand + Eingang ab
 
 ```mermaid
 flowchart LR
-    IN([Eingang]) --> NS["Folgezustand"]
-    NS --> SR["Zustandsreg."]
-    IN --> OL["Ausgangslogik"]
+    IN([input]) --> NS["next-state"]
+    NS --> SR["state reg"]
+    IN --> OL["output logic"]
     SR --> OL
-    OL --> OUT([Ausgänge])
+    OL --> OUT([outputs])
 ```
 
 Ausgänge sind eine Funktion des aktuellen Zustands **und** des aktuellen Eingangs. Sie können sich zwischen Taktflanken ändern.
 
-**Vorteile**
+**Pros**
 - Schneller — Ausgänge können im selben Zyklus auf einen Eingang reagieren, nicht erst im nächsten.
-- Benötigt oft weniger Zustände.
+- Oft weniger Zustände nötig.
 
-**Nachteile**
+**Cons**
 - Ausgänge können glitchen (folgen dem kombinatorischen Eingang).
-- Schwerer zu debuggen, wenn Ausgänge nicht an Taktflanken ausgerichtet sind.
+- Schwerer zu debuggen, wenn Ausgänge nicht mit Taktflanken zusammenfallen.
 
-## Welche solltest du verwenden?
+## Welchen nehmen?
 
-**Standard: Moore.** Die Glitch-Freiheit und die flankenausgerichteten Ausgänge machen Designs vorhersehbar. Für Steuerlogik in einer CPU, einem Speichercontroller oder irgendetwas Sicherheitsrelevantem ist Moore die sicherere Wahl.
+**Standard: Moore.** Die Glitch-Freiheit und die kantenausgerichteten Ausgänge machen Designs vorhersagbar. Für Steuerlogik in einer CPU, einem Speichercontroller oder bei allem Sicherheitsrelevanten ist Moore die sicherere Wahl.
 
-**Greife zu Mealy,** wenn du innerhalb desselben Taktzyklus reagieren musst oder wenn die zusätzlichen Moore-Zustände das Design aufblähen würden. UART- und Protokoll-Engines landen aus Reaktionszeit-Gründen oft bei Mealy.
+**Greife zu Mealy, wenn** du im selben Taktzyklus reagieren musst oder wenn die zusätzlichen Moore-Zustände den Entwurf aufblähen würden. UART und Protokoll-Engines landen oft bei Mealy wegen des Reaktionszeit-Arguments.
 
-## Wie Kmila sie unterstützt
+## Wie Kmila beide unterstützt
 
-Beide Stile passen in dasselbe **Zwei-Prozess-Muster**, das du im Ampel-Beispiel sehen wirst:
+Beide Stile lassen sich in dasselbe **Zwei-Prozess-Muster** packen, das du im Ampelbeispiel sehen wirst:
 
 ```vhdl
 -- Prozess 1: Zustandsregister (immer Moore-sicher)
@@ -69,17 +69,17 @@ begin
   end if;
 end process;
 
--- Prozess 2: kombinatorisch Folgezustand + Ausgänge
+-- Prozess 2: kombinatorischer Folgezustand + Ausgänge
 process(state, input)
 begin
   ...
 end process;
 ```
 
-Bei einer Moore-Maschine schauen die Ausgänge nur auf `state`. Bei einer Mealy-Maschine schauen sie auf `state` und `input`.
+Bei einem Moore-Automaten schauen die Ausgänge nur auf `state`. Bei einem Mealy-Automaten schauen sie auf `state` und `input`.
 
-## Was zu merken ist
+## Was du behalten solltest
 
-- Moore: Ausgang ist eine Funktion nur des Zustands. Glitch-frei.
-- Mealy: Ausgang ist eine Funktion von Zustand + Eingang. Schneller.
+- Moore: Ausgang ist Funktion des Zustands allein. Glitch-frei.
+- Mealy: Ausgang ist Funktion von Zustand + Eingang. Schneller.
 - Starte mit Moore; wechsle zu Mealy, wenn du einen konkreten Grund hast.

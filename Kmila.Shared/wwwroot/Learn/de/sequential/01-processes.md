@@ -1,10 +1,10 @@
 # Prozesse und Sensitivitätslisten
 
-Alles in VHDL außerhalb eines Prozesses ist nebenläufig — Drähte und Gatter. In dem Moment, in dem du möchtest, dass sich eine Schaltung etwas von einem Taktzyklus zum nächsten **merkt**, brauchst du einen Prozess.
+Alles in VHDL außerhalb eines Prozesses ist nebenläufig — Drähte und Gatter. Sobald du willst, dass eine Schaltung von einem Taktzyklus zum nächsten **etwas merkt**, brauchst du einen Prozess.
 
 ## Was ein Prozess ist
 
-Ein `process` ist ein Block sequentiellen Codes innerhalb einer VHDL-Architektur. Seine Zeilen werden von oben nach unten gelesen, genau wie Software. Aber der Prozess selbst "läuft" nur, wenn sich etwas in seiner **Sensitivitätsliste** ändert.
+Ein `process` ist ein Block sequentiellen Codes innerhalb einer VHDL-Architektur. Seine Zeilen werden von oben nach unten gelesen, wie Software. Aber der Prozess selbst „läuft" nur, wenn sich etwas in seiner **Sensitivitätsliste** ändert.
 
 ```vhdl
 process(clk, reset)
@@ -17,13 +17,13 @@ begin
 end process;
 ```
 
-Dieser Block bedeutet: "immer wenn `clk` oder `reset` sich ändert, werte meinen Rumpf neu aus."
+Dieser Block bedeutet: „wann immer `clk` oder `reset` sich ändert, werte meinen Body neu aus."
 
 ## Zwei Formen, die du in 99 % der Fälle siehst
 
 ### Kombinatorischer Prozess
 
-Sensitivitätsliste = jeder Eingang, der im Rumpf gelesen wird. Kein Takt. Ausgang ist eine reine Funktion der Eingänge.
+Sensitivitätsliste = jeder im Inneren gelesene Eingang. Kein Takt. Der Ausgang ist eine reine Funktion der Eingänge.
 
 ```vhdl
 process(a, b, sel)
@@ -36,7 +36,7 @@ begin
 end process;
 ```
 
-Wird zu einem 2-zu-1-Mux synthetisiert. Kein Speicher.
+Synthetisiert zu einem 2-zu-1-MUX. Kein Speicher.
 
 ### Getakteter (sequentieller) Prozess
 
@@ -53,34 +53,34 @@ begin
 end process;
 ```
 
-Das ist das klassische D-Flipflop-Muster.
+Das ist das klassische D-Flip-Flop-Muster.
 
 ## Die Sensitivitätslisten-Falle
 
-Wenn du vergisst, ein Signal aufzulisten, das der Rumpf liest, weichen Simulation und Synthese voneinander ab:
+Vergisst du, ein Signal aufzulisten, das der Body liest, sind Simulation und Synthese uneinig:
 
-- **Simulation**: Der Prozess wird nicht neu ausgewertet, wenn sich dieses Signal ändert. Waveform sieht falsch aus.
-- **Synthese**: Das Tool liest den Rumpf, sieht jeden Lesezugriff und baut sowieso die richtige Hardware.
+- **Simulation**: der Prozess wertet nicht neu aus, wenn sich dieses Signal ändert. Wellenform sieht falsch aus.
+- **Synthese**: das Tool liest den Body, sieht jedes Lese und baut die richtige Hardware trotzdem.
 
-Ergebnis: Dein Testbench besteht, aber das Board funktioniert nicht — oder umgekehrt. Modernes VHDL-2008 erlaubt dir `process(all)`, um das ganz zu vermeiden:
+Resultat: deine Testbench besteht, aber das Board geht nicht — oder umgekehrt. Modernes VHDL-2008 erlaubt `process(all)`, um das ganz zu vermeiden:
 
 ```vhdl
-process(all)  -- schließt jedes im Rumpf gelesene Signal ein
+process(all)  -- jedes im Body gelesene Signal einschließen
 begin
   ...
 end process;
 ```
 
-Kmilas Parser akzeptiert `process(all)`, und das ist, was die meisten Teams in neuen Designs verwenden.
+Kmilas Parser akzeptiert `process(all)`, und das ist, was die meisten Teams in neuen Designs nutzen.
 
-## Eine Faustregel
+## Faustregel
 
-- Sensitivität = nur `(clk, reset)` → du beschreibst **Register** (Flipflops).
-- Sensitivität = jeden Eingang, den du liest → du beschreibst **kombinatorische Logik**.
-- Sensitivität mischt getaktete und nicht-getaktete Signale → du hast ziemlich sicher einen Bug.
+- Sensitivität = nur `(clk, reset)` → du beschreibst **Register** (Flip-Flops).
+- Sensitivität = jeder gelesene Eingang → du beschreibst **kombinatorische Logik**.
+- Sensitivität mischt Taktsignal + nicht-Taktsignal → du hast fast sicher einen Bug.
 
-## Was zu merken ist
+## Was du behalten solltest
 
-- Ein Prozess ist die Einheit sequentiellen Codes innerhalb einer ansonsten nebenläufigen Datei.
-- Getaktete Prozesse (`rising_edge(clk)`) werden zu Flipflops synthetisiert. So bekommst du Speicher.
-- Liste jedes Signal auf, das du liest, oder verwende `process(all)`, damit das Tool es für dich tut.
+- Ein Prozess ist die Einheit sequentiellen Codes in einer sonst nebenläufigen Datei.
+- Getaktete Prozesse (`rising_edge(clk)`) synthetisieren zu Flip-Flops. So bekommst du Speicher.
+- Liste jedes gelesene Signal auf, oder nutze `process(all)` und lass das Tool es für dich tun.

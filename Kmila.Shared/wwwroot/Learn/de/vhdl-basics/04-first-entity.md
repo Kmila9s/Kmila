@@ -1,6 +1,6 @@
 # Beispiel: deine erste Entity (2-zu-1-MUX)
 
-Ein **Multiplexer** ist das einfachste kombinatorische Bauteil, das eine "Wahl" trifft. Die 2-zu-1-Version wählt zwischen zwei Eingängen basierend auf einem `sel`-Bit aus:
+Ein **Multiplexer** ist das einfachste kombinatorische Gerät, das eine „Wahl" hat. Die 2-zu-1-Variante wählt zwischen zwei Eingängen basierend auf einem `sel`-Bit:
 
 ```
   sel = 0  →  y = a
@@ -13,20 +13,20 @@ Das VHDL dafür ist eine Zeile:
 y <= a when sel = '0' else b;
 ```
 
-## Was das Beispiel macht
+## Was das Beispiel tut
 
-Öffne das Beispiel, und du bekommst ein Projekt namens **Your first entity** mit:
+Öffne das Beispiel und du bekommst ein Projekt namens **Your first entity** mit:
 
-- `mux21.vhd` (dem Design oben)
-- Einer begleitenden Simulationskonfiguration, die `sel`, `a` und `b` über 40 Mikrosekunden antreibt
+- `mux21.vhd` (das Design oben)
+- Eine Begleit-Simulations-Config, die `sel`, `a` und `b` über 40 Mikrosekunden treibt
 
-Wenn du Run klickst, zeigt der Waveforms-Tab vier Zeilen — die drei Eingänge und den Ausgang. Beobachte, wie `y` zwischen `a` und `b` wechselt, während `sel` kippt.
+Wenn du Run drückst, zeigt der Wellenform-Tab vier Zeilen — die drei Eingänge und den Ausgang. Beobachte, wie `y` zwischen `a` und `b` flipt, wenn `sel` togglet.
 
-## Dinge, die auffallen
+## Dinge zu beachten
 
-Die Zuweisung `y <= a when sel = '0' else b;` ist eine **nebenläufige Anweisung**: Sie lebt außerhalb eines jeden Prozesses und beschreibt eine permanente Verdrahtung. Es gibt kein "wann wird diese Zeile ausgeführt?" — sie ist einfach.
+Die Zuweisung `y <= a when sel = '0' else b;` ist eine **nebenläufige Anweisung**: sie lebt außerhalb eines Prozesses und beschreibt eine permanente Verdrahtung. Es gibt kein „wann wird diese Zeile ausgeführt?" — sie existiert einfach.
 
-Die Bedingung innerhalb eines `when/else` kann jeder boolesche Ausdruck sein:
+Die Bedingung in einem `when/else` kann jeder boolesche Ausdruck sein:
 
 ```vhdl
 y <= a when sel = '0' else
@@ -34,14 +34,14 @@ y <= a when sel = '0' else
      'Z';
 ```
 
-Ketten wie die werden zu einem Prioritäts-Multiplexer synthetisiert (der oberste Fall gewinnt bei Gleichstand).
+Solche Ketten synthetisieren zu einem Prioritäts-Multiplexer (oberer Fall gewinnt Gleichstand).
 
 ## Du bist dran: erweitere es
 
-Sobald du das Beispiel hast laufen sehen:
+Sobald das Beispiel läuft:
 
-1. Ändere die Entity zu einem **4-zu-1-MUX** — `sel` wird zu 2 Bits, und du wählst zwischen `a`, `b`, `c`, `d`.
-2. Füge einen fünften Port `output_enable` hinzu. Wenn er `'0'` ist, treibe `y <= 'Z'` (hochohmig) unabhängig von `sel`.
-3. Vergleiche `when/else` mit der `with/select`-Version, die du im nächsten Modul kennenlernen wirst.
+1. Ändere die Entity zu einem **4-zu-1-MUX** — `sel` wird zu 2 Bit, und du wählst zwischen `a`, `b`, `c`, `d`.
+2. Füge einen fünften Port `output_enable` hinzu. Wenn er `'0'` ist, treibe `y <= 'Z'` (hochohmig), unabhängig von `sel`.
+3. Vergleiche `when/else` mit der `with/select`-Variante, die du im nächsten Modul triffst.
 
-Kmilas Editor hebt die VHDL-Schlüsselwörter hervor und kennt `std_logic` — halte die Maus über `when`, um die eingebaute Dokumentation zu sehen.
+Kmilas Editor hebt die VHDL-Schlüsselwörter hervor und kennt `std_logic` — hover über `when`, um die eingebaute Doku zu sehen.

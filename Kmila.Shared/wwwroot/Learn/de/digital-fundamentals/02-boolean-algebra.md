@@ -1,18 +1,18 @@
 # Boolesche Algebra und die wichtigen Gesetze
 
-Die boolesche Algebra ist die Mathematik der Wahr/Falsch-Werte und der Operationen, die du darauf ausführen kannst. Jede digitale Schaltung — von einem einzelnen Gatter bis zu einer Millionen-Transistor-CPU — ist letztlich ein boolescher Ausdruck.
+Boolesche Algebra ist die Mathematik von Wahr/Falsch-Werten und der Operationen, die du darauf ausführen kannst. Jede digitale Schaltung — von einem einzelnen Gatter bis zu einer CPU mit Millionen Transistoren — ist letztlich ein boolescher Ausdruck.
 
-Die gute Nachricht: Du musst dir nur eine Handvoll Identitäten merken. Damit kannst du fast jeden Ausdruck von Hand vereinfachen.
+Die gute Nachricht: du musst dir nur eine Handvoll Identitäten merken. Damit kannst du fast jeden Ausdruck per Hand vereinfachen.
 
 ## Die drei Grundoperationen
 
 | Op | Symbol (Mathe) | Symbol (VHDL) | Liest sich als |
 |----|----------------|---------------|----------------|
-| AND | · oder Nebeneinander | `and` | "A und B" |
-| OR  | +                    | `or`  | "A oder B" |
-| NOT | Überstrich (`Ā`)     | `not` | "nicht A" |
+| AND | · oder Aneinanderreihung | `and` | „A und B" |
+| OR  | +                  | `or`  | „A oder B" |
+| NOT | Überstrich (`Ā`)   | `not` | „nicht A"  |
 
-Wahrheitstabellen für die Binäroperatoren:
+Wahrheitstabellen der binären Operatoren:
 
 ```
  A  B  │  A·B   A+B
@@ -23,23 +23,23 @@ Wahrheitstabellen für die Binäroperatoren:
  1  1  │   1     1
 ```
 
-## Die Identitäten, die du wirklich brauchst
+## Die Identitäten, die du wirklich nutzen wirst
 
-**Kommutativität** — die Reihenfolge spielt keine Rolle:
+**Kommutativität** — Reihenfolge ist egal:
 
 ```
 A · B = B · A
 A + B = B + A
 ```
 
-**Assoziativität** — die Gruppierung spielt keine Rolle:
+**Assoziativität** — Gruppierung ist egal:
 
 ```
 (A · B) · C = A · (B · C)
 (A + B) + C = A + (B + C)
 ```
 
-**Distributivität** — die im OR-Fall seltsam aussieht:
+**Distributivität** — diejenige im OR-Fall sieht komisch aus:
 
 ```
 A · (B + C) = A·B + A·C
@@ -59,18 +59,18 @@ A + 1 = 1      A · 0 = 0
 A + Ā = 1      A · Ā = 0
 ```
 
-**De Morgans Gesetze** — die zwei nützlichsten Umformungen im Digitaldesign:
+**Die Gesetze von De Morgan** — die zwei nützlichsten Umformungen im Digitaldesign:
 
 ```
 not(A · B) = Ā + B̄
 not(A + B) = Ā · B̄
 ```
 
-Mit De Morgan kannst du ein NAND in "OR der Komplemente" verwandeln, ein NOR in "AND der Komplemente", oder lange NOT-Striche aufheben. Jede FPGA-Toolchain nutzt sie ständig während der Optimierung.
+De Morgan lässt dich ein NAND in „OR der Komplemente" verwandeln, oder ein NOR in „AND der Komplemente", oder lange NOT-Striche kürzen. Jede FPGA-Toolchain nutzt sie ständig bei der Optimierung.
 
-## Eine durchgearbeitete Vereinfachung
+## Eine durchgerechnete Vereinfachung
 
-Starte mit:
+Start mit:
 
 ```
 Y = A·B + A·B̄·C + A·B̄·C̄
@@ -97,10 +97,10 @@ Y = A · (B + B̄ · 1)
   = A
 ```
 
-Vier Terme mit fünf AND-OR-Operationen kollabieren zu einem Draht. Das ist die Art von Arbeit, die der Synthesizer automatisch für dich erledigt — aber sie zu verstehen macht dich schärfer darin, die Netzliste eines anderen zu lesen.
+Vier Terme mit fünf AND-OR-Operationen kollabieren auf einen Draht. Das ist die Arbeit, die der Synthesizer automatisch für dich macht — aber sie zu verstehen macht dich beim Lesen fremder Netlists schärfer.
 
-## Was zu merken ist
+## Was du behalten solltest
 
-- AND / OR / NOT sind alles, was du brauchst. NAND und NOR sind AND/OR mit einem angehängten NOT.
+- AND / OR / NOT ist alles, was du brauchst. NAND und NOR sind AND/OR mit einem NOT dran.
 - De Morgan ist das Schweizer Taschenmesser — lerne, ihn in beide Richtungen zu erkennen.
-- Wenn ein Teilausdruck mit Komplement zu `1` auswertet, vereinfacht sich das gesamte Produkt.
+- Wenn ein Teilausdruck per Komplement zu `1` wird, kollabiert das ganze Produkt.

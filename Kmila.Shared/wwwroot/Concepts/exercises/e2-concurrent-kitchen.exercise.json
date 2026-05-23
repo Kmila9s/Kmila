@@ -140,6 +140,88 @@
       }
     },
     {
+      "fingerprint": "kmila_recipe_step:STEP=chop|kmila_recipe_step:STEP=marinate|kmila_recipe_step:STEP=fry|kmila_recipe_step:STEP=boil|kmila_recipe_step:STEP=serve",
+      "label": {
+        "en": "Full service: 4 cooks + waiter",
+        "es": "Servicio completo: 4 cocineros + camarero"
+      },
+      "timeline": {
+        "code": "1. Chop the vegetables\n2. Marinate the meat\n3. Fry the eggs\n4. Boil the pasta\n5. Slice and serve",
+        "language": "plaintext",
+        "signalOrder": ["veggies", "meat", "eggs", "pasta", "plated", "elapsed"],
+        "steps": [
+          {
+            "t": 0,
+            "highlightLines": [],
+            "signals": { "veggies": "raw", "meat": "raw", "eggs": "raw", "pasta": "raw", "plated": "no", "elapsed": "0 min" },
+            "note": {
+              "en": "Five concurrent tasks. The waiter (serve) waits for nothing — they also fire in the same delta.",
+              "es": "Cinco tareas concurrentes. El camarero (servir) no espera nada — también se dispara en el mismo delta."
+            }
+          },
+          {
+            "t": 1,
+            "highlightLines": [1, 2, 3, 4, 5],
+            "signals": { "veggies": "in progress", "meat": "in progress", "eggs": "in progress", "pasta": "in progress", "plated": "in progress", "elapsed": "1 min" },
+            "note": {
+              "en": "All five lines fire at once. Concurrent semantics never read 'wait for the previous step' — that's a sequential idea you have to unlearn here.",
+              "es": "Las cinco líneas se disparan a la vez. La semántica concurrente nunca dice 'espera al paso anterior' — esa es una idea secuencial que hay que desaprender aquí."
+            }
+          },
+          {
+            "t": 2,
+            "highlightLines": [],
+            "signals": { "veggies": "done", "meat": "done", "eggs": "done", "pasta": "done", "plated": "done", "elapsed": "10 min" },
+            "note": {
+              "en": "Five results commit together. In real VHDL each of these would be a concurrent signal assignment — but the waiter assigning before the meat is plated is the kind of race you handle with proper data dependencies (signals on the RHS).",
+              "es": "Los cinco resultados se confirman juntos. En VHDL real cada una sería una asignación concurrente — pero el camarero asignando antes de que la carne esté lista es la clase de carrera que se resuelve con dependencias de datos correctas (señales en el lado derecho)."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fingerprint": "kmila_recipe_step:STEP=fry|kmila_recipe_step:STEP=chop|kmila_recipe_step:STEP=marinate|kmila_recipe_step:STEP=boil",
+      "label": {
+        "en": "Eggs-first ordering",
+        "es": "Empezando por los huevos"
+      },
+      "timeline": {
+        "code": "1. Fry the eggs\n2. Chop the vegetables\n3. Marinate the meat\n4. Boil the pasta",
+        "language": "plaintext",
+        "signalOrder": ["eggs", "veggies", "meat", "pasta", "elapsed"],
+        "steps": [
+          {
+            "t": 0,
+            "highlightLines": [],
+            "signals": { "eggs": "raw", "veggies": "raw", "meat": "raw", "pasta": "raw", "elapsed": "0 min" },
+            "note": {
+              "en": "Yet another ordering. The block at the top happens to be the quickest task. Concurrent semantics: still don't care.",
+              "es": "Otro orden más. El bloque de arriba resulta ser la tarea más rápida. La semántica concurrente: sigue sin importarle."
+            }
+          },
+          {
+            "t": 1,
+            "highlightLines": [1, 2, 3, 4],
+            "signals": { "eggs": "in progress", "veggies": "in progress", "meat": "in progress", "pasta": "in progress", "elapsed": "1 min" },
+            "note": {
+              "en": "Same delta, four cooks, four results in flight. Note: the eggs being 'first' in the source doesn't make them 'first' on the wall clock — they finish quickest because frying is fast, not because of code position.",
+              "es": "Mismo delta, cuatro cocineros, cuatro resultados en marcha. Nota: los huevos siendo 'primeros' en el código no los hace 'primeros' en el tiempo — terminan rápido porque freír es rápido, no por la posición en el código."
+            }
+          },
+          {
+            "t": 2,
+            "highlightLines": [],
+            "signals": { "eggs": "done", "veggies": "done", "meat": "done", "pasta": "done", "elapsed": "10 min" },
+            "note": {
+              "en": "Same outcome. Try any permutation — concurrent statements are an unordered set, not a list.",
+              "es": "Mismo resultado. Prueba cualquier permutación — las sentencias concurrentes son un conjunto desordenado, no una lista."
+            }
+          }
+        ]
+      }
+    },
+    {
       "fingerprint": "kmila_recipe_step:STEP=chop|kmila_recipe_step:STEP=fry|kmila_recipe_step:STEP=boil",
       "label": {
         "en": "Mini-brigade (3 tasks)",

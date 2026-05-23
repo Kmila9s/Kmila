@@ -107,6 +107,41 @@
                 <ExecutionPlayer Doc="_timeline" Lang="_lang" />
             }
 
+            @if (_gates != null && _gates.Steps.Count > 0)
+            {
+                @* Inline GateAnimator — opt-in via Lesson.GateAnimation in
+                   the manifest. Sidecar at
+                   Learn/{lang}/{moduleId}/{lessonId}.gates.json. Independent
+                   of the ExecutionPlayer so a lesson can carry either or both. *@
+                <GateAnimator Doc="_gates" Lang="_lang" />
+            }
+            else if (_lesson.GateAnimation)
+            {
+                @* Flag is set in the manifest but the sidecar didn't load
+                   (missing file, malformed JSON, or empty steps). Surface
+                   a banner instead of silently dropping the animation —
+                   author needs to see the breakage to fix it. *@
+                <div class="lesson-missing lesson-missing--soft">
+                    <Icon Name="IconName.ExclamationTriangleFill" />
+                    <span>@Traductor.T("LEARN_GATE_ANIMATION_MISSING")</span>
+                </div>
+            }
+
+            @if (_fsm != null && _fsm.Steps.Count > 0)
+            {
+                @* Inline FsmAnimator — opt-in via Lesson.FsmAnimation in
+                   the manifest. Sidecar at
+                   Learn/{lang}/{moduleId}/{lessonId}.fsm.json. *@
+                <FsmAnimator Doc="_fsm" Lang="_lang" />
+            }
+            else if (_lesson.FsmAnimation)
+            {
+                <div class="lesson-missing lesson-missing--soft">
+                    <Icon Name="IconName.ExclamationTriangleFill" />
+                    <span>@Traductor.T("LEARN_FSM_ANIMATION_MISSING")</span>
+                </div>
+            }
+
             @if (_lesson.Sample != null)
             {
                 <aside class="lesson-sample-cta">
@@ -195,6 +230,8 @@
     private string? _body;
     private string? _lessonTitle;
     private ExecutionTimelineDoc? _timeline;
+    private GateAnimationDoc? _gates;
+    private FsmAnimationDoc? _fsm;
     private bool _completed;
     private bool _loading = true;
     private bool _openingSample;
@@ -267,6 +304,17 @@
         // that have no timeline JSON next to their Markdown body.
         _timeline = _lesson.InlinePlayer
             ? await Catalog.GetTimelineAsync(_module.Id, _lesson.Id, _lang)
+            : null;
+
+        // Optional inline GateAnimator — same opt-in pattern. Loaded
+        // independently so a lesson can carry just one player surface,
+        // or both stacked one above the other.
+        _gates = _lesson.GateAnimation
+            ? await Catalog.GetGateAnimationAsync(_module.Id, _lesson.Id, _lang)
+            : null;
+
+        _fsm = _lesson.FsmAnimation
+            ? await Catalog.GetFsmAnimationAsync(_module.Id, _lesson.Id, _lang)
             : null;
 
         // Record this as "last opened" so the catalog's Continue banner can

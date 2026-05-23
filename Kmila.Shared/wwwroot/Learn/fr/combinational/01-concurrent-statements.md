@@ -1,10 +1,10 @@
-# Assignations concurrentes : `when/else` et `with/select`
+# Affectations concurrentes : `when/else` et `with/select`
 
-La logique combinatoire en VHDL s'écrit avec des instructions concurrentes — chaque ligne hors d'un process décrit un morceau de matériel câblé en permanence. Il existe deux variantes syntaxiques pour le même travail : **conditionnelle** et **sélective**.
+La logique combinatoire en VHDL s'écrit avec des instructions concurrentes — chaque ligne hors d'un process décrit un morceau de matériel câblé en dur. Deux saveurs syntaxiques pour le même job : affectation **conditionnelle** et **sélective**.
 
-## `when/else` — conditionnelle
+## `when/else` — conditionnel
 
-À utiliser quand tu as une liste de conditions priorisées, ou quand chaque branche vérifie un signal différent :
+Bien quand tu as une liste priorisée de conditions, ou quand chaque branche teste un signal différent :
 
 ```vhdl
 y <= '0' when reset = '1' else
@@ -13,11 +13,11 @@ y <= '0' when reset = '1' else
      'Z';
 ```
 
-La première condition qui matche l'emporte. L'ordre compte — cela se synthétise en un **multiplexeur à priorité** : la condition du haut a le chemin le plus direct vers `y`.
+La première condition vraie gagne. L'ordre compte — ça compile vers un **MUX prioritaire** : la condition la plus haute a le chemin le plus direct vers `y`.
 
-## `with/select` — sélective
+## `with/select` — sélectif
 
-À utiliser quand tu branches sur une seule expression (comme un `switch` en logiciel) :
+Bien quand tu branches sur une seule expression (comme un `switch` logiciel) :
 
 ```vhdl
 with mode select
@@ -28,18 +28,18 @@ with mode select
     'Z' when others;
 ```
 
-Tous les cas se comparent au même signal (`mode`), et `when others` est obligatoire pour couvrir tous les patterns possibles. Ce style se synthétise en un **multiplexeur équilibré** — aucune branche n'est privilégiée.
+Tous les cas comparent au même signal (`mode`), et `when others` est obligatoire pour couvrir tous les motifs possibles. Ce style compile vers un **MUX équilibré** — aucune branche n'est privilégiée.
 
-## Laquelle choisir ?
+## Lequel choisir ?
 
-- **Même signal, plusieurs patterns :** `with/select` se lit comme une table de vérité. Utilise-la.
-- **Signaux différents, logique de priorité :** `when/else`. Choix naturel.
-- **Sortie de synthèse :** les deux produisent à peu près les mêmes portes sur un FPGA moderne — choisir la forme la plus claire au niveau du code est presque toujours le bon choix.
+- **Même signal, plusieurs motifs :** `with/select` se lit comme une table de vérité. Prends-le.
+- **Signaux différents, logique prioritaire :** `when/else`. Naturel.
+- **Sortie de synthèse :** les deux produisent à peu près les mêmes portes sur un FPGA moderne — choisir la forme la plus claire au niveau source est presque toujours la bonne décision.
 
 ## Un petit piège
 
-Les deux formes exigent que `y` finisse assigné dans **tous** les scénarios. Si tu oublies le dernier `else` d'un `when/else`, ou que tu sautes le `when others` d'un `with/select`, le compilateur t'avertira — et le synthétiseur pourra inférer un latch pour « mémoriser » la dernière valeur, ce qui n'est presque jamais ce que tu veux. C'est le même piège du latch que tu reverras dans l'exercice de correction du module séquentiel.
+Les deux formes exigent que `y` soit assigné dans **chaque** scénario. Si tu oublies le `else` final d'un `when/else`, ou si tu sautes le `when others` d'un `with/select`, le compilateur t'avertit — et le synthétiseur peut inférer un verrou pour « se souvenir » de la dernière valeur, ce qui n'est presque jamais ce que tu veux. C'est le même piège du verrou que tu reverras dans l'exercice fix-it du module séquentiel.
 
 ## Où ça apparaît ensuite
 
-Tu utiliseras `with/select` dans l'exemple du décodeur 3 vers 8 juste après cette leçon, et `when/else` partout dans la FSM de feu tricolore plus tard. Les deux sont du pain quotidien en VHDL.
+Tu utiliseras `with/select` dans le décodeur 3 vers 8 juste après cette leçon, et `when/else` un peu partout dans le FSM de feu tricolore plus tard. Tous deux sont le pain quotidien du VHDL.

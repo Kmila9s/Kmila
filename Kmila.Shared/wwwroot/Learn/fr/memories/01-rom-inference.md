@@ -1,10 +1,10 @@
 # Exemple : ROM synchrone inférée
 
-Chaque FPGA a des **block RAM** (BRAM) — des blocs mémoire dédiés que le synthétiseur utilise lorsqu'il reconnaît un pattern de ROM ou de RAM dans ton code. Tu n'instancies pas de primitives fournisseur ; tu écris du VHDL normal dans une forme que l'outil sait mapper.
+Tout FPGA possède de la **block RAM** (BRAM) — des blocs mémoire dédiés que le synthétiseur utilise quand il reconnaît un motif de ROM ou de RAM dans ton code. Tu n'instances pas de primitives propriétaires ; tu écris du VHDL ordinaire dans une forme que l'outil sait mapper.
 
-Cet exemple est le pattern de ROM portable, celui des manuels. Tout synthétiseur sérieux (Xilinx Vivado, Intel Quartus, Lattice Radiant, Yosys) le reconnaîtra et allouera de la BRAM automatiquement.
+Cet exemple est le motif ROM portable et classique. Tout synthétiseur sérieux (Xilinx Vivado, Intel Quartus, Lattice Radiant, Yosys) le reconnaît et alloue automatiquement de la BRAM.
 
-## Le pattern
+## Le motif
 
 ```vhdl
 type rom_t is array(0 to 15) of std_logic_vector(7 downto 0);
@@ -21,27 +21,27 @@ begin
 end process;
 ```
 
-Trois choses font de cette ROM une ROM BRAM-friendly :
+Trois choses font de ça une ROM compatible BRAM :
 
-1. **Le stockage est une constante** (`constant ROM : rom_t := (...)`). Les données sont fixées au moment de la synthèse.
-2. **La lecture est cadencée.** Une lecture combinatoire de ROM ne peut être mappée qu'en LUT — c'est correct pour une toute petite ROM de 16 entrées, mais tout ce qui est plus gros a besoin du pattern cadencé pour que le synthétiseur alloue de la BRAM.
-3. **`addr` est utilisé purement comme index.** Pas de logique combinatoire coûteuse entre `addr` et l'accès mémoire.
+1. **Le stockage est une constante** (`constant ROM : rom_t := (...)`). Les données sont figées à la synthèse.
+2. **La lecture est cadencée.** Une lecture ROM combinatoire ne peut être mappée qu'en LUTs — c'est correct pour une ROM minuscule de 16 entrées, mais tout ce qui est plus gros a besoin du motif cadencé pour que le synthétiseur alloue de la BRAM.
+3. **`addr` est utilisé purement comme indice.** Pas de logique combinatoire coûteuse entre `addr` et l'accès mémoire.
 
-## Pourquoi ces contenus ?
+## Pourquoi ce contenu ?
 
-La ROM d'exemple contient `n²` pour `n = 0..15`. Utile pour une unité de mise au carré par table de lookup — plus rapide qu'un vrai multiplieur quand tu n'as besoin que de petits opérandes. Tu pourrais aussi stocker :
+L'exemple stocke `n²` pour `n = 0..15`. Utile comme unité de mise au carré par lookup — plus rapide qu'un vrai multiplieur quand tu n'as besoin que de petits opérandes. Tu pourrais aussi y mettre :
 
-- Une table sinus (pour des générateurs DDS)
+- Une table sinusoïdale (pour générateurs DDS)
 - Des polynômes CRC
 - Des tables de lookup de protocole
 - Des fontes de caractères
 
 ## Ce que fait l'exemple
 
-La sim pilote `addr` à travers 5 valeurs spécifiques : 0, 1, 4, 8, 15. Après le front d'horloge, `data` affiche l'entrée ROM correspondante, un cycle plus tard (c'est la latence de lecture d'une ROM synchrone — tu demandes l'adresse, tu obtiens la donnée au **prochain** coup d'horloge).
+La sim pilote `addr` à travers 5 valeurs précises : 0, 1, 4, 8, 15. Après le front d'horloge, `data` montre l'entrée ROM correspondante, un cycle plus tard (c'est la latence de lecture d'une ROM synchrone — tu demandes l'adresse, tu obtiens les données au cycle **suivant**).
 
-## À toi
+## À toi de jouer
 
-- **Rends-la paramétrable.** Remplace la taille fixe de 16 entrées par `generic (DEPTH : integer := 16; WIDTH : integer := 8)`. Le reste du code doit continuer à fonctionner.
-- **Lis le contenu depuis un fichier.** Les vrais projets chargent le contenu des ROM via `init_from_file()` ou un package séparé de constantes. Essaie de faire lire au VHDL un fichier texte de valeurs hex (`textio` + `hread`) au moment de l'élaboration.
-- **Ajoute un second port de lecture.** Pour des choses comme la mémoire instruction/donnée dans un CPU single-cycle. Tu verras ce pattern dans le projet CPU plus tard dans le programme.
+- **Paramètre-le.** Remplace la taille fixe de 16 entrées par `generic (DEPTH : integer := 16; WIDTH : integer := 8)`. Le reste du code doit continuer à marcher.
+- **Lis le contenu depuis un fichier.** Les vrais projets chargent les ROMs via `init_from_file()` ou un package de constantes. Essaie de faire lire un fichier texte de valeurs hex (`textio` + `hread`) à l'élaboration.
+- **Ajoute un second port de lecture.** Pour des choses comme mémoire d'instructions/données dans un CPU monocycle. Tu verras ce motif plus tard dans le projet CPU du cursus.

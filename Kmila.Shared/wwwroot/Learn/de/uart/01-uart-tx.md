@@ -1,31 +1,31 @@
 # Projekt: UART-Sender
 
-Ein UART (Universal Asynchronous Receiver / Transmitter) ist das erste echte Protokoll, das die meisten Embedded-Designer bauen. Es ist Punkt-zu-Punkt, Vollduplex und braucht nur drei Drähte (TX, RX, GND). Jeder FTDI-USB-Serial-Adapter, jeder Arduino-`Serial.print`, jedes klassische Terminal ist darunter ein UART.
+Ein UART (Universal Asynchronous Receiver / Transmitter) ist das erste echte Protokoll, das die meisten Embedded-Entwickler bauen. Punkt-zu-Punkt, vollduplex, braucht nur drei Drähte (TX, RX, GND). Jeder FTDI-USB-Serial-Adapter, jedes `Serial.print` in Arduino, jedes alte Terminal ist im Grunde ein UART.
 
-Dieses Projekt baut die **Sende**-Seite. Die Empfangsseite ist ein ausgezeichnetes nächstes Projekt, sobald du dieses fertig hast.
+Dieses Projekt baut die **Sende**-Seite. Die Empfangsseite ist ein hervorragendes Folgeprojekt, sobald du das hier durch hast.
 
-## Frameformat (keine Parität, 8-Bit-Daten, 1 Stop)
+## Rahmenformat (keine Parität, 8 Datenbits, 1 Stopp)
 
 ```
   Idle  Start   Bit0  Bit1  Bit2  Bit3  Bit4  Bit5  Bit6  Bit7   Stop   Idle
   ────┐      ┌───── ... ─────────────────────────────── ... ─────┐──────
       │      │
       └──────┘
-    Linie ist normalerweise hoch ('1'); Startbit ist eine fallende Flanke.
+    Leitung normal high ('1'); Startbit ist die fallende Flanke.
 ```
 
-Jedes Bit wird auf `tx` für genau `clk_freq / baud` Taktzyklen gehalten. Für einen 50-MHz-Takt und 115 200 Baud sind das ≈ 434 Zyklen pro Bit.
+Jedes Bit wird auf `tx` für genau `clk_freq / baud` Taktzyklen gehalten. Bei 50 MHz Takt und 115 200 Baud sind das ≈ 434 Zyklen pro Bit.
 
-## Deine Aufgabe
+## Dein Job
 
-1. Baue einen Taktzähler, der etwa alle 434 Zyklen einen einzyklischen `baud_tick` erzeugt.
+1. Bau einen Taktzähler, der alle ~434 Zyklen einen Ein-Zyklus-`baud_tick` erzeugt.
 2. Bei `send = '1'` lade `data` in ein 10-Bit-Schieberegister: `{ stop_bit, data[7..0], start_bit } = 1 & data & 0`. Treibe `busy <= '1'`.
-3. Bei jedem `baud_tick` schiebe das Register nach rechts (sodass zuerst das Startbit rausgeht, dann LSB bis MSB der Daten, dann das Stopbit).
-4. Nach dem 10. Tick lasse `busy` fallen und halte `tx` im Idle-Zustand hoch.
+3. Schiebe das Register bei jedem `baud_tick` nach rechts (so geht das Startbit zuerst raus, dann LSB bis MSB der Daten, dann das Stoppbit).
+4. Nach dem 10. Tick fällt `busy`, und `tx` idlet high.
 
 ## Gerüst
 
-Die Entity und der Idle-Zustand sind vorgegeben; `tx` ist standardmäßig hoch, `busy` standardmäßig niedrig. Alles zwischen diesen Defaults liegt in deiner Verantwortung.
+Entity und Idle-Zustand sind gegeben; `tx` ist standardmäßig high, `busy` ist standardmäßig low. Alles zwischen diesen Defaults liegt in deiner Verantwortung.
 
 ```vhdl
 architecture rtl of uart_tx is
@@ -54,20 +54,20 @@ signal sending    : std_logic := '0';
   - `clk_count <= clk_count + 1;`
   - wenn `clk_count = BAUD_PERIOD - 1`:
     - `tx_reg <= shift_reg(0);`
-    - `shift_reg <= '1' & shift_reg(9 downto 1);` — nach rechts schieben, oben mit Idle auffüllen
+    - `shift_reg <= '1' & shift_reg(9 downto 1);` — rechts schieben, oben mit Idle padden
     - `bit_count <= bit_count + 1;`
     - `clk_count <= 0;`
   - wenn `bit_count = 10`:
     - `sending <= '0';`
 
-Mach `BAUD_PERIOD` zu einem Generic, damit du es für die Simulation schrumpfen kannst (z. B. 5 Zyklen/Bit) und dieselbe Logik auf der Hardware bei voller Geschwindigkeit funktioniert.
+Mach `BAUD_PERIOD` zu einem Generic, damit du es für die Simulation kleiner setzen kannst (z. B. 5 Zyklen/Bit) und derselbe Code in Hardware bei voller Geschwindigkeit läuft.
 
 ## Was zu testen ist
 
-Treibe `send = '1'` mit `data = "01001000"` (ASCII `'H'`). Nachdem das Frame abgeschlossen ist, sollte die `tx`-Waveform genau 10 Bit-Perioden Aktivität zeigen:
+Treibe `send = '1'` mit `data = "01001000"` (ASCII `'H'`). Nach Frame-Ende sollte die `tx`-Wellenform exakt 10 Bitperioden Aktivität zeigen:
 
-1. Start (niedrig)
-2. Bit 0 der Daten (das ist das LSB: `0`)
+1. Start (low)
+2. Bit 0 der Daten (LSB: `0`)
 3. `0`
 4. `0`
 5. `1`
@@ -75,12 +75,12 @@ Treibe `send = '1'` mit `data = "01001000"` (ASCII `'H'`). Nachdem das Frame abg
 7. `0`
 8. `1`
 9. `0` (MSB)
-10. Stop (hoch)
+10. Stopp (high)
 
-Dann zurück zu Idle hoch. Zoome in den Waveforms-Tab und verifiziere das Muster Bit für Bit.
+Danach wieder idle high. Zoome in den Wellenform-Tab und prüfe das Muster Bit für Bit.
 
-## Noch weiter
+## Weitergehen
 
-- Füge ein **FIFO** hinzu, damit du mehrere Bytes in die Warteschlange stellen kannst; `send` wird zu "push".
-- Baue die **RX**-Seite: taste jedes eingehende Bit bei 1,5 × Bit-Periode ab, danach bei 1 ×.
-- Parametriere das Frame: Parität, 7-Bit- vs. 8-Bit-Daten, 1 vs. 2 Stopbits.
+- Füge eine **FIFO** hinzu, damit du mehrere Bytes einreihen kannst; `send` wird zu „push".
+- Bau die **RX**-Seite: jedes ankommende Bit bei 1,5 × Bitperiode samplen, danach bei 1 × .
+- Parametriere den Frame: Parität, 7-Bit vs. 8-Bit Daten, 1 vs. 2 Stoppbits.

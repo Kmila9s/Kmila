@@ -1,29 +1,29 @@
-# Fix it: Der Tristate-Puffer, der immer treibt
+# Korrigieren: Der Tristate-Buffer, der immer treibt
 
-Ein Tristate-Puffer ist ein schaltbarer Ausgang. Wenn das Output-Enable-Signal (`oe`) hoch ist, reicht er seine Daten auf den Bus durch. Wenn `oe` niedrig ist, **gibt er den Bus frei** — er treibt hochohmig (`'Z'`), damit andere Geräte reden können.
+Ein Tristate-Buffer ist ein umschaltbarer Ausgang. Wenn das Output-Enable-Signal (`oe`) high ist, gibt er seine Daten an den Bus weiter. Bei low **gibt er den Bus frei** — er treibt hochohmig (`'Z'`), damit andere Geräte reden können.
 
 ## Was falsch ist
 
-Öffne das Beispiel und schau dir den Rumpf an:
+Öffne das Beispiel und sieh dir den Body an:
 
 ```vhdl
 y <= d when oe = '0' else 'Z';
 ```
 
-Lies es laut vor: "`y` ist gleich `d`, **wenn `oe` null ist**, sonst `'Z'`." Das ist verkehrt herum. Du willst, dass der Puffer Daten durchreicht, wenn das Enable **hoch** ist, und freigibt, wenn es **niedrig** ist.
+Lies es laut vor: „`y` ist `d`, **wenn `oe` 0 ist**, sonst `'Z'`." Das ist falsch herum. Du willst, dass der Buffer Daten weitergibt, wenn das Enable **high** ist, und freigibt, wenn es **low** ist.
 
-## Deine Mission
+## Dein Auftrag
 
 - Öffne das Beispiel im Editor.
 - Korrigiere die Bedingung in Zeile 12 (die `y <=`-Zuweisung).
-- Führe die Simulation aus und verifiziere im Waveforms-Tab:
-  - Wenn `oe = '0'`, sollte `y` gleich `'Z'` sein.
-  - Wenn `oe = '1'`, sollte `y` `d` folgen.
+- Lass die Simulation laufen und prüfe im Wellenform-Tab:
+  - Bei `oe = '0'` soll `y` `'Z'` sein.
+  - Bei `oe = '1'` soll `y` `d` folgen.
 
 ## Warum Tristate wichtig ist
 
-Tristate-Puffer sind die Art, wie sich mehrere Treiber einen einzelnen Draht (einen Bus) teilen, ohne sich gegenseitig kurzzuschließen. FPGAs haben in ihrer internen Struktur keine Tristates — sie verwenden stattdessen Multiplexer — aber **externe** Tristates (an den I/O-Pads) sind immer noch die Art, wie DDR-Speicher und PCIe-Endpunkte sich Pins teilen.
+Tristate-Buffer sind die Art, wie mehrere Treiber sich einen Draht (einen Bus) teilen, ohne sich kurzzuschließen. FPGAs haben in ihrer internen Struktur keine Tristates — sie nutzen stattdessen Multiplexer — aber **externe** Tristates (an den I/O-Pads) sind weiterhin so, wie DDR-Speicher und PCIe-Endpunkte Pins teilen.
 
-## Extra: Achte auf `'X'`
+## Extra: pass auf `'X'` auf
 
-Wenn zwei Tristate-Puffer gleichzeitig denselben Bus mit unterschiedlichen Werten treiben, würde eine echte Schaltung Rauch erzeugen. Der Simulator zeigt das als `'X'` (unbekannt) in der Waveform. Versuche, ein kleines Testbench mit zwei deiner Puffer an demselben `y` zu bauen, und beobachte, was passiert.
+Wenn zwei Tristate-Buffer denselben Bus gleichzeitig mit unterschiedlichen Werten treiben, würde eine echte Schaltung qualmen. Der Simulator zeigt das als `'X'` (unbekannt) auf der Wellenform. Versuch eine winzige Testbench mit zwei deiner Buffer auf demselben `y` und beobachte, was passiert.

@@ -1,106 +1,106 @@
-# データ型: `std_logic`、ベクタ、`unsigned`、`integer`
+# データ型:`std_logic`、ベクトル、`unsigned`、`integer`
 
-VHDL は型付き言語です。ポートが `in std_logic` で宣言されているのを見たら、コンパイラはそれを異なる型のものに接続させません。各信号に適切な型を選ぶことは、きれいな VHDL を書くことの半分です。
+VHDL は型付き言語。ポートが `in std_logic` と宣言されているのを見たら、コンパイラはそれを別の型のものに配線させない。各信号に正しい型を選ぶことが、クリーンな VHDL を書く半分の仕事。
 
-## `std_logic` — ユニバーサルなワイヤ
+## `std_logic` — 万能線
 
-**9 値** IEEE ロジックの 1 ビット。そう、9 つです:
+**9 値**の IEEE ロジックの 1 ビット。そう、9 つ:
 
-| 値    | 意味 |
-|-------|------|
-| `'0'` | 強い駆動ロー |
-| `'1'` | 強い駆動ハイ |
-| `'Z'` | 高インピーダンス(トライステートオフ) |
-| `'L'` | 弱いロー(プルダウン) |
-| `'H'` | 弱いハイ(プルアップ) |
-| `'X'` | 不定 / 複数のドライバが不一致 |
-| `'U'` | 未初期化 — 信号が代入されなかった |
-| `'W'` | 弱い不定 |
-| `'-'` | don't care (case 文で使用) |
+| 値     | 意味 |
+|--------|------|
+| `'0'`  | 強駆動 Low |
+| `'1'`  | 強駆動 High |
+| `'Z'`  | ハイインピーダンス(トライステートオフ) |
+| `'L'`  | 弱 Low(プルダウン) |
+| `'H'`  | 弱 High(プルアップ) |
+| `'X'`  | 不明 / 複数ドライバが矛盾 |
+| `'U'`  | 未初期化 — 信号が一度も代入されていない |
+| `'W'`  | 弱不明 |
+| `'-'`  | don't care(case 文で使う) |
 
-合成では `'0'`、`'1'`、`'Z'` だけがハードウェアに届きます。他はシミュレーションの診断です — 波形で `'U'` が見えたら、書き込まれる前に読まれている信号があります。
+合成では `'0'`、`'1'`、`'Z'` だけがハードウェアに到達する。他はシミュレーション診断 — 波形に `'U'` を見つけたら、書かれる前に読まれた信号がある。
 
 ## `std_logic_vector` — バス
 
 `std_logic` の固定幅配列:
 
 ```vhdl
-signal data : std_logic_vector(7 downto 0);  -- 8 bits, indexes 7..0
-signal addr : std_logic_vector(0 to 15);     -- 16 bits, indexes 0..15
+signal data : std_logic_vector(7 downto 0);  -- 8 ビット、インデックス 7..0
+signal addr : std_logic_vector(0 to 15);     -- 16 ビット、インデックス 0..15
 ```
 
-`downto` が圧倒的によく使われる方向です — これは数字の書き方(左に MSB)と一致します。
+`downto` は圧倒的に一般的な方向 — 数値の書き方(MSB が左)と合う。
 
 リテラル:
 
 ```vhdl
-data <= "10101010";     -- binary literal, one char per bit
-addr <= x"CAFE";        -- hex literal (must be multiple of 4 bits)
-data <= (others => '0');-- shorthand for all-zeros
-data <= (0 => '1', others => '0'); -- only the LSB high
+data <= "10101010";     -- バイナリリテラル、1 文字 1 ビット
+data <= x"AA";          -- 16 進リテラル(4 ビットの倍数)
+data <= (others => '0');-- 全ゼロの短縮形
+data <= (0 => '1', others => '0'); -- LSB だけ High
 ```
 
-## `unsigned` / `signed` — 計算できるベクタ
+## `unsigned` / `signed` — 算術できるベクトル
 
-`std_logic_vector` は「ただのビットの袋」です。数値的意味を持ちません。加減算するには `unsigned` または `signed` が必要です:
+`std_logic_vector` は「ビットの袋」にすぎない。数値的意味を持たない。加算や減算には `unsigned` か `signed` が必要:
 
 ```vhdl
 use IEEE.NUMERIC_STD.ALL;
 
 signal a, b, sum : unsigned(7 downto 0);
 ...
-sum <= a + b;   -- works
+sum <= a + b;   -- 動く
 ```
 
-それらの間の移動:
+相互変換:
 
 ```vhdl
--- vector → unsigned for math
+-- ベクトル → 算術用 unsigned
 u <= unsigned(slv);
 
--- unsigned → vector for the outside world
+-- unsigned → 外向けのベクトル
 slv <= std_logic_vector(u);
 
--- unsigned → integer for indexing or constants
+-- unsigned → インデックスや定数用 integer
 idx <= to_integer(u);
 
--- integer → unsigned (specify width)
+-- integer → unsigned(幅を指定)
 u <= to_unsigned(42, 8);
 ```
 
-経験則: **ポート** では `std_logic_vector` を使い(最も広い対象)、実際に算術を行うアーキテクチャ内部では `unsigned` / `signed` に変換しましょう。
+経験則:**ポート**には `std_logic_vector` を使い(対象が最も広い)、実際に算術するアーキテクチャ内部で `unsigned` / `signed` に変換する。
 
-## `integer` — インデックスとカウント用
+## `integer` — インデックスと計数
 
-ループカウンタ、定数、およびポート境界を越えないものには `integer` (または制約付きサブタイプ) を使います:
+ループカウンタ、定数、ポート境界を越えないものには `integer`(または制約付きサブタイプ)を使う:
 
 ```vhdl
 constant DEPTH : integer := 32;
 for i in 0 to DEPTH - 1 loop ...
 ```
 
-無制限の `integer` はシミュレーションでは通常 32 ビットです。ハードウェアには制約付き範囲が欲しいです:
+無制約の `integer` はシミュレーションでは通常 32 ビット。ハードウェアには制約付きの範囲が欲しい:
 
 ```vhdl
 signal counter : integer range 0 to 255;
 ```
 
-するとシンセサイザはちょうど 8 ビットを与えます。
+そうするとシンセサイザは正確に 8 ビットを与える。
 
 ## 列挙型 — FSM 状態用
 
-状態機械のために読みやすい型を宣言します:
+ステートマシンに読みやすい型を宣言:
 
 ```vhdl
 type state_t is (S_IDLE, S_START, S_ACTIVE, S_DONE);
 signal state : state_t;
 ```
 
-すると `state <= "010"` ではなく `state <= S_ACTIVE` と書けます。シンセサイザがバイナリ符号化を選んでくれます(気にするなら属性でヒントできます)。
+`state <= S_ACTIVE` と書ける、`state <= "010"` ではなく。シンセサイザがバイナリエンコーディングを選ぶ(気にするなら属性で示唆できる)。
 
 ## 覚えておくべきこと
 
-- 単一ワイヤ → `std_logic`。バス → `std_logic_vector`。
-- 算術が必要? `unsigned` (または `signed`) と `IEEE.NUMERIC_STD` を使う。
-- **ポート** を `std_logic_vector` で宣言するとエンティティの移植性が最大になる。
-- FSM 状態には列挙型を使う — コードが仕様のように読める。
+- 単線 → `std_logic`。バス → `std_logic_vector`。
+- 算術が必要?`unsigned`(または `signed`)と `IEEE.NUMERIC_STD` を使う。
+- **ポート**を `std_logic_vector` で宣言すると entity の移植性が最大になる。
+- FSM 状態には列挙型を使う — コードが仕様書のように読める。

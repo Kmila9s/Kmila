@@ -1,0 +1,188 @@
+{
+  "viewBox": "0 0 620 380",
+  "nodes": [
+    {
+      "id": "reset",
+      "kind": "input",
+      "label": "reset",
+      "x": 60,
+      "y": 60
+    },
+    {
+      "id": "a",
+      "kind": "input",
+      "label": "a",
+      "x": 60,
+      "y": 130
+    },
+    {
+      "id": "b",
+      "kind": "input",
+      "label": "b",
+      "x": 60,
+      "y": 190
+    },
+    {
+      "id": "z_in",
+      "kind": "input",
+      "label": "'Z'",
+      "x": 60,
+      "y": 250
+    },
+    {
+      "id": "sel",
+      "kind": "input",
+      "label": "sel",
+      "x": 240,
+      "y": 350
+    },
+    {
+      "id": "g_mux",
+      "kind": "mux",
+      "label": "MUX 4:1",
+      "dataInputs": 4,
+      "x": 260,
+      "y": 60
+    },
+    {
+      "id": "y",
+      "kind": "output",
+      "label": "y",
+      "x": 460,
+      "y": 184
+    }
+  ],
+  "wires": [
+    {
+      "source": "reset",
+      "from": "reset",
+      "to": "g_mux.i0"
+    },
+    {
+      "source": "a",
+      "from": "a",
+      "to": "g_mux.i1"
+    },
+    {
+      "source": "b",
+      "from": "b",
+      "to": "g_mux.i2"
+    },
+    {
+      "source": "z_in",
+      "from": "z_in",
+      "to": "g_mux.i3"
+    },
+    {
+      "source": "sel",
+      "from": "sel",
+      "to": "g_mux.sel"
+    },
+    {
+      "source": "y",
+      "from": "g_mux.out",
+      "to": "y"
+    }
+  ],
+  "signalOrder": [
+    "sel",
+    "reset",
+    "a",
+    "b",
+    "y"
+  ],
+  "steps": [
+    {
+      "t": 0,
+      "values": {
+        "sel": "00",
+        "reset": "1",
+        "a": "0",
+        "b": "0",
+        "z_in": "Z",
+        "y": "1"
+      },
+      "active": [
+        "g_mux"
+      ],
+      "note": {
+        "en": "sel=00 picks i0 — the 'reset = 1' branch from the when/else. The output drives the priority value '1' (we map reset's '1' to that branch's literal output). This is the topmost rule in the priority chain — nothing below it gets a say.",
+        "es": "sel=00 elige i0 — la rama 'reset = 1' del when/else. La salida toma el valor con prioridad '1' (mapeamos el reset alto a la literal de esa rama). Es la regla más alta de la cadena de prioridad — nada por debajo participa.",
+        "ar": "sel=00 يختار i0 — فرع 'reset = 1' من when/else. الخرج يأخذ القيمة ذات الأولوية '1' (نُسقِط reset = 1 على الناتج الحرفي لتلك الفرع). هذه القاعدة الأعلى في سلسلة الأولويات — لا شيء أدنى منها له رأي.",
+        "ch": "sel=00 选中 i0 — when/else 中 'reset = 1' 的那一支。输出取优先级最高的字面值 '1'(我们把 reset 高位映射到该分支的输出)。这是优先级链最顶端的规则 — 下面的规则都没有发言权。",
+        "de": "sel=00 wählt i0 — der „reset = 1“-Zweig aus when/else. Der Ausgang treibt den Prioritätswert '1' (wir mappen reset='1' auf das Literal dieses Zweigs). Das ist die oberste Regel in der Prioritätskette — alles darunter hat keine Stimme.",
+        "fr": "sel=00 sélectionne i0 — la branche « reset = 1 » du when/else. La sortie prend la valeur prioritaire '1' (on associe reset='1' au littéral de cette branche). C'est la règle au sommet de la chaîne de priorité — rien en dessous n'a son mot à dire.",
+        "jp": "sel=00 が i0 を選ぶ — when/else の「reset = 1」ブランチ。出力は最優先値 '1' を駆動する(reset='1' をそのブランチのリテラルにマップ)。これは優先順位チェーンの最上位ルール — 下のルールは発言権を持たない。"
+      }
+    },
+    {
+      "t": 1,
+      "values": {
+        "sel": "01",
+        "reset": "0",
+        "a": "1",
+        "b": "0",
+        "z_in": "Z",
+        "y": "1"
+      },
+      "active": [
+        "g_mux"
+      ],
+      "note": {
+        "en": "sel=01 picks i1 = a. The when/else fell through 'reset = 1' (false now) and matched 'mode = read'. y tracks a. Notice how the MUX is what when/else compiles to — a priority chain just selects which data input wins.",
+        "es": "sel=01 elige i1 = a. El when/else falló en 'reset = 1' (ya no es cierto) y entró en 'mode = read'. y sigue a a. Observa que el MUX es a lo que se compila el when/else — la cadena de prioridad solo decide qué entrada de datos gana.",
+        "ar": "sel=01 يختار i1 = a. تخطَّى when/else شرط 'reset = 1' (صار غير صحيح) وطابق 'mode = read'. y يتبع a. لاحظ أن MUX هو ما يُترجَم إليه when/else — سلسلة أولويَّات تختار أيَّ دخل بيانات يفوز.",
+        "ch": "sel=01 选中 i1 = a。when/else 跳过了已不成立的 'reset = 1',匹配到 'mode = read'。y 跟随 a。注意 when/else 最终就是被综合成一个 MUX — 优先级链负责选哪个数据输入获胜。",
+        "de": "sel=01 wählt i1 = a. Das when/else fällt durch 'reset = 1' (jetzt falsch) und trifft 'mode = read'. y folgt a. Beachte: zu einem MUX wird das when/else compiliert — eine Prioritätskette wählt nur, welcher Dateneingang gewinnt.",
+        "fr": "sel=01 sélectionne i1 = a. Le when/else passe « reset = 1 » (faux maintenant) et atteint « mode = read ». y suit a. Remarquez que le when/else se compile vers un MUX — la chaîne de priorité décide juste quelle entrée gagne.",
+        "jp": "sel=01 が i1 = a を選ぶ。when/else は 'reset = 1'(今は偽)を抜けて 'mode = read' にマッチ。y は a に追従。when/else は MUX にコンパイルされる — 優先順位チェーンがどのデータ入力を勝たせるか決めるだけ。"
+      }
+    },
+    {
+      "t": 2,
+      "values": {
+        "sel": "10",
+        "reset": "0",
+        "a": "0",
+        "b": "1",
+        "z_in": "Z",
+        "y": "1"
+      },
+      "active": [
+        "g_mux"
+      ],
+      "note": {
+        "en": "sel=10 picks i2 = b. The when/else fell through reset and read, matched 'mode = write'. y tracks b. Each priority level corresponds to a sel pattern; the synth tool turns the if-else chain into exactly this mux.",
+        "es": "sel=10 elige i2 = b. El when/else descartó reset y read, entró en 'mode = write'. y sigue a b. Cada nivel de prioridad equivale a un patrón de sel; la herramienta de síntesis convierte la cadena if-else en exactamente este mux.",
+        "ar": "sel=10 يختار i2 = b. تخطَّى when/else reset وread وطابق 'mode = write'. y يتبع b. كل مستوى أولوية يقابل نمط sel؛ تحوِّل أداة التركيب سلسلة if-else إلى هذا MUX بالضبط.",
+        "ch": "sel=10 选中 i2 = b。when/else 跳过 reset 和 read,匹配到 'mode = write'。y 跟随 b。每一级优先级对应一个 sel 模式;综合工具把 if-else 链转换成正是这个 MUX。",
+        "de": "sel=10 wählt i2 = b. Das when/else lässt reset und read fallen, trifft 'mode = write'. y folgt b. Jede Prioritätsstufe entspricht einem sel-Muster; das Synthese-Tool macht aus der if-else-Kette genau diesen Mux.",
+        "fr": "sel=10 sélectionne i2 = b. Le when/else dépasse reset et read, atteint « mode = write ». y suit b. Chaque niveau de priorité correspond à un motif de sel ; le synthétiseur transforme la chaîne if-else en exactement ce mux.",
+        "jp": "sel=10 が i2 = b を選ぶ。when/else は reset と read を抜けて 'mode = write' にマッチ。y は b に追従。各優先順位レベルは sel パターンに対応;シンセシスツールは if-else チェーンを正にこの mux に変換する。"
+      }
+    },
+    {
+      "t": 3,
+      "values": {
+        "sel": "11",
+        "reset": "0",
+        "a": "0",
+        "b": "0",
+        "z_in": "Z",
+        "y": "Z"
+      },
+      "active": [
+        "g_mux"
+      ],
+      "note": {
+        "en": "sel=11 falls through to the final 'else Z' — the bus releases. This is the default arm of the when/else, reached only when every prior condition was false. with/select would balance these four cases into the same MUX shape with no priority.",
+        "es": "sel=11 cae a la rama final 'else Z' — el bus se libera. Es la rama por defecto del when/else, alcanzada solo cuando todas las condiciones previas son falsas. with/select equilibraría estos cuatro casos en el mismo MUX sin prioridad.",
+        "ar": "sel=11 يسقط إلى الفرع الأخير 'else Z' — يُحرَّر الناقل. هذه الفرع الافتراضي لـ when/else، يُصاب فقط حين تكون كل الشروط السابقة كاذبة. with/select كان سيُوازن هذه الحالات الأربع في نفس شكل MUX بلا أولوية.",
+        "ch": "sel=11 落入最后的 'else Z' 分支 — 总线被释放。这是 when/else 的默认分支,只有当前面所有条件都不成立时才会走到。with/select 会把这四种情况平衡成同样形状的 MUX,但没有优先级。",
+        "de": "sel=11 fällt zum letzten 'else Z' durch — der Bus wird freigegeben. Das ist der Default-Zweig von when/else, der nur erreicht wird, wenn jede vorherige Bedingung falsch war. with/select würde diese vier Fälle in dieselbe MUX-Form bringen, aber ohne Priorität.",
+        "fr": "sel=11 tombe sur la branche finale « else Z » — le bus est libéré. C'est la branche par défaut du when/else, atteinte uniquement quand toutes les conditions précédentes sont fausses. with/select équilibrerait ces quatre cas dans le même MUX sans priorité.",
+        "jp": "sel=11 は最後の 'else Z' に落ちる — バスが解放される。when/else のデフォルト分岐で、前のすべての条件が偽のときだけ到達する。with/select なら同じ MUX 形状を優先順位なしで均等に表現する。"
+      }
+    }
+  ]
+}

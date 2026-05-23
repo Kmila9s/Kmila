@@ -1,6 +1,6 @@
-# Fix it: das versehentliche Latch
+# Korrigieren: Der versehentliche Latch
 
-Das ist einer der zwei oder drei Bugs, die jeder VHDL-Studierende mindestens einmal schreibt. Der Code sieht auf dem Papier korrekt aus, baut ohne Fehler, simuliert mit plausibler Ausgabe — und wenn du ihn synthetisierst, warnt dich das Tool, dass es ein **Latch** hergeleitet hat, das du nie wolltest.
+Das ist einer der zwei oder drei Bugs, den jeder VHDL-Student mindestens einmal schreibt. Der Code sieht auf dem Papier richtig aus, baut ohne Fehler, simuliert mit einer plausiblen Ausgabe — und wenn du synthetisierst, warnt das Tool, dass es einen **Latch** abgeleitet hat, den du nie wolltest.
 
 ## Der Starter
 
@@ -19,29 +19,29 @@ end architecture rtl;
 
 ## Was schiefgeht
 
-In einem rein kombinatorischen Prozess muss jeder Ausgang **auf jedem Pfad** durch den Prozess zugewiesen werden. Dieser weist `y` nur dann zu, wenn `enable = '1'`. Wenn `enable = '0'`, sagt der Prozess nichts über `y`.
+In einem rein kombinatorischen Prozess muss jeder Ausgang **auf jedem Pfad** durch den Prozess zugewiesen werden. Dieser hier weist `y` nur zu, wenn `enable = '1'`. Wenn `enable = '0'`, sagt der Prozess nichts über `y`.
 
-VHDLs Lösung für "du hast mir nicht gesagt, was ich mit diesem Signal tun soll": **merke den vorherigen Wert**. Das ist ein Latch — ein transparentes Speicherelement. Die Synthese leitet eines her, dein Design hat einen Timing-Pfad-Albtraum, und das Board glitcht bei Signalübergängen.
+VHDLs Lösung für „du hast mir nicht gesagt, was ich mit diesem Signal tun soll": **merke dir den vorherigen Wert**. Das ist ein Latch — ein transparentes Speicherelement. Die Synthese leitet einen ab, dein Design hat einen Timing-Pfad-Albtraum, und das Board glitcht bei Signalübergängen.
 
-## Deine Mission
+## Dein Auftrag
 
-Öffne das Beispiel und mache das Design **rein kombinatorisch** — kein Latch, kein Flipflop, nur Gatter. Zwei idiomatische Lösungen:
+Öffne das Beispiel und mach das Design **rein kombinatorisch** — kein Latch, kein Flip-Flop, nur Gatter. Zwei idiomatische Fixes:
 
-**Fix 1: Standardzuweisung am Anfang**
+**Fix 1: Default-Zuweisung oben**
 
 ```vhdl
 process(enable, a, b)
 begin
-  y <= '0';                       -- Standard
+  y <= '0';                       -- Default
   if enable = '1' then
     y <= a and b;
   end if;
 end process;
 ```
 
-Ein Signal kann in einem Prozess mehrfach zugewiesen werden — nur die letzte Zuweisung wirkt. Der Standard am Anfang bedeutet "sofern mich nichts überschreibt, sei `'0'`".
+Ein Signal darf in einem Prozess mehrfach zugewiesen werden — nur die letzte Zuweisung gilt. Der Default oben bedeutet „außer etwas überschreibt mich, bin ich `'0'`".
 
-**Fix 2: Das `if` vervollständigen**
+**Fix 2: Vervollständige das `if`**
 
 ```vhdl
 process(enable, a, b)
@@ -54,17 +54,17 @@ begin
 end process;
 ```
 
-Beide sind richtig. Beide erzeugen identische Hardware. Wähle, was sich für das Design, an dem du arbeitest, besser liest.
+Beide sind richtig. Beide produzieren identische Hardware. Nimm, was sich für dein Design besser liest.
 
-## Den Fix verifizieren
+## Verifiziere den Fix
 
-Nach deinem Fix, führe die Sim aus. In der Waveform:
+Nach deinem Fix lass die Sim laufen. In der Wellenform:
 
 - Für `15–25 µs` (wenn `enable = '1'` und `a=b='1'`): `y = '1'`.
 - Zu jeder anderen Zeit: `y = '0'`.
 
-Vor dem Fix würde `y` auf `'1'` bleiben, wenn `enable` auf `'0'` zurückfällt — das ist das Latch, das seinen vorherigen Wert hält, was genau das ist, was du vermeiden willst.
+Vor dem Fix wäre `y` `'1'` geblieben, wenn `enable` zurück auf `'0'` fiel — das ist der Latch, der seinen vorherigen Wert hält, was du genau vermeiden willst.
 
 ## Die Regel
 
-In einem kombinatorischen Prozess muss **jeder Ausgang auf jedem Pfad zugewiesen werden**. Wenn du das nicht erfüllen kannst, füge entweder einen Standard hinzu, oder du willst tatsächlich ein Flipflop — in welchem Fall du zu einem getakteten Prozess wechseln und diese Entscheidung bewusst treffen solltest.
+In einem kombinatorischen Prozess **muss jeder Ausgang auf jedem Pfad zugewiesen werden**. Wenn du das nicht erfüllen kannst, füge entweder einen Default hinzu, oder du willst eigentlich ein Flip-Flop — dann wechsle zu einem getakteten Prozess und stehe zu der Entscheidung.

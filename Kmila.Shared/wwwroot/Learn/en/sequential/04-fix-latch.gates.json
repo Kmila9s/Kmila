@@ -1,0 +1,198 @@
+{
+  "viewBox": "0 0 660 280",
+  "nodes": [
+    {
+      "id": "enable",
+      "kind": "input",
+      "label": "enable",
+      "x": 60,
+      "y": 60
+    },
+    {
+      "id": "a",
+      "kind": "input",
+      "label": "a",
+      "x": 60,
+      "y": 140
+    },
+    {
+      "id": "b",
+      "kind": "input",
+      "label": "b",
+      "x": 60,
+      "y": 180
+    },
+    {
+      "id": "g_and",
+      "kind": "and",
+      "label": "AND",
+      "x": 220,
+      "y": 140
+    },
+    {
+      "id": "g_latch",
+      "kind": "latch",
+      "label": "LATCH",
+      "x": 380,
+      "y": 130
+    },
+    {
+      "id": "y",
+      "kind": "output",
+      "label": "y",
+      "x": 580,
+      "y": 152
+    }
+  ],
+  "chips": [
+    {
+      "net": "temp",
+      "x": 330,
+      "y": 168,
+      "label": "a·b"
+    }
+  ],
+  "wires": [
+    {
+      "source": "a",
+      "from": "a",
+      "to": "g_and.in1"
+    },
+    {
+      "source": "b",
+      "from": "b",
+      "to": "g_and.in2"
+    },
+    {
+      "source": "temp",
+      "from": "g_and.out",
+      "to": "g_latch.d"
+    },
+    {
+      "source": "enable",
+      "from": "enable",
+      "to": "g_latch.en"
+    },
+    {
+      "source": "y",
+      "from": "g_latch.q",
+      "to": "y"
+    }
+  ],
+  "signalOrder": [
+    "enable",
+    "a",
+    "b",
+    "temp",
+    "y"
+  ],
+  "steps": [
+    {
+      "t": 0,
+      "values": {
+        "enable": "0",
+        "a": "0",
+        "b": "0",
+        "temp": "0",
+        "y": "0"
+      },
+      "active": [],
+      "note": {
+        "en": "Cold start. enable is low, the latch is CLOSED — whatever the AND produces can't flow through. y holds at 0.",
+        "es": "Inicio en frío. enable está bajo, la cerradura está CERRADA — lo que produzca la AND no puede pasar. y se queda en 0.",
+        "ar": "بدء بارد. enable منخفض، المزلاج مُغلَق — ما تُنتجه AND لا يمكن أن يمرَّ. y يبقى عند 0.",
+        "ch": "冷启动。enable 低,锁存器关闭 — AND 算出来什么都过不去。y 保持 0。",
+        "de": "Kaltstart. enable ist niedrig, der Latch ist GESCHLOSSEN — was das AND auch produziert, kommt nicht durch. y bleibt auf 0.",
+        "fr": "Démarrage à froid. enable est bas, le verrou est FERMÉ — peu importe ce que le AND produit, rien ne passe. y reste à 0.",
+        "jp": "コールドスタート。enable が Low、ラッチは閉じている — AND が何を生成しても通り抜けられない。y は 0 のまま。"
+      }
+    },
+    {
+      "t": 1,
+      "values": {
+        "enable": "1",
+        "a": "1",
+        "b": "1",
+        "temp": "1",
+        "y": "1"
+      },
+      "active": [
+        "g_and",
+        "g_latch"
+      ],
+      "note": {
+        "en": "enable goes high. The latch becomes TRANSPARENT — whatever temp is, y follows. a·b = 1, so y = 1. Same behaviour as a plain wire while enable=1.",
+        "es": "enable sube. La cerradura se vuelve TRANSPARENTE — lo que sea temp, y le sigue. a·b = 1, así que y = 1. Mismo comportamiento que un cable simple mientras enable=1.",
+        "ar": "enable يرتفع. يصبح المزلاج شفَّافًا — مهما كانت قيمة temp يتبعها y. a·b = 1، فـ y = 1. السلوك نفسه كسلك بسيط ما دام enable=1.",
+        "ch": "enable 拉高。锁存器变得透明 — temp 是什么,y 就是什么。a·b = 1,所以 y = 1。enable=1 期间,行为和一根普通线一样。",
+        "de": "enable geht hoch. Der Latch wird TRANSPARENT — was auch immer temp ist, y folgt. a·b = 1, also y = 1. Verhält sich wie ein einfacher Draht, solange enable=1.",
+        "fr": "enable monte. Le verrou devient TRANSPARENT — quoi que vaille temp, y suit. a·b = 1, donc y = 1. Comportement identique à un fil ordinaire tant qu'enable=1.",
+        "jp": "enable が High に。ラッチが透明になる — temp が何であれ y は追従。a·b = 1 なので y = 1。enable=1 の間は普通の線と同じ動作。"
+      }
+    },
+    {
+      "t": 2,
+      "values": {
+        "enable": "0",
+        "a": "1",
+        "b": "1",
+        "temp": "1",
+        "y": "1"
+      },
+      "active": [],
+      "note": {
+        "en": "enable drops. The latch slams shut — y is now FROZEN at whatever it was reading at the moment enable went low (here, 1). temp still says 1 but it can't influence y any more.",
+        "es": "enable baja. La cerradura se cierra de golpe — y queda CONGELADO en el valor que tenía al momento de cerrarse (aquí, 1). temp aún vale 1 pero ya no puede influir en y.",
+        "ar": "enable ينزل. يُغلَق المزلاج بإحكام — y الآن مُجمَّد على القيمة التي كان يقرؤها لحظة هبوط enable (هنا، 1). لا يزال temp يقول 1 لكنَّه لم يعد قادرًا على التأثير في y.",
+        "ch": "enable 掉下。锁存器砰地一声关上 — y 现在被冻结在 enable 掉下那一刻读到的值(这里是 1)。temp 仍然是 1,但它再也影响不了 y。",
+        "de": "enable fällt. Der Latch knallt zu — y ist jetzt EINGEFROREN auf dem Wert, den er las, als enable niedrig wurde (hier 1). temp sagt immer noch 1, kann y aber nicht mehr beeinflussen.",
+        "fr": "enable descend. Le verrou claque la porte — y est désormais FIGÉ sur la valeur lue au moment où enable est tombé (ici 1). temp dit toujours 1 mais ne peut plus influencer y.",
+        "jp": "enable が立ち下がる。ラッチは閉まる — y は enable が Low になった瞬間に読んでいた値 (ここでは 1) で凍結。temp は依然 1 だが、もう y に影響を与えられない。"
+      }
+    },
+    {
+      "t": 3,
+      "values": {
+        "enable": "0",
+        "a": "0",
+        "b": "0",
+        "temp": "0",
+        "y": "1"
+      },
+      "active": [
+        "g_and"
+      ],
+      "note": {
+        "en": "HERE IS THE BUG. a and b drop to 0, so a·b drops to 0 — but y is STILL 1, because the latch is shut. This is the unwanted memory the synthesizer warns about: y disagrees with the combinational expression of its inputs.",
+        "es": "AQUÍ ESTÁ EL BUG. a y b bajan a 0, así que a·b baja a 0 — pero y SIGUE en 1, porque la cerradura está cerrada. Esta es la memoria no deseada que el sintetizador reporta: y no concuerda con la expresión combinacional de sus entradas.",
+        "ar": "ها هو الخطأ. a وb ينزلان إلى 0، فينزل a·b إلى 0 — لكن y لا يزال 1، لأن المزلاج مُغلَق. هذه هي الذاكرة غير المرغوبة التي يُحذِّر منها المُركِّب: y لا يتطابق مع التعبير التوافقي لمداخله.",
+        "ch": "这就是那个 bug。a 和 b 都掉到 0,所以 a·b 掉到 0 — 但 y 仍是 1,因为锁存器关着。这正是综合器警告的“非预期记忆”:y 与其输入的组合表达式不一致。",
+        "de": "HIER IST DER BUG. a und b fallen auf 0, also fällt a·b auf 0 — aber y ist IMMER NOCH 1, weil der Latch geschlossen ist. Das ist die unerwünschte Erinnerung, vor der der Synthesizer warnt: y stimmt nicht mit dem kombinatorischen Ausdruck seiner Eingänge überein.",
+        "fr": "VOICI LE BUG. a et b retombent à 0, donc a·b retombe à 0 — mais y est ENCORE à 1 parce que le verrou est fermé. C'est la mémoire indésirable contre laquelle le synthétiseur met en garde : y ne correspond pas à l'expression combinatoire de ses entrées.",
+        "jp": "これがバグ。a と b が 0 に下がり、a·b も 0 に — しかし y はまだ 1、ラッチが閉じているから。これがシンセサイザが警告する意図しない記憶:y がその入力の組合せ式と一致しない。"
+      }
+    },
+    {
+      "t": 4,
+      "values": {
+        "enable": "1",
+        "a": "0",
+        "b": "0",
+        "temp": "0",
+        "y": "0"
+      },
+      "active": [
+        "g_latch"
+      ],
+      "note": {
+        "en": "enable rises again. The latch reopens and y finally catches up with temp=0. Pedagogy: the fix is to NOT use a latch — give y a default assignment at the top of the process, or complete the if/else so every path drives y combinationally.",
+        "es": "enable vuelve a subir. La cerradura se abre y y por fin alcanza a temp=0. Moraleja: el arreglo es NO usar una cerradura — asigna y a un valor por defecto al inicio del proceso, o completa el if/else para que todo camino conduzca y.",
+        "ar": "enable يرتفع مرَّة أخرى. يعاد فتح المزلاج وأخيرًا يلحق y بـ temp=0. الدرس: الإصلاح ألَّا تستخدم مزلاجًا — أعطِ y إسنادًا افتراضيًّا في أوَّل المعالجة، أو أكمل if/else بحيث يُحرِّك كل مسار y توافقيًّا.",
+        "ch": "enable 重新拉高。锁存器再次打开,y 终于追上 temp=0。要点:解决办法是不要用锁存器 — 在 process 顶部给 y 一个默认赋值,或补全 if/else,让每条路径都以组合方式驱动 y。",
+        "de": "enable steigt wieder. Der Latch öffnet sich erneut und y holt endlich auf temp=0 auf. Lektion: die Lösung ist KEIN Latch — gib y oben im Prozess eine Default-Zuweisung oder vervollständige das if/else, so dass jeder Pfad y kombinatorisch treibt.",
+        "fr": "enable remonte. Le verrou rouvre et y rattrape enfin temp=0. Leçon : la solution est de NE PAS utiliser un verrou — donnez à y une affectation par défaut en tête de process, ou complétez le if/else pour que chaque chemin pilote y combinatoirement.",
+        "jp": "enable が再び High に。ラッチが再び開き、y はようやく temp=0 に追いつく。教訓:修正はラッチを使わないこと — process の先頭で y にデフォルト代入を与えるか、すべての経路が組合せ的に y を駆動するよう if/else を補完する。"
+      }
+    }
+  ]
+}

@@ -1,46 +1,46 @@
 # Was ist ein System-on-Chip?
 
-Deine 8-Bit-CPU aus dem früheren Track läuft eigenständig. Sie rechnet, aber sie spricht nicht mit der Welt. Ein **System-on-Chip** ist die nächste Größe: eine CPU plus eine Handvoll Peripheriegeräte plus das Geflecht, das sie miteinander reden lässt, alles auf demselben Die.
+Deine 8-Bit-CPU aus dem vorigen Track läuft eigenständig. Sie rechnet, aber sie spricht nicht mit der Welt. Ein **System-on-Chip** ist die nächste Größenordnung: eine CPU plus eine Handvoll Peripheriebausteine plus das Geflecht, das sie miteinander reden lässt — alles auf demselben Die.
 
-## Drei verpflichtende Bestandteile
+## Drei zwingende Bausteine
 
-Jedes SoC, von der erweiterten Kmila-CPU bis zu einem Apple-A-Serie-Chip im Wert von 5 Mio. $, läuft hinaus auf:
+Jeder SoC, von der erweiterten Kmila-CPU bis zur 5-Millionen-Dollar-Apple-A-Serie, läuft auf folgendes hinaus:
 
-1. **Ein oder mehrere Verarbeitungselemente** — CPUs, DSPs, GPUs, Beschleuniger.
-2. **Speicher** — On-Chip-SRAM, Block-RAM, manchmal externes DDR.
-3. **Ein Interconnect** — die Drähte + Arbitrierung, die (1) mit (2) und den Peripheriegeräten reden lassen.
+1. **Ein oder mehrere Recheneinheiten** — CPUs, DSPs, GPUs, Beschleuniger.
+2. **Speicher** — On-Chip-SRAM, Block-RAM, manchmal externer DDR.
+3. **Ein Interconnect** — die Drähte + Arbitrierung, die (1) mit (2) und mit der Peripherie reden lässt.
 
-Das Interconnect ist der Teil, der aufhört, "nur RTL" zu sein, und anfängt, sich architektonisch anzufühlen. Es erzwingt, wer wann reden darf, wie viele Transaktionen gleichzeitig unterwegs sein können und wie schnell eine gegebene Anfrage abgeschlossen werden kann.
+Das Interconnect ist der Teil, der aufhört, „nur RTL" zu sein, und architektonisch wird. Es regelt, wer wann reden darf, wie viele Transaktionen gleichzeitig unterwegs sein dürfen und wie schnell eine Anfrage abgeschlossen werden kann.
 
 ## Gängige Interconnect-Protokolle
 
 Die Industrie hat sich auf eine Handvoll geeinigt:
 
-| Protokoll        | Hersteller | Wo du es sehen wirst                                    |
-|------------------|------------|---------------------------------------------------------|
-| AXI4 / AXI4-Lite | ARM        | RISC-V-Kerne, Xilinx PS/PL-Grenze, meistes neue IP      |
-| AHB / APB        | ARM        | Ältere ARM-Kerne, langsame Peripherie                   |
-| Avalon MM / ST   | Intel      | NIOS-II, Qsys-generierte SoCs                           |
-| Wishbone         | OpenCores  | OpenRISC, viele Open-Source-IP-Kerne                    |
+| Protokoll       | Hersteller | Wo du es siehst                                        |
+|-----------------|------------|--------------------------------------------------------|
+| AXI4 / AXI4-Lite| ARM        | RISC-V-Kerne, Xilinx PS/PL-Grenze, fast alles Neue     |
+| AHB / APB       | ARM        | Ältere ARM-Kerne, langsame Peripherie                  |
+| Avalon MM / ST  | Intel      | NIOS-II, Qsys-generierte SoCs                          |
+| Wishbone        | OpenCores  | OpenRISC, viele Open-Source-IP-Kerne                   |
 
-Alle laufen hinaus auf dieselben drei Spuren: einen **Adresskanal**, einen **Schreibdaten-Kanal** und einen **Lesedaten-Kanal**. Die Unterschiede betreffen das Handshake-Protokoll, Out-of-Order-Unterstützung und Burst-Semantik.
+Alle laufen auf dieselben drei Spuren hinaus: einen **Adresskanal**, einen **Schreibdatenkanal** und einen **Lesedatenkanal**. Unterschiede gibt es beim Handshake-Protokoll, bei Out-of-Order-Unterstützung und bei der Burst-Semantik.
 
 ## Was AXI4-Lite eigentlich ist
 
-Das einfachste Mitglied der AXI-Familie. Entferne alles zu Bursts, Out-of-Order und QoS, und du bekommst fünf unabhängige Kanäle, jeder mit einem `valid`/`ready`-Handshake:
+Das simpelste Mitglied der AXI-Familie. Lass alles über Bursts, Out-of-Order und QoS weg, und du bekommst fünf unabhängige Kanäle, jeder mit `valid`/`ready`-Handshake:
 
 ```
-  AW  (address write)
-  W   (write data)
-  B   (write response)
-  AR  (address read)
-  R   (read data)
+  AW  (Adresse schreiben)
+  W   (Schreibdaten)
+  B   (Schreibantwort)
+  AR  (Adresse lesen)
+  R   (Lesedaten)
 ```
 
-Jeder Transfer ist ein Beat. Jeder Kanal stallt, wenn die andere Seite nicht `ready` ist. Das war's.
+Jeder Transfer ist ein Beat. Jeder Kanal hält an, wenn die Gegenseite nicht `ready` ist. Mehr nicht.
 
-## Der Kmila-Lehrplan-Plan
+## Der Plan im Kmila-Curriculum
 
-Spätere Lektionen in diesem Modul bauen eine AXI4-Lite-Registerschnittstelle von Grund auf, verbinden sie dann zwischen deiner 8-Bit-CPU und einem speicherabgebildeten UART, damit die CPU "drucken" kann, indem sie auf eine Adresse schreibt. Das gibt dir das Denkmodell für das, was in jedem modernen SoC passiert, in einer Größe, die du dir tatsächlich merken kannst.
+Spätere Lektionen in diesem Modul bauen ein AXI4-Lite-Register-Interface von Grund auf, verdrahten es dann zwischen deine 8-Bit-CPU und ein memory-mapped UART, sodass die CPU „drucken" kann, indem sie an eine Adresse schreibt. Das gibt dir das mentale Modell dafür, was in jedem modernen SoC vorgeht — in einer Größe, die du dir wirklich noch merken kannst.
 
-*Weitere Lektionen folgen — dieses Modul wird aktiv geschrieben.*
+*Weitere Lektionen folgen — dieses Modul ist in aktiver Bearbeitung.*

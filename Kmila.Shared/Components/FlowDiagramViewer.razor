@@ -55,6 +55,12 @@
                 <Icon Name="IconName.FileEarmarkImage" />
                 <span>PNG</span>
             </button>
+            <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                    @onclick="ExportUmlAsync"
+                    title="@Traductor.T("FLOW_EXPORT_UML")">
+                <Icon Name="IconName.FileEarmarkCode" />
+                <span>UML</span>
+            </button>
             <button type="button"
                     class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm @(_isFullscreen ? "is-active" : "")"
                     @onclick="ToggleFullscreen"
@@ -223,6 +229,35 @@
             }
             var bytes = Convert.FromBase64String(base64);
             var result = await Export.SaveBytesAsync(ExportCategory.Png, fileName, "image/png", bytes);
+            NotifyExportResult(result);
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+    }
+
+    /// <summary>
+    /// Re-walks the parsed AST through <see cref="PlantUmlFlowEmitter"/> and
+    /// writes the resulting <c>.puml</c> payload. Unlike SVG/PNG this path
+    /// doesn't depend on Mermaid having rendered — the emitter reads the
+    /// Builder directly, so it works even if the on-screen diagram isn't
+    /// ready yet (CDN blocked, theme switch mid-flight, etc.).
+    /// </summary>
+    private async Task ExportUmlAsync()
+    {
+        var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+        var fileName = $"kmila-flow-{stamp}.puml";
+        try
+        {
+            var uml = PlantUmlFlowEmitter.Emit(Builder?.Parser?.Entities);
+            if (string.IsNullOrEmpty(uml))
+            {
+                ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                    "No entities to export.", ToastType.Danger));
+                return;
+            }
+            var result = await Export.SaveTextAsync(ExportCategory.Uml, fileName, "text/plain", uml);
             NotifyExportResult(result);
         }
         catch (Exception ex)

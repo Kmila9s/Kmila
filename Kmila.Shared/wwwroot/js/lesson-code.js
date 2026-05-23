@@ -59,6 +59,19 @@
         var mime = lang ? LANG_TO_MIME[lang.toLowerCase()] : null;
         if (!mime) return; // untagged or unsupported — leave as plain text
 
+        // Source preservation across theme switches. monaco.editor.colorizeElement
+        // reads `domNode.firstChild.nodeValue` to grab the text — after first
+        // colorize, firstChild is a <span> (Element), nodeValue is null, the
+        // tokenizer gets an empty string, and innerHTML is replaced with
+        // nothing → code block visibly disappears. Stash the raw source the
+        // first time we see this element and restore it before each colorize
+        // pass. Backlog #7.
+        if (!codeEl.hasAttribute('data-kmila-original-src')) {
+            codeEl.setAttribute('data-kmila-original-src', codeEl.textContent || '');
+        } else {
+            codeEl.textContent = codeEl.getAttribute('data-kmila-original-src');
+        }
+
         monaco.editor.colorizeElement(codeEl, {
             mimeType: mime,
             theme: theme,

@@ -1,65 +1,65 @@
 # Machines Mealy vs Moore
 
-Une machine à états finis (FSM) est une logique de contrôle qui se souvient de ce qu'elle est en train de faire. Toute FSM a :
+Une machine à états finis (FSM) est une logique de contrôle qui se souvient de ce qu'elle fait. Toute FSM a :
 
-- Un **registre d'état** (un groupe de flip-flops).
-- Une **logique d'état suivant** (combinatoire, décide quel sera l'état au prochain front d'horloge).
-- Une **logique de sortie** (combinatoire, décide ce que valent les sorties maintenant).
+- Un **registre d'état** (un groupe de bascules).
+- **Logique de prochain état** (combinatoire, décide ce que sera l'état au prochain front d'horloge).
+- **Logique de sortie** (combinatoire, décide ce que sont les sorties à l'instant présent).
 
-La manière dont la logique de sortie cherche ses entrées divise les FSM en deux familles.
+L'endroit où la logique de sortie cherche ses entrées partage les FSM en deux familles.
 
-## Moore : les sorties dépendent uniquement de l'état
+## Moore : les sorties ne dépendent que de l'état
 
 ```mermaid
 flowchart LR
-    IN([entrée]) --> NS["état suivant"]
-    NS --> SR["reg. d'état"]
-    SR --> OUT["sorties"]
+    IN([input]) --> NS["next-state"]
+    NS --> SR["state reg"]
+    SR --> OUT["outputs"]
 ```
 
-Étant donné un état, la sortie est fixe. Si tu es en `S_GREEN`, `green = '1'`. Toujours. Peu importe ce que fait l'entrée.
+Étant donné un état, la sortie est fixée. Si tu es dans `S_GREEN`, `green = '1'`. Toujours. Quoi que dise l'entrée.
 
 **Pour**
 - Les sorties ne changent qu'aux fronts d'horloge → pas de glitches.
-- Facile à raisonner, facile à déboguer, facile à vérifier.
+- Facile à raisonner, à débugger, à vérifier.
 
 **Contre**
-- Au moins un cycle d'horloge de latence entre l'entrée et la sortie (l'état doit d'abord transitionner).
-- Parfois il faut plus d'états pour encoder le même comportement qu'une machine Mealy.
+- Au moins un cycle d'horloge de latence entre entrée et sortie (l'état doit transitionner d'abord).
+- Il faut parfois plus d'états pour encoder le même comportement qu'une machine Mealy.
 
-## Mealy : les sorties dépendent de l'état + de l'entrée
+## Mealy : les sorties dépendent de l'état + entrée
 
 ```mermaid
 flowchart LR
-    IN([entrée]) --> NS["état suivant"]
-    NS --> SR["reg. d'état"]
-    IN --> OL["logique de sortie"]
+    IN([input]) --> NS["next-state"]
+    NS --> SR["state reg"]
+    IN --> OL["output logic"]
     SR --> OL
-    OL --> OUT([sorties])
+    OL --> OUT([outputs])
 ```
 
 Les sorties sont une fonction de l'état courant **et** de l'entrée courante. Elles peuvent changer entre deux fronts d'horloge.
 
 **Pour**
 - Plus rapide — les sorties peuvent réagir à une entrée dans le même cycle, pas au suivant.
-- Souvent moins d'états.
+- Souvent moins d'états nécessaires.
 
 **Contre**
 - Les sorties peuvent glitcher (elles suivent l'entrée combinatoire).
-- Plus difficile à déboguer quand les sorties ne s'alignent pas sur les fronts d'horloge.
+- Plus dur à débugger quand les sorties ne sont pas alignées sur les fronts d'horloge.
 
-## Laquelle utiliser ?
+## Laquelle prendre ?
 
-**Par défaut : Moore.** L'absence de glitches et les sorties alignées sur les fronts rendent les designs prévisibles. Pour une logique de contrôle dans un CPU, un contrôleur mémoire, ou toute chose liée à la sûreté, Moore est le choix le plus sûr.
+**Par défaut : Moore.** L'absence de glitches et les sorties alignées sur les fronts rendent le design prévisible. Pour de la logique de contrôle dans un CPU, un contrôleur mémoire ou tout ce qui relève de la sûreté, Moore est le choix le plus sûr.
 
-**Choisis Mealy quand** tu as besoin de réagir dans le même cycle d'horloge, ou quand les états supplémentaires de Moore feraient exploser le design. UART et moteurs de protocole finissent souvent Mealy pour l'argument du temps de réaction.
+**Prends Mealy quand** tu dois réagir dans le même cycle d'horloge, ou quand les états supplémentaires Moore feraient enfler le design. UART et moteurs de protocole finissent souvent en Mealy pour cette raison de temps de réaction.
 
 ## Comment Kmila les supporte
 
-Les deux styles tombent dans le même **patron à deux process** que tu verras dans l'exemple du feu tricolore :
+Les deux styles entrent dans le même **motif à deux process** que tu verras dans l'exemple du feu tricolore :
 
 ```vhdl
--- Process 1 : registre d'état (toujours Moore-safe)
+-- Process 1 : registre d'état (toujours sûr Moore)
 process(clk, reset)
 begin
   if reset = '1' then
@@ -69,7 +69,7 @@ begin
   end if;
 end process;
 
--- Process 2 : next-state combinatoire + sorties
+-- Process 2 : prochain état combinatoire + sorties
 process(state, input)
 begin
   ...
@@ -80,6 +80,6 @@ Pour une machine Moore, les sorties ne regardent que `state`. Pour une machine M
 
 ## À retenir
 
-- Moore : la sortie est une fonction de l'état seul. Sans glitches.
-- Mealy : la sortie est une fonction de l'état + entrée. Plus rapide.
+- Moore : sortie = fonction de l'état seul. Sans glitch.
+- Mealy : sortie = fonction de l'état + entrée. Plus rapide.
 - Commence par Moore ; passe à Mealy quand tu as une raison précise.

@@ -1,60 +1,142 @@
 {
   "code": "architecture rtl of mux2 is\nbegin\n  -- when/else style:\n  y1 <= a when sel = '0' else b;        -- line 4\n  -- with/select style:\n  with sel select\n    y2 <= a when '0',\n          b when others;                 -- line 8\nend architecture;",
   "language": "vhdl",
-  "signalOrder": ["sel", "a", "b", "y1", "y2"],
+  "signalOrder": [
+    "sel",
+    "a",
+    "b",
+    "y1",
+    "y2"
+  ],
   "steps": [
     {
       "t": 0,
       "highlightLines": [],
-      "signals": { "sel": "0", "a": "1", "b": "0", "y1": "U", "y2": "U" },
+      "signals": {
+        "sel": "0",
+        "a": "1",
+        "b": "0",
+        "y1": "U",
+        "y2": "U"
+      },
       "note": {
         "en": "Initial state. sel = 0; both concurrent statements will pick a.",
-        "es": "Estado inicial. sel = 0; ambas sentencias concurrentes seleccionarán a."
+        "es": "Estado inicial. sel = 0; ambas sentencias concurrentes seleccionarán a.",
+        "ar": "الحالة الابتدائيَّة. sel = 0؛ كلتا السطرَين التزامنيَّتَين ستختاران a.",
+        "ch": "初始状态。sel = 0;两条并发语句都会选 a。",
+        "de": "Anfangszustand. sel = 0; beide nebenläufige Anweisungen wählen a.",
+        "fr": "État initial. sel = 0 ; les deux instructions concurrentes vont choisir a.",
+        "jp": "初期状態。sel = 0;両並行文とも a を選ぶ。"
       }
     },
     {
       "t": 1,
-      "highlightLines": [4, 6, 7, 8],
-      "signals": { "sel": "0", "a": "1", "b": "0", "y1": "U", "y2": "U" },
+      "highlightLines": [
+        4,
+        6,
+        7,
+        8
+      ],
+      "signals": {
+        "sel": "0",
+        "a": "1",
+        "b": "0",
+        "y1": "U",
+        "y2": "U"
+      },
       "note": {
         "en": "Both concurrent statements fire in the SAME delta cycle — source order is irrelevant.",
-        "es": "Ambas sentencias concurrentes se disparan en el MISMO ciclo delta — el orden del código es irrelevante."
+        "es": "Ambas sentencias concurrentes se disparan en el MISMO ciclo delta — el orden del código es irrelevante.",
+        "ar": "كلتا السطرَين التزامنيَّتَين تنطلقان في نفس دلتا-الدورة — ترتيب الشفرة لا يهمُّ.",
+        "ch": "两条并发语句在同一个 delta 周期里同时触发 — 源代码顺序无关。",
+        "de": "Beide nebenläufige Anweisungen feuern im SELBEN Delta-Zyklus — die Quellreihenfolge ist egal.",
+        "fr": "Les deux instructions concurrentes s'allument dans le MÊME cycle delta — l'ordre du code source n'a pas d'importance.",
+        "jp": "両並行文が同じデルタサイクルで発火 — ソース順序は無関係。"
       }
     },
     {
       "t": 2,
       "highlightLines": [],
-      "signals": { "sel": "0", "a": "1", "b": "0", "y1": "1", "y2": "1" },
+      "signals": {
+        "sel": "0",
+        "a": "1",
+        "b": "0",
+        "y1": "1",
+        "y2": "1"
+      },
       "note": {
         "en": "Delta closes. y1 = a = 1 (when/else picked the true branch); y2 = a = 1 (with/select matched '0'). Same circuit, two syntaxes.",
-        "es": "Cierra el delta. y1 = a = 1 (when/else tomó la rama verdadera); y2 = a = 1 (with/select coincidió con '0'). Mismo circuito, dos sintaxis."
+        "es": "Cierra el delta. y1 = a = 1 (when/else tomó la rama verdadera); y2 = a = 1 (with/select coincidió con '0'). Mismo circuito, dos sintaxis.",
+        "ar": "تُغلَق الدلتا. y1 = a = 1 (when/else اختار الفرع الصحيح)؛ y2 = a = 1 (with/select طابق '0'). الدائرة نفسها بصيغتَين.",
+        "ch": "delta 关闭。y1 = a = 1(when/else 选中真分支);y2 = a = 1(with/select 匹配 '0')。同一电路,两种语法。",
+        "de": "Delta schließt. y1 = a = 1 (when/else hat den Wahrzweig gewählt); y2 = a = 1 (with/select hat '0' getroffen). Gleiche Schaltung, zwei Syntaxen.",
+        "fr": "Delta se ferme. y1 = a = 1 (when/else a pris la branche vraie) ; y2 = a = 1 (with/select a fait correspondre '0'). Même circuit, deux syntaxes.",
+        "jp": "デルタがクローズ。y1 = a = 1(when/else が真ブランチを選択);y2 = a = 1(with/select が '0' にマッチ)。同じ回路、2 つの構文。"
       }
     },
     {
       "t": 3,
       "highlightLines": [],
-      "signals": { "sel": "1", "a": "1", "b": "0", "y1": "1", "y2": "1" },
+      "signals": {
+        "sel": "1",
+        "a": "1",
+        "b": "0",
+        "y1": "1",
+        "y2": "1"
+      },
       "note": {
         "en": "sel flips to 1. Both concurrent statements wake again — they're implicitly sensitive to every signal they read.",
-        "es": "sel cambia a 1. Ambas sentencias concurrentes se despiertan otra vez — son implícitamente sensibles a cada señal que leen."
+        "es": "sel cambia a 1. Ambas sentencias concurrentes se despiertan otra vez — son implícitamente sensibles a cada señal que leen.",
+        "ar": "sel يقفز إلى 1. تستيقظ كلتا السطرَين مرَّة أخرى — هما حسَّاستان ضمنيًّا لكل إشارة يقرآنها.",
+        "ch": "sel 翻到 1。两条并发语句再次醒来 — 它们对它们读取的每个信号都是隐式敏感的。",
+        "de": "sel kippt auf 1. Beide nebenläufige Anweisungen wachen wieder auf — sie sind implizit sensitiv auf jedes Signal, das sie lesen.",
+        "fr": "sel bascule à 1. Les deux instructions concurrentes se réveillent à nouveau — elles sont implicitement sensibles à chaque signal qu'elles lisent.",
+        "jp": "sel が 1 に反転。両並行文が再び起動 — 読み取るすべての信号に暗黙的に感度を持つ。"
       }
     },
     {
       "t": 4,
-      "highlightLines": [4, 6, 7, 8],
-      "signals": { "sel": "1", "a": "1", "b": "0", "y1": "1", "y2": "1" },
+      "highlightLines": [
+        4,
+        6,
+        7,
+        8
+      ],
+      "signals": {
+        "sel": "1",
+        "a": "1",
+        "b": "0",
+        "y1": "1",
+        "y2": "1"
+      },
       "note": {
         "en": "Same parallel evaluation. The when/else's else-clause selects b; with/select's 'others' selects b.",
-        "es": "Misma evaluación en paralelo. La cláusula else de when/else selecciona b; el 'others' de with/select selecciona b."
+        "es": "Misma evaluación en paralelo. La cláusula else de when/else selecciona b; el 'others' de with/select selecciona b.",
+        "ar": "تقييم متوازٍ مماثل. تُختار b من فرع else لـ when/else؛ ويختار 'others' في with/select b.",
+        "ch": "同样的并行求值。when/else 的 else 子句选择 b;with/select 的 'others' 选择 b。",
+        "de": "Gleiche parallele Auswertung. Die else-Klausel des when/else wählt b; das 'others' von with/select wählt b.",
+        "fr": "Même évaluation parallèle. La clause else du when/else sélectionne b ; le 'others' du with/select sélectionne b.",
+        "jp": "同じ並列評価。when/else の else 節は b を選び、with/select の 'others' も b を選ぶ。"
       }
     },
     {
       "t": 5,
       "highlightLines": [],
-      "signals": { "sel": "1", "a": "1", "b": "0", "y1": "0", "y2": "0" },
+      "signals": {
+        "sel": "1",
+        "a": "1",
+        "b": "0",
+        "y1": "0",
+        "y2": "0"
+      },
       "note": {
         "en": "Delta closes. y1 = y2 = b = 0. The two syntaxes describe identical hardware.",
-        "es": "Cierra el delta. y1 = y2 = b = 0. Las dos sintaxis describen hardware idéntico."
+        "es": "Cierra el delta. y1 = y2 = b = 0. Las dos sintaxis describen hardware idéntico.",
+        "ar": "تُغلَق الدلتا. y1 = y2 = b = 0. الصياغتان تصفان عتادًا متطابقًا.",
+        "ch": "delta 关闭。y1 = y2 = b = 0。两种语法描述完全相同的硬件。",
+        "de": "Delta schließt. y1 = y2 = b = 0. Die beiden Syntaxen beschreiben identische Hardware.",
+        "fr": "Delta se ferme. y1 = y2 = b = 0. Les deux syntaxes décrivent un matériel identique.",
+        "jp": "デルタがクローズ。y1 = y2 = b = 0。2 つの構文は同一のハードウェアを記述する。"
       }
     }
   ]

@@ -252,6 +252,83 @@ window.downloadFile = function (fileName, content) {
     // id), inlines its computed background and width/height attributes, and
     // returns a {svg, w, h, bg, ok} record. Shared by serialize/download
     // entry points so the SVG-discovery + cloning logic lives in one place.
+    // Walk source + clone trees in lockstep and copy a small set of visual
+    // computed-style properties from live → clone as inline `style="..."`,
+    // then aggressively strip every node / attribute that could trigger an
+    // external fetch when the rasteriser loads the standalone SVG. Without
+    // this, mermaid's <style> @imports Google Fonts and toBlob throws
+    // "Tainted canvases may not be exported". Logs sanitisation stats so a
+    // future report of "still tainted" can be diagnosed against the actual
+    // tree the function saw. Backlog #2.
+    //
+    // NOTE: deliberately does NOT inline font-family from getComputedStyle
+    // — mermaid resolves to "Trebuchet MS, Lucida Sans Unicode, sans-serif"
+    // or similar; baking that into the standalone SVG can still trip a font
+    // probe on engines that look up the family before falling back. We pin
+    // every element to a guaranteed-local system stack instead.
+    function _kmilaInlineSvgStyles(srcRoot, dstRoot) {
+        const PROPS = [
+            'fill', 'fill-opacity', 'stroke', 'stroke-width', 'stroke-dasharray',
+            'stroke-linecap', 'stroke-linejoin', 'opacity',
+            'font-size', 'font-weight', 'font-style',
+            'text-anchor', 'dominant-baseline', 'color'
+        ];
+        let nodesVisited = 0;
+        const stack = [[srcRoot, dstRoot]];
+        while (stack.length) {
+            const [s, d] = stack.pop();
+            nodesVisited++;
+            try {
+                const cs = getComputedStyle(s);
+                let inline = 'font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;';
+                for (let i = 0; i < PROPS.length; i++) {
+                    const v = cs.getPropertyValue(PROPS[i]);
+                    if (v) inline += PROPS[i] + ':' + v + ';';
+                }
+                const existing = d.getAttribute('style') || '';
+                d.setAttribute('style', inline + existing);
+            } catch (_) { /* SVG nodes without computed styles — skip */ }
+            const sc = s.children, dc = d.children;
+            const n = Math.min(sc.length, dc.length);
+            for (let i = 0; i < n; i++) stack.push([sc[i], dc[i]]);
+        }
+
+        const stats = { nodesVisited, stylesStripped: 0, foreignStripped: 0,
+                        externalImagesStripped: 0, externalUseStripped: 0,
+                        externalHrefsCleared: 0 };
+
+        // Each of these is a documented canvas-taint source. We remove them
+        // outright rather than trying to rewrite — the export needs to
+        // succeed even if it means dropping some decorative element.
+        dstRoot.querySelectorAll('style').forEach(function (el) {
+            el.remove(); stats.stylesStripped++;
+        });
+        dstRoot.querySelectorAll('foreignObject').forEach(function (el) {
+            el.remove(); stats.foreignStripped++;
+        });
+        const isExternal = function (href) {
+            return !!href && !href.startsWith('#') && !href.startsWith('data:');
+        };
+        dstRoot.querySelectorAll('image').forEach(function (el) {
+            const h = el.getAttribute('href') || el.getAttributeNS('http://www.w3.org/1999/xlink', 'href');
+            if (isExternal(h)) { el.remove(); stats.externalImagesStripped++; }
+        });
+        dstRoot.querySelectorAll('use').forEach(function (el) {
+            const h = el.getAttribute('href') || el.getAttributeNS('http://www.w3.org/1999/xlink', 'href');
+            if (isExternal(h)) { el.remove(); stats.externalUseStripped++; }
+        });
+        // Belt-and-braces: any remaining external href / xlink:href on any
+        // node (a, link, etc. mermaid-rare-but-possible) gets blanked.
+        dstRoot.querySelectorAll('*').forEach(function (el) {
+            ['href', 'xlink:href'].forEach(function (attr) {
+                const v = el.getAttribute(attr);
+                if (isExternal(v)) { el.removeAttribute(attr); stats.externalHrefsCleared++; }
+            });
+        });
+
+        try { console.log('[kmilaInlineSvgStyles] sanitised', stats); } catch (_) {}
+    }
+
     function _kmilaPrepFlowSvg(container) {
         let root = null;
         if (typeof container === 'string') {
@@ -269,6 +346,11 @@ window.downloadFile = function (fileName, content) {
         if (!svg) return { ok: false };
 
         const clone = svg.cloneNode(true);
+        // Inline computed styles + strip <style> so the standalone SVG has
+        // zero external references. Without this, mermaid's font @import
+        // taints the rasterisation canvas.
+        try { _kmilaInlineSvgStyles(svg, clone); }
+        catch (e) { console.warn('[_kmilaPrepFlowSvg] style inline failed', e); }
         const cs = getComputedStyle(svg);
         const bg = cs.backgroundColor && cs.backgroundColor !== 'rgba(0, 0, 0, 0)'
             ? cs.backgroundColor : '#ffffff';
@@ -298,6 +380,12 @@ window.downloadFile = function (fileName, content) {
         w = Math.max(1, Math.round(w));
         h = Math.max(1, Math.round(h));
         clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+        // xlink namespace is required for the <use xlink:href="…"/> markers
+        // mermaid emits (arrowheads / nodes). Without an explicit declaration
+        // on the standalone SVG, the canvas rasteriser refuses to load the
+        // image (silent — onerror fires, the export comes back as empty
+        // bytes and the file never downloads). Backlog #2 root cause.
+        clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
         clone.setAttribute('width', w);
         clone.setAttribute('height', h);
         clone.style.background = bg;
@@ -323,38 +411,63 @@ window.downloadFile = function (fileName, content) {
 
     // Rasterises the mermaid SVG to a PNG and returns base64 bytes. Counterpart
     // to kmilaSerializeFlowSvg for the PNG export path. Resolves '' on failure.
-    window.kmilaSerializeFlowPng = async function (container) {
-        try {
-            const prep = _kmilaPrepFlowSvg(container);
-            if (!prep.ok) return '';
-            const dpr = Math.max(1, window.devicePixelRatio || 1) * 2;
-            const canvas = document.createElement('canvas');
-            canvas.width  = prep.w * dpr;
-            canvas.height = prep.h * dpr;
-            const ctx = canvas.getContext('2d');
-            ctx.scale(dpr, dpr);
-            ctx.fillStyle = prep.bg;
-            ctx.fillRect(0, 0, prep.w, prep.h);
+    //
+    // Uses a Blob URL (not a data: URL) for the intermediate <img>. Mermaid
+    // SVGs routinely contain inline <style> blocks, foreignObject HTML, and
+    // unicode glyphs; piping that through encodeURIComponent for a data:
+    // URL is fragile (long-SVG ceilings, fractional-percent encoding bugs in
+    // some WebViews) and the load silently fails, which is what backlog #2
+    // was hitting. The Blob path is what SchematicViewer's working PNG
+    // export uses — same primitive, same robustness.
+    window.kmilaSerializeFlowPng = function (container) {
+        return new Promise(function (resolve) {
+            try {
+                const prep = _kmilaPrepFlowSvg(container);
+                if (!prep.ok) { resolve(''); return; }
+                const dpr = Math.max(1, window.devicePixelRatio || 1) * 2;
+                const canvas = document.createElement('canvas');
+                canvas.width  = Math.max(1, Math.floor(prep.w * dpr));
+                canvas.height = Math.max(1, Math.floor(prep.h * dpr));
+                const ctx = canvas.getContext('2d');
+                ctx.scale(dpr, dpr);
+                ctx.fillStyle = prep.bg;
+                ctx.fillRect(0, 0, prep.w, prep.h);
 
-            const img = new Image();
-            const dataUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(prep.svg);
-            await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = dataUrl; });
-            ctx.drawImage(img, 0, 0, prep.w, prep.h);
-            return await new Promise((res) => canvas.toBlob(function (blob) {
-                if (!blob) { res(''); return; }
-                const reader = new FileReader();
-                reader.onloadend = function () {
-                    const result = reader.result || '';
-                    const comma = String(result).indexOf(',');
-                    res(comma >= 0 ? String(result).substring(comma + 1) : '');
+                const svgBlob = new Blob([prep.svg], { type: 'image/svg+xml;charset=utf-8' });
+                const blobUrl = URL.createObjectURL(svgBlob);
+                const img = new Image();
+                img.onload = function () {
+                    try {
+                        ctx.drawImage(img, 0, 0, prep.w, prep.h);
+                        canvas.toBlob(function (blob) {
+                            URL.revokeObjectURL(blobUrl);
+                            if (!blob) { resolve(''); return; }
+                            const reader = new FileReader();
+                            reader.onloadend = function () {
+                                const result = reader.result || '';
+                                const comma = String(result).indexOf(',');
+                                resolve(comma >= 0 ? String(result).substring(comma + 1) : '');
+                            };
+                            reader.onerror = function () { resolve(''); };
+                            reader.readAsDataURL(blob);
+                        }, 'image/png');
+                    } catch (drawErr) {
+                        URL.revokeObjectURL(blobUrl);
+                        console.error('[kmilaSerializeFlowPng] draw failed', drawErr);
+                        resolve('');
+                    }
                 };
-                reader.onerror = function () { res(''); };
-                reader.readAsDataURL(blob);
-            }, 'image/png'));
-        } catch (e) {
-            console.error('[kmilaSerializeFlowPng]', e);
-            return '';
-        }
+                img.onerror = function (e) {
+                    URL.revokeObjectURL(blobUrl);
+                    console.error('[kmilaSerializeFlowPng] image load failed', e);
+                    resolve('');
+                };
+                img.src = blobUrl;
+            } catch (e) {
+                console.error('[kmilaSerializeFlowPng]', e);
+                resolve('');
+            }
+        });
     };
 
     // Legacy anchor-download path. Kept for the Web target (browser sandbox)
@@ -1103,5 +1216,97 @@ window.kmilaExecClearHighlights = function () {
     if (prev.length > 0) {
         editor.deltaDecorations(prev, []);
         _kmilaExecDecos.set(editor, []);
+    }
+};
+
+/* ── Phase B+ Deep AST (follow-up): Monaco gutter line breakpoints ────────
+ * Editor.razor's main Monaco (the `.editor-monaco` wrapper) lets the user
+ * click on the line-numbers / glyph margin to toggle a breakpoint at that
+ * line. The click handler routes the line number back to Blazor via the
+ * passed-in DotNetObjectReference; Blazor in turn calls back here with the
+ * current breakpoint set, and we paint a glyph decoration on each line.
+ *
+ * One handler per editor — re-init is idempotent (we dispose the previous
+ * handler before binding a new one). Decorations live in a WeakMap keyed
+ * by editor instance so multiple panes don't trample each other.            */
+const _kmilaBpDecos = new WeakMap();
+const _kmilaBpListeners = new WeakMap();
+
+function _kmilaFindEditorMonaco() {
+    if (typeof monaco === 'undefined' || !monaco.editor) return null;
+    const editors = monaco.editor.getEditors();
+    if (!editors || editors.length === 0) return null;
+    return editors.find(e => {
+        const dom = e.getDomNode && e.getDomNode();
+        if (!dom || !dom.isConnected) return false;
+        return dom.closest && dom.closest('.editor-monaco');
+    }) || null;
+}
+
+window.kmilaInitMonacoBreakpoints = function (dotNetRef) {
+    const editor = _kmilaFindEditorMonaco();
+    if (!editor || !dotNetRef) return false;
+
+    // Drop any previous listener — re-init must be idempotent (the Blazor
+    // component re-fires this on every editor remount).
+    const prev = _kmilaBpListeners.get(editor);
+    if (prev && typeof prev.dispose === 'function') {
+        try { prev.dispose(); } catch { }
+    }
+
+    const handler = editor.onMouseDown(e => {
+        // Monaco's MouseTargetType: GUTTER_LINE_NUMBERS = 3, GUTTER_GLYPH_MARGIN = 2.
+        // Either counts as a gutter click for breakpoint-toggle purposes.
+        if (!e || !e.target) return;
+        const t = e.target.type;
+        if (t !== 2 && t !== 3) return;
+        const pos = e.target.position;
+        if (!pos || !pos.lineNumber) return;
+        try { dotNetRef.invokeMethodAsync('ToggleBreakpoint', pos.lineNumber); }
+        catch { /* dotnet ref may be disposed during teardown — fine */ }
+    });
+    _kmilaBpListeners.set(editor, handler);
+    return true;
+};
+
+window.kmilaSetMonacoBreakpoints = function (lineNumbers) {
+    const editor = _kmilaFindEditorMonaco();
+    if (!editor) return;
+    const model = editor.getModel();
+    if (!model) return;
+
+    const maxLine = model.getLineCount();
+    const safe = (Array.isArray(lineNumbers) ? lineNumbers : [])
+        .filter(n => Number.isInteger(n) && n >= 1 && n <= maxLine);
+
+    const newDecos = safe.map(ln => ({
+        range: new monaco.Range(ln, 1, ln, 1),
+        options: {
+            isWholeLine: false,
+            glyphMarginClassName: 'kmila-bp-glyph',
+            // Hover message in Monaco's native tooltip (best-effort i18n —
+            // the dictionary string is computed Blazor-side and not piped
+            // through here; users mostly recognise the dot icon).
+            glyphMarginHoverMessage: { value: '**Breakpoint** — line ' + ln }
+        }
+    }));
+
+    const prev = _kmilaBpDecos.get(editor) || [];
+    const next = editor.deltaDecorations(prev, newDecos);
+    _kmilaBpDecos.set(editor, next);
+};
+
+window.kmilaDisposeMonacoBreakpoints = function () {
+    const editor = _kmilaFindEditorMonaco();
+    if (!editor) return;
+    const prev = _kmilaBpListeners.get(editor);
+    if (prev && typeof prev.dispose === 'function') {
+        try { prev.dispose(); } catch { }
+    }
+    _kmilaBpListeners.delete(editor);
+    const decos = _kmilaBpDecos.get(editor) || [];
+    if (decos.length > 0) {
+        editor.deltaDecorations(decos, []);
+        _kmilaBpDecos.set(editor, []);
     }
 };

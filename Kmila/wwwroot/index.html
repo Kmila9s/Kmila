@@ -23,17 +23,33 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
     <link href="_content/Blazor.Bootstrap/blazor.bootstrap.css" rel="stylesheet" />
 
-    <!-- Mermaid diagram rendering (shared with Web host via the same API). -->
+    <!-- Mermaid diagram rendering (shared with Web host via the same API).
+         Source preservation: mermaid overwrites pre.mermaid innerHTML with
+         the rendered SVG, so a theme switch can't simply re-run mermaid on
+         the same node — textContent is now SVG markup, parse fails, the
+         diagram vanishes. Stash the original source on first sight and
+         restore it before re-rendering. (Backlog #7.) -->
     <script type="module">
         import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
         const isDark = () => document.documentElement.getAttribute('data-bs-theme') === 'dark';
         mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: isDark() ? 'dark' : 'default' });
         window.kmilaMermaidRun = function () {
-            try { mermaid.run({ querySelector: 'pre.mermaid' }); } catch (e) { console.warn('[mermaid]', e); }
+            try {
+                document.querySelectorAll('pre.mermaid').forEach(function (el) {
+                    if (!el.hasAttribute('data-kmila-mermaid-src')) {
+                        el.setAttribute('data-kmila-mermaid-src', el.textContent || '');
+                    }
+                });
+                mermaid.run({ querySelector: 'pre.mermaid' });
+            } catch (e) { console.warn('[mermaid]', e); }
         };
         new MutationObserver(() => {
             mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: isDark() ? 'dark' : 'default' });
-            document.querySelectorAll('pre.mermaid').forEach(el => { el.removeAttribute('data-processed'); });
+            document.querySelectorAll('pre.mermaid').forEach(el => {
+                var src = el.getAttribute('data-kmila-mermaid-src');
+                if (src !== null) el.textContent = src;
+                el.removeAttribute('data-processed');
+            });
             window.kmilaMermaidRun();
         }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-bs-theme'] });
         window.addEventListener('load', () => window.kmilaMermaidRun());
@@ -47,7 +63,7 @@
          ╚═══════════════════════════════════════════════════════════════════╝ -->
     <link rel="stylesheet" href="_content/Kmila.Shared/css/tokens.css?v=8" />
     <link rel="stylesheet" href="_content/Kmila.Shared/app.css?v=8" />
-    <link rel="stylesheet" href="_content/Kmila.Shared/css/pages.css?v=10" />
+    <link rel="stylesheet" href="_content/Kmila.Shared/css/pages.css?v=14" />
     <link rel="stylesheet" href="_content/Kmila.Shared/css/buttons.css?v=8" />
     <link rel="stylesheet" href="app.css" />
     <link rel="stylesheet" href="Kmila.styles.css" />
@@ -110,9 +126,9 @@
          through Monaco's tokenizer so VHDL snippets in lessons look identical
          to the Editor. Must load after vhdl.js (which registers the `vhdl`
          language) and after editor.main.js (provides colorizeElement). -->
-    <script src="_content/Kmila.Shared/js/lesson-code.js"></script>
+    <script src="_content/Kmila.Shared/js/lesson-code.js?v=20260522a"></script>
     <!-- Kmila app utilities (file download, etc.) -->
-    <script src="_content/Kmila.Shared/js/app.js"></script>
+    <script src="_content/Kmila.Shared/js/app.js?v=20260522c"></script>
     <script src="_framework/blazor.webview.js" autostart="false"></script>
 
 </body>

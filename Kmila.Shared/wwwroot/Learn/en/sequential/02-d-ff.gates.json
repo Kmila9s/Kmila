@@ -1,0 +1,251 @@
+{
+  "viewBox": "0 0 660 280",
+  "nodes": [
+    {
+      "id": "reset",
+      "kind": "input",
+      "label": "reset",
+      "x": 60,
+      "y": 40
+    },
+    {
+      "id": "d",
+      "kind": "input",
+      "label": "d",
+      "x": 60,
+      "y": 122
+    },
+    {
+      "id": "clk",
+      "kind": "input",
+      "label": "clk",
+      "x": 60,
+      "y": 200
+    },
+    {
+      "id": "g_dff",
+      "kind": "dff",
+      "label": "DFF",
+      "x": 300,
+      "y": 100
+    },
+    {
+      "id": "q",
+      "kind": "output",
+      "label": "q",
+      "x": 560,
+      "y": 122
+    }
+  ],
+  "wires": [
+    {
+      "id": "w_d",
+      "source": "d",
+      "from": "d",
+      "to": "g_dff.d"
+    },
+    {
+      "id": "w_clk",
+      "source": "clk",
+      "from": "clk",
+      "to": "g_dff.clk"
+    },
+    {
+      "id": "w_reset",
+      "source": "reset",
+      "from": "reset",
+      "to": "g_dff.reset"
+    },
+    {
+      "id": "w_q",
+      "source": "q",
+      "from": "g_dff.q",
+      "to": "q"
+    }
+  ],
+  "signalOrder": [
+    "reset",
+    "clk",
+    "d",
+    "q"
+  ],
+  "steps": [
+    {
+      "t": 0,
+      "values": {
+        "reset": "1",
+        "clk": "0",
+        "d": "0",
+        "q": "0"
+      },
+      "active": [],
+      "note": {
+        "en": "Cold start. reset is asserted, clk is low. q is forced to 0 — async reset has priority over everything else, including the clock.",
+        "es": "Inicio en frío. reset está activo y clk en bajo. q se fuerza a 0 — el reset asíncrono tiene prioridad sobre todo lo demás, incluido el reloj.",
+        "ar": "بدء بارد. reset مفعَّل، clk منخفض. q يُجبَر على 0 — reset اللاتزامني له أولوية على كل ما عداه، بما في ذلك الساعة.",
+        "ch": "冷启动。reset 有效,clk 为低。q 被强制为 0 — 异步 reset 优先级高于一切,包括时钟。",
+        "de": "Kaltstart. reset ist aktiv, clk niedrig. q wird auf 0 gezwungen — der asynchrone Reset hat Priorität vor allem anderen, auch vor dem Takt.",
+        "fr": "Démarrage à froid. reset est activé, clk bas. q est forcé à 0 — le reset asynchrone est prioritaire sur tout le reste, y compris l'horloge.",
+        "jp": "コールドスタート。reset がアサート、clk は Low。q は 0 に強制 — 非同期リセットはクロックを含む他のすべてに優先する。"
+      }
+    },
+    {
+      "t": 1,
+      "values": {
+        "reset": "1",
+        "clk": "1",
+        "d": "0",
+        "q": "0"
+      },
+      "active": [],
+      "note": {
+        "en": "Rising edge on clk. NORMALLY this would capture d into q, but reset is still high so the flip-flop ignores the edge. The clock wedge inside the DFF is the visual cue that this gate is edge-triggered.",
+        "es": "Flanco de subida en clk. NORMALMENTE esto capturaría d en q, pero reset sigue alto así que el flip-flop ignora el flanco. La cuña del reloj dentro del DFF es la señal visual de que esta compuerta se dispara por flanco.",
+        "ar": "حافة صاعدة على clk. عادةً سيُلتقط d إلى q، لكن reset لا يزال مرتفعًا فيتجاهل القلَّاب الحافة. وتد الساعة داخل DFF هو الإشارة البصريَّة بأن هذه البوابة تُطلَق بالحافة.",
+        "ch": "clk 的上升沿。正常情况下会把 d 锁存到 q,但 reset 还在,所以触发器忽略这次边沿。DFF 内部的小三角是表示该门是边沿触发的视觉提示。",
+        "de": "Steigende Flanke auf clk. NORMAL würde das d in q übernehmen, aber reset ist immer noch high, also ignoriert das Flip-Flop die Flanke. Der Takt-Wedge im DFF ist der visuelle Hinweis darauf, dass dieses Gatter flankengetriggert ist.",
+        "fr": "Front montant sur clk. NORMALEMENT cela capturerait d dans q, mais reset est encore haut donc la bascule ignore le front. Le coin d'horloge à l'intérieur du DFF est l'indice visuel que cette porte est déclenchée sur front.",
+        "jp": "clk の立ち上がりエッジ。通常なら d を q に取り込むが、reset がまだ High なのでフリップフロップはエッジを無視。DFF 内のクロックくさび印は、このゲートがエッジトリガであることを示す視覚的手がかり。"
+      }
+    },
+    {
+      "t": 2,
+      "values": {
+        "reset": "1",
+        "clk": "0",
+        "d": "1",
+        "q": "0"
+      },
+      "active": [],
+      "note": {
+        "en": "clk falls; d rises to 1. Nothing happens at q because (a) the clock just fell — no rising edge — and (b) reset still holds q at 0 regardless.",
+        "es": "clk baja; d sube a 1. Nada le pasa a q porque (a) el reloj acaba de bajar — sin flanco — y (b) reset sigue forzando q a 0.",
+        "ar": "clk ينزل؛ d يرتفع إلى 1. لا شيء يحدث في q لأن (أ) الساعة نزلت توًّا — لا حافة صاعدة — و(ب) reset لا يزال يُمسك q عند 0.",
+        "ch": "clk 下降;d 上升到 1。q 没有变化,因为 (a) 时钟刚刚下降 — 没有上升沿 — 而且 (b) reset 仍把 q 钳在 0。",
+        "de": "clk fällt; d steigt auf 1. An q passiert nichts, weil (a) der Takt gerade gefallen ist — keine steigende Flanke — und (b) reset q sowieso auf 0 hält.",
+        "fr": "clk descend ; d monte à 1. Rien n'arrive à q parce que (a) l'horloge vient de descendre — pas de front montant — et (b) reset maintient encore q à 0 de toute façon.",
+        "jp": "clk が立ち下がる;d が 1 に上昇。q には何も起きない、なぜなら (a) クロックが今立ち下がった — 立ち上がりエッジなし — そして (b) reset がいずれにせよ q を 0 に保持しているから。"
+      }
+    },
+    {
+      "t": 3,
+      "values": {
+        "reset": "0",
+        "clk": "0",
+        "d": "1",
+        "q": "0"
+      },
+      "active": [],
+      "note": {
+        "en": "reset releases. q is still 0 because no clock edge has happened since reset went away. Notice d is HOT (=1) but q hasn't moved — the DFF only acts on edges, not levels.",
+        "es": "reset se libera. q sigue en 0 porque no ha ocurrido ningún flanco desde que reset se fue. Fíjate que d está caliente (=1) pero q no se ha movido — el DFF solo actúa en flancos, no en niveles.",
+        "ar": "يُحرَّر reset. q لا يزال 0 لأن لا حافة ساعة حدثت منذ أن غادر reset. لاحظ أن d ساخن (=1) لكن q لم يتحرَّك — DFF يعمل بالحافات فقط، لا بالمستويات.",
+        "ch": "reset 释放。q 仍为 0,因为自从 reset 撤销后还没有时钟沿。注意 d 是热的(=1)但 q 没动 — DFF 只对边沿动作,不对电平。",
+        "de": "reset wird freigegeben. q ist immer noch 0, weil seit dem Wegfall von reset keine Taktflanke aufgetreten ist. Beachte: d ist heiß (=1), aber q hat sich nicht bewegt — das DFF reagiert nur auf Flanken, nicht auf Pegel.",
+        "fr": "reset se relâche. q reste à 0 parce qu'aucun front d'horloge n'est survenu depuis que reset est tombé. Notez que d est chaud (=1) mais q n'a pas bougé — le DFF n'agit que sur les fronts, pas sur les niveaux.",
+        "jp": "reset が解除される。reset が解除されてからクロックエッジが発生していないので q はまだ 0。d はホット (=1) だが q は動いていない — DFF はエッジにのみ反応し、レベルには反応しない。"
+      }
+    },
+    {
+      "t": 4,
+      "values": {
+        "reset": "0",
+        "clk": "1",
+        "d": "1",
+        "q": "1"
+      },
+      "active": [
+        "g_dff"
+      ],
+      "note": {
+        "en": "Rising edge with reset=0 and d=1. The DFF fires (pulse on the body). q latches to 1 and will hold until the next edge or another reset.",
+        "es": "Flanco de subida con reset=0 y d=1. El DFF se dispara (pulso en el cuerpo). q se engancha a 1 y se queda así hasta el próximo flanco u otro reset.",
+        "ar": "حافة صاعدة مع reset=0 و d=1. ينطلق DFF (نبضة في الجسم). q يُغلَق على 1 ويبقى حتى الحافة التالية أو reset آخر.",
+        "ch": "在 reset=0、d=1 时的上升沿。DFF 触发(本体闪烁)。q 锁存到 1,并一直保持到下一次边沿或新的 reset。",
+        "de": "Steigende Flanke mit reset=0 und d=1. Das DFF feuert (Puls am Body). q rastet auf 1 ein und hält bis zur nächsten Flanke oder einem erneuten Reset.",
+        "fr": "Front montant avec reset=0 et d=1. Le DFF s'allume (pulsation sur le corps). q se verrouille à 1 et y restera jusqu'au prochain front ou à un autre reset.",
+        "jp": "reset=0、d=1 で立ち上がりエッジ。DFF が発火(本体にパルス)。q は 1 にラッチされ、次のエッジか別のリセットまで保持。"
+      }
+    },
+    {
+      "t": 5,
+      "values": {
+        "reset": "0",
+        "clk": "1",
+        "d": "0",
+        "q": "1"
+      },
+      "active": [],
+      "note": {
+        "en": "d drops to 0 BETWEEN clock edges. Watch: q stays at 1. The DFF only samples d at the next rising edge — what d does in the middle is ignored. This is what gives a register its memory.",
+        "es": "d baja a 0 ENTRE flancos. Observa: q se queda en 1. El DFF solo muestrea d en el próximo flanco de subida — lo que d haga en medio se ignora. Eso es lo que le da memoria al registro.",
+        "ar": "d ينزل إلى 0 بين حافَّات الساعة. شاهد: q يبقى عند 1. يأخذ DFF عيِّنة d فقط عند الحافة الصاعدة التالية — ما يفعله d في الوسط يُتجاهَل. هذا ما يمنح المسجِّل ذاكرته.",
+        "ch": "d 在两个时钟沿之间掉到 0。看:q 仍是 1。DFF 只在下一个上升沿采样 d — 中间发生什么都被忽略。这就是寄存器有记忆的原因。",
+        "de": "d fällt ZWISCHEN den Taktflanken auf 0. Beobachte: q bleibt auf 1. Das DFF tastet d nur an der nächsten steigenden Flanke ab — was d zwischendurch macht, wird ignoriert. Genau das gibt einem Register seinen Speicher.",
+        "fr": "d retombe à 0 ENTRE deux fronts d'horloge. Observez : q reste à 1. Le DFF échantillonne d uniquement au prochain front montant — ce que d fait entretemps est ignoré. C'est ce qui donne au registre sa mémoire.",
+        "jp": "クロックエッジの間に d が 0 に下がる。見て:q は 1 のまま。DFF は次の立ち上がりエッジでのみ d をサンプルする — その間に d が何をしようと無視される。これがレジスタに記憶を与える理由。"
+      }
+    },
+    {
+      "t": 6,
+      "values": {
+        "reset": "0",
+        "clk": "0",
+        "d": "0",
+        "q": "1"
+      },
+      "active": [],
+      "note": {
+        "en": "clk falls. Falling edges don't trigger a rising-edge DFF — q still holds 1.",
+        "es": "clk baja. Los flancos de bajada no disparan un DFF de flanco de subida — q sigue manteniendo 1.",
+        "ar": "clk ينزل. الحافات النازلة لا تُطلق DFF الصاعد — q يحتفظ بـ 1.",
+        "ch": "clk 下降。下降沿不会触发上升沿 DFF — q 仍保持 1。",
+        "de": "clk fällt. Fallende Flanken triggern kein steigend-flankengetriggertes DFF — q hält weiter 1.",
+        "fr": "clk descend. Les fronts descendants ne déclenchent pas un DFF à front montant — q maintient toujours 1.",
+        "jp": "clk が立ち下がる。立ち下がりエッジは立ち上がりエッジ DFF をトリガしない — q は 1 を保持。"
+      }
+    },
+    {
+      "t": 7,
+      "values": {
+        "reset": "0",
+        "clk": "1",
+        "d": "0",
+        "q": "0"
+      },
+      "active": [
+        "g_dff"
+      ],
+      "note": {
+        "en": "Next rising edge. d=0 at the edge, so q captures 0. The DFF fires again — same gate, opposite direction.",
+        "es": "Siguiente flanco de subida. d=0 en el flanco, así que q captura 0. El DFF se dispara de nuevo — misma compuerta, dirección contraria.",
+        "ar": "الحافة الصاعدة التالية. d=0 عند الحافة، فيلتقط q قيمة 0. ينطلق DFF مرَّة أخرى — البوابة نفسها، الاتجاه المعاكس.",
+        "ch": "下一个上升沿。沿上 d=0,所以 q 捕获 0。DFF 再次触发 — 同一个门,方向相反。",
+        "de": "Nächste steigende Flanke. d=0 an der Flanke, also übernimmt q den Wert 0. Das DFF feuert wieder — gleiches Gatter, andere Richtung.",
+        "fr": "Front montant suivant. d=0 au front, donc q capture 0. Le DFF s'allume à nouveau — même porte, sens opposé.",
+        "jp": "次の立ち上がりエッジ。エッジで d=0 なので q は 0 を取り込む。DFF が再度発火 — 同じゲート、逆方向。"
+      }
+    },
+    {
+      "t": 8,
+      "values": {
+        "reset": "1",
+        "clk": "1",
+        "d": "1",
+        "q": "0"
+      },
+      "active": [
+        "g_dff"
+      ],
+      "note": {
+        "en": "reset re-asserts mid-cycle. q is forced to 0 INSTANTLY, regardless of clk or d — this is the meaning of \"asynchronous\". The DFF body pulses because its output just moved.",
+        "es": "reset se vuelve a activar a mitad de ciclo. q se fuerza a 0 al INSTANTE, sin importar clk ni d — eso es lo que significa \"asíncrono\". El cuerpo del DFF pulsa porque su salida acaba de moverse.",
+        "ar": "reset يُعاد تفعيله في منتصف الدورة. q يُجبَر على 0 فورًا، بغضِّ النظر عن clk أو d — هذا معنى «لاتزامني». يضرب جسم DFF نبضة لأن خرجه تحرَّك توًّا.",
+        "ch": "周期中途 reset 又被拉高。q 立刻被强制为 0,与 clk、d 都无关 — 这就是 “异步” 的含义。DFF 本体闪烁,因为它的输出刚刚移动。",
+        "de": "reset wird mitten im Zyklus wieder aktiv. q wird SOFORT auf 0 gezwungen, unabhängig von clk oder d — das bedeutet „asynchron“. Der DFF-Body pulst, weil sein Ausgang sich gerade bewegt hat.",
+        "fr": "reset se réactive en plein cycle. q est forcé à 0 INSTANTANÉMENT, peu importe clk ou d — c'est le sens d'« asynchrone ». Le corps du DFF pulse parce que sa sortie vient de bouger.",
+        "jp": "サイクル途中で reset が再アサート。clk や d に関係なく q が即座に 0 に強制される — これが「非同期」の意味。DFF 本体は出力が動いたばかりなのでパルス。"
+      }
+    }
+  ]
+}

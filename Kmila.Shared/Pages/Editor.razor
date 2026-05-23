@@ -24,6 +24,45 @@
         @* ---------- Workbench: editor + action rail ---------- *@
         <div class="editor-workbench">
 
+            @* Phase B+ (follow-up): editor-card tab strip. Splits the
+               workbench between the source-code view and a Step Replay
+               view so the debug surface lives next to the editor rather
+               than crammed into the bottom dock. Tabs are always present
+               (Replay reads as "disabled" until a sim has run / is
+               running, but the tab strip itself is constant so the user
+               always sees the choice). *@
+            <div class="editor-workbench__view-tabs" role="tablist"
+                 aria-label="@Traductor.T("EDITOR_VIEW_SWITCH")">
+                <button type="button"
+                        class="kmila-btn-tab @(_editorCardTab == EditorCardTab.Code ? "is-active" : "")"
+                        role="tab" aria-selected="@(_editorCardTab == EditorCardTab.Code ? "true" : "false")"
+                        @onclick="() => SwitchEditorCardTabAsync(EditorCardTab.Code)">
+                    <Icon Name="IconName.Code" />
+                    <span>@Traductor.T("EDITOR_VIEW_CODE")</span>
+                </button>
+                <button type="button"
+                        class="kmila-btn-tab @(_editorCardTab == EditorCardTab.Replay ? "is-active" : "")"
+                        role="tab" aria-selected="@(_editorCardTab == EditorCardTab.Replay ? "true" : "false")"
+                        disabled="@(!Replay.IsLiveActive && Replay.Current == null)"
+                        @onclick="() => SwitchEditorCardTabAsync(EditorCardTab.Replay)">
+                    <Icon Name="IconName.PlayCircle" />
+                    <span>@Traductor.T("EDITOR_VIEW_REPLAY")</span>
+                    @if (Replay.IsLiveActive)
+                    {
+                        <span class="editor-workbench__view-tab-badge @(Replay.IsLivePaused ? "editor-workbench__view-tab-badge--paused" : "editor-workbench__view-tab-badge--live")">
+                            @(Replay.IsLivePaused ? "⏸" : "●")
+                        </span>
+                    }
+                </button>
+            </div>
+
+            @* Code view — existing workbench header + pane(s). Hidden via
+               CSS (not unmounted) when the Replay tab is active so Monaco
+               keeps its breakpoint glyphs / cursor / scroll across
+               tab switches. *@
+            <div class="editor-workbench__view editor-workbench__view--code"
+                 style="@(_editorCardTab == EditorCardTab.Code ? "" : "display:none")">
+
             @* File info bar on top of the editor — reflects the FOCUSED
                pane's active tab via the compatibility shims. The Split
                toggle lives at the right end of the status block; only
@@ -128,6 +167,16 @@
                     </section>
                 }
             </div>
+
+            </div> @* /editor-workbench__view--code *@
+
+            @* Step Replay view — sibling tab of Code. Always mounted so its
+               internal Monaco / decorations survive tab switches. *@
+            <div class="editor-workbench__view editor-workbench__view--replay"
+                 style="@(_editorCardTab == EditorCardTab.Replay ? "" : "display:none")">
+                <StepReplayPanel />
+            </div>
+
         </div>
 
         @* ---------- Run bar ---------- *@
@@ -227,11 +276,11 @@
                            OnCompareSnapshots="OpenCompareAsync" />
             </RunsContent>
 
-            <ReplayContent>
-                @* Step-through playback of the last simulation run.
-                   ReplayState is fed in OnSimulationDataReady below. *@
-                <StepReplayPanel />
-            </ReplayContent>
+            @* Step Replay moved out of the bottom dock and into a sibling
+               tab of the editor card (see editor-workbench__view-tabs
+               above). Frees the dock for entities / schematic / waveforms
+               / output / files etc., and puts the debug surface right
+               next to the source it's stepping through. *@
 
             <FilesContent>
                 <FilesCard
@@ -423,8 +472,52 @@
         Builder.OnSimulationProgressUpdate += OnSimulationProgressUpdate;
         Builder.OnSimulationEnded         += OnSimulationEnded;
         Builder.OnProgressAdvanced        += OnProgressAdvanced;
+        Builder.OnEngineReady             += OnEngineReadyForLiveReplay;
+        Replay.OnBreakpointsChanged       += OnBreakpointsChangedRepaint;
+        Replay.OnLiveChanged              += OnReplayLiveChangedForTabBadge;
         Sim.OnChange                      += OnSimParamsChanged;
         Snapshots.OnChange                += OnSnapshotsChanged;
+    }
+
+    /// <summary>
+    /// Phase B (2026-05-19): handoff from <c>ProgramBuilder</c> when the
+    /// engine is constructed for a new run. Attaches the engine to the
+    /// scoped <see cref="ReplayState"/> so <c>StepReplayPanel</c> can
+    /// surface the cooperative Pause / Resume / Step controls. The
+    /// matching detach lives in <see cref="OnSimulationEnded"/>.
+    ///
+    /// Phase B+ (2026-05-19, "live frame consumption"): also reads the
+    /// current Monaco source so live frames can carry highlight-line info.
+    /// Fire-and-forget by design — the first few frames may arrive before
+    /// the async source read finishes, but the engine emits hundreds of
+    /// frames over a typical run so the warm-up gap is invisible.
+    /// </summary>
+    private void OnEngineReadyForLiveReplay(Interpreter.Services.DeltaCycleEngine engine)
+    {
+        // Attach SYNCHRONOUSLY with the saved file content so the engine's
+        // OnFrameEmitted subscription is in place before the first delta
+        // fires. The async Monaco.GetValue() path raced against the
+        // simulator's tick loop — breakpoints sometimes missed early
+        // transitions because the handler wasn't wired yet. The saved
+        // file content has correct line numbers (it's what the parser
+        // just ran on); even if the user has unsaved edits the line
+        // mapping stays good for everything ABOVE the unsaved region.
+        var source = _openedFile?.Content ?? string.Empty;
+        Replay.AttachLive(engine, source);
+
+        // Phase B+ (follow-up 2): auto-switch the editor card to the
+        // Step Replay tab so the user sees the live pause/resume UI from
+        // the moment Run starts. Only fires when at least one breakpoint
+        // is set — otherwise the user probably just wants to watch the
+        // waveform fill in, and we shouldn't yank them off the code view.
+        if (Replay.Breakpoints.Count > 0)
+        {
+            InvokeAsync(() =>
+            {
+                _editorCardTab = EditorCardTab.Replay;
+                StateHasChanged();
+            });
+        }
     }
 
     /// <summary>
@@ -792,7 +885,18 @@
             Log.Success(ended
                 ? Traductor.T("SIM_LOG_ENDED_OK")
                 : Traductor.T("SIM_LOG_ENDED_STOPPED"));
+
+            // Phase B+ (follow-up 2): bottom dock no longer has a Replay
+            // tab; auto-focus Waveforms unconditionally. The editor card's
+            // Step Replay tab stays on Replay for post-hoc scrubbing — the
+            // user can flip back to Code from the workbench tab strip.
             DockState.SetActive(EditorTab.Waveforms);
+
+            // Phase B: drop the live-engine reference now that the run is
+            // over. The post-hoc replay doc (built by OnSimulationDataReady)
+            // takes over as the Replay tab's content.
+            Replay.DetachLive();
+
             StateHasChanged();
         });
     }
@@ -1405,6 +1509,11 @@
             WordWrap = "on",
             ScrollBeyondLastLine = false,
             RenderWhitespace = "selection",
+            // Phase B+ Deep AST (follow-up): glyph margin enabled so the
+            // breakpoint dot can render to the left of the line number.
+            // Monaco hides it by default; explicit opt-in keeps the layout
+            // shift in check on existing projects.
+            GlyphMargin = true,
             // Minimap — enabled by default. CSS (max-width: 900px) hides it on
             // narrow viewports and mobile where the sidebar real-estate matters.
             Minimap = new EditorMinimapOptions
@@ -1526,6 +1635,104 @@ end architecture behavioral;",
         // Materialise Monaco models for any tabs opened before this
         // pane's editor was ready.
         await LoadPendingFileAsync(paneIdx);
+
+        // Phase B+ Deep AST (follow-up): wire up gutter-click breakpoints.
+        // Only fire on the primary pane (idx 0) — secondary panes share the
+        // same Replay state but the listener targets the first .editor-monaco
+        // it finds, which is what the user is interacting with anyway.
+        if (paneIdx == 0)
+        {
+            try
+            {
+                _bpDotNetRef ??= DotNetObjectReference.Create(this);
+                await JS.InvokeVoidAsync("kmilaInitMonacoBreakpoints", _bpDotNetRef);
+                await JS.InvokeVoidAsync("kmilaSetMonacoBreakpoints",
+                    Replay.Breakpoints.ToArray());
+            }
+            catch (Exception ex)
+            {
+                // Non-fatal: breakpoints are an optional debugger surface, not
+                // load-bearing. A missing JS helper or Monaco quirk would just
+                // disable the feature, not break the editor.
+                Logger.LogWarning(ex, "[Editor] Failed to wire Monaco gutter breakpoints");
+            }
+        }
+    }
+
+    private DotNetObjectReference<Editor>? _bpDotNetRef;
+
+    /// <summary>
+    /// Phase B+ (follow-up 3, 2026-05-19): which view the editor card is
+    /// currently showing. Code = the Monaco editor + panes. Replay = the
+    /// inline <see cref="StepReplayPanel"/>. Moved out of the bottom dock
+    /// per Daniel's UX feedback — the debug surface belongs next to the
+    /// source, not crammed alongside 8 other dock tabs.
+    /// </summary>
+    private EditorCardTab _editorCardTab = EditorCardTab.Code;
+
+    public enum EditorCardTab { Code, Replay }
+
+    /// <summary>
+    /// Switches the editor card between Code and Step Replay. When
+    /// returning to Code, asks Monaco to re-layout — Monaco's auto-layout
+    /// usually catches a display:none → visible transition on its own, but
+    /// calling Layout() explicitly is the canonical fix when the editor
+    /// gets clipped after becoming visible.
+    /// </summary>
+    private async Task SwitchEditorCardTabAsync(EditorCardTab tab)
+    {
+        if (_editorCardTab == tab) return;
+        _editorCardTab = tab;
+        StateHasChanged();
+        if (tab == EditorCardTab.Code)
+        {
+            try
+            {
+                foreach (var pane in _panes)
+                {
+                    if (pane.Initialized) await pane.Monaco.Layout();
+                }
+            }
+            catch { /* Monaco may not be mounted yet — fine */ }
+        }
+    }
+
+    /// <summary>
+    /// Replay state's OnLiveChanged ticks the editor-card tab's badge
+    /// (running / paused) — wired in <see cref="OnInitialized"/>.
+    /// </summary>
+    private void OnReplayLiveChangedForTabBadge() => InvokeAsync(StateHasChanged);
+
+    /// <summary>
+    /// Phase B+ Deep AST (follow-up): invoked from JS when the user clicks
+    /// the Monaco gutter on a line. Toggles the breakpoint in scoped Replay
+    /// state — the OnBreakpointsChanged handler below repaints the gutter
+    /// glyphs and the engine's frame handler picks up the new set.
+    /// </summary>
+    [Microsoft.JSInterop.JSInvokable]
+    public void ToggleBreakpoint(int line)
+    {
+        if (line <= 0) return;
+        Replay.ToggleBreakpoint(line);
+    }
+
+    /// <summary>
+    /// Pushes the current breakpoint set into Monaco as gutter decorations.
+    /// Fired from <c>Replay.OnBreakpointsChanged</c> so the indicator stays
+    /// in sync with both gutter clicks AND the list-based editor in the
+    /// Replay panel.
+    /// </summary>
+    private void OnBreakpointsChangedRepaint()
+    {
+        InvokeAsync(async () =>
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("kmilaSetMonacoBreakpoints",
+                    Replay.Breakpoints.ToArray());
+            }
+            catch { /* Monaco may not be mounted — fine */ }
+        });
     }
 
     /// <summary>
@@ -1688,8 +1895,9 @@ end architecture behavioral;",
             }
             catch { /* Monaco may not be mounted in headless / test paths */ }
 
-            var doc = Kmila.Shared.Services.ReplayBuilder.Build(wd, source);
-            Replay.Set(doc);
+            // Phase C: cache the waveform + source in ReplayState so the
+            // detail-level selector can rebuild without rerunning the sim.
+            Replay.StoreCaptureAndBuild(wd, source);
         }
         catch (Exception ex)
         {
@@ -2189,6 +2397,17 @@ end architecture behavioral;",
         Builder.OnSimulationProgressUpdate -= OnSimulationProgressUpdate;
         Builder.OnSimulationEnded         -= OnSimulationEnded;
         Builder.OnProgressAdvanced        -= OnProgressAdvanced;
+        Builder.OnEngineReady             -= OnEngineReadyForLiveReplay;
+        Replay.OnBreakpointsChanged       -= OnBreakpointsChangedRepaint;
+        Replay.OnLiveChanged              -= OnReplayLiveChangedForTabBadge;
+        Replay.DetachLive();
+
+        // Phase B+ Deep AST (follow-up): release the gutter-click JS hookup
+        // + DotNet reference. JS-side calls become no-ops once the ref is
+        // disposed; the editor instance itself outlives this scope.
+        try { _ = JS.InvokeVoidAsync("kmilaDisposeMonacoBreakpoints"); } catch { }
+        _bpDotNetRef?.Dispose();
+        _bpDotNetRef = null;
         Sim.OnChange                      -= OnSimParamsChanged;
         Snapshots.OnChange                -= OnSnapshotsChanged;
 

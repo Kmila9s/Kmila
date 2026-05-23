@@ -102,8 +102,11 @@
                 else { @RenderEmpty(IconName.ClockHistory, "EDITOR_EMPTY_RUNS") }
                 break;
             case EditorTab.Replay:
-                @if (ReplayContent != null) { @ReplayContent }
-                else { @RenderEmpty(IconName.PlayCircle, "EDITOR_EMPTY_REPLAY") }
+                // Replay was promoted to a sibling tab of the editor card.
+                // Falling through with an empty render — if localStorage
+                // hydrates this value, the user clicks any visible tab and
+                // the layout resolves itself.
+                @RenderEmpty(IconName.PlayCircle, "EDITOR_REPLAY_MOVED")
                 break;
             case EditorTab.Files:
                 @if (FilesContent != null) { @FilesContent }
@@ -124,7 +127,8 @@
     [Parameter] public RenderFragment? PortsContent { get; set; }
     [Parameter] public RenderFragment? WaveformsContent { get; set; }
     [Parameter] public RenderFragment? RunsContent { get; set; }
-    [Parameter] public RenderFragment? ReplayContent { get; set; }
+    // ReplayContent deliberately removed — see editor-workbench__view-tabs
+    // in Editor.razor for the Step Replay surface's new home.
     [Parameter] public RenderFragment? FilesContent { get; set; }
     [Parameter] public RenderFragment? OutputContent { get; set; }
 
@@ -147,7 +151,11 @@
         new TabDef(EditorTab.Ports,     IconName.Plugin,           "EDITOR_TAB_PORTS"),
         new TabDef(EditorTab.Waveforms, IconName.GraphUp,          "EDITOR_WAVEFORMS"),
         new TabDef(EditorTab.Runs,      IconName.ClockHistory,     "EDITOR_TAB_RUNS"),
-        new TabDef(EditorTab.Replay,    IconName.PlayCircle,       "EDITOR_TAB_REPLAY"),
+        // EditorTab.Replay deliberately omitted (2026-05-19, follow-up 3):
+        // Step Replay was promoted to a sibling tab of the Monaco editor in
+        // the editor card itself. Enum value stays for back-compat with any
+        // hydrated localStorage values; the case branch below falls through
+        // to the entities default.
         new TabDef(EditorTab.Files,     IconName.Folder2Open,      "EDITOR_FILES"),
         new TabDef(EditorTab.Output,    IconName.TerminalFill,     "EDITOR_TAB_OUTPUT")
     };

@@ -103,7 +103,7 @@ public sealed class MauiFileExportService : IFileExportService
             return candidate;
         }
 #endif
-        return Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        return System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyDocuments);
     }
 
 #if ANDROID

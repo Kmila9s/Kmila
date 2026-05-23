@@ -1,6 +1,6 @@
 # Exemple : décodeur 3 vers 8
 
-Un décodeur prend un petit code binaire et le transforme en sortie **one-hot** : exactement une sortie est à 1, et sa position correspond au code.
+Un décodeur prend un petit code binaire et le transforme en sortie **one-hot** : exactement une sortie est haute, et sa position correspond au code.
 
 ```
   sel  │  y
@@ -14,11 +14,11 @@ Un décodeur prend un petit code binaire et le transforme en sortie **one-hot** 
   111  │  10000000
 ```
 
-On trouve des décodeurs dans tous les systèmes de mémoire — les lignes d'adresse pilotent un décodeur, et la sortie « row match » active exactement une ligne. Chaque fois que tu entends « décodeur d'adresse », c'est ce qu'il y a dessous.
+Les décodeurs vivent dans tout système mémoire — les lignes d'adresse pilotent un décodeur, et la sortie « match de ligne » active exactement une ligne. Quand tu entends « décodeur d'adresse », c'est ça qui est en dessous.
 
 ## Le VHDL
 
-Un décodeur est un cas d'école pour `with/select` :
+Un décodeur est le cas d'école pour `with/select` :
 
 ```vhdl
 with sel select
@@ -33,15 +33,15 @@ with sel select
     "10000000" when others;
 ```
 
-Remarque le `when others` à la fin. `sel` est un `std_logic_vector(2 downto 0)` — 3 bits — il y a donc 2³ = 8 valeurs binaires, mais comme `std_logic` a neuf états, le compilateur a besoin de la clause `others` pour couvrir toutes les combinaisons (elle se synthétisera comme `"111"`).
+Note le `when others` à la fin. `sel` est un `std_logic_vector(2 downto 0)` — 3 bits — donc il y a 2³ = 8 valeurs binaires, mais comme `std_logic` a neuf états, le compilateur a besoin de la clause `others` pour couvrir toute combinaison (elle se synthétise comme `"111"`).
 
 ## Ce que fait l'exemple
 
-L'exemple fait cycler `sel` à travers les huit valeurs 3 bits, 10 µs par valeur. Dans l'onglet Waveforms, tu verras les 8 bits de `y` former un `'1'` marchant — un « chenillard » numérique.
+L'exemple parcourt `sel` sur les huit valeurs 3 bits, 10 µs par valeur. Sur l'onglet Waveforms tu verras les 8 bits de `y` devenir un `'1'` qui se déplace — un « chenillard » numérique.
 
-## À toi
+## À toi de jouer
 
-Une fois que ça tourne :
+Une fois que ça marche :
 
-- Élargis le décodeur à une version 4 vers 16. Tu peux le faire à la main, ou réécrire le corps en `y <= std_logic_vector(shift_left(to_unsigned(1, 16), to_integer(unsigned(sel))));`. Les deux se synthétisent à l'identique — prends celle que tu trouves la plus lisible.
-- Ajoute une entrée `enable`. Quand `enable = '0'`, toutes les sorties sont basses, quel que soit `sel`.
+- Élargis le décodeur en version 4 vers 16. À la main, ou réécris le corps en `y <= std_logic_vector(shift_left(to_unsigned(1, 16), to_integer(unsigned(sel))));`. Les deux se synthétisent à l'identique — choisis ce que tu trouves le plus lisible.
+- Ajoute une entrée `enable`. Quand `enable = '0'`, toutes les sorties sont basses quel que soit `sel`.

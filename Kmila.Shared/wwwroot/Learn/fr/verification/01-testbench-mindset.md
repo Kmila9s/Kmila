@@ -1,10 +1,10 @@
-# L'état d'esprit testbench
+# La mentalité du banc de test
 
-Dans toutes les leçons jusqu'ici, Kmila a été ton testbench — tu as glissé des stimuli dans l'onglet Ports, Run a exécuté le design, et tu as examiné la forme d'onde à l'œil. C'est bien pour apprendre. Ce n'est pas comme ça que fonctionne le design numérique professionnel.
+Dans toutes les leçons précédentes, Kmila a été ton banc de test — tu glissais des stimuli dans l'onglet Ports, Run lançait le design, et tu jugeais le chronogramme à l'œil. Pour apprendre, c'est très bien. Ce n'est pas comme ça que le design numérique professionnel fonctionne.
 
-## Ce qu'est un vrai testbench
+## Ce qu'est un vrai banc de test
 
-Un **testbench** est une autre entité VHDL dont le seul rôle est d'exercer un *design under test* (DUT). Il n'a pas de ports, puisque rien ne le pilote ; il déclare le DUT comme composant, câble ses propres signaux internes sur les ports du DUT, puis utilise un **process** pour parcourir des séquences de stimuli dans le temps.
+Un **banc de test** est une autre entity VHDL dont l'unique rôle est d'exercer un *design under test* (DUT). Il n'a pas de ports, car rien ne le pilote ; il déclare le DUT comme un composant, câble ses propres signaux internes vers les ports du DUT, puis utilise un **process** pour dérouler des séquences de stimulus dans le temps.
 
 Squelette :
 
@@ -32,27 +32,27 @@ begin
         reset <= '0';
         wait for 200 ns;
         assert q = "1010"
-            report "Counter should be 10 at 200 ns, got " & to_string(q)
+            report "Compteur devrait être 10 à 200 ns, obtenu " & to_string(q)
             severity error;
         wait;
     end process;
 end architecture sim;
 ```
 
-Trois nouvelles idées :
+Trois idées nouvelles :
 
-1. **`wait`** — le temps ne passe que lorsqu'un process le dit.
-2. **`assert … report … severity`** — la vérification automatique. Transforme une forme d'onde de 1000 lignes en « pass » ou « fail ».
-3. **Entité sans ports** — les testbenches sont autonomes ; le simulateur les instancie directement.
+1. **`wait`** — le temps n'avance que quand un process le dit.
+2. **`assert … report … severity`** — l'auto-vérification. Transforme un chronogramme de 1000 lignes en « pass » ou « fail ».
+3. **Entity sans ports** — les bancs de test sont autonomes ; le simulateur les instancie directement.
 
 ## Pourquoi ça compte
 
-- **Régression** : un testbench que tu as écrit hier tourne encore aujourd'hui. Une forme d'onde que tu as regardée hier est partie.
-- **Couverture** : tu peux piloter des patterns de stimuli qu'une session interactive n'atteint jamais (entrées aléatoires, cas limites, fréquences de coin).
-- **Automatisation** : un système de CI lance ton testbench à chaque commit. Les formes d'onde ne rentrent pas dans la CI.
+- **Régression** : un banc de test écrit hier tourne encore aujourd'hui. Un chronogramme que tu fixais hier est perdu.
+- **Couverture** : tu peux pousser des motifs de stimulus qu'une session interactive n'atteindra jamais (entrées aléatoires, cas limites, fréquences extrêmes).
+- **Automatisation** : un système de CI lance ton banc à chaque commit. Les chronogrammes ne rentrent pas en CI.
 
 ## Limites actuelles de Kmila
 
-Le simulateur Kmila exécute les testbenches sans problème si tu les écris comme des entités ordinaires — la seule chose qui manque aujourd'hui est l'extraction automatique pass/fail des instructions `assert` vers le log Output. C'est dans la roadmap.
+Le simulateur Kmila exécute très bien les bancs de test si tu les écris comme des entities ordinaires — la seule chose qui manque aujourd'hui, c'est l'extraction automatique de pass/fail depuis les `assert` vers le journal de sortie. C'est dans la roadmap.
 
-*D'autres leçons à venir — ce module est en cours de rédaction active.*
+*D'autres leçons à venir — ce module est en cours d'écriture.*

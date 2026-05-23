@@ -1,8 +1,8 @@
 # Nebenläufige Zuweisungen: `when/else` und `with/select`
 
-Kombinatorische Logik wird in VHDL mit nebenläufigen Anweisungen geschrieben — jede Zeile außerhalb eines Prozesses beschreibt ein Stück fest verdrahteter Hardware. Für dieselbe Aufgabe gibt es zwei Syntaxvarianten: die **konditionale** und die **selektive** Zuweisung.
+Kombinatorische Logik in VHDL wird mit nebenläufigen Anweisungen geschrieben — jede Zeile außerhalb eines Prozesses beschreibt ein Stück fest verdrahtete Hardware. Zwei Syntax-Varianten existieren für denselben Job: **bedingte** und **selektive** Zuweisung.
 
-## `when/else` — konditional
+## `when/else` — bedingt
 
 Gut, wenn du eine priorisierte Liste von Bedingungen hast oder wenn jeder Zweig ein anderes Signal prüft:
 
@@ -13,11 +13,11 @@ y <= '0' when reset = '1' else
      'Z';
 ```
 
-Die erste zutreffende Bedingung gewinnt. Die Reihenfolge zählt — es kompiliert zu einem **Prioritäts-Mux**: Die oberste Bedingung hat den direktesten Pfad zu `y`.
+Die erste passende Bedingung gewinnt. Die Reihenfolge zählt — es compiliert zu einem **Prioritäts-MUX**: die oberste Bedingung hat den direktesten Pfad zu `y`.
 
 ## `with/select` — selektiv
 
-Gut, wenn du auf einen einzelnen Ausdruck umschaltest (so wie es eine Software-`switch`-Anweisung tut):
+Gut, wenn du über einen einzelnen Ausdruck schaltest (so wie ein Software-`switch`):
 
 ```vhdl
 with mode select
@@ -28,18 +28,18 @@ with mode select
     'Z' when others;
 ```
 
-Alle Fälle werden gegen dasselbe Signal (`mode`) verglichen, und `when others` ist zwingend, um jedes mögliche Muster abzudecken. Dieser Stil kompiliert zu einem **balancierten Mux** — kein Zweig ist bevorzugt.
+Alle Fälle vergleichen gegen dasselbe Signal (`mode`), und `when others` ist Pflicht, um jedes mögliche Muster abzudecken. Dieser Stil compiliert zu einem **balancierten MUX** — kein Zweig wird bevorzugt.
 
-## Welche solltest du wählen?
+## Welche wählen?
 
-- **Gleiches Signal, viele Muster:** `with/select` liest sich wie eine Wahrheitstabelle. Nimm es.
-- **Verschiedene Signale, Prioritätslogik:** `when/else`. Passt natürlich.
-- **Synthese-Ergebnis:** Beide erzeugen auf einem modernen FPGA etwa die gleichen Gatter — die klarere Form im Quelltext zu wählen ist fast immer die richtige Entscheidung.
+- **Gleiches Signal, viele Muster:** `with/select` liest sich wie eine Wahrheitstabelle. Nimm das.
+- **Verschiedene Signale, Prioritätslogik:** `when/else`. Natürlich.
+- **Syntheseausgabe:** beide produzieren auf modernen FPGAs etwa dieselben Gatter — die im Quellcode klarere Form ist fast immer die richtige Wahl.
 
 ## Eine kleine Falle
 
-Beide Formen verlangen, dass `y` in **jedem** Szenario zugewiesen wird. Wenn du das abschließende `else` bei `when/else` oder das `when others` bei `with/select` vergisst, warnt dich der Compiler — und der Synthesizer kann ein Latch schlussfolgern, um den letzten Wert zu "merken", was fast nie gewollt ist. Das ist dieselbe Latch-Falle, die du in der Fix-it-Übung des sequentiellen Moduls wiedersehen wirst.
+Beide Formen verlangen, dass `y` in **jedem** Szenario zugewiesen wird. Vergisst du das finale `else` bei `when/else` oder lässt `when others` bei `with/select` weg, warnt der Compiler — und der Synthesizer kann einen Latch ableiten, um den letzten Wert zu „merken", was fast nie gewünscht ist. Es ist dieselbe Latch-Falle, die du in der Fix-it-Übung des sequentiellen Moduls wiedersiehst.
 
-## Wo das als Nächstes auftaucht
+## Wo das als nächstes auftaucht
 
-Du wirst `with/select` gleich im 3-zu-8-Decoder-Beispiel nach dieser Lektion verwenden und `when/else` überall in der späteren Ampel-FSM. Beide sind VHDL-Brot-und-Butter.
+Du nutzt `with/select` direkt im 3-zu-8-Decoder-Sample nach dieser Lektion und `when/else` überall im Ampel-FSM später. Beides ist VHDL-Brot-und-Butter.

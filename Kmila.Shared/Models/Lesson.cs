@@ -135,6 +135,29 @@ public class Lesson
     /// </summary>
     [JsonPropertyName("inlinePlayer")]
     public bool InlinePlayer { get; set; } = false;
+
+    /// <summary>
+    /// When <c>true</c>, the lesson view tries to load a sidecar
+    /// <c>{lessonId}.gates.json</c> and renders an inline
+    /// <c>GateAnimator</c> — an SVG circuit walked by the same tape
+    /// transport as the ExecutionPlayer, with wires pulsing in time
+    /// with each step's signal values. Independent of
+    /// <see cref="InlinePlayer"/>: a lesson may have either, both, or
+    /// neither.
+    /// </summary>
+    [JsonPropertyName("gateAnimation")]
+    public bool GateAnimation { get; set; } = false;
+
+    /// <summary>
+    /// When <c>true</c>, the lesson view tries to load a sidecar
+    /// <c>{lessonId}.fsm.json</c> and renders an inline
+    /// <c>FsmAnimator</c> — an SVG state machine with state circles and
+    /// transition arrows, walked by the same tape transport. Independent
+    /// of <see cref="InlinePlayer"/> and <see cref="GateAnimation"/>:
+    /// a lesson may carry any combination.
+    /// </summary>
+    [JsonPropertyName("fsmAnimation")]
+    public bool FsmAnimation { get; set; } = false;
 }
 
 /// <summary>

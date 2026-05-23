@@ -252,4 +252,23 @@ public class ConceptCatalog
         var first = values.Values.FirstOrDefault(x => !string.IsNullOrEmpty(x));
         return first ?? fallback;
     }
+
+    /// <summary>
+    /// Same as <see cref="Localize"/> but prepends a ⚠ marker when the
+    /// requested language wasn't available and we fell back to English
+    /// (or another language). Matches the project-wide
+    /// translation-pending convention so untranslated notes are visibly
+    /// flagged in the UI instead of silently passing through.
+    /// </summary>
+    public static string LocalizeWithFallbackWarning(IDictionary<string, string> values, string lang, string fallback = "")
+    {
+        if (values == null || values.Count == 0) return fallback;
+        if (values.TryGetValue(lang, out var v) && !string.IsNullOrEmpty(v)) return v;
+        // Fall back to English (or first non-empty) and warn.
+        if (values.TryGetValue("en", out var en) && !string.IsNullOrEmpty(en))
+            return lang == "en" ? en : "⚠ " + en;
+        var first = values.Values.FirstOrDefault(x => !string.IsNullOrEmpty(x));
+        if (string.IsNullOrEmpty(first)) return fallback;
+        return lang == "en" ? first : "⚠ " + first;
+    }
 }

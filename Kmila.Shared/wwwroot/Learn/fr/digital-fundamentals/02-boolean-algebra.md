@@ -1,16 +1,16 @@
 # Algèbre de Boole et les lois qui comptent
 
-L'algèbre de Boole est la mathématique des valeurs vrai/faux et des opérations que tu peux effectuer dessus. Tout circuit numérique — d'une seule porte à un CPU d'un million de transistors — est en fin de compte une expression booléenne.
+L'algèbre de Boole est la mathématique des valeurs vrai/faux et des opérations qu'on peut faire dessus. Tout circuit numérique — d'une seule porte à un CPU à un million de transistors — est en dernière instance une expression booléenne.
 
-La bonne nouvelle : tu n'as qu'à retenir une poignée d'identités. Avec celles-ci, tu peux simplifier presque n'importe quelle expression à la main.
+La bonne nouvelle : tu n'as qu'à mémoriser une poignée d'identités. Avec ça tu peux simplifier presque n'importe quelle expression à la main.
 
 ## Les trois opérations de base
 
-| Op | Symbole (math)     | Symbole (VHDL) | Se lit |
-|----|--------------------|----------------|--------|
-| AND | · ou juxtaposition | `and`          | « A et B » |
-| OR  | +                  | `or`           | « A ou B » |
-| NOT | barre (`Ā`)        | `not`          | « non A »  |
+| Op  | Symbole (math) | Symbole (VHDL) | Se lit |
+|-----|----------------|----------------|--------|
+| AND | · ou juxtaposition | `and` | « A et B » |
+| OR  | +                  | `or`  | « A ou B » |
+| NOT | barre (`Ā`)        | `not` | « non A »  |
 
 Tables de vérité des opérateurs binaires :
 
@@ -25,28 +25,28 @@ Tables de vérité des opérateurs binaires :
 
 ## Les identités que tu utiliseras vraiment
 
-**Commutativité** — l'ordre n'a pas d'importance :
+**Commutativité** — l'ordre est sans importance :
 
 ```
 A · B = B · A
 A + B = B + A
 ```
 
-**Associativité** — le groupement n'a pas d'importance :
+**Associativité** — le groupement est sans importance :
 
 ```
 (A · B) · C = A · (B · C)
 (A + B) + C = A + (B + C)
 ```
 
-**Distributivité** — celle qui paraît bizarre dans le cas du OR :
+**Distributivité** — celle du cas OR a l'air étrange :
 
 ```
 A · (B + C) = A·B + A·C
 A + (B · C) = (A + B) · (A + C)   ← oui, vraiment
 ```
 
-**Identité et absorption** :
+**Identité et dominance** :
 
 ```
 A + 0 = A      A · 1 = A
@@ -59,18 +59,18 @@ A + 1 = 1      A · 0 = 0
 A + Ā = 1      A · Ā = 0
 ```
 
-**Lois de De Morgan** — les deux réécritures les plus utiles du design numérique :
+**Lois de De Morgan** — les deux réécritures les plus utiles en design numérique :
 
 ```
-not(A · B) = Ā + B̄
-not(A + B) = Ā · B̄
+non(A · B) = Ā + B̄
+non(A + B) = Ā · B̄
 ```
 
-De Morgan te laisse transformer un NAND en « OR de compléments », ou un NOR en « AND de compléments », ou annuler de longues barres NOT. Toute toolchain FPGA les utilise en permanence pendant l'optimisation.
+De Morgan te laisse transformer un NAND en « OR des compléments », ou un NOR en « AND des compléments », ou annuler de longues barres NOT. Toute toolchain FPGA les utilise constamment lors de l'optimisation.
 
-## Une simplification détaillée
+## Une simplification déroulée
 
-Commence par :
+On part de :
 
 ```
 Y = A·B + A·B̄·C + A·B̄·C̄
@@ -97,10 +97,10 @@ Y = A · (B + B̄ · 1)
   = A
 ```
 
-Quatre termes avec cinq opérations AND-OR s'effondrent en un fil. C'est le genre de travail que le synthétiseur fait pour toi automatiquement — mais le comprendre te rend plus affûté pour lire la netlist de quelqu'un d'autre.
+Quatre termes avec cinq opérations AND-OR s'effondrent en un fil. C'est le genre de travail que le synthétiseur fait pour toi automatiquement — mais le comprendre te rend plus aiguisé pour lire la netlist d'un collègue.
 
 ## À retenir
 
-- AND / OR / NOT sont tout ce dont tu as besoin. NAND et NOR sont AND/OR avec un NOT collé dessus.
+- AND / OR / NOT, c'est tout ce qu'il te faut. NAND et NOR, c'est AND/OR avec un NOT collé dessus.
 - De Morgan est le couteau suisse — apprends à le reconnaître dans les deux sens.
-- Quand une sous-expression se simplifie à `1` via le complément, tout le produit se simplifie.
+- Quand une sous-expression vaut `1` par complément, le produit entier se simplifie.

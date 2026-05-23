@@ -1497,14 +1497,18 @@
 .settings-page__grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-    gap: var(--space-4);
+    /* Wider gutter so each card reads as its own object rather than a
+       tile in a continuous wall. Backlog #6: "no clear separation". */
+    gap: var(--space-5);
 }
 
 .settings-card {
     background-color: var(--surface-2);
-    border: 1px solid var(--border-subtle);
+    /* Stronger boundary so cards visually separate from the page bg
+       and from each other. Backlog #6. */
+    border: 1px solid var(--border-default);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-1);
+    box-shadow: var(--shadow-2);
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -1526,15 +1530,14 @@
 
 .settings-card__head {
     display: flex;
-    align-items: center;          /* center-align icon with title block on a
-                                     single-row head — looks tighter and stops
-                                     the icon hovering above an already-short
-                                     title + sub stack. */
-    gap: var(--space-2);          /* was --space-3; the icon-to-text gap was
-                                     reading as part of the padding budget. */
-    padding: var(--space-2) var(--space-3);  /* was --space-3 var(--space-4) */
-    border-bottom: 1px solid var(--border-subtle);
-    background-color: var(--surface-1);
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-3) var(--space-2);
+    /* Backlog #6 retry: head no longer reads as a banner-on-card. Dropped
+       the separate background-color and the border-bottom — head and body
+       now share the card's surface so each card reads as one cohesive
+       block rather than "banner + sub-card". Outer card boundary (border,
+       shadow, gap) carries the separation between cards. */
 }
 
 .settings-card__head h2 {
@@ -1559,10 +1562,12 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 36px;
-    border-radius: var(--radius-md);
-    font-size: var(--fs-md);
+    /* Tightened from 36px so the icon stops dominating the head's
+       vertical budget. Backlog #6 retry. */
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    font-size: var(--fs-sm);
     flex-shrink: 0;
 }
 
@@ -9775,7 +9780,7 @@
     padding: 0 .4rem;
     border-radius: 999px;
     background: var(--bg-subtle, rgba(0,0,0,.05));
-    font-size: .75rem;
+    font-size: var(--fs-xs);
     color: var(--text-muted, #64748b);
 }
 
@@ -9794,7 +9799,7 @@
     color: var(--text-muted, #64748b);
     padding: .15rem .5rem;
     border-radius: 6px;
-    font-size: .8rem;
+    font-size: var(--fs-sm);
     cursor: pointer;
 }
 
@@ -9816,7 +9821,7 @@
     display: flex;
     flex-direction: column;
     gap: .15rem;
-    font-size: .75rem;
+    font-size: var(--fs-xs);
 }
 
 .schematic-diagnostics__item {
@@ -9879,7 +9884,7 @@
     border-radius: 999px;
     background: #6366f1;
     color: #fff;
-    font-size: .65rem;
+    font-size: var(--fs-xs);
     font-weight: 600;
     line-height: 1.4;
     min-width: 1.2rem;
@@ -9909,7 +9914,7 @@
     border-radius: 8px;
     box-shadow: 0 6px 20px rgba(0,0,0,.08);
     padding: .5rem;
-    font-size: .8rem;
+    font-size: var(--fs-sm);
     z-index: 5;
     display: flex;
     flex-direction: column;
@@ -9928,7 +9933,7 @@
     margin-left: auto;
     color: var(--text-muted, #64748b);
     font-weight: 400;
-    font-size: .7rem;
+    font-size: var(--fs-xs);
 }
 
 .schematic-basket__counts {
@@ -10001,7 +10006,7 @@
     border-radius: 8px;
     box-shadow: 0 6px 20px rgba(0,0,0,.08);
     padding: .5rem;
-    font-size: .8rem;
+    font-size: var(--fs-sm);
     z-index: 5;
 }
 
@@ -10044,7 +10049,7 @@
 }
 
 .schematic-info__doc-summary {
-    font-size: .82rem;
+    font-size: var(--fs-sm);
     font-weight: 600;
     color: var(--text-strong, #1e293b);
     margin: 0;
@@ -10052,7 +10057,7 @@
 }
 
 .schematic-info__doc-body {
-    font-size: .75rem;
+    font-size: var(--fs-xs);
     color: var(--text-muted, #475569);
     margin: 0;
     line-height: 1.45;
@@ -10060,7 +10065,7 @@
 
 .schematic-info__truth {
     font-family: ui-monospace, Menlo, monospace;
-    font-size: .72rem;
+    font-size: var(--fs-xs);
     border-collapse: collapse;
     margin: .15rem 0;
     width: auto;
@@ -10081,7 +10086,7 @@
 
 .schematic-info__vhdl {
     font-family: ui-monospace, Menlo, monospace;
-    font-size: .72rem;
+    font-size: var(--fs-xs);
     background: var(--bg-subtle, rgba(0,0,0,.04));
     padding: .35rem .5rem;
     border-radius: 4px;
@@ -10092,7 +10097,7 @@
 }
 
 .schematic-info__note {
-    font-size: .7rem;
+    font-size: var(--fs-xs);
     color: var(--text-muted, #64748b);
     margin: .15rem 0 0 0;
     display: flex;
@@ -10170,7 +10175,7 @@
     border-left: 3px solid var(--kmila-accent, #4f8cff);
     border-radius: var(--radius-sm);
     padding: var(--space-2) var(--space-3);
-    font-size: 0.92rem;
+    font-size: var(--fs-base);
     line-height: 1.4;
     min-height: 4.5em;
 }
@@ -10191,7 +10196,7 @@
     padding: var(--space-2) var(--space-3);
     background-color: var(--surface-3, var(--surface-2));
     font-weight: 600;
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
     color: var(--text-muted, #64748b);
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -10201,7 +10206,7 @@
     width: 100%;
     border-collapse: collapse;
     font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-    font-size: 0.9rem;
+    font-size: var(--fs-base);
 }
 
 .kmila-exec-signals__table th,
@@ -10256,7 +10261,7 @@
     align-items: center;
     gap: var(--space-2);
     color: var(--text-muted, #64748b);
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
 }
 
 .kmila-exec-tape__progress-track {
@@ -10278,7 +10283,7 @@
     display: inline-flex;
     align-items: center;
     gap: .25rem;
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
     color: var(--text-muted, #64748b);
 }
 
@@ -10289,6 +10294,600 @@
     border-radius: var(--radius-sm);
     padding: .15rem .4rem;
     font: inherit;
+}
+
+/* ── GateAnimator ──────────────────────────────────────────────────────────
+   Schematic-style sibling of ExecutionPlayer. SVG circuit on the left, the
+   shared signal table + note pane on the right. Reuses .kmila-exec-tape +
+   .kmila-exec-signals + .kmila-exec-player__note + .kmila-exec-player__side
+   so the two players visually rhyme inside the same lesson page.
+
+   Theme tokens follow the Concepts player: --kmila-accent for "hot" /
+   logical-1 propagation, --surface-2 for the cold-wire base. Pulse
+   animation is honoured only when prefers-reduced-motion is unset.       */
+
+.kmila-gate-player {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    gap: var(--space-3);
+    margin: var(--space-3) 0;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background-color: var(--surface-1);
+    padding: var(--space-3);
+}
+
+@media (max-width: 880px) {
+    .kmila-gate-player { grid-template-columns: 1fr; }
+}
+
+.kmila-gate-player__stage {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-width: 0;
+}
+
+.kmila-gate-canvas {
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2);
+    overflow: hidden;
+}
+
+.kmila-gate-canvas svg {
+    width: 100%;
+    height: auto;
+    display: block;
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+
+/* Wires: thin lines that fade between "carrying 0" (cold) and "carrying 1"
+   (hot). Each unique source-node id gets its own HSL hue (mirrors the
+   SchematicViewer port-colour scheme), applied via an inline style on the
+   path element. The cold state ignores the hue and renders muted so the
+   "where the 1 is travelling" reading is unambiguous. */
+.kmila-gate-wire {
+    stroke-width: 2.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: stroke 220ms ease-out, stroke-width 220ms ease-out;
+}
+.kmila-gate-wire--cold {
+    stroke: color-mix(in srgb, var(--text-muted, #64748b) 55%, transparent);
+}
+.kmila-gate-wire--hot {
+    stroke-width: 3.4;
+}
+
+/* Gate bodies + terminals share a foreground colour so light/dark themes
+   pick up automatically. Active gates pulse the stroke to draw the eye. */
+.kmila-gate-body,
+.kmila-gate-accent,
+.kmila-gate-terminal {
+    fill: var(--surface-1);
+    stroke: var(--text-muted, #64748b);
+    stroke-width: 1.6;
+    transition: stroke 200ms ease-out, fill 200ms ease-out;
+}
+.kmila-gate-accent { fill: none; }
+.kmila-gate-bubble {
+    fill: var(--surface-1);
+    stroke: var(--text-muted, #64748b);
+    stroke-width: 1.4;
+}
+
+.kmila-gate-terminal--input  { fill: color-mix(in srgb, var(--kmila-accent, #4f8cff) 14%, var(--surface-1)); }
+.kmila-gate-terminal--output { fill: color-mix(in srgb, var(--success, #10b981) 14%, var(--surface-1)); }
+
+.kmila-gate-node--active .kmila-gate-body,
+.kmila-gate-node--active .kmila-gate-accent {
+    stroke: var(--kmila-accent, #4f8cff);
+    stroke-width: 2.4;
+    filter: drop-shadow(0 0 3px color-mix(in srgb, var(--kmila-accent, #4f8cff) 60%, transparent));
+    animation: kmila-gate-pulse 800ms ease-out;
+}
+
+@keyframes kmila-gate-pulse {
+    0%   { stroke-width: 3.6; }
+    100% { stroke-width: 2.4; }
+}
+
+.kmila-gate-label {
+    font-size: 13px;
+    font-weight: 600;
+    fill: var(--text-muted, #64748b);
+}
+
+/* Small in-body schematic-style pin hints (D, CLK, R, Q, EN) on DFF /
+   latch / tristate primitives. Lighter than the gate label so they sit
+   visibly inside the body without competing with the gate's identity. */
+.kmila-gate-pin-label {
+    font-size: 9.5px;
+    font-weight: 600;
+    fill: var(--text-muted, #64748b);
+    opacity: 0.7;
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+
+/* Junction dots — small filled circles at wire branch points. Auto-detected
+   for any from-spec shared by 2+ wires, plus any manual entries in
+   Doc.Junctions. Default colour matches the cold-wire muted token so the
+   dot reads even on a 0-carrying trunk; the inline style swaps in the
+   source's hue when that trunk is hot. */
+.kmila-gate-junction {
+    fill: color-mix(in srgb, var(--text-muted, #64748b) 60%, transparent);
+    stroke: var(--surface-1);
+    stroke-width: 1;
+    transition: fill 220ms ease-out, stroke 220ms ease-out;
+}
+
+/* Timing strip — rendered above the main canvas when Doc.ClockSignal is
+   set. Thin clock-waveform diagram with a vertical cursor at the current
+   step; anchors "this is the rising edge" pedagogically for sequential
+   lessons. */
+.kmila-gate-timing {
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: var(--space-1) var(--space-2);
+    margin-bottom: var(--space-2);
+    overflow-x: auto;
+}
+.kmila-gate-timing__svg {
+    height: 36px;
+    width: 100%;
+    min-width: 320px;
+}
+.kmila-gate-timing__label {
+    font-size: 11px;
+    font-weight: 600;
+    fill: var(--text-muted, #64748b);
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+.kmila-gate-timing__wave {
+    stroke: var(--kmila-accent, #4f8cff);
+    stroke-width: 2;
+    stroke-linejoin: miter;
+    fill: none;
+}
+.kmila-gate-timing__cursor {
+    stroke: color-mix(in srgb, var(--success, #10b981) 70%, transparent);
+    stroke-width: 1.4;
+    stroke-dasharray: 2 2;
+}
+
+/* Keyboard-shortcut hint chip in the tape transport. Hidden on small
+   screens (mobile users don't have physical keyboards), kept terse so it
+   doesn't fight for attention with the play / step buttons. */
+.kmila-exec-tape__hint {
+    margin-left: var(--space-2);
+    font-size: var(--fs-xs);
+    color: var(--text-muted, #64748b);
+    opacity: 0.7;
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    white-space: nowrap;
+}
+@media (max-width: 720px) {
+    .kmila-exec-tape__hint { display: none; }
+}
+
+/* Mobile: tall diagrams (logic-gates is 720×760) eat the whole viewport on
+   a phone. Cap the canvas at 80vh and let the user scroll vertically; also
+   allow horizontal scroll for super-wide layouts. The viewBox keeps the
+   diagram readable, just no longer requires a full screen of vertical
+   space before the side panel becomes visible. */
+.kmila-gate-canvas {
+    max-height: 80vh;
+    overflow: auto;
+}
+
+/* ── FsmAnimator ───────────────────────────────────────────────────────────
+   Third archetype, sibling to GateAnimator. State circles + transition
+   arrows; the host frame (.kmila-gate-player + .kmila-gate-canvas + the
+   tape + signal table) is shared, so only the SVG primitives need their
+   own classes here. */
+
+.kmila-fsm-state__body {
+    fill: var(--surface-1);
+    stroke: var(--text-muted, #64748b);
+    stroke-width: 1.8;
+    transition: stroke 200ms ease-out, fill 200ms ease-out;
+}
+.kmila-fsm-state__label {
+    font-size: 13px;
+    font-weight: 600;
+    fill: var(--text);
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+.kmila-fsm-state__moore {
+    font-size: 10px;
+    fill: var(--text-muted, #64748b);
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+.kmila-fsm-state--active .kmila-fsm-state__body {
+    stroke: var(--kmila-accent, #4f8cff);
+    stroke-width: 3;
+    fill: color-mix(in srgb, var(--kmila-accent, #4f8cff) 14%, var(--surface-1));
+    animation: kmila-gate-pulse 800ms ease-out;
+}
+
+.kmila-fsm-transition {
+    stroke: color-mix(in srgb, var(--text-muted, #64748b) 55%, transparent);
+    stroke-width: 1.6;
+    fill: none;
+    transition: stroke 200ms ease-out, stroke-width 200ms ease-out;
+}
+.kmila-fsm-transition--active {
+    stroke: var(--kmila-accent, #4f8cff);
+    stroke-width: 2.4;
+}
+.kmila-fsm-arrow-head {
+    fill: color-mix(in srgb, var(--text-muted, #64748b) 60%, transparent);
+}
+.kmila-fsm-arrow-head--active {
+    fill: var(--kmila-accent, #4f8cff);
+}
+.kmila-fsm-transition__label {
+    font-size: 11px;
+    font-weight: 500;
+    fill: var(--text-muted, #64748b);
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+.kmila-fsm-transition__label--active {
+    fill: var(--kmila-accent, #4f8cff);
+    font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .kmila-fsm-state--active .kmila-fsm-state__body { animation: none; }
+}
+
+/* ── Step replay panel ─────────────────────────────────────────────────────
+   Phase A added the panel itself (kmila-replay / kmila-replay-empty); Phase B
+   added the live branch (kmila-replay--live) with pause/resume/step controls
+   above the inner ExecutionPlayer. Styles below cover both branches with the
+   same visual language — header chip + control row + the player below. */
+
+.kmila-replay,
+.kmila-replay-empty {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3);
+}
+
+.kmila-replay__header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--fs-base);
+    color: var(--text-muted, #64748b);
+}
+
+.kmila-replay__title {
+    font-weight: 600;
+    color: var(--text);
+}
+
+.kmila-replay__meta {
+    margin-left: auto;
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: var(--fs-sm);
+}
+
+.kmila-replay--live .kmila-replay__header {
+    color: color-mix(in srgb, var(--success, #10b981) 70%, var(--text-muted, #64748b));
+}
+
+.kmila-replay__live-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background-color: color-mix(in srgb, var(--success, #10b981) 8%, var(--surface-2));
+    border: 1px solid color-mix(in srgb, var(--success, #10b981) 30%, var(--border-subtle));
+    border-radius: var(--radius-sm);
+}
+
+.kmila-replay__live-hint {
+    margin-left: auto;
+    font-size: var(--fs-sm);
+    color: var(--text-muted, #64748b);
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+
+.kmila-replay-empty {
+    text-align: center;
+    color: var(--text-muted, #64748b);
+}
+.kmila-replay-empty__icon {
+    font-size: var(--fs-2xl);
+    opacity: 0.6;
+}
+.kmila-replay-empty h3 {
+    margin: 0;
+    font-size: var(--fs-base);
+    color: var(--text);
+}
+.kmila-replay-empty p {
+    margin: 0;
+    font-size: var(--fs-base);
+}
+
+/* Phase C — detail-level selector chip in the post-hoc header. */
+.kmila-replay__detail {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    margin-left: var(--space-2);
+    font-size: var(--fs-sm);
+    color: var(--text-muted, #64748b);
+}
+.kmila-replay__detail select {
+    background-color: var(--surface-2);
+    color: inherit;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: .15rem .4rem;
+    font: inherit;
+}
+
+/* Phase E — line-breakpoint editor inside the live panel. */
+.kmila-replay__breakpoints {
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface-2);
+    padding: var(--space-2) var(--space-3);
+}
+.kmila-replay__breakpoints summary {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    cursor: pointer;
+    font-size: var(--fs-base);
+    color: var(--text);
+    list-style: none;
+}
+.kmila-replay__breakpoints summary::-webkit-details-marker { display: none; }
+.kmila-replay__bp-count {
+    margin-left: auto;
+    font-size: var(--fs-xs);
+    color: var(--text-muted, #64748b);
+    padding: 0 .5rem;
+    background-color: var(--surface-3, var(--surface-2));
+    border-radius: 999px;
+}
+.kmila-replay__bp-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: var(--space-2) 0;
+}
+.kmila-replay__bp-input {
+    flex: 1;
+    min-width: 0;
+    padding: .3rem .6rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface-1);
+    color: var(--text);
+    font: inherit;
+}
+.kmila-replay__bp-empty {
+    margin: 0;
+    font-size: var(--fs-sm);
+    color: var(--text-muted, #64748b);
+    font-style: italic;
+}
+.kmila-replay__bp-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+}
+.kmila-replay__bp-list li {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: .3rem .6rem;
+    background-color: var(--surface-1);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: var(--fs-sm);
+}
+.kmila-replay__bp-list li span { flex: 1; }
+
+/* ── Phase D: signal-table filter UI ──────────────────────────────────────
+   Surfaces only on big designs (≥12 signals with ≥2 distinct port types).
+   Search box on top, port-type chips + group-by checkbox underneath.       */
+
+.kmila-exec-signals__filter {
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--border-subtle);
+    background-color: color-mix(in srgb, var(--surface-2) 50%, var(--surface-1));
+}
+
+.kmila-exec-signals__search {
+    width: 100%;
+    padding: .25rem .5rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface-1);
+    color: var(--text);
+    font-size: var(--fs-sm);
+}
+
+.kmila-exec-signals__chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .25rem;
+}
+
+.kmila-exec-signals__chip {
+    border: 1px solid var(--border-subtle);
+    background-color: var(--surface-1);
+    color: var(--text-muted, #64748b);
+    border-radius: 999px;
+    padding: .1rem .55rem;
+    font-size: var(--fs-xs);
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    cursor: pointer;
+    transition: background-color 160ms ease-out, color 160ms ease-out, border-color 160ms ease-out;
+}
+.kmila-exec-signals__chip:hover { color: var(--text); }
+.kmila-exec-signals__chip--active {
+    background-color: color-mix(in srgb, var(--kmila-accent, #4f8cff) 18%, var(--surface-1));
+    border-color: var(--kmila-accent, #4f8cff);
+    color: var(--kmila-accent, #4f8cff);
+}
+
+.kmila-exec-signals__groupby {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    font-size: var(--fs-xs);
+    color: var(--text-muted, #64748b);
+    cursor: pointer;
+    user-select: none;
+}
+
+/* ── Monaco gutter breakpoint glyph (Phase B+ follow-up) ──────────────────
+   Painted by kmilaSetMonacoBreakpoints via Monaco's glyphMarginClassName.
+   Sits in the editor's glyph margin to the LEFT of the line number.
+
+   Why a pseudo-element instead of a background gradient: Monaco sizes the
+   overlay div to the line height (~18–22 px tall) but lets the glyph
+   className control the visible content. A radial-gradient with no fixed
+   height stretches into an ellipse on a tall line. A centered ::after
+   pseudo with explicit dimensions renders a real circle every time. */
+.kmila-bp-glyph {
+    position: relative;
+    cursor: pointer;
+}
+.kmila-bp-glyph::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--danger, #ef4444);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--danger, #ef4444) 45%, transparent);
+}
+.kmila-bp-glyph:hover::after {
+    background: color-mix(in srgb, var(--danger, #ef4444) 80%, white);
+}
+
+/* ── Editor card: Code / Step Replay tab strip (Phase B+ follow-up 3) ─────
+   Promoted out of the bottom dock so the debug surface sits right next to
+   the source it's stepping through. Uses the same .kmila-btn-tab family
+   the dock uses so the visual language stays consistent. */
+.editor-workbench__view-tabs {
+    display: flex;
+    gap: var(--space-2, 0.5rem);
+    padding: var(--space-2, 0.5rem) var(--space-3, 0.75rem) 0;
+    border-bottom: 1px solid var(--border-subtle);
+    background-color: var(--surface-2);
+}
+.editor-workbench__view-tabs .kmila-btn-tab {
+    position: relative;
+}
+.editor-workbench__view-tabs .kmila-btn-tab[disabled] {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+.editor-workbench__view-tab-badge {
+    margin-left: .35rem;
+    font-size: var(--fs-xs);
+    line-height: 1;
+}
+.editor-workbench__view-tab-badge--live {
+    color: var(--success, #10b981);
+    animation: kmila-view-tab-pulse 1200ms ease-in-out infinite;
+}
+.editor-workbench__view-tab-badge--paused {
+    color: var(--warning, #f59e0b);
+}
+@keyframes kmila-view-tab-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.45; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .editor-workbench__view-tab-badge--live { animation: none; }
+}
+
+.editor-workbench__view {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+.editor-workbench__view--code {
+    /* Inherits the existing workbench-header + body-panes layout. The
+       inner children already have their own flex sizing, so this wrapper
+       just needs to keep the flex chain going. */
+}
+.editor-workbench__view--replay {
+    overflow: auto;
+}
+
+/* Subgroup header row when "Group by type" is on. */
+.kmila-exec-signals__group-row th {
+    padding: .3rem var(--space-3);
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted, #64748b);
+    background-color: var(--surface-2);
+    border-top: 1px solid var(--border-subtle);
+}
+
+.kmila-gate-chip rect {
+    fill: var(--surface-3, var(--surface-2));
+    stroke: var(--border-subtle);
+    stroke-width: 1;
+    transition: fill 220ms ease-out, stroke 220ms ease-out;
+}
+.kmila-gate-chip text {
+    font-size: 13px;
+    font-weight: 700;
+    fill: var(--text-muted, #64748b);
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    transition: fill 220ms ease-out;
+}
+.kmila-gate-chip--hot rect {
+    fill: color-mix(in srgb, var(--kmila-accent, #4f8cff) 22%, var(--surface-1));
+    stroke: var(--kmila-accent, #4f8cff);
+}
+.kmila-gate-chip--hot text { fill: var(--kmila-accent, #4f8cff); }
+
+.kmila-gate-node--changed .kmila-gate-chip rect {
+    animation: kmila-gate-chip-pulse 700ms ease-out;
+}
+
+@keyframes kmila-gate-chip-pulse {
+    from { stroke-width: 2.4; }
+    to   { stroke-width: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .kmila-gate-node--active .kmila-gate-body,
+    .kmila-gate-node--active .kmila-gate-accent,
+    .kmila-gate-node--changed .kmila-gate-chip rect {
+        animation: none;
+    }
 }
 
 /* ── Concepts Scratch-style exercise board ─────────────────────────────────
@@ -10338,7 +10937,7 @@
 
 .kmila-exercise-match > div { display: flex; flex-direction: column; }
 .kmila-exercise-match strong { display: block; line-height: 1.3; }
-.kmila-exercise-match span { color: var(--text-muted, #64748b); font-size: 0.9rem; }
+.kmila-exercise-match span { color: var(--text-muted, #64748b); font-size: var(--fs-base); }
 
 .kmila-exercise-match--ok {
     border-color: color-mix(in srgb, var(--success, #10b981) 60%, var(--border-subtle));
@@ -10369,14 +10968,14 @@
     gap: .4rem;
     color: var(--text-muted, #64748b);
     text-transform: uppercase;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     letter-spacing: 0.06em;
     font-weight: 600;
 }
 
 .kmila-quizlet__question {
     margin: 0;
-    font-size: 1.05rem;
+    font-size: var(--fs-md);
     font-weight: 500;
     line-height: 1.4;
 }

@@ -1,0 +1,387 @@
+{
+  "viewBox": "0 0 900 360",
+  "clockSignal": "clk",
+  "nodes": [
+    {
+      "id": "reset",
+      "kind": "input",
+      "label": "reset",
+      "x": 60,
+      "y": 30
+    },
+    {
+      "id": "din",
+      "kind": "input",
+      "label": "din",
+      "x": 60,
+      "y": 122
+    },
+    {
+      "id": "clk",
+      "kind": "input",
+      "label": "clk",
+      "x": 60,
+      "y": 280
+    },
+    {
+      "id": "g_dff1",
+      "kind": "dff",
+      "label": "FF0",
+      "x": 200,
+      "y": 100
+    },
+    {
+      "id": "g_dff2",
+      "kind": "dff",
+      "label": "FF1",
+      "x": 370,
+      "y": 100
+    },
+    {
+      "id": "g_dff3",
+      "kind": "dff",
+      "label": "FF2",
+      "x": 540,
+      "y": 100
+    },
+    {
+      "id": "g_dff4",
+      "kind": "dff",
+      "label": "FF3",
+      "x": 710,
+      "y": 100
+    },
+    {
+      "id": "q0",
+      "kind": "output",
+      "label": "q[0]",
+      "x": 240,
+      "y": 250
+    },
+    {
+      "id": "q1",
+      "kind": "output",
+      "label": "q[1]",
+      "x": 410,
+      "y": 250
+    },
+    {
+      "id": "q2",
+      "kind": "output",
+      "label": "q[2]",
+      "x": 580,
+      "y": 250
+    },
+    {
+      "id": "q3",
+      "kind": "output",
+      "label": "q[3]",
+      "x": 750,
+      "y": 250
+    }
+  ],
+  "wires": [
+    {
+      "source": "din",
+      "from": "din",
+      "to": "g_dff1.d"
+    },
+    {
+      "source": "q0",
+      "from": "g_dff1.q",
+      "to": "g_dff2.d"
+    },
+    {
+      "source": "q1",
+      "from": "g_dff2.q",
+      "to": "g_dff3.d"
+    },
+    {
+      "source": "q2",
+      "from": "g_dff3.q",
+      "to": "g_dff4.d"
+    },
+    {
+      "source": "q0",
+      "from": "g_dff1.q",
+      "to": "q0"
+    },
+    {
+      "source": "q1",
+      "from": "g_dff2.q",
+      "to": "q1"
+    },
+    {
+      "source": "q2",
+      "from": "g_dff3.q",
+      "to": "q2"
+    },
+    {
+      "source": "q3",
+      "from": "g_dff4.q",
+      "to": "q3"
+    },
+    {
+      "source": "reset",
+      "from": "reset",
+      "to": "g_dff1.reset"
+    },
+    {
+      "source": "reset",
+      "from": "reset",
+      "to": "g_dff2.reset"
+    },
+    {
+      "source": "reset",
+      "from": "reset",
+      "to": "g_dff3.reset"
+    },
+    {
+      "source": "reset",
+      "from": "reset",
+      "to": "g_dff4.reset"
+    },
+    {
+      "source": "clk",
+      "from": "clk",
+      "to": "g_dff1.clk"
+    },
+    {
+      "source": "clk",
+      "from": "clk",
+      "to": "g_dff2.clk"
+    },
+    {
+      "source": "clk",
+      "from": "clk",
+      "to": "g_dff3.clk"
+    },
+    {
+      "source": "clk",
+      "from": "clk",
+      "to": "g_dff4.clk"
+    }
+  ],
+  "signalOrder": [
+    "reset",
+    "clk",
+    "din",
+    "q0",
+    "q1",
+    "q2",
+    "q3"
+  ],
+  "steps": [
+    {
+      "t": 0,
+      "values": {
+        "reset": "1",
+        "din": "1",
+        "clk": "0",
+        "q0": "0",
+        "q1": "0",
+        "q2": "0",
+        "q3": "0"
+      },
+      "active": [],
+      "note": {
+        "en": "Reset asserted. Every flip-flop holds q=0 regardless of its d input. din is already 1, sitting at the chain entry — but nothing happens until reset releases AND a rising edge arrives.",
+        "es": "Reset activo. Cada flip-flop mantiene q=0 sin importar su entrada d. din ya vale 1, esperando en la entrada de la cadena — pero nada pasa hasta que reset se libere Y llegue un flanco de subida.",
+        "ar": "reset مفعَّل. كل قلَّاب يبقي q=0 بغضِّ النظر عن دخله. din بالفعل 1 ينتظر عند مدخل السلسلة — لكن لا شيء يحدث حتى يُحرَّر reset وتأتي حافة صاعدة.",
+        "ch": "reset 有效。每个触发器都把 q 保持在 0,与各自的 d 输入无关。din 已经是 1,停在链的入口 — 但要等 reset 释放 + 上升沿到来才会有动作。",
+        "de": "reset aktiv. Jedes Flip-Flop hält q=0 unabhängig von seinem d-Eingang. din ist bereits 1, am Eingang der Kette — aber nichts passiert, bis reset wegfällt UND eine steigende Flanke kommt.",
+        "fr": "reset activé. Chaque bascule maintient q=0 quel que soit son entrée d. din vaut déjà 1, posé à l'entrée de la chaîne — mais rien ne se passe tant que reset n'est pas relâché ET qu'un front montant n'arrive pas.",
+        "jp": "reset アサート。各フリップフロップは d 入力に関係なく q=0 を保持。din はすでに 1 でチェーン入口に待機 — だが reset 解除 + 立ち上がりエッジが来るまで何も起きない。"
+      }
+    },
+    {
+      "t": 1,
+      "values": {
+        "reset": "0",
+        "din": "1",
+        "clk": "0",
+        "q0": "0",
+        "q1": "0",
+        "q2": "0",
+        "q3": "0"
+      },
+      "active": [],
+      "note": {
+        "en": "Reset releases. Still no clock edge, so no DFF moves. The shift register is now armed.",
+        "es": "Reset se libera. Aún sin flanco de reloj, ningún DFF se mueve. El registro está armado.",
+        "ar": "يُحرَّر reset. لا حافة ساعة بعد، فلا يتحرَّك DFF. المسجِّل الآن مُسلَّح.",
+        "ch": "reset 释放。还没有时钟沿,所以没有 DFF 动作。移位寄存器现在已待命。",
+        "de": "reset wird freigegeben. Noch keine Taktflanke, also bewegt sich kein DFF. Das Schieberegister ist jetzt scharf.",
+        "fr": "reset relâché. Toujours pas de front d'horloge, donc aucun DFF ne bouge. Le registre est armé.",
+        "jp": "reset 解除。まだクロックエッジなし、DFF は動かない。シフトレジスタは武装完了。"
+      }
+    },
+    {
+      "t": 2,
+      "values": {
+        "reset": "0",
+        "din": "1",
+        "clk": "1",
+        "q0": "1",
+        "q1": "0",
+        "q2": "0",
+        "q3": "0"
+      },
+      "active": [
+        "g_dff1"
+      ],
+      "note": {
+        "en": "First rising edge. FF0 captures din=1 → q[0]=1. The other three captured 0 because their d-inputs (q[0], q[1], q[2]) were all 0 BEFORE the edge.",
+        "es": "Primer flanco de subida. FF0 captura din=1 → q[0]=1. Las otras tres capturaron 0 porque sus entradas d (q[0], q[1], q[2]) estaban en 0 ANTES del flanco.",
+        "ar": "أوَّل حافة صاعدة. يلتقط FF0 الـ din=1 → q[0]=1. الثلاثة الباقون التقطوا 0 لأن دخلَهم d (q[0]، q[1]، q[2]) كانت كلها 0 قبل الحافة.",
+        "ch": "第一个上升沿。FF0 捕获 din=1 → q[0]=1。其它三个捕获到 0,因为在边沿之前它们的 d 输入(q[0]、q[1]、q[2])都是 0。",
+        "de": "Erste steigende Flanke. FF0 erfasst din=1 → q[0]=1. Die anderen drei haben 0 erfasst, weil ihre d-Eingänge (q[0], q[1], q[2]) vor der Flanke alle 0 waren.",
+        "fr": "Premier front montant. FF0 capture din=1 → q[0]=1. Les trois autres ont capturé 0 parce que leurs entrées d (q[0], q[1], q[2]) étaient toutes à 0 AVANT le front.",
+        "jp": "最初の立ち上がりエッジ。FF0 が din=1 を取り込み → q[0]=1。他の 3 つは 0 を取り込んだ、なぜならエッジ前の d 入力(q[0]、q[1]、q[2])がすべて 0 だったから。"
+      }
+    },
+    {
+      "t": 3,
+      "values": {
+        "reset": "0",
+        "din": "0",
+        "clk": "0",
+        "q0": "1",
+        "q1": "0",
+        "q2": "0",
+        "q3": "0"
+      },
+      "active": [],
+      "note": {
+        "en": "Clock falls; din drops to 0. The register holds — falling edges don't trigger a rising-edge DFF.",
+        "es": "El reloj baja; din baja a 0. El registro se mantiene — los flancos de bajada no disparan un DFF de flanco de subida.",
+        "ar": "الساعة تنزل؛ din ينزل إلى 0. المسجِّل يحتفظ — الحافات النازلة لا تُطلق DFF صاعد.",
+        "ch": "时钟下降;din 掉到 0。寄存器保持 — 下降沿不触发上升沿 DFF。",
+        "de": "Takt fällt; din fällt auf 0. Das Register hält — fallende Flanken triggern kein steigend-flankengetriggertes DFF.",
+        "fr": "L'horloge descend ; din tombe à 0. Le registre maintient — les fronts descendants ne déclenchent pas un DFF à front montant.",
+        "jp": "クロック立ち下がり;din が 0 に。レジスタは保持 — 立ち下がりエッジは立ち上がりエッジ DFF をトリガしない。"
+      }
+    },
+    {
+      "t": 4,
+      "values": {
+        "reset": "0",
+        "din": "0",
+        "clk": "1",
+        "q0": "0",
+        "q1": "1",
+        "q2": "0",
+        "q3": "0"
+      },
+      "active": [
+        "g_dff1",
+        "g_dff2"
+      ],
+      "note": {
+        "en": "Second rising edge. FF0 captures the NEW din=0 → q[0]=0. FF1 captures FF0's OLD value (1) → q[1]=1. The first bit just shifted one position to the right.",
+        "es": "Segundo flanco de subida. FF0 captura el NUEVO din=0 → q[0]=0. FF1 captura el valor VIEJO de FF0 (1) → q[1]=1. El primer bit acaba de desplazarse una posición a la derecha.",
+        "ar": "ثاني حافة صاعدة. يلتقط FF0 din=0 الجديد → q[0]=0. يلتقط FF1 قيمة FF0 القديمة (1) → q[1]=1. البت الأوَّل انتقل خطوة واحدة إلى اليمين.",
+        "ch": "第二个上升沿。FF0 捕获新的 din=0 → q[0]=0。FF1 捕获 FF0 之前的旧值(1) → q[1]=1。第一个比特刚好向右移了一位。",
+        "de": "Zweite steigende Flanke. FF0 erfasst das NEUE din=0 → q[0]=0. FF1 erfasst den ALTEN Wert von FF0 (1) → q[1]=1. Das erste Bit ist gerade eine Position nach rechts gewandert.",
+        "fr": "Second front montant. FF0 capture le NOUVEAU din=0 → q[0]=0. FF1 capture l'ANCIENNE valeur de FF0 (1) → q[1]=1. Le premier bit vient de glisser d'une position vers la droite.",
+        "jp": "2 番目の立ち上がりエッジ。FF0 は新しい din=0 を取り込む → q[0]=0。FF1 は FF0 の古い値 (1) を取り込む → q[1]=1。最初のビットが 1 つ右にシフトした。"
+      }
+    },
+    {
+      "t": 5,
+      "values": {
+        "reset": "0",
+        "din": "1",
+        "clk": "0",
+        "q0": "0",
+        "q1": "1",
+        "q2": "0",
+        "q3": "0"
+      },
+      "active": [],
+      "note": {
+        "en": "Clock low; din rises to 1. Holds.",
+        "es": "Reloj en bajo; din sube a 1. Mantiene.",
+        "ar": "الساعة منخفضة؛ din يرتفع إلى 1. يحتفظ.",
+        "ch": "时钟为低;din 上升到 1。保持。",
+        "de": "Takt niedrig; din steigt auf 1. Hält.",
+        "fr": "Horloge basse ; din monte à 1. Maintient.",
+        "jp": "クロック Low;din が 1 に上昇。保持。"
+      }
+    },
+    {
+      "t": 6,
+      "values": {
+        "reset": "0",
+        "din": "1",
+        "clk": "1",
+        "q0": "1",
+        "q1": "0",
+        "q2": "1",
+        "q3": "0"
+      },
+      "active": [
+        "g_dff1",
+        "g_dff2",
+        "g_dff3"
+      ],
+      "note": {
+        "en": "Third rising edge. All inputs latched simultaneously: FF0 grabs the new din=1, FF1 grabs FF0's old q (0), FF2 grabs FF1's old q (1). The pattern keeps walking — the original 1 is now in FF2.",
+        "es": "Tercer flanco de subida. Todas las entradas se enganchan a la vez: FF0 toma el nuevo din=1, FF1 toma la q vieja de FF0 (0), FF2 toma la q vieja de FF1 (1). El patrón sigue caminando — el 1 original ya está en FF2.",
+        "ar": "ثالث حافة صاعدة. تُغلَق كل المداخل في الوقت نفسه: FF0 يأخذ din=1 الجديد، FF1 يأخذ q القديم لـ FF0 (0)، FF2 يأخذ q القديم لـ FF1 (1). يستمر النمط في المشي — العدد 1 الأصلي الآن في FF2.",
+        "ch": "第三个上升沿。所有输入同时被锁存:FF0 取新的 din=1,FF1 取 FF0 的旧 q(0),FF2 取 FF1 的旧 q(1)。模式在继续行进 — 原来的 1 现在在 FF2。",
+        "de": "Dritte steigende Flanke. Alle Eingänge gleichzeitig eingerastet: FF0 nimmt das neue din=1, FF1 nimmt FF0s alten q (0), FF2 nimmt FF1s alten q (1). Das Muster wandert weiter — die ursprüngliche 1 ist jetzt in FF2.",
+        "fr": "Troisième front montant. Toutes les entrées se verrouillent simultanément : FF0 prend le nouveau din=1, FF1 prend l'ancien q de FF0 (0), FF2 prend l'ancien q de FF1 (1). Le motif continue de marcher — le 1 d'origine est maintenant dans FF2.",
+        "jp": "3 番目の立ち上がりエッジ。すべての入力が同時にラッチ:FF0 は新しい din=1 を、FF1 は FF0 の古い q (0) を、FF2 は FF1 の古い q (1) を取り込む。パターンは歩み続け — 元の 1 は今 FF2 に。"
+      }
+    },
+    {
+      "t": 7,
+      "values": {
+        "reset": "0",
+        "din": "1",
+        "clk": "0",
+        "q0": "1",
+        "q1": "0",
+        "q2": "1",
+        "q3": "0"
+      },
+      "active": [],
+      "note": {
+        "en": "Clock low. Holds.",
+        "es": "Reloj en bajo. Mantiene.",
+        "ar": "الساعة منخفضة. يحتفظ.",
+        "ch": "时钟为低。保持。",
+        "de": "Takt niedrig. Hält.",
+        "fr": "Horloge basse. Maintient.",
+        "jp": "クロック Low。保持。"
+      }
+    },
+    {
+      "t": 8,
+      "values": {
+        "reset": "0",
+        "din": "1",
+        "clk": "1",
+        "q0": "1",
+        "q1": "1",
+        "q2": "0",
+        "q3": "1"
+      },
+      "active": [
+        "g_dff2",
+        "g_dff3",
+        "g_dff4"
+      ],
+      "note": {
+        "en": "Fourth rising edge. The original 1 has marched all the way to FF3 — q[3]=1. In the lesson's 8-bit version this would take 8 cycles total. The chain is the round-trip latency of a serial-in shift register.",
+        "es": "Cuarto flanco de subida. El 1 original llegó hasta FF3 — q[3]=1. En la versión de 8 bits de la lección esto tarda 8 ciclos. La cadena es la latencia ida-y-vuelta de un registro de desplazamiento serie.",
+        "ar": "رابع حافة صاعدة. وصل العدد 1 الأصلي إلى FF3 — q[3]=1. في إصدار 8 بت بالدرس سيستغرق ذلك 8 دورات كاملة. السلسلة هي زمن الرحلة ذهابًا وإيابًا لمسجِّل إزاحة بدخل تسلسلي.",
+        "ch": "第四个上升沿。原来的 1 一路走到 FF3 — q[3]=1。在课程的 8 位版本中,这一共需要 8 个时钟周期。这条链就是串入移位寄存器的往返延迟。",
+        "de": "Vierte steigende Flanke. Die ursprüngliche 1 ist bis zu FF3 marschiert — q[3]=1. In der 8-Bit-Version der Lektion bräuchte das insgesamt 8 Zyklen. Die Kette ist die Round-Trip-Latenz eines Serial-In-Schieberegisters.",
+        "fr": "Quatrième front montant. Le 1 d'origine a marché jusqu'à FF3 — q[3]=1. Dans la version 8 bits de la leçon, cela prendrait 8 cycles au total. La chaîne, c'est la latence aller-retour d'un registre à décalage en entrée série.",
+        "jp": "4 番目の立ち上がりエッジ。元の 1 が FF3 まで歩いた — q[3]=1。レッスンの 8 ビット版なら計 8 サイクルかかる。このチェーンが、シリアル入力シフトレジスタのラウンドトリップ遅延。"
+      }
+    }
+  ]
+}

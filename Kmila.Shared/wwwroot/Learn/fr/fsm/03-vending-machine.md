@@ -1,32 +1,32 @@
-# Projet : distributeur automatique à pièces
+# Projet : distributeur à pièces
 
-C'est ton premier vrai projet. Le cahier des charges est fixe, le code de départ te livre la plomberie, et ton boulot est d'écrire la logique qui le complète.
+C'est ton premier vrai projet. La spec est fixée, le code de démarrage te tend la plomberie, et ton boulot est d'écrire la logique qui le complète.
 
-## Ce que tu vas construire
+## Ce que tu construis
 
-Une FSM qui suit l'argent qu'un client a inséré et distribue un produit (une unique impulsion de sortie, `dispense`) quand le total atteint 25¢. Les entrées sont :
+Une FSM qui suit l'argent qu'un client a inséré et délivre un produit (une seule impulsion de sortie, `dispense`) quand le total atteint 25¢. Les entrées sont :
 
-- `nickel` — une impulsion d'un cycle signifiant « une pièce de 5¢ vient de tomber »
-- `dime`   — une impulsion d'un cycle signifiant « une pièce de 10¢ vient de tomber »
+- `nickel` — impulsion d'1 cycle : « une pièce de 5¢ vient d'entrer »
+- `dime`   — impulsion d'1 cycle : « une pièce de 10¢ vient d'entrer »
 - `clk`, `reset`
 
 Et les sorties :
 
-- `dispense` — impulsion haute pendant exactement un cycle d'horloge quand tu as atteint ≥ 25¢
-- `change`   — impulsion haute pendant un cycle en même temps que `dispense` si le total était **plus** que 25¢ (donc la machine doit rendre la monnaie)
+- `dispense` — pulse haut pendant exactement un cycle d'horloge quand tu as atteint ≥ 25¢
+- `change`   — pulse haut pendant un cycle en même temps que `dispense` si le total était **plus** que 25¢ (la machine doit rendre la monnaie)
 
 ## Critères d'acceptation
 
-| Séquence de pièces    | Comportement attendu          |
-|-----------------------|-------------------------------|
-| 5 nickels             | `dispense=1, change=0`        |
-| 2 dimes + 1 nickel    | `dispense=1, change=0`        |
-| 3 dimes (= 30¢)       | `dispense=1, change=1`        |
-| 2 nickels + 1 dime    | pas de distribution (seulement 20¢) |
+| Séquence de pièces   | Comportement attendu          |
+|----------------------|-------------------------------|
+| 5 nickels            | `dispense=1, change=0`        |
+| 2 dimes + 1 nickel   | `dispense=1, change=0`        |
+| 3 dimes (= 30¢)      | `dispense=1, change=1`        |
+| 2 nickels + 1 dime   | pas de dispense (seulement 20¢) |
 
 ## Ce que te donne le starter
 
-L'entité et l'accumulateur `total` sont câblés. Chaque impulsion `nickel` ajoute 5 ; chaque impulsion `dime` ajoute 10. Mais le starter force toujours `dispense = '0'` et `change = '0'`. **C'est ce que tu dois changer.**
+L'entity et l'accumulateur `total` sont câblés. Chaque pulse `nickel` ajoute 5 ; chaque pulse `dime` ajoute 10. Mais le starter pilote toujours `dispense = '0'` et `change = '0'`. **C'est ça que tu dois changer.**
 
 ```vhdl
 process(clk, reset)
@@ -46,11 +46,11 @@ change   <= '0';  -- TODO
 
 ## Approche suggérée
 
-1. **Détecte la condition de vente.** À chaque front montant d'horloge, vérifie si `total >= 25` après avoir ajouté la pièce courante. (Attention : tu dois calculer le *nouveau* total, pas celui du cycle précédent.)
-2. **Pulse `dispense` pendant exactement un cycle.** L'astuce : quand tu détectes la vente, lève un signal flag et remets `total` à zéro. Le flag vit un cycle.
-3. **Calcule `change`.** Si le total au moment de la vente était > 25, pulse `change` aussi.
+1. **Détecte la condition de vente.** À chaque front montant, vérifie si `total >= 25` *après* avoir ajouté la pièce courante. (Attention : tu dois calculer le *nouveau* total, pas celui du cycle précédent.)
+2. **Pulse `dispense` pendant exactement un cycle.** Astuce : quand tu détectes la vente, mets un drapeau et remets `total` à zéro. Le drapeau ne vit qu'un cycle.
+3. **Calcule `change`.** Si le total au moment de la vente était > 25, pulse aussi `change`.
 
-Indice : c'est plus simple si tu calcules le « next total » comme signal local (ou `variable` dans le process) :
+Indice : c'est plus simple si tu calcules le « total suivant » comme un signal local (ou `variable` dans le process) :
 
 ```vhdl
 variable next_total : unsigned(5 downto 0);
@@ -74,5 +74,5 @@ end if;
 ## Pour aller plus loin
 
 - Ajoute un bouton **refund** qui remet `total` à zéro sans distribuer.
-- Supporte une pièce de **25¢ (quarter)** — doit distribuer immédiatement.
-- Suis le nombre d'articles vendus dans un compteur 8 bits séparé, visible en sortie. C'est le genre de feedback que les vrais distributeurs envoient en amont.
+- Supporte une pièce **quarter** (25¢) — doit distribuer immédiatement.
+- Suis le nombre d'articles vendus dans un compteur 8 bits séparé visible en sortie. C'est le genre de retour que les vrais distributeurs envoient vers le haut.

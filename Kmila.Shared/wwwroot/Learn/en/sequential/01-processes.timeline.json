@@ -1,60 +1,131 @@
 {
   "code": "-- The sensitivity list is the contract: 'wake me when…'\nprocess(a, b)         -- line 2\nbegin\n  out1 <= a;\n  out2 <= b and out1; -- line 5: reads OLD out1\nend process;",
   "language": "vhdl",
-  "signalOrder": ["a", "b", "out1", "out2"],
+  "signalOrder": [
+    "a",
+    "b",
+    "out1",
+    "out2"
+  ],
   "steps": [
     {
       "t": 0,
       "highlightLines": [],
-      "signals": { "a": "0", "b": "0", "out1": "U", "out2": "U" },
+      "signals": {
+        "a": "0",
+        "b": "0",
+        "out1": "U",
+        "out2": "U"
+      },
       "note": {
         "en": "Cold start. out1 and out2 begin uninitialised. Process is asleep.",
-        "es": "Inicio en frío. out1 y out2 empiezan sin inicializar. El proceso duerme."
+        "es": "Inicio en frío. out1 y out2 empiezan sin inicializar. El proceso duerme.",
+        "ar": "بدء بارد. out1 و out2 يبدآن دون تهيئة. المعالجة نائمة.",
+        "ch": "冷启动。out1 与 out2 都未初始化。process 在睡眠。",
+        "de": "Kaltstart. out1 und out2 starten uninitialisiert. Prozess schläft.",
+        "fr": "Démarrage à froid. out1 et out2 commencent non initialisés. Le process dort.",
+        "jp": "コールドスタート。out1 と out2 は未初期化で始まる。process は眠っている。"
       }
     },
     {
       "t": 1,
-      "highlightLines": [2],
-      "signals": { "a": "1", "b": "1", "out1": "U", "out2": "U" },
+      "highlightLines": [
+        2
+      ],
+      "signals": {
+        "a": "1",
+        "b": "1",
+        "out1": "U",
+        "out2": "U"
+      },
       "note": {
         "en": "a → 1, b → 1. Sensitivity list says wake on (a, b) — process wakes.",
-        "es": "a → 1, b → 1. La lista de sensibilidad dice despertar con (a, b) — el proceso se despierta."
+        "es": "a → 1, b → 1. La lista de sensibilidad dice despertar con (a, b) — el proceso se despierta.",
+        "ar": "a → 1، b → 1. تقول قائمة الحساسيَّة استيقظ على (a, b) — تستيقظ المعالجة.",
+        "ch": "a → 1,b → 1。敏感列表说在 (a, b) 上唤醒 — process 醒来。",
+        "de": "a → 1, b → 1. Die Sensitivitätsliste sagt: aufwachen bei (a, b) — Prozess wacht auf.",
+        "fr": "a → 1, b → 1. La liste de sensibilité dit de se réveiller sur (a, b) — le process se réveille.",
+        "jp": "a → 1、b → 1。感度リストが (a, b) で起動と言う — process 起動。"
       }
     },
     {
       "t": 2,
-      "highlightLines": [4],
-      "signals": { "a": "1", "b": "1", "out1": "U", "out2": "U" },
+      "highlightLines": [
+        4
+      ],
+      "signals": {
+        "a": "1",
+        "b": "1",
+        "out1": "U",
+        "out2": "U"
+      },
       "note": {
         "en": "Line 4: schedule out1 <= a. Transaction posted; out1 still reads as U during the delta.",
-        "es": "Línea 4: programar out1 <= a. Transacción registrada; out1 aún se lee como U durante el delta."
+        "es": "Línea 4: programar out1 <= a. Transacción registrada; out1 aún se lee como U durante el delta.",
+        "ar": "السطر 4: جدولة out1 <= a. سُجِّلت المعاملة؛ يقرأ out1 لا يزال كـ U خلال الدلتا.",
+        "ch": "第 4 行:调度 out1 <= a。事务登记;在 delta 期间 out1 仍读为 U。",
+        "de": "Zeile 4: out1 <= a einplanen. Transaktion eingetragen; out1 wird während des Deltas immer noch als U gelesen.",
+        "fr": "Ligne 4 : planifier out1 <= a. Transaction enregistrée ; out1 se lit toujours comme U pendant le delta.",
+        "jp": "行 4:out1 <= a をスケジュール。トランザクション登録;デルタ中 out1 は依然 U として読まれる。"
       }
     },
     {
       "t": 3,
-      "highlightLines": [5],
-      "signals": { "a": "1", "b": "1", "out1": "U", "out2": "U" },
+      "highlightLines": [
+        5
+      ],
+      "signals": {
+        "a": "1",
+        "b": "1",
+        "out1": "U",
+        "out2": "U"
+      },
       "note": {
         "en": "Line 5: out2 <= b and out1. Reads OLD out1 (= U). U and 1 = U. The classic trap.",
-        "es": "Línea 5: out2 <= b and out1. Lee el VIEJO out1 (= U). U and 1 = U. La trampa clásica."
+        "es": "Línea 5: out2 <= b and out1. Lee el VIEJO out1 (= U). U and 1 = U. La trampa clásica.",
+        "ar": "السطر 5: out2 <= b and out1. يقرأ out1 القديم (= U). U and 1 = U. الفخّ الكلاسيكي.",
+        "ch": "第 5 行:out2 <= b and out1。读到的是旧的 out1 (= U)。U and 1 = U。经典陷阱。",
+        "de": "Zeile 5: out2 <= b and out1. Liest das ALTE out1 (= U). U and 1 = U. Die klassische Falle.",
+        "fr": "Ligne 5 : out2 <= b and out1. Lit l'ANCIEN out1 (= U). U and 1 = U. Le piège classique.",
+        "jp": "行 5:out2 <= b and out1。古い out1 (= U) を読む。U and 1 = U。古典的な罠。"
       }
     },
     {
       "t": 4,
       "highlightLines": [],
-      "signals": { "a": "1", "b": "1", "out1": "1", "out2": "U" },
+      "signals": {
+        "a": "1",
+        "b": "1",
+        "out1": "1",
+        "out2": "U"
+      },
       "note": {
         "en": "Delta closes. out1 = 1, out2 = U. out1 changed, but out1 is NOT in the sensitivity list — process does NOT wake again.",
-        "es": "Cierra el delta. out1 = 1, out2 = U. out1 cambió, pero out1 NO está en la lista de sensibilidad — el proceso NO se despierta otra vez."
+        "es": "Cierra el delta. out1 = 1, out2 = U. out1 cambió, pero out1 NO está en la lista de sensibilidad — el proceso NO se despierta otra vez.",
+        "ar": "تُغلَق الدلتا. out1 = 1، out2 = U. تغيَّر out1، لكن out1 ليس في قائمة الحساسيَّة — المعالجة لا تستيقظ مرَّة أخرى.",
+        "ch": "delta 关闭。out1 = 1,out2 = U。out1 变了,但 out1 不在敏感列表中 — process 不会再次醒来。",
+        "de": "Delta schließt. out1 = 1, out2 = U. out1 hat sich geändert, aber out1 steht NICHT in der Sensitivitätsliste — der Prozess wacht NICHT erneut auf.",
+        "fr": "Delta se ferme. out1 = 1, out2 = U. out1 a changé, mais out1 N'est PAS dans la liste de sensibilité — le process ne se réveille PAS de nouveau.",
+        "jp": "デルタがクローズ。out1 = 1、out2 = U。out1 は変化したが、out1 は感度リストにない — process は再起動しない。"
       }
     },
     {
       "t": 5,
       "highlightLines": [],
-      "signals": { "a": "1", "b": "1", "out1": "1", "out2": "U" },
+      "signals": {
+        "a": "1",
+        "b": "1",
+        "out1": "1",
+        "out2": "U"
+      },
       "note": {
         "en": "out2 stays U forever. Fix: either add out1 to the sensitivity list, or use a variable inside the process.",
-        "es": "out2 se queda en U para siempre. Solución: o agregar out1 a la lista de sensibilidad, o usar una variable dentro del proceso."
+        "es": "out2 se queda en U para siempre. Solución: o agregar out1 a la lista de sensibilidad, o usar una variable dentro del proceso.",
+        "ar": "يبقى out2 عند U إلى الأبد. الإصلاح: إمَّا أضف out1 إلى قائمة الحساسيَّة، أو استخدم متغيِّرًا داخل المعالجة.",
+        "ch": "out2 永远停在 U。修复方法:要么把 out1 加进敏感列表,要么在 process 中使用 variable。",
+        "de": "out2 bleibt für immer U. Lösung: entweder out1 zur Sensitivitätsliste hinzufügen, oder im Prozess eine Variable verwenden.",
+        "fr": "out2 reste à U pour toujours. Solution : soit ajouter out1 à la liste de sensibilité, soit utiliser une variable à l'intérieur du process.",
+        "jp": "out2 は永遠に U のまま。修正:out1 を感度リストに加えるか、process 内で変数を使う。"
       }
     }
   ]

@@ -1,27 +1,27 @@
 # Die sieben Logikgatter
 
-Jede digitale Schaltung, bis hinunter zu einer modernen GPU, ist eine Kombination aus sieben elementaren Zellen. Wenn du weißt, wie sich jede einzelne verhält und wie du sie in VHDL schreibst, hast du schon mit dem Hardwaredesign angefangen.
+Jede digitale Schaltung, bis hinunter zur modernen GPU, ist eine Kombination von sieben elementaren Zellen. Wenn du weißt, wie sich jede verhält und wie du sie in VHDL schreibst, hast du bereits angefangen, Hardware zu entwerfen.
 
-## Die sechs Zwei-Eingangs-Gatter
+## Die sechs zwei-Eingang-Gatter
 
-| Gatter | Symbol in VHDL | Liest sich als | Ausgang ist `1`, wenn… |
-|--------|----------------|----------------|------------------------|
-| AND    | `a and b`      | "A und B"       | beide Eingänge 1 sind |
-| OR     | `a or b`       | "A oder B"      | mindestens ein Eingang 1 ist |
-| XOR    | `a xor b`      | "A xor B"       | die Eingänge unterschiedlich sind |
-| NAND   | `a nand b`     | "nicht (A und B)" | mindestens ein Eingang 0 ist |
-| NOR    | `a nor b`      | "nicht (A oder B)" | beide Eingänge 0 sind |
-| XNOR   | `a xnor b`     | "A = B"         | die Eingänge gleich sind |
+| Gatter | VHDL-Symbol  | Liest sich als | Ausgang ist `1`, wenn… |
+|--------|--------------|----------------|------------------------|
+| AND    | `a and b`    | „A und B"      | beide Eingänge 1 sind  |
+| OR     | `a or b`     | „A oder B"     | mindestens ein Eingang 1 ist |
+| XOR    | `a xor b`    | „A xor B"      | Eingänge unterschiedlich sind |
+| NAND   | `a nand b`   | „nicht (A und B)" | mindestens ein Eingang 0 ist |
+| NOR    | `a nor b`    | „nicht (A oder B)" | beide Eingänge 0 sind |
+| XNOR   | `a xnor b`   | „A = B"        | Eingänge gleich sind   |
 
-Und das Ein-Eingangs-NOT:
+Und das ein-Eingang-NOT:
 
 ```vhdl
 y <= not a;
 ```
 
-## Warum NAND und NOR speziell sind
+## Warum NAND und NOR besonders sind
 
-Ein klassisches Ergebnis der Digitallogik: **NAND allein** (oder NOR allein) reicht, um jedes andere Gatter zu bauen. Beide werden genau aus diesem Grund "funktional vollständig" genannt. Deshalb liefern CMOS-Prozessbibliotheken viele NAND2- und NOR2-Zellen — aus ihnen kann man alles synthetisieren.
+Ein klassisches Resultat der digitalen Logik: **NAND allein** (oder NOR allein) reicht, um jedes andere Gatter zu bauen. Beide nennt man „funktional vollständig". Deshalb liefern CMOS-Prozessbibliotheken jede Menge NAND2- und NOR2-Zellen — du kannst alles daraus synthetisieren.
 
 - NOT: `not a = a nand a`
 - AND: `a and b = not (a nand b)`
@@ -29,15 +29,15 @@ Ein klassisches Ergebnis der Digitallogik: **NAND allein** (oder NOR allein) rei
 
 ## XOR ist das mathematische
 
-XOR wird oft mit einem eingekreisten Plus (⊕) gezeichnet. Es ist das Gatter, das "Parität" berechnet — sein Ausgang ist `1`, wenn eine ungerade Anzahl von Eingängen `1` ist. Das macht es zum Kern von:
+XOR wird oft mit einem Kreis-Plus (⊕) gezeichnet. Es ist das Gatter, das „Parität" berechnet — sein Ausgang ist `1`, wenn eine ungerade Zahl von Eingängen `1` ist. Damit ist es der Kern von:
 
 - Addierern: `sum = a xor b xor carry_in`
 - Paritätsprüfern und Fehlererkennungscodes
-- Toggle-Flipflops: `q_next = q xor toggle_input`
+- Toggle-Flip-Flops: `q_next = q xor toggle_input`
 
 ## Alle sechs in einer Datei sehen
 
-Wenn du das **Wahrheitstabellen-Explorer**-Lab für dieses Modul öffnest, findest du eine einzige VHDL-Entity, die alle sechs 2-Eingangs-Gatter gleichzeitig berechnet, mit den Eingängen `a` und `b`, die für Stimulus an den Ports-Tab angeschlossen sind. Der Waveform-Viewer zeigt dann die Reaktion jedes Ausgangs bei jeder Kombination.
+Wenn du das **Wahrheitstabellen-Explorer**-Lab dieses Moduls öffnest, findest du eine einzelne VHDL-Entity, die alle sechs 2-Eingangs-Gatter gleichzeitig berechnet, mit den Eingängen `a` und `b` ans Ports-Tab als Stimulus verdrahtet. Der Wellenform-Viewer zeigt dann die Reaktion jedes Ausgangs auf jede Kombination.
 
 ```vhdl
 architecture rtl of gates is
@@ -51,10 +51,10 @@ begin
 end architecture rtl;
 ```
 
-Beachte, dass jede dieser sechs Zeilen **ein Draht** ist, keine Anweisung, die läuft. Sechs Gatter, sechs Stücke Hardware — sie werden alle gleichzeitig ausgewertet.
+Beachte: jede dieser sechs Zeilen ist **ein Draht**, keine Anweisung, die ausgeführt wird. Sechs Gatter, sechs Stücke Hardware — sie werden alle gleichzeitig ausgewertet.
 
-## Was zu merken ist
+## Was du behalten solltest
 
-- Sechs Zwei-Eingangs-Gatter + NOT sind der komplette Satz.
-- NAND und NOR sind "universell" — du kannst alles aus ihnen bauen.
-- In VHDL sind Gatter nebenläufige Einzeilen-Zuweisungen. Sie werden nicht "aufgerufen"; sie existieren.
+- Sechs Zwei-Eingang-Gatter + NOT ist das ganze Set.
+- NAND und NOR sind „universell" — aus ihnen baust du alles.
+- In VHDL sind Gatter Ein-Zeiler-Nebenläufige-Zuweisungen. Sie werden nicht „aufgerufen"; sie existieren.

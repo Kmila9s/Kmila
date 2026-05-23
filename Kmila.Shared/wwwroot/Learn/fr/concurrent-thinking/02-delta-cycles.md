@@ -1,10 +1,10 @@
-# Cycles delta et conditions de course
+# Delta-cycles et conditions de course
 
-Un simulateur doit donner à « deux choses qui se produisent en même temps » un ordre déterministe. La réponse de VHDL s'appelle le **cycle delta** : une tranche de temps infiniment petite qui sépare la cause de l'effet.
+Un simulateur doit donner un ordre déterministe à « deux choses qui se passent en même temps ». La réponse de VHDL est le **delta-cycle** : une tranche de temps infiniment petite qui sépare la cause de l'effet.
 
-## Ce qu'est un cycle delta
+## Ce qu'est un delta-cycle
 
-Le temps de simulation avance par étapes réelles (mesurées en ns, µs, ms). Mais à l'intérieur d'un même pas de temps, des changements peuvent avoir lieu dans l'ordre des **cycles delta** :
+Le temps de simulation avance en pas réels (mesurés en ns, µs, ms). Mais à l'intérieur d'un seul pas de temps, des changements peuvent arriver dans un ordre **delta-cycle** :
 
 - δ₀ : tu planifies une mise à jour de signal.
 - δ₁ : la mise à jour prend effet ; tout process sensible à ce signal a maintenant de nouvelles entrées.
@@ -12,7 +12,7 @@ Le temps de simulation avance par étapes réelles (mesurées en ns, µs, ms). M
 - δ₃ : ces mises à jour prennent effet.
 - …
 
-Chaque delta représente « zéro temps réel » mais correspond à une étape causale. Le simulateur continue de cycler à travers les deltas jusqu'à ce que plus rien n'ait besoin de se mettre à jour — alors, et seulement alors, le temps réel avance.
+Chaque delta vaut « zéro temps réel » mais représente un pas causal. Le simulateur boucle sur les deltas jusqu'à ce que plus rien n'ait besoin d'être mis à jour — alors et seulement alors le temps réel avance.
 
 ## Pourquoi ça existe
 
@@ -28,11 +28,11 @@ begin
 end process;
 ```
 
-Sans les cycles delta, le simulateur devrait choisir un ordre arbitraire — `a` est-il mis à jour avant `b` ? Après ? Exactement au même instant ? Les cycles delta évitent ce problème : les deux assignations sont planifiées à δ₀ et prennent toutes deux effet à δ₁. Tout process qui lit `a` ou `b` voit les deux nouvelles valeurs en même temps.
+Sans delta-cycles, le simulateur devrait choisir un ordre arbitraire — `a` mis à jour avant `b` ? Après ? Au même instant exact ? Les delta-cycles contournent ça : les deux affectations sont planifiées à δ₀ et prennent toutes deux effet à δ₁. Tout process qui lit `a` ou `b` voit les deux nouvelles valeurs en même temps.
 
-## Le piège de la condition de course
+## Le piège de la course
 
-Regarde ceci :
+Regarde ça :
 
 ```vhdl
 process(a)
@@ -46,27 +46,27 @@ begin
 end process;
 ```
 
-Quand `a` change, le premier process se déclenche et planifie `b`. À δ₁, `b` a sa nouvelle valeur. Le second process se déclenche, planifie `c`. À δ₂, `c` a la bonne valeur.
+Quand `a` change, le premier process s'allume et planifie `b`. À δ₁, `b` a sa nouvelle valeur. Le second process s'allume, planifie `c`. À δ₂, `c` a la bonne valeur.
 
-Maintenant, échange les deux process. Quelque chose change-t-il ? **Non.** Les cycles delta garantissent que les deux chemins produisent le même résultat final — même si l'« ordre » des process dans le fichier est différent. C'est exactement pour ça que les cycles delta existent.
+Maintenant intervertis les deux process. Est-ce que quelque chose change ? **Non.** Les delta-cycles garantissent que les deux chemins produisent le même résultat final — même si l'« ordre » des process dans le fichier est différent. C'est exactement pourquoi les delta-cycles existent.
 
-## Là où ça tourne mal
+## Là où ça déraille
 
-Le problème, c'est quand tu mélanges la sémantique des **signaux** avec « j'ai besoin que ça arrive avant ça dans le même tick ». Exemple :
+Le problème est quand tu mélanges sémantique **signal** avec « j'ai besoin que ceci se passe avant cela dans le même tick ». Exemple :
 
 ```vhdl
 process(clk)
 begin
   if rising_edge(clk) then
-    a <= b + 1;     -- a est mis à jour à la fin du tick
+    a <= b + 1;     -- a se met à jour en fin de tick
     b <= a + 1;     -- b lit l'ANCIEN a
   end if;
 end process;
 ```
 
-Si tu as supposé que « la ligne 1 s'exécute en premier, donc `a` est déjà à jour quand la ligne 2 s'exécute », tu te trompes. `a` se met à jour à la fin du tick. `b` lit l'ancienne valeur de `a`. Résultat : les deux s'incrémentent à partir des anciennes données, pas à partir des nouvelles données de l'autre.
+Si tu supposes « la ligne 1 s'exécute en premier, donc `a` est déjà à jour quand la ligne 2 tourne », tu te trompes. `a` se met à jour en fin de tick. `b` lit l'ancienne valeur de `a`. Résultat : les deux s'incrémentent sur des données anciennes, pas sur les nouvelles données de l'autre.
 
-Remplace les signaux par des variables pour obtenir une sémantique à la C :
+Remplace les signaux par des variables pour retrouver la sémantique style C :
 
 ```vhdl
 process(clk)
@@ -79,12 +79,12 @@ begin
 end process;
 ```
 
-Maintenant ça fonctionne comme les programmeurs logiciels s'y attendent.
+Maintenant ça marche comme les programmeurs logiciels s'y attendent.
 
 ## À retenir
 
-- Les cycles delta sont la façon du simulateur de rendre la logique concurrente déterministe.
-- Les assignations de signaux prennent effet **après** les cycles delta. Les variables, non.
-- Si ton testbench se comporte « bizarrement » autour d'un front d'horloge, soupçonne un problème d'ordre de cycle delta avant d'accuser l'outil.
+- Les delta-cycles sont la manière du simulateur de rendre la logique concurrente déterministe.
+- Les affectations de signaux prennent effet **après** les delta-cycles. Pas les variables.
+- Si ton banc de test se comporte « bizarrement » autour d'un front d'horloge, suspecte un problème d'ordre de delta-cycle avant de blâmer l'outil.
 
-L'exercice suivant du programme montre une petite condition de course à l'œuvre. Trouve-la, nomme-la, corrige-la — tu n'oublieras plus jamais la règle.
+L'exercice suivant du cursus montre une petite course en action. Trouve-la, nomme-la, corrige-la — tu n'oublieras plus jamais la règle.

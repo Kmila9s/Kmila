@@ -83,10 +83,52 @@
     <div class="kmila-exec-player__side">
         <div class="kmila-exec-signals" aria-label="@Traductor.T("CONCEPTS_PLAYER_SIGNALS")">
             <div class="kmila-exec-signals__header">@Traductor.T("CONCEPTS_PLAYER_SIGNALS")</div>
+
+            @* Phase D: filter / group UI surfaces only on large designs.
+               Threshold is 12 signals AND at least 2 distinct port types in
+               the metadata — small Concepts lessons never see this. *@
+            @if (ShouldShowFilterUI())
+            {
+                <div class="kmila-exec-signals__filter">
+                    <input type="search"
+                           class="kmila-exec-signals__search"
+                           placeholder="@Traductor.T("CONCEPTS_PLAYER_FILTER_SEARCH_PLACEHOLDER")"
+                           value="@_filterText"
+                           @oninput="OnFilterTextChanged" />
+                    <div class="kmila-exec-signals__chips"
+                         role="group"
+                         aria-label="@Traductor.T("CONCEPTS_PLAYER_FILTER_TYPES")">
+                        @foreach (var pt in AllPortTypes())
+                        {
+                            var key = pt;
+                            var active = _filterPortTypes.Contains(key);
+                            <button type="button"
+                                    class="kmila-exec-signals__chip @(active ? "kmila-exec-signals__chip--active" : "")"
+                                    @onclick="() => TogglePortType(key)">
+                                @PortTypeLabel(key)
+                            </button>
+                        }
+                        <label class="kmila-exec-signals__groupby">
+                            <input type="checkbox" checked="@_groupByType"
+                                   @onchange="OnGroupByChanged" />
+                            <span>@Traductor.T("CONCEPTS_PLAYER_FILTER_GROUP")</span>
+                        </label>
+                    </div>
+                </div>
+            }
+
             <table class="kmila-exec-signals__table">
                 <tbody>
-                    @foreach (var name in OrderedSignalNames())
+                    @foreach (var (groupHeader, signalName) in FilteredAndGroupedNames())
                     {
+                        if (groupHeader != null)
+                        {
+                            <tr class="kmila-exec-signals__group-row">
+                                <th colspan="2">@groupHeader</th>
+                            </tr>
+                            continue;
+                        }
+                        var name = signalName!;
                         var value = _runner.CurrentStep.Signals.TryGetValue(name, out var v) ? v : "—";
                         var changed = HasChanged(name, value);
                         <tr>
@@ -125,6 +167,21 @@
     /// <summary>Fired once when autoplay reaches the last step.</summary>
     [Parameter] public EventCallback OnPlaybackComplete { get; set; }
 
+    /// <summary>
+    /// Phase B+ (2026-05-19): live-follow mode. When true, the player jumps
+    /// to the latest step every time <see cref="LiveTick"/> bumps — drives
+    /// the "watch the simulation as it runs" UX. When false (default), the
+    /// component behaves like the post-hoc replay surface it always was.
+    /// </summary>
+    [Parameter] public bool FollowLive { get; set; }
+
+    /// <summary>
+    /// Render-trigger counter. Increment any time the doc's steps list grows
+    /// in-place (same identity, new contents). The component compares against
+    /// the previous tick to decide whether to advance the cursor.
+    /// </summary>
+    [Parameter] public int LiveTick { get; set; }
+
     private readonly TimelineRunner _runner = new();
     private StandaloneCodeEditor? _monaco;
     private bool _monacoReady;
@@ -132,6 +189,13 @@
     private string _speedKey = "1";
     private Dictionary<string, string> _previousSignals = new();
     private string _currentNote = string.Empty;
+    private int _lastLiveTick = -1;
+
+    // ─── Phase D filter state ────────────────────────────────────────────
+    private string _filterText = string.Empty;
+    private HashSet<string> _filterPortTypes =
+        new(new[] { "IN", "OUT", "INOUT", "BUFFER", "INTERNAL" }, StringComparer.OrdinalIgnoreCase);
+    private bool _groupByType;
 
     private int TotalSteps => Math.Max(_runner.Document.Steps.Count, 1);
     private int ProgressPct =>
@@ -160,6 +224,7 @@
             _lastLoaded = Doc;
             _previousSignals = new();
             _runner.Load(Doc ?? new ExecutionTimelineDoc());
+            _lastLiveTick = -1; // doc swap resets the live tick chase
 
             if (_monacoReady && _monaco != null)
             {
@@ -171,6 +236,36 @@
                 await PushHighlightsAsync();
             }
             UpdateCurrentNote();
+            return;
+        }
+
+        // Phase B+ (2026-05-19): live-follow path. The parent (live-mode
+        // ReplayState) mutates the same doc in place — Doc identity hasn't
+        // changed, but new steps have been appended. Auto-advance the cursor
+        // to the latest step so the user sees frames as they arrive.
+        if (FollowLive && LiveTick != _lastLiveTick && Doc != null && Doc.Steps.Count > 0)
+        {
+            _lastLiveTick = LiveTick;
+            // Reload the runner against the (now-grown) doc so its internal
+            // step count tracks. Seek to the latest step.
+            _runner.Load(Doc);
+            _runner.SeekTo(Doc.Steps.Count - 1);
+            _previousSignals = new();
+            UpdateCurrentNote();
+            if (_monacoReady && _monaco != null)
+            {
+                try
+                {
+                    // Refresh Monaco source — in live mode the source may
+                    // have been re-injected per attach. Cheap idempotent op.
+                    var current = _runner.Document.Code ?? string.Empty;
+                    var existing = await _monaco.GetValue();
+                    if (existing != current)
+                        await _monaco.SetValue(current);
+                }
+                catch { /* tolerated */ }
+                await PushHighlightsAsync();
+            }
         }
     }
 
@@ -244,7 +339,7 @@
     private void UpdateCurrentNote()
     {
         var notes = _runner.CurrentStep.Note;
-        _currentNote = ConceptCatalog.Localize(notes, Lang, string.Empty);
+        _currentNote = ConceptCatalog.LocalizeWithFallbackWarning(notes, Lang, string.Empty);
     }
 
     private void OnPlay()
@@ -312,6 +407,105 @@
         if (_runner.Document.Steps.Count > 0)
             return _runner.Document.Steps[0].Signals.Keys;
         return Enumerable.Empty<string>();
+    }
+
+    // ─── Phase D: filter / group helpers ─────────────────────────────────
+
+    /// <summary>
+    /// Surfaces the filter UI only on designs big enough to need it:
+    /// 12+ signals AND at least two distinct port types in the metadata.
+    /// Small Concepts lessons never see it.
+    /// </summary>
+    private bool ShouldShowFilterUI()
+    {
+        var sigCount = _runner.Document.SignalOrder.Count;
+        if (sigCount == 0 && _runner.Document.Steps.Count > 0)
+            sigCount = _runner.Document.Steps[0].Signals.Count;
+        if (sigCount < 12) return false;
+        var meta = _runner.Document.SignalMeta;
+        if (meta == null || meta.Count == 0) return false;
+        var distinctTypes = new HashSet<string>(meta.Values, StringComparer.OrdinalIgnoreCase);
+        return distinctTypes.Count >= 2;
+    }
+
+    private static IEnumerable<string> AllPortTypes() =>
+        new[] { "IN", "OUT", "INOUT", "BUFFER", "INTERNAL" };
+
+    private string PortTypeLabel(string portType) => portType.ToUpperInvariant() switch
+    {
+        "IN"       => Traductor.T("CONCEPTS_PLAYER_FILTER_IN"),
+        "OUT"      => Traductor.T("CONCEPTS_PLAYER_FILTER_OUT"),
+        "INOUT"    => Traductor.T("CONCEPTS_PLAYER_FILTER_INOUT"),
+        "BUFFER"   => Traductor.T("CONCEPTS_PLAYER_FILTER_BUFFER"),
+        "INTERNAL" => Traductor.T("CONCEPTS_PLAYER_FILTER_INTERNAL"),
+        _          => portType,
+    };
+
+    private void TogglePortType(string portType)
+    {
+        if (!_filterPortTypes.Remove(portType))
+            _filterPortTypes.Add(portType);
+    }
+
+    private void OnFilterTextChanged(ChangeEventArgs e) =>
+        _filterText = e.Value?.ToString() ?? string.Empty;
+
+    private void OnGroupByChanged(ChangeEventArgs e) =>
+        _groupByType = e.Value is bool b && b;
+
+    private string ResolveType(string name) =>
+        _runner.Document.SignalMeta != null
+        && _runner.Document.SignalMeta.TryGetValue(name, out var t)
+        && !string.IsNullOrEmpty(t)
+            ? t.ToUpperInvariant()
+            : "INTERNAL";
+
+    /// <summary>
+    /// Yields signal rows, optionally separated by group headers. Each item
+    /// is either <c>(header, null)</c> (when grouping is on) or
+    /// <c>(null, name)</c>. The filter UI only fires when
+    /// <see cref="ShouldShowFilterUI"/> is true; otherwise this is just an
+    /// unfiltered ordered name list, preserving the original tape behaviour.
+    /// </summary>
+    private IEnumerable<(string? header, string? name)> FilteredAndGroupedNames()
+    {
+        var names = OrderedSignalNames();
+        var showUI = ShouldShowFilterUI();
+        var search = (_filterText ?? string.Empty).Trim();
+
+        var filtered = names.Where(n =>
+        {
+            if (!showUI) return true;
+            if (search.Length > 0 &&
+                n.IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0)
+                return false;
+            if (_filterPortTypes.Count > 0 &&
+                !_filterPortTypes.Contains(ResolveType(n)))
+                return false;
+            return true;
+        }).ToList();
+
+        if (!showUI || !_groupByType)
+        {
+            foreach (var n in filtered)
+                yield return (null, n);
+            yield break;
+        }
+
+        // Render groups in canonical port-type order so IN / OUT / INOUT /
+        // BUFFER / INTERNAL stay in the same vertical positions across
+        // designs. Empty groups are skipped to keep the table compact.
+        var byType = filtered
+            .GroupBy(n => ResolveType(n), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var pt in AllPortTypes())
+        {
+            if (!byType.TryGetValue(pt, out var list) || list.Count == 0) continue;
+            yield return (PortTypeLabel(pt), null);
+            foreach (var n in list)
+                yield return (null, n);
+        }
     }
 
     private void OnKeyDown(KeyboardEventArgs e)

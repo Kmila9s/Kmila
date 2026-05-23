@@ -1,12 +1,12 @@
-# Systèmes de numération : bits, hexadécimal, complément à deux
+# Systèmes numériques : bits, hex, complément à deux
 
-Les circuits numériques ne connaissent pas le « sept » — ils connaissent des rangées d'interrupteurs soit allumés soit éteints. Pour concevoir avec eux, tu dois être à l'aise pour passer entre la représentation que les humains aiment (décimal) et celle que le silicium comprend (binaire), avec l'hexadécimal comme raccourci utile au milieu.
+Les circuits numériques ne connaissent pas « sept » — ils connaissent des rangées d'interrupteurs allumés ou éteints. Pour concevoir avec eux, il faut être à l'aise pour naviguer entre la représentation que les humains aiment (décimal) et celle que le silicium comprend (binaire), avec l'hexadécimal comme raccourci utile au milieu.
 
 ## Binaire (base 2)
 
-Un **bit** est une valeur unique on/off, écrite `0` ou `1`. Un **octet** (byte) fait huit bits.
+Un **bit** est une valeur on/off, écrite `0` ou `1`. Un **octet** vaut huit bits.
 
-Des piles de bits encodent des entiers positionnellement, tout comme le décimal — chaque position est une puissance de deux :
+Des piles de bits encodent les entiers positionnellement, comme le décimal — chaque place est une puissance de deux :
 
 ```
   1 0 1 1 0
@@ -23,19 +23,19 @@ Donc `10110₂ = 18₁₀`.
 
 ## Hexadécimal (base 16)
 
-Écrire 32 bits en binaire te donne une soupe de 32 caractères que personne ne peut relire :
+Écrire 32 bits en binaire donne une soupe de 32 caractères que personne ne peut relire :
 
 ```
 00000000 00000000 11001010 11111110
 ```
 
-L'hexadécimal groupe les bits par quatre. Chaque chiffre hex couvre exactement un nibble (4 bits), donc 32 bits deviennent une chaîne bien rangée de 8 caractères :
+L'hex groupe les bits quatre par quatre. Chaque chiffre hex couvre exactement un quartet (4 bits), donc 32 bits deviennent une chaîne propre de 8 caractères :
 
 ```
 0x0000CAFE
 ```
 
-La correspondance est figée :
+La correspondance est fixe :
 
 | bin  | hex | bin  | hex |
 |------|-----|------|-----|
@@ -48,23 +48,23 @@ La correspondance est figée :
 | 0110 | 6   | 1110 | E   |
 | 0111 | 7   | 1111 | F   |
 
-En VHDL, tu écriras des littéraux hex pour les vecteurs dont la longueur est un multiple de quatre :
+En VHDL tu écriras des littéraux hex pour des vecteurs dont la longueur est multiple de quatre :
 
 ```vhdl
-signal addr : std_logic_vector(7 downto 0) := x"CA";  -- 8 bits: 11001010
+signal addr : std_logic_vector(7 downto 0) := x"CA";  -- 8 bits : 11001010
 ```
 
 ## Complément à deux (entiers signés)
 
-Le binaire tel que montré plus haut n'encode que des nombres **non négatifs**. Pour faire rentrer des nombres négatifs dans le même motif binaire, les concepteurs numériques utilisent le **complément à deux** :
+Le binaire montré ci-dessus n'encode que des nombres **non négatifs**. Pour faire tenir les négatifs dans le même bit-pattern, les concepteurs numériques utilisent le **complément à deux** :
 
-1. Écris le nombre positif en binaire.
-2. Inverse chaque bit.
-3. Ajoute 1.
+1. Écrire le nombre positif en binaire.
+2. Inverser chaque bit.
+3. Ajouter 1.
 
-Pour représenter `-5` sur 8 bits : `+5 = 00000101`, inverse → `11111010`, ajoute 1 → `11111011`.
+Pour représenter `-5` sur 8 bits : `+5 = 00000101`, invert → `11111010`, +1 → `11111011`.
 
-Pourquoi ce schéma ? Parce que l'addition fonctionne à l'identique, que les nombres soient signés ou non — pas besoin de deux additionneurs. `-5 + 7` en complément à deux 8 bits :
+Pourquoi ce schéma ? Parce que l'addition fonctionne à l'identique, signés ou non — tu n'as pas besoin de deux additionneurs. `-5 + 7` en complément à deux 8 bits :
 
 ```
   11111011   (-5)
@@ -73,10 +73,10 @@ Pourquoi ce schéma ? Parce que l'addition fonctionne à l'identique, que les no
  100000010
 ```
 
-Le neuvième bit déborde par le haut, et les 8 bits du bas valent `00000010 = 2`. Ce qui est la bonne réponse.
+Le neuvième bit déborde par le haut, et les 8 du bas valent `00000010 = 2`. Ce qui est la bonne réponse.
 
 ## À retenir
 
 - Les bits sont les atomes ; les octets sont des groupes de 8.
-- Binaire et hexadécimal sont le **même nombre** avec des habits différents. L'hex est plus facile à lire.
-- Le complément à deux encode les négatifs en inversant-puis-ajoutant-un — et c'est la raison pour laquelle `A + B` dans ton ALU fonctionne indépendamment du signe.
+- Binaire et hex sont **le même nombre** sous un autre vernis. L'hex est plus lisible.
+- Le complément à deux encode les négatifs par invert-et-+1 — et c'est la raison pour laquelle `A + B` dans ton ALU fonctionne quel que soit le signe.

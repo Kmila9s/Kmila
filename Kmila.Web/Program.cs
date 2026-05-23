@@ -26,8 +26,17 @@ public class Program
         var builder = WebApplication.CreateBuilder(args);
 
         // Add services to the container.
+        //
+        // MaximumReceiveMessageSize: Blazor Server's default is 32 KB, which
+        // is fine for typical JSInterop chatter but kills the SignalR circuit
+        // when JS returns a serialised mermaid SVG (~1-3 MB for a flow with
+        // 800+ nodes) or a base64-encoded PNG export (~5-20 MB). The circuit
+        // crashes with "Server returned an error on close" and the export
+        // silently fails. Lift the cap to 64 MB so Flow / Schematic / PNG
+        // exports for non-trivial designs make it through the wire. Backlog #2.
         builder.Services.AddRazorComponents()
-            .AddInteractiveServerComponents();
+            .AddInteractiveServerComponents()
+            .AddHubOptions(o => o.MaximumReceiveMessageSize = 64L * 1024 * 1024);
 
         // Add device-specific services used by the Kmila.Shared project
         builder.Services.AddSingleton<IFormFactor, FormFactor>();

@@ -1,6 +1,6 @@
-# Exemple : RAM simple port avec lecture write-first
+# Exemple : RAM monoport avec lecture write-first
 
-La mémoire lecture/écriture est l'autre moitié de « l'inférence de BRAM ». Le même pattern `type…array…of` fonctionne, mais cette fois le tableau est un **signal**, et tu écris sur certains fronts d'horloge et tu lis sur les autres.
+La mémoire lecture-écriture est l'autre moitié de « inférer la BRAM ». Le même motif `type…array…of` marche, mais maintenant le tableau est un **signal**, et tu écris sur certains fronts d'horloge et lis sur les autres.
 
 ## Le template
 
@@ -23,20 +23,20 @@ end process;
 
 ## Les trois politiques de lecture
 
-Toute RAM synchrone doit décider ce que fait `dout` **pendant une écriture**. Trois conventions existent :
+Toute RAM synchrone doit décider de ce que fait `dout` **pendant une écriture**. Trois conventions :
 
-- **Write-first (montré ci-dessus) :** lors d'une écriture, `dout` affiche la donnée fraîchement écrite. Sémantique la plus propre — une lecture et une écriture à la même adresse dans le même cycle te donnent la valeur fraîche.
-- **Read-first :** lors d'une écriture, `dout` affiche l'**ancien** contenu de la cellule. Le banc de registres de certains CPU utilise cela.
-- **No-change :** lors d'une écriture, `dout` ne se met pas à jour. Certains designs basse consommation.
+- **Write-first (ci-dessus) :** lors d'une écriture, `dout` montre les données fraîchement écrites. Sémantique la plus propre — une lecture et une écriture à la même adresse au même cycle te donnent la valeur fraîche.
+- **Read-first :** lors d'une écriture, `dout` montre l'**ancien** contenu de la cellule. Certains register files de CPU utilisent ça.
+- **No-change :** lors d'une écriture, `dout` ne change pas. Certains designs basse consommation.
 
-Les trois se mappent sur du block RAM sur tout FPGA moderne, mais le synthétiseur choisit le mode en fonction de la forme exacte de ton process. Le template write-first est le plus portable — en cas de doute, écris celui-là.
+Les trois mappent en block RAM sur tout FPGA moderne, mais le synthétiseur choisit le mode selon la forme exacte de ton process. Le template write-first est le plus portable — en cas de doute, écris-le.
 
 ## Ce que fait l'exemple
 
-Pendant les 30 premières µs, la sim écrit à trois adresses (`0`, `1`, `2`) avec trois patterns d'octet différents. Puis `we` descend, et `addr` est remis à 0 à 40 µs. L'onglet Waveforms montre `dout` qui suit `din` durant les écritures, puis qui restitue la valeur stockée quand tu lis.
+Pendant les 30 premières µs, la sim écrit à trois adresses (`0`, `1`, `2`) avec trois motifs d'octet différents. Puis `we` tombe, et `addr` est remis à 0 à 40 µs. L'onglet Waveforms montre `dout` qui suit `din` pendant les écritures, puis qui ressort la valeur stockée lors de la lecture.
 
-## À toi
+## À toi de jouer
 
-- **Passe à une vraie RAM double port.** Deux jeux complets de `addr`/`din`/`dout`/`we`, tous deux cadencés par `clk`. C'est le pattern que toutes les FIFO et DPRAM double-horloge de tous les fournisseurs utilisent en dessous.
-- **Ajoute un registre de sortie.** Le block RAM Xilinx supporte un second registre de pipeline après le tableau mémoire. Ajoute `dout_reg <= dout;` dans un second bloc cadencé et observe ce qui change dans la forme d'onde (indice : un cycle de latence supplémentaire, mais une bien meilleure fermeture temporelle).
-- **Change le contenu initial.** Précharge les premières entrées avec un pattern reconnaissable en modifiant l'initialiseur de `signal mem`. Tous les synthétiseurs ne respectent pas les initialisateurs BRAM en VHDL portable — vérifie ta cible avant de compter dessus en production.
+- **Passe à une vraie RAM double port.** Deux jeux complets `addr`/`din`/`dout`/`we`, tous deux cadencés par `clk`. C'est le motif que toutes les FIFOs et DPRAMs double-horloge des fournisseurs utilisent en dessous.
+- **Ajoute un registre de sortie.** La block RAM Xilinx supporte un second pipeline register après le tableau mémoire. Ajoute `dout_reg <= dout;` dans un second bloc cadencé et regarde ce qui change sur la waveform (indice : un cycle de latence en plus, mais bien meilleur timing closure).
+- **Change le contenu initial.** Précharge les premières entrées avec un motif reconnaissable en modifiant l'initialiseur de `signal mem`. Tous les synthétiseurs ne respectent pas les initialisateurs BRAM en VHDL portable — vérifie ta cible avant de t'y fier en production.

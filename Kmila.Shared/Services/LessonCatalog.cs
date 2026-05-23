@@ -25,6 +25,8 @@ public class LessonCatalog
     private LessonManifest? _manifest;
     private readonly Dictionary<string, string> _bodyCache = new();
     private readonly Dictionary<string, ExecutionTimelineDoc?> _timelineCache = new();
+    private readonly Dictionary<string, GateAnimationDoc?> _gatesCache = new();
+    private readonly Dictionary<string, FsmAnimationDoc?> _fsmCache = new();
 
     public LessonCatalog(Func<string, Task<Stream>> openFileAsync,
                          ILogger<LessonCatalog>? logger = null)
@@ -165,6 +167,84 @@ public class LessonCatalog
         {
             using var stream = await _open(path);
             return await JsonSerializer.DeserializeAsync<ExecutionTimelineDoc>(
+                stream,
+                new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                    ReadCommentHandling = JsonCommentHandling.Skip,
+                    AllowTrailingCommas = true
+                });
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Loads the optional gate-animation sidecar for a lesson, with EN
+    /// fallback. Returns null when no <c>.gates.json</c> sits next to the
+    /// lesson's Markdown body. Used by <c>LessonView</c> to render an inline
+    /// <c>GateAnimator</c> when the lesson opts in via
+    /// <see cref="Lesson.GateAnimation"/>.
+    /// </summary>
+    public async Task<GateAnimationDoc?> GetGateAnimationAsync(string moduleId, string lessonId, string lang)
+    {
+        var key = $"{lang}|{moduleId}|{lessonId}";
+        if (_gatesCache.TryGetValue(key, out var cached)) return cached;
+
+        var doc = await TryReadGatesAsync(moduleId, lessonId, lang)
+               ?? (lang != "en" ? await TryReadGatesAsync(moduleId, lessonId, "en") : null);
+
+        _gatesCache[key] = doc;
+        return doc;
+    }
+
+    private async Task<GateAnimationDoc?> TryReadGatesAsync(string moduleId, string lessonId, string lang)
+    {
+        var path = $"Learn/{lang}/{moduleId}/{lessonId}.gates.json";
+        try
+        {
+            using var stream = await _open(path);
+            return await JsonSerializer.DeserializeAsync<GateAnimationDoc>(
+                stream,
+                new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                    ReadCommentHandling = JsonCommentHandling.Skip,
+                    AllowTrailingCommas = true
+                });
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Loads the optional FSM-animation sidecar for a lesson, with EN
+    /// fallback. Mirrors <see cref="GetGateAnimationAsync"/>'s shape so the
+    /// loader semantics stay consistent across both player surfaces.
+    /// </summary>
+    public async Task<FsmAnimationDoc?> GetFsmAnimationAsync(string moduleId, string lessonId, string lang)
+    {
+        var key = $"{lang}|{moduleId}|{lessonId}";
+        if (_fsmCache.TryGetValue(key, out var cached)) return cached;
+
+        var doc = await TryReadFsmAsync(moduleId, lessonId, lang)
+               ?? (lang != "en" ? await TryReadFsmAsync(moduleId, lessonId, "en") : null);
+
+        _fsmCache[key] = doc;
+        return doc;
+    }
+
+    private async Task<FsmAnimationDoc?> TryReadFsmAsync(string moduleId, string lessonId, string lang)
+    {
+        var path = $"Learn/{lang}/{moduleId}/{lessonId}.fsm.json";
+        try
+        {
+            using var stream = await _open(path);
+            return await JsonSerializer.DeserializeAsync<FsmAnimationDoc>(
                 stream,
                 new JsonSerializerOptions
                 {

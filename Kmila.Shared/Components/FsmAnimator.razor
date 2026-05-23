@@ -1,0 +1,497 @@
+@*
+    FsmAnimator — third archetype, sibling to GateAnimator + ExecutionPlayer.
+
+    Walks a hand-authored FsmAnimationDoc step by step. Each step drives:
+      • highlight on the current state's circle,
+      • pulse on the transition arrow that fired (compared to prev step),
+      • the side I/O table (inputs + outputs from the current step),
+      • the same tape transport as the other players.
+
+    Pure SVG + Blazor — no JS interop. Mirrors GateAnimator's visual language
+    (cold muted, hot accent, drop-shadow pulse) so the three players read as
+    one family across the curriculum.
+*@
+
+@implements IDisposable
+
+<div class="kmila-gate-player" @onkeydown="OnKeyDown" tabindex="0">
+    <div class="kmila-gate-player__stage">
+        <div class="kmila-gate-canvas">
+            <svg viewBox="@(Doc?.ViewBox ?? "0 0 720 360")"
+                 preserveAspectRatio="xMidYMid meet"
+                 xmlns="http://www.w3.org/2000/svg"
+                 role="img"
+                 aria-label="@Traductor.T("CONCEPTS_PLAYER_FSM")">
+                <defs>
+                    <marker id="kmila-fsm-arrow" viewBox="0 0 10 10"
+                            refX="9" refY="5" markerWidth="6" markerHeight="6"
+                            orient="auto-start-reverse">
+                        <path d="M0,0 L10,5 L0,10 Z" class="kmila-fsm-arrow-head" />
+                    </marker>
+                    <marker id="kmila-fsm-arrow-active" viewBox="0 0 10 10"
+                            refX="9" refY="5" markerWidth="7" markerHeight="7"
+                            orient="auto-start-reverse">
+                        <path d="M0,0 L10,5 L0,10 Z" class="kmila-fsm-arrow-head kmila-fsm-arrow-head--active" />
+                    </marker>
+                </defs>
+
+                @* Transitions first so state circles overlay them. *@
+                @foreach (var t in Doc?.Transitions ?? new())
+                {
+                    var active = string.Equals(CurrentStep.Transition, t.Id,
+                        StringComparison.OrdinalIgnoreCase);
+                    var path = ArrowPath(t, out var labelPos);
+                    if (string.IsNullOrEmpty(path)) continue;
+                    <path d="@path"
+                          class="kmila-fsm-transition @(active ? "kmila-fsm-transition--active" : "")"
+                          fill="none"
+                          marker-end="@(active ? "url(#kmila-fsm-arrow-active)" : "url(#kmila-fsm-arrow)")" />
+                    @if (!string.IsNullOrEmpty(t.Condition))
+                    {
+                        @RenderTransitionLabel(t.Condition, labelPos.x, labelPos.y, active)
+                    }
+                }
+
+                @foreach (var s in Doc?.States ?? new())
+                {
+                    var active = string.Equals(CurrentStep.State, s.Id,
+                        StringComparison.OrdinalIgnoreCase);
+                    <g class="kmila-fsm-state @(active ? "kmila-fsm-state--active" : "")"
+                       transform="@($"translate({Fmt(s.X)},{Fmt(s.Y)})")">
+                        <circle cx="0" cy="0" r="36" class="kmila-fsm-state__body" />
+                        @RenderStateLabel(s)
+                        @if (s.Outputs != null && s.Outputs.Count > 0)
+                        {
+                            @RenderMooreOutput(s)
+                        }
+                    </g>
+                }
+            </svg>
+        </div>
+
+        <div class="kmila-exec-tape" role="group" aria-label="@Traductor.T("CONCEPTS_PLAYER_TAPE_LABEL")">
+            <div class="kmila-exec-tape__progress">
+                <span>@(_currentIndex + 1) / @TotalSteps</span>
+                <div class="kmila-exec-tape__progress-track">
+                    <div class="kmila-exec-tape__progress-fill" style="width: @ProgressPct%"></div>
+                </div>
+                <span>@StepLabel</span>
+            </div>
+
+            <button type="button" class="kmila-btn-icon"
+                    title="@Traductor.T("CONCEPTS_PLAYER_RESTART")"
+                    aria-label="@Traductor.T("CONCEPTS_PLAYER_RESTART")"
+                    @onclick="OnRestart">
+                <Icon Name="IconName.ArrowCounterclockwise" />
+            </button>
+            <button type="button" class="kmila-btn-icon"
+                    title="@Traductor.T("CONCEPTS_PLAYER_STEP_BACK")"
+                    aria-label="@Traductor.T("CONCEPTS_PLAYER_STEP_BACK")"
+                    disabled="@(_currentIndex == 0)"
+                    @onclick="OnStepBack">
+                <Icon Name="IconName.SkipStart" />
+            </button>
+            @if (_playing)
+            {
+                <button type="button" class="kmila-btn-icon kmila-btn-icon--accent"
+                        title="@Traductor.T("CONCEPTS_PLAYER_PAUSE")"
+                        aria-label="@Traductor.T("CONCEPTS_PLAYER_PAUSE")"
+                        @onclick="OnPause">
+                    <Icon Name="IconName.PauseFill" />
+                </button>
+            }
+            else
+            {
+                <button type="button" class="kmila-btn-icon kmila-btn-icon--accent"
+                        title="@Traductor.T("CONCEPTS_PLAYER_PLAY")"
+                        aria-label="@Traductor.T("CONCEPTS_PLAYER_PLAY")"
+                        @onclick="OnPlay">
+                    <Icon Name="IconName.PlayFill" />
+                </button>
+            }
+            <button type="button" class="kmila-btn-icon"
+                    title="@Traductor.T("CONCEPTS_PLAYER_STEP_FORWARD")"
+                    aria-label="@Traductor.T("CONCEPTS_PLAYER_STEP_FORWARD")"
+                    disabled="@IsAtEnd"
+                    @onclick="OnStepForward">
+                <Icon Name="IconName.SkipEnd" />
+            </button>
+
+            <label class="kmila-exec-tape__speed">
+                @Traductor.T("CONCEPTS_PLAYER_SPEED")
+                <select value="@_speedKey" @onchange="OnSpeedChanged">
+                    <option value="0.5">0.5×</option>
+                    <option value="1">1×</option>
+                    <option value="2">2×</option>
+                </select>
+            </label>
+
+            <span class="kmila-exec-tape__hint" aria-hidden="true"
+                  title="@Traductor.T("CONCEPTS_PLAYER_KEYS")">
+                ⌨ Space · ← → · R
+            </span>
+        </div>
+    </div>
+
+    <div class="kmila-exec-player__side">
+        <div class="kmila-exec-signals" aria-label="@Traductor.T("CONCEPTS_PLAYER_SIGNALS")">
+            <div class="kmila-exec-signals__header">@Traductor.T("CONCEPTS_PLAYER_SIGNALS")</div>
+            <table class="kmila-exec-signals__table">
+                <tbody>
+                    <tr>
+                        <th scope="row">state</th>
+                        <td>
+                            <span class="kmila-exec-signals__value">
+                                @(string.IsNullOrEmpty(CurrentStep.State) ? "—" : CurrentStep.State)
+                            </span>
+                        </td>
+                    </tr>
+                    @foreach (var kv in CurrentStep.Inputs)
+                    {
+                        var changed = HasChanged(kv.Key, kv.Value, isInput: true);
+                        <tr>
+                            <th scope="row">@kv.Key</th>
+                            <td>
+                                <span class="kmila-exec-signals__value @(changed ? "kmila-exec-signals__value--changed" : "")">
+                                    @kv.Value
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                    @foreach (var kv in CurrentStep.Outputs)
+                    {
+                        var changed = HasChanged(kv.Key, kv.Value, isInput: false);
+                        <tr>
+                            <th scope="row">@kv.Key</th>
+                            <td>
+                                <span class="kmila-exec-signals__value @(changed ? "kmila-exec-signals__value--changed" : "")">
+                                    @kv.Value
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="kmila-exec-player__note" role="status" aria-live="polite">
+            @if (!string.IsNullOrEmpty(_currentNote))
+            {
+                @_currentNote
+            }
+            else
+            {
+                <span class="kmila-exec-player__note-empty">@Traductor.T("CONCEPTS_PLAYER_NOTE_EMPTY")</span>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public FsmAnimationDoc Doc { get; set; } = new();
+    [Parameter] public string Lang { get; set; } = "en";
+    [Parameter] public EventCallback OnPlaybackComplete { get; set; }
+
+    private const int BaseStepMs = 1100;
+
+    private FsmAnimationDoc? _lastLoaded;
+    private int _currentIndex;
+    private bool _playing;
+    private CancellationTokenSource? _playCts;
+    private double _speed = 1.0;
+    private string _speedKey = "1";
+    private Dictionary<string, string> _previousInputs = new();
+    private Dictionary<string, string> _previousOutputs = new();
+    private string _currentNote = string.Empty;
+
+    private int TotalSteps => Math.Max(Doc?.Steps.Count ?? 0, 1);
+    private bool IsAtEnd => (Doc?.Steps.Count ?? 0) == 0 || _currentIndex >= (Doc!.Steps.Count - 1);
+
+    private int ProgressPct =>
+        (Doc?.Steps.Count ?? 0) <= 1 ? 100
+        : (int)Math.Round(100.0 * _currentIndex / (Doc!.Steps.Count - 1));
+
+    private string StepLabel =>
+        (Doc?.Steps.Count ?? 0) == 0 ? string.Empty : $"t = {CurrentStep.T}";
+
+    private FsmStep CurrentStep
+    {
+        get
+        {
+            if (Doc == null || Doc.Steps.Count == 0) return new FsmStep();
+            var i = Math.Clamp(_currentIndex, 0, Doc.Steps.Count - 1);
+            return Doc.Steps[i];
+        }
+    }
+
+    protected override Task OnParametersSetAsync()
+    {
+        if (!ReferenceEquals(Doc, _lastLoaded))
+        {
+            PauseInternal();
+            _lastLoaded = Doc;
+            _currentIndex = 0;
+            _previousInputs = new();
+            _previousOutputs = new();
+            UpdateCurrentNote();
+        }
+        else
+        {
+            UpdateCurrentNote();
+        }
+        return Task.CompletedTask;
+    }
+
+    private bool HasChanged(string key, string value, bool isInput)
+    {
+        var map = isInput ? _previousInputs : _previousOutputs;
+        if (!map.TryGetValue(key, out var prev)) return false;
+        return !string.Equals(prev, value, StringComparison.Ordinal);
+    }
+
+    private void UpdateCurrentNote()
+    {
+        _currentNote = ConceptCatalog.LocalizeWithFallbackWarning(CurrentStep.Note, Lang, string.Empty);
+    }
+
+    private static string Fmt(double v) => v.ToString("0.##",
+        System.Globalization.CultureInfo.InvariantCulture);
+
+    // ─── Geometry ────────────────────────────────────────────────────────
+    // Constants matching the SVG rendering — state circle radius and the
+    // arrow-back-off distance (so arrows land on the circle edge instead of
+    // burying inside it).
+    private const double StateRadius = 36;
+
+    private FsmState? StateById(string id) =>
+        Doc?.States.FirstOrDefault(s =>
+            string.Equals(s.Id, id, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Builds the SVG path for one transition arrow, plus the position
+    /// where its condition label should sit. Self-loops become an arc above
+    /// the state; everything else is a straight back-off line. Two arrows
+    /// pointing in opposite directions between the same pair are detected
+    /// here and curved apart so their labels don't collide.
+    /// </summary>
+    private string ArrowPath(FsmTransition t, out (double x, double y) label)
+    {
+        label = (0, 0);
+        var from = StateById(t.From);
+        var to   = StateById(t.To);
+        if (from == null || to == null) return string.Empty;
+
+        // Self-loop: arc above the state.
+        if (from == to)
+        {
+            var cx = from.X;
+            var cy = from.Y - StateRadius;
+            // Two anchor points on the top of the circle, 30° apart.
+            var anchorL = (x: from.X - 18, y: from.Y - StateRadius + 4);
+            var anchorR = (x: from.X + 18, y: from.Y - StateRadius + 4);
+            label = (cx, from.Y - StateRadius - 30);
+            return $"M{Fmt(anchorL.x)},{Fmt(anchorL.y)} " +
+                   $"A22,22 0 1 1 {Fmt(anchorR.x)},{Fmt(anchorR.y)}";
+        }
+
+        // Straight back-off. Compute the direction and shorten both endpoints
+        // by StateRadius so the arrow lands on the circle edge.
+        var dx = to.X - from.X;
+        var dy = to.Y - from.Y;
+        var len = Math.Sqrt(dx * dx + dy * dy);
+        if (len < 0.001) return string.Empty;
+        var ux = dx / len;
+        var uy = dy / len;
+
+        // Detect a reverse transition (same pair, opposite direction). When
+        // present, curve both arrows outward so their labels don't overlap.
+        var hasReverse = Doc!.Transitions.Any(o =>
+            o != t &&
+            string.Equals(o.From, t.To, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(o.To, t.From, StringComparison.OrdinalIgnoreCase));
+
+        var sx = from.X + ux * StateRadius;
+        var sy = from.Y + uy * StateRadius;
+        var ex = to.X - ux * StateRadius;
+        var ey = to.Y - uy * StateRadius;
+
+        if (hasReverse)
+        {
+            // Offset the curve to one side (perpendicular). Pick the side
+            // deterministically by string comparison of from-id so the two
+            // arrows always pick opposite sides.
+            var sign = string.CompareOrdinal(t.From, t.To) < 0 ? 1 : -1;
+            var nx = -uy * sign;
+            var ny =  ux * sign;
+            var midX = (sx + ex) / 2 + nx * 28;
+            var midY = (sy + ey) / 2 + ny * 28;
+            label = (midX + nx * 14, midY + ny * 14);
+            return $"M{Fmt(sx)},{Fmt(sy)} Q{Fmt(midX)},{Fmt(midY)} {Fmt(ex)},{Fmt(ey)}";
+        }
+
+        label = ((sx + ex) / 2.0, (sy + ey) / 2.0 - 8);
+        return $"M{Fmt(sx)},{Fmt(sy)} L{Fmt(ex)},{Fmt(ey)}";
+    }
+
+    private RenderFragment RenderTransitionLabel(string text, double x, double y, bool active) => __builder =>
+    {
+        __builder.OpenElement(0, "text");
+        __builder.AddAttribute(1, "x", Fmt(x));
+        __builder.AddAttribute(2, "y", Fmt(y));
+        __builder.AddAttribute(3, "text-anchor", "middle");
+        __builder.AddAttribute(4, "class",
+            $"kmila-fsm-transition__label {(active ? "kmila-fsm-transition__label--active" : "")}");
+        __builder.AddContent(5, text);
+        __builder.CloseElement();
+    };
+
+    private RenderFragment RenderMooreOutput(FsmState s) => __builder =>
+    {
+        __builder.OpenElement(0, "text");
+        __builder.AddAttribute(1, "x", "0");
+        __builder.AddAttribute(2, "y", "22");
+        __builder.AddAttribute(3, "text-anchor", "middle");
+        __builder.AddAttribute(4, "class", "kmila-fsm-state__moore");
+        __builder.AddContent(5, MooreOutputSummary(s));
+        __builder.CloseElement();
+    };
+
+    private RenderFragment RenderStateLabel(FsmState s) => __builder =>
+    {
+        // Render multi-line labels (split on '\n') stacked with tspan.
+        var lines = (s.Label ?? string.Empty).Split('\n');
+        var lineCount = Math.Max(1, lines.Length);
+        var startY = -(lineCount - 1) * 7;
+
+        __builder.OpenElement(0, "text");
+        __builder.AddAttribute(1, "x", "0");
+        __builder.AddAttribute(2, "y", "0");
+        __builder.AddAttribute(3, "text-anchor", "middle");
+        __builder.AddAttribute(4, "class", "kmila-fsm-state__label");
+        for (var i = 0; i < lines.Length; i++)
+        {
+            __builder.OpenElement(10 + i * 5, "tspan");
+            __builder.AddAttribute(11 + i * 5, "x", "0");
+            __builder.AddAttribute(12 + i * 5, "y", Fmt(startY + i * 14 + 4));
+            __builder.AddContent(13 + i * 5, lines[i]);
+            __builder.CloseElement();
+        }
+        __builder.CloseElement();
+    };
+
+    private string MooreOutputSummary(FsmState s)
+    {
+        if (s.Outputs == null || s.Outputs.Count == 0) return string.Empty;
+        return string.Join(", ", s.Outputs.Select(kv => $"{kv.Key}={kv.Value}"));
+    }
+
+    // ─── Transport ───────────────────────────────────────────────────────
+    private void OnPlay()
+    {
+        if (_playing || Doc == null || Doc.Steps.Count == 0) return;
+        if (IsAtEnd) _currentIndex = 0;
+        SnapshotValues();
+        _playing = true;
+        _playCts = new CancellationTokenSource();
+        _ = PlayLoopAsync(_playCts.Token);
+    }
+
+    private void OnPause() => PauseInternal();
+
+    private void PauseInternal()
+    {
+        var cts = _playCts;
+        _playCts = null;
+        _playing = false;
+        if (cts == null) return;
+        try { cts.Cancel(); } catch { }
+        cts.Dispose();
+    }
+
+    private void OnRestart()
+    {
+        PauseInternal();
+        SnapshotValues();
+        _currentIndex = 0;
+        UpdateCurrentNote();
+    }
+
+    private void OnStepForward()
+    {
+        if (Doc == null || Doc.Steps.Count == 0) return;
+        SnapshotValues();
+        if (_currentIndex < Doc.Steps.Count - 1)
+        {
+            _currentIndex++;
+            UpdateCurrentNote();
+        }
+    }
+
+    private void OnStepBack()
+    {
+        if (Doc == null || Doc.Steps.Count == 0) return;
+        SnapshotValues();
+        if (_currentIndex > 0)
+        {
+            _currentIndex--;
+            UpdateCurrentNote();
+        }
+    }
+
+    private void OnSpeedChanged(ChangeEventArgs e)
+    {
+        _speedKey = e.Value?.ToString() ?? "1";
+        if (double.TryParse(_speedKey, System.Globalization.NumberStyles.Any,
+                            System.Globalization.CultureInfo.InvariantCulture, out var x))
+            _speed = x;
+    }
+
+    private async Task PlayLoopAsync(CancellationToken token)
+    {
+        try
+        {
+            while (!token.IsCancellationRequested && Doc != null && _currentIndex < Doc.Steps.Count - 1)
+            {
+                var delay = Math.Max(120, (int)(BaseStepMs / Math.Max(0.1, _speed)));
+                try { await Task.Delay(delay, token); }
+                catch (TaskCanceledException) { return; }
+                if (token.IsCancellationRequested) return;
+
+                SnapshotValues();
+                _currentIndex++;
+                UpdateCurrentNote();
+                await InvokeAsync(StateHasChanged);
+            }
+            if (!token.IsCancellationRequested)
+            {
+                _playing = false;
+                _playCts = null;
+                await InvokeAsync(StateHasChanged);
+                if (OnPlaybackComplete.HasDelegate)
+                    await OnPlaybackComplete.InvokeAsync();
+            }
+        }
+        catch { /* component disposed mid-play; safe to swallow */ }
+    }
+
+    private void SnapshotValues()
+    {
+        _previousInputs  = new Dictionary<string, string>(CurrentStep.Inputs);
+        _previousOutputs = new Dictionary<string, string>(CurrentStep.Outputs);
+    }
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case " ":
+            case "Spacebar":   if (_playing) OnPause(); else OnPlay(); break;
+            case "ArrowRight": OnStepForward(); break;
+            case "ArrowLeft":  OnStepBack();    break;
+            case "r":
+            case "R":          OnRestart();     break;
+        }
+    }
+
+    public void Dispose() => PauseInternal();
+}
