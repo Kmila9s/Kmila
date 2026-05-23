@@ -33,6 +33,9 @@
        coloured from the shared palette). Signals present in only some runs
        still get a row — missing traces just drop out, so the viewer never
        hides a signal the student wants to see. *@
+    // Hoisted so the body element can stamp data-view-end-ns for the JS hover.
+    var compareTrackWidthPx = _zoomWidth;
+    var compareMaxNs = _compareTracks.Max(t => (long)t.Data.TotalTicks * t.Data.TimescaleNs);
     <section class="waveform-viewer waveform-viewer--compare" aria-label="@Traductor.T("WAVEFORM_VIEWER")">
         <header class="waveform-viewer__toolbar">
             <div class="waveform-viewer__title">
@@ -65,15 +68,18 @@
             }
         </div>
 
-        <div class="waveform-viewer__body">
+        <div class="waveform-viewer__body"
+             data-view-start-ns="0"
+             data-view-end-ns="@compareMaxNs"
+             data-label-width="160">
             <div class="waveform-grid">
                 @{
-                    var trackWidthPx = _zoomWidth;
+                    var trackWidthPx = compareTrackWidthPx;
+                    var maxNs = compareMaxNs;
                     var signalNames = _compareTracks
                         .SelectMany(t => t.Data.Signals.Select(s => s.Name))
                         .Distinct(StringComparer.Ordinal)
                         .ToList();
-                    var maxNs = _compareTracks.Max(t => (long)t.Data.TotalTicks * t.Data.TimescaleNs);
                 }
 
                 @foreach (var name in signalNames)
@@ -111,6 +117,10 @@
 }
 else if (Data != null && Data.Signals.Count > 0)
 {
+    // Hoisted out of the inner markup so the body element can stamp
+    // data-view-start-ns / data-view-end-ns for the JS hover cursor.
+    var trackWidthPx = _zoomWidth;
+    var (viewStartNs, viewEndNs) = GetViewBounds();
     <section class="waveform-viewer" aria-label="@Traductor.T("WAVEFORM_VIEWER")">
         <header class="waveform-viewer__toolbar">
             <div class="waveform-viewer__title">
@@ -159,12 +169,11 @@ else if (Data != null && Data.Signals.Count > 0)
             </div>
         </header>
 
-        <div class="waveform-viewer__body">
+        <div class="waveform-viewer__body"
+             data-view-start-ns="@viewStartNs"
+             data-view-end-ns="@viewEndNs"
+             data-label-width="160">
             <div class="waveform-grid">
-                @{
-                    var trackWidthPx = _zoomWidth;
-                    var (viewStartNs, viewEndNs) = GetViewBounds();
-                }
                 @for (int i = 0; i < Data.Signals.Count; i++)
                 {
                     var signal = Data.Signals[i];
@@ -273,21 +282,36 @@ else if (Data != null && Data.Signals.Count > 0)
     /// </summary>
     private int _panZoomId = -1;
     private bool _panZoomBound;
+    /// <summary>
+    /// Handle for the JS hover-cursor helper (vertical guide line + time
+    /// chip that follow the mouse over the body). Bound on first render of
+    /// either rendering branch; detached on Dispose.
+    /// </summary>
+    private int _hoverId = -1;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         // Re-bind whenever the wrapper might have remounted.
-        if (_panZoomBound && _panZoomId > 0) return;
+        if (_panZoomBound && _panZoomId > 0 && _hoverId > 0) return;
         try
         {
-            _panZoomId = await JS.InvokeAsync<int>("kmilaAttachPanZoom",
-                ".waveform-viewer__body",
-                new { targetSelector = ".waveform-grid", minScale = 0.5, maxScale = 4 });
-            _panZoomBound = _panZoomId > 0;
+            if (!_panZoomBound || _panZoomId <= 0)
+            {
+                _panZoomId = await JS.InvokeAsync<int>("kmilaAttachPanZoom",
+                    ".waveform-viewer__body",
+                    new { targetSelector = ".waveform-grid", minScale = 0.5, maxScale = 4 });
+                _panZoomBound = _panZoomId > 0;
+            }
+            if (_hoverId <= 0)
+            {
+                _hoverId = await JS.InvokeAsync<int>("kmilaAttachWaveformHover",
+                    ".waveform-viewer__body");
+            }
         }
         catch
         {
-            // Prerender / no JS — toolbar zoom is still functional.
+            // Prerender / no JS — toolbar zoom is still functional and the
+            // hover indicator just doesn't render.
         }
     }
 
@@ -296,6 +320,11 @@ else if (Data != null && Data.Signals.Count > 0)
         if (_panZoomId > 0)
         {
             try { _ = JS.InvokeVoidAsync("kmilaDetachPanZoom", _panZoomId).AsTask(); }
+            catch { }
+        }
+        if (_hoverId > 0)
+        {
+            try { _ = JS.InvokeVoidAsync("kmilaDetachWaveformHover", _hoverId).AsTask(); }
             catch { }
         }
     }
@@ -345,8 +374,14 @@ else if (Data != null && Data.Signals.Count > 0)
     private static bool IsClockName(string name)
         => Kmila.Shared.Services.StimulusBuilder.IsClockPortName(name);
 
-    private void ZoomIn()    => _zoomWidth = Math.Min((int)(_zoomWidth * 1.5), 24000);
-    private void ZoomOut()   => _zoomWidth = Math.Max((int)(_zoomWidth / 1.5),  600);
+    // Zoom ceiling raised from 24000 → 96000 so per-cycle value labels stay
+    // visible on long simulations: BuildTraceSvg hides the vector label when
+    // its plateau is < 24 px wide, which kicked in for a 10 ns clock period
+    // on any sim longer than ~10 µs. At 96000 px wide, a 10 ns plateau in a
+    // 40 µs sim renders ~24 px — labels render through the typical workload.
+    // Lower bound is just below the 1200 px BaseWidth so ZoomOut still steps.
+    private void ZoomIn()    => _zoomWidth = Math.Min((int)(_zoomWidth * 1.5), 96000);
+    private void ZoomOut()   => _zoomWidth = Math.Max((int)(_zoomWidth / 1.5),   600);
     private void ZoomReset() => _zoomWidth = BaseWidth;
 
     /// <summary>

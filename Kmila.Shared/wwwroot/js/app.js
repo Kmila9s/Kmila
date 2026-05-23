@@ -999,6 +999,130 @@ window.downloadFile = function (fileName, content) {
 })();
 
 
+/* ─── Waveform hover cursor ────────────────────────────────────────────────
+ * Vertical guide line + time chip that follow the mouse over the waveform
+ * body. Lets the user read off the time of any transition without having to
+ * scroll down and align by eye against the ruler row.
+ *
+ * The line is appended into the body's content (which is the horizontal
+ * scrollport) and positioned at `scrollLeft + bodyX` so as the user scrolls
+ * the trace under the cursor, the line stays visually at the cursor X. The
+ * chip uses the same X plus `scrollTop` for Y so it stays anchored to the
+ * top of the visible body even when the body is scrolled vertically.
+ *
+ * Time bounds + label-column width are read live from data-* attributes on
+ * the body, so Razor's re-renders (zoom changes, live-window slides, etc.)
+ * naturally update what the JS computes — no JSInterop refresh needed.
+ *
+ * Public API:
+ *   kmilaAttachWaveformHover(bodySelector) → id
+ *   kmilaDetachWaveformHover(id)
+ * --------------------------------------------------------------------- */
+(function () {
+    const handles = new Map();
+    let nextId = 1;
+
+    function formatTime(ns) {
+        const a = Math.abs(ns);
+        if (a >= 1e9) return (ns / 1e9).toFixed(3) + ' s';
+        if (a >= 1e6) return (ns / 1e6).toFixed(3) + ' ms';
+        if (a >= 1e3) return (ns / 1e3).toFixed(3) + ' µs';
+        return Math.round(ns) + ' ns';
+    }
+
+    function attach(bodySel) {
+        const body = (typeof bodySel === 'string')
+            ? document.querySelector(bodySel) : bodySel;
+        if (!body) return -1;
+        if (body.__kmilaHoverId) detach(body.__kmilaHoverId);
+
+        const line = document.createElement('div');
+        line.className = 'waveform-hover__line';
+        line.style.display = 'none';
+        body.appendChild(line);
+        const chip = document.createElement('div');
+        chip.className = 'waveform-hover__chip';
+        chip.style.display = 'none';
+        body.appendChild(chip);
+
+        let lastBodyX = -1;
+
+        function update() {
+            if (lastBodyX < 0) {
+                line.style.display = 'none';
+                chip.style.display = 'none';
+                return;
+            }
+            const rect = body.getBoundingClientRect();
+            const labelW = parseFloat(body.dataset.labelWidth || '160');
+            // Don't show the indicator over the sticky label column or
+            // outside the body — both reads would map to an invalid time.
+            if (lastBodyX < labelW || lastBodyX > rect.width) {
+                line.style.display = 'none';
+                chip.style.display = 'none';
+                return;
+            }
+            const startNs = parseFloat(body.dataset.viewStartNs || '0');
+            const endNs   = parseFloat(body.dataset.viewEndNs   || '0');
+            if (!(endNs > startNs)) return;
+            const grid = body.querySelector('.waveform-grid');
+            if (!grid) return;
+            const trackW = grid.offsetWidth - labelW;
+            if (trackW <= 0) return;
+
+            const trackX = lastBodyX - labelW + body.scrollLeft;
+            const t = startNs + (trackX / trackW) * (endNs - startNs);
+
+            const contentX = body.scrollLeft + lastBodyX;
+            line.style.left = contentX + 'px';
+            line.style.height = grid.offsetHeight + 'px';
+            line.style.display = 'block';
+
+            chip.textContent = formatTime(t);
+            // Flip the chip to the left of the cursor near the right edge so
+            // it never clips out of the visible body.
+            const chipW = chip.offsetWidth || 60;
+            const flip  = (rect.width - lastBodyX) < (chipW + 16);
+            chip.style.left = (contentX + (flip ? -chipW - 8 : 8)) + 'px';
+            chip.style.top  = (body.scrollTop + 4) + 'px';
+            chip.style.display = 'block';
+        }
+
+        function onMove(e) {
+            const rect = body.getBoundingClientRect();
+            lastBodyX = e.clientX - rect.left;
+            update();
+        }
+        function onLeave() { lastBodyX = -1; update(); }
+        function onScroll() { if (lastBodyX >= 0) update(); }
+
+        body.addEventListener('mousemove', onMove);
+        body.addEventListener('mouseleave', onLeave);
+        body.addEventListener('scroll', onScroll, { passive: true });
+
+        const id = nextId++;
+        handles.set(id, { body, line, chip, onMove, onLeave, onScroll });
+        body.__kmilaHoverId = id;
+        return id;
+    }
+
+    function detach(id) {
+        const h = handles.get(id);
+        if (!h) return;
+        h.body.removeEventListener('mousemove', h.onMove);
+        h.body.removeEventListener('mouseleave', h.onLeave);
+        h.body.removeEventListener('scroll', h.onScroll);
+        try { h.line.remove(); } catch (_) {}
+        try { h.chip.remove(); } catch (_) {}
+        h.body.__kmilaHoverId = null;
+        handles.delete(id);
+    }
+
+    window.kmilaAttachWaveformHover = attach;
+    window.kmilaDetachWaveformHover = detach;
+})();
+
+
 /* ─── Tiny haptic helper (Android-only; iOS Safari ignores) ──────────────── */
 window.kmilaHaptic = function (kind) {
     if (!navigator.vibrate) return;

@@ -7809,7 +7809,14 @@
     width: 100%;
     min-width: 0;
     overflow-x: auto;
-    overflow-y: hidden;
+    /* Vertical scroll lives on the body, not the grid — a sim with many ports
+       (e.g. CPU register file) used to be clipped at 70vh with no way to reach
+       the rows below. The grid now grows to its content; the body bounds the
+       viewport and shows a scrollbar when needed. Mouse wheel without ctrl/cmd
+       scrolls natively (kmilaAttachPanZoom's wheel handler bails early on
+       non-modified wheel events); ctrl/cmd-wheel still zooms. */
+    overflow-y: auto;
+    max-height: 70vh;
     contain: inline-size;
 }
 
@@ -7819,7 +7826,6 @@
     background-color: var(--surface-0);
     border-radius: var(--radius-md);
     width: max-content;
-    max-height: 70vh;
 }
 
 .waveform-row {
@@ -7844,10 +7850,35 @@
     font-size: var(--fs-xs);
     flex-wrap: wrap;
     /* Sticks to the left edge of the scrollable body — signal name stays
-       readable even after scrolling 24 k pixels of trace. */
+       readable even after scrolling 24 k pixels of trace. The right-edge
+       shadow makes the pinning visible: at zoom-out the column sits flush
+       against the trace and the shadow is invisible; once the user scrolls
+       horizontally the trace slides under the column and the shadow gives
+       a clear depth cue that "this column stays put". */
     position: sticky;
     left: 0;
     z-index: 2;
+    box-shadow: 4px 0 6px -2px rgba(15, 23, 42, 0.12);
+}
+[data-bs-theme="dark"] .waveform-row__label {
+    /* On dark surfaces the shadow needs a touch more contrast to read. */
+    box-shadow: 4px 0 8px -2px rgba(0, 0, 0, 0.45);
+}
+
+/* Top-row label is the first row of the grid; we also make the ruler row's
+   label cell stick to the BOTTOM of the body so the time axis stays visible
+   as the user scrolls vertically through many signals — same idea as the
+   left column, just on the other axis. */
+.waveform-row--ruler {
+    position: sticky;
+    bottom: 0;
+    z-index: 3;
+    background-color: var(--surface-0);
+}
+.waveform-row--ruler .waveform-row__label {
+    /* Ruler label cell stays at the bottom-left intersection — needs the
+       higher z-index so it sits above the regular sticky column above it. */
+    z-index: 4;
 }
 
 .waveform-row__track {
@@ -7859,6 +7890,37 @@
 
 .waveform-svg          { display: block; height: 40px; width: 100%; }
 .waveform-svg--ruler   { height: 22px; }
+
+/* Hover cursor: vertical guide line + time chip injected by
+   kmilaAttachWaveformHover. Both elements sit inside .waveform-viewer__body
+   in content coordinates; the JS recomputes positions on mousemove/scroll
+   so the line tracks the cursor visually while the chip stays anchored to
+   the top of the visible body. pointer-events: none keeps them from
+   intercepting clicks on the underlying traces. */
+.waveform-hover__line {
+    position: absolute;
+    top: 0;
+    width: 1px;
+    background-color: var(--accent);
+    opacity: 0.7;
+    pointer-events: none;
+    z-index: 5;
+}
+.waveform-hover__chip {
+    position: absolute;
+    padding: 2px 6px;
+    background-color: var(--surface-3, var(--surface-2));
+    color: var(--text-strong);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 11px;
+    line-height: 1.3;
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 6;
+    box-shadow: var(--shadow-1);
+}
 
 
 /* Sidebar project row: "simulation is running" pulse. Drives from
