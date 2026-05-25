@@ -142,6 +142,17 @@ public class GateWire
     /// <summary>Auto-router destination endpoint; see <see cref="From"/>.</summary>
     [JsonPropertyName("to")]
     public string To { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Optional fan-out gate. When non-empty, this wire renders "hot" only when
+    /// <see cref="Source"/> carries logic 1 AND at least one of these node ids
+    /// appears in the current step's <see cref="GateStep.Active"/> list.
+    /// Lets an author show a signal propagating down ONE branch of a fan-out
+    /// instead of pulsing every branch in lockstep. When empty (the default)
+    /// the wire's hotness is source-driven, matching pre-2026-05-22 behaviour.
+    /// </summary>
+    [JsonPropertyName("activeFor")]
+    public List<string> ActiveFor { get; set; } = new();
 }
 
 /// <summary>
@@ -240,6 +251,28 @@ public class GateAnimationDoc
     /// <summary>The steps. Must contain at least one entry to be playable.</summary>
     [JsonPropertyName("steps")]
     public List<GateStep> Steps { get; set; } = new();
+
+    /// <summary>
+    /// Opt-in channel routing for the auto-router. When true, wires that
+    /// share a destination column are spread across distinct vertical lanes
+    /// so their drop legs no longer paint on top of each other — essential
+    /// for high-fan-in clusters like the decoder where 8 wires land at the
+    /// same AND-gate column. Has no effect on wires authored with a manual
+    /// <c>path</c>. Default false so existing demos keep their geometry.
+    /// </summary>
+    [JsonPropertyName("staggerLanes")]
+    public bool StaggerLanes { get; set; } = false;
+
+    /// <summary>
+    /// Opt-in "spotlight" rendering. When true, gates whose output is cold
+    /// AND which have no hot wire feeding them are visually dimmed each step
+    /// so the live propagation path stands out. Input/output terminals stay
+    /// at full opacity to preserve layout anchors. Cuts visual noise on
+    /// dense diagrams where many overlapping cold wires + idle gates make
+    /// the firing path hard to read. Default false.
+    /// </summary>
+    [JsonPropertyName("spotlight")]
+    public bool Spotlight { get; set; } = false;
 }
 
 /// <summary>

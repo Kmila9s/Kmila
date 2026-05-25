@@ -28,6 +28,12 @@
    is unused inside the component but the @inject side-effect is what
    we want — DI instantiates it once per circuit / app session. *@
 @inject AutoErrorReporter AutoErrorReporter
+@* Same pattern for the simulation coordinator: its constructor wires
+   ProgramBuilder.OnProgressAdvanced + OnSimulationEnded into Sim, and
+   that bridge has to stay live whether or not the Editor page is
+   currently mounted — otherwise navigating away mid-run freezes the
+   sidebar / projects-card "background sim" surfaces. *@
+@inject SimulationCoordinator SimulationCoordinator
 
 @if (!_isLoading)
 {
@@ -60,7 +66,7 @@ else
         <Spinner Type="SpinnerType.Border" Color="SpinnerColor.Primary" />
     </div>
 }
-<Toasts class="p-3" AutoHide="true" Delay="5000" Placement="ToastsPlacement.TopCenter" />
+<KmilaToastHost />
 <div id="blazor-error-ui" data-nosnippet>
     @Traductor.T("ERROR_UNHANDLED")
     <a href="." class="reload">@Traductor.T("COMMON_RELOAD")</a>

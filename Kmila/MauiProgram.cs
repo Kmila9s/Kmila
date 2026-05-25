@@ -127,6 +127,18 @@ public static class MauiProgram
         builder.Services.AddSingleton<SimulationParameters>();
         builder.Services.AddSingleton<BuildLog>();
 
+        // Persistent bridge from ProgramBuilder engine events into Sim. Must
+        // live for the app lifetime so navigating away from the Editor doesn't
+        // break the progress / sim-end pipeline. Eagerly resolved by
+        // MainLayout via @inject so its constructor (which wires the
+        // subscriptions) actually runs at app startup.
+        builder.Services.AddSingleton<SimulationCoordinator>();
+
+        // Sim-end notifier — native iOS / Android local notifications. Both
+        // platforms request authorization lazily on first fire so the prompt
+        // has clear context (the user just finished a sim).
+        builder.Services.AddSingleton<ISimEndNotifier, MauiSimEndNotifier>();
+
         // In-app logs (/logs page) — same instance shared between DI and the
         // logger provider so every ILogger<T> write lands in AppLogStore.
         var appLog = new AppLogStore();
@@ -298,6 +310,11 @@ public static class MauiProgram
 
         // BlazorBootstrap provides Bootstrap-based Blazor UI components
         builder.Services.AddBlazorBootstrap();
+
+        // Custom toast service — replaces BB's ToastService at the inject layer
+        // (see _Imports.razor). Singleton in MAUI to match the host's lifetime
+        // (matches the surrounding state-service pattern in this file).
+        builder.Services.AddSingleton<KmilaToastService>();
 
         // Enable Blazor developer tools and debug logging in DEBUG builds only
 #if DEBUG

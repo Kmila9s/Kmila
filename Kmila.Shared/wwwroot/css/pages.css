@@ -3140,6 +3140,19 @@
     padding: 0;
 }
 
+/* Waveforms tab owns its own internal scroll (see .waveform-viewer__body).
+   The default panel rule above used to add a SECOND vertical scrollbar
+   alongside the body's — pair of nested overflow:auto's stacked. Same
+   recipe as the schematic: the panel becomes a fixed rect; the viewer
+   inside fills it and handles overflow internally. Padding stays at 0
+   so the toolbar's bottom border sits flush with the panel edge. */
+.kmila-dock__panel--waveforms {
+    overflow: hidden;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+
 
 /* ──────────────────────────────────────────────────────────────────
    Schematic export modal — global so the rules survive the Bootstrap
@@ -6208,8 +6221,19 @@
 .lesson-page {
     display: grid;
     gap: var(--space-5);
-    max-width: 880px;
-    margin: 0 auto;
+}
+
+/* Backlog #12: chrome, players (ExecutionPlayer / GateAnimator /
+   FsmAnimator), Blockly board, sample CTA, and footer span the full
+   content area like every other route. Only the prose elements below
+   re-impose a ~72ch reading column so long sentences stay legible on
+   wide monitors. */
+.lesson-markdown,
+.lesson-body > h1,
+.lesson-page__subtitle,
+.lesson-fallback-banner {
+    max-width: 72ch;
+    margin-inline: auto;
 }
 
 .lesson-page__chrome {
@@ -7443,6 +7467,135 @@
    rewriting keeps the component's ARIA + auto-hide + placement logic intact.
 */
 
+/* ----------------------------------------------------------------------------
+   KmilaToast — custom glass-styled toast stack (replaces BlazorBootstrap Toasts)
+   ----------------------------------------------------------------------------
+   Backed by `Services/KmilaToastService.cs` + `Components/KmilaToastHost.razor`.
+   The old `.toast`/`.toast-container` block below is kept for any leftover BB
+   usage (modals/dialogs still rely on it indirectly) but the live host paints
+   through `.kmila-toast-host` + `.kmila-toast` exclusively.
+*/
+
+.kmila-toast-host {
+    position: fixed;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: var(--z-toast);
+    width: min(440px, calc(100vw - var(--space-4) * 2));
+    padding: var(--space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    pointer-events: none;       /* let clicks through gaps between toasts */
+}
+.kmila-toast-host > * { pointer-events: auto; }
+
+.kmila-toast {
+    --t-accent: var(--kmila-accent);
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+    background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+    -webkit-backdrop-filter: blur(16px) saturate(1.6);
+    backdrop-filter: blur(16px) saturate(1.6);
+    border: 1px solid color-mix(in srgb, var(--t-accent) 35%, var(--border-subtle));
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-3),
+                inset 0 0 0 1px color-mix(in srgb, var(--t-accent) 8%, transparent),
+                0 0 30px -10px var(--t-accent);
+    color: var(--text-strong);
+    font-size: var(--fs-sm);
+    animation: kmila-toast-in var(--duration-base) var(--ease-standard) both;
+}
+
+/* Fallback for browsers without backdrop-filter (covers older WebViews). */
+@supports not ((backdrop-filter: blur(16px)) or (-webkit-backdrop-filter: blur(16px))) {
+    .kmila-toast { background: var(--surface-2); }
+}
+
+.kmila-toast--success { --t-accent: var(--success); }
+.kmila-toast--danger  { --t-accent: var(--danger); }
+.kmila-toast--warning { --t-accent: var(--warning); }
+.kmila-toast--info    { --t-accent: var(--kmila-accent); }
+
+.kmila-toast__icon {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    color: var(--t-accent);
+    margin-top: 2px;
+}
+
+.kmila-toast__text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.kmila-toast__title {
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-semibold);
+    color: var(--text-strong);
+    letter-spacing: var(--tracking-tight);
+}
+
+.kmila-toast__body {
+    font-size: var(--fs-sm);
+    color: var(--text-default);
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.kmila-toast__close {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: var(--text-muted);
+    padding: 0;
+    cursor: pointer;
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: color var(--duration-base) var(--ease-standard),
+                background-color var(--duration-base) var(--ease-standard);
+}
+.kmila-toast__close:hover { color: var(--text-strong); background: rgba(148, 163, 184, 0.1); }
+.kmila-toast__close:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+}
+.kmila-toast__close svg { width: 16px; height: 16px; }
+
+@keyframes kmila-toast-in {
+    from { opacity: 0; transform: translateY(-12px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Phones: respect the iOS notch + cap width to fit narrow viewports. The
+   modal block applies the same pattern; keep the values in sync. */
+@media (max-width: 640.98px) {
+    .kmila-toast-host {
+        width: calc(100vw - var(--space-2));
+        padding-top: calc(var(--space-3) + env(safe-area-inset-top, 0px));
+        padding-left: calc(var(--space-3) + env(safe-area-inset-left, 0px));
+        padding-right: calc(var(--space-3) + env(safe-area-inset-right, 0px));
+    }
+}
+
+
+/* ----------------------------------------------------------------------------
+   Legacy BlazorBootstrap toast reskin (kept until BB Toasts is fully removed).
+   ---------------------------------------------------------------------------- */
+
 .toast-container {
     padding: var(--space-3);
     pointer-events: none;               /* container doesn't intercept clicks */
@@ -7479,6 +7632,31 @@
     padding: var(--space-3);
     color: var(--text-body);
     line-height: 1.45;
+    /* Long unbreakable strings (filesystem paths, URLs) must wrap rather
+       than push the close button offscreen on narrow viewports. */
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+/* ── Phones: respect the iOS notch + cap width so toasts always fit. ─────
+   The `Toasts` component in `Layout/MainLayout.razor` uses TopCenter
+   placement which puts `.toast-container` at `top: 0; left: 50%`. Without
+   safe-area padding the toast paints over the status bar on iPhone; without
+   the max-width cap a toast at min-width 300px can equal the viewport on
+   narrow screens (e.g. iPhone SE landscape rotation). */
+@media (max-width: 640.98px) {
+    .toast-container {
+        padding-top: calc(var(--space-3) + env(safe-area-inset-top, 0px));
+        padding-left: calc(var(--space-3) + env(safe-area-inset-left, 0px));
+        padding-right: calc(var(--space-3) + env(safe-area-inset-right, 0px));
+        padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+        max-width: 100vw;
+    }
+    .toast {
+        min-width: 0;
+        max-width: calc(100vw - var(--space-4) * 2);
+        width: 100%;
+    }
 }
 
 /* Variant left-accent bar keyed off the Bootstrap text-* / bg-* classes that
@@ -7802,22 +7980,48 @@
     width: 100%;
     min-width: 0;
     max-width: 100%;
+    /* Flex column so the body row can `flex: 1; min-height: 0` and absorb the
+       remaining height inside its parent (.kmila-dock__panel--waveforms,
+       which is itself a flex column). Without this the body would shrink to
+       its content's max-height and a SECOND outer scrollbar would appear on
+       the panel — that's the "third scroll" UX issue. */
+    display: flex;
+    flex-direction: column;
+    height: 100%;
     overflow: hidden;
     contain: inline-size;
 }
 .waveform-viewer__body {
     width: 100%;
     min-width: 0;
+    /* Vertical scroll lives on the body — a sim with many ports (e.g. CPU
+       register file) used to be clipped at 70vh with no way to reach the
+       rows below. The body now fills whatever vertical space the panel
+       offers; the grid grows to its content; the body shows a scrollbar
+       when its content exceeds the available rect. Mouse wheel without
+       ctrl/cmd scrolls natively. */
     overflow-x: auto;
-    /* Vertical scroll lives on the body, not the grid — a sim with many ports
-       (e.g. CPU register file) used to be clipped at 70vh with no way to reach
-       the rows below. The grid now grows to its content; the body bounds the
-       viewport and shows a scrollbar when needed. Mouse wheel without ctrl/cmd
-       scrolls natively (kmilaAttachPanZoom's wheel handler bails early on
-       non-modified wheel events); ctrl/cmd-wheel still zooms. */
     overflow-y: auto;
-    max-height: 70vh;
+    flex: 1 1 auto;
+    min-height: 0;
     contain: inline-size;
+    /* Containing block for the JS hover cursor's absolutely-positioned
+       line + chip (appended into the body by kmilaAttachWaveformHover).
+       Without this the chip's top:scrollTop+4 anchors to the nearest
+       positioned ancestor — usually .kmila-dock — and visually drifts up
+       to the toolbar/tabs region. contain:inline-size + overflow:auto
+       don't establish a positioning context by themselves; only an
+       explicit `position` does. */
+    position: relative;
+    /* Native touch scroll. The shared gesture-cursor rule below assumes the
+       body is a custom pan-zoom surface (true for schematic + flow, false
+       for the waveform after we detached pan-zoom from it). Restore the
+       defaults explicitly so touch users on iOS/Android get a normal scroll
+       experience instead of the page being frozen. */
+    touch-action: auto;
+    cursor: auto;
+    user-select: auto;
+    -webkit-user-select: auto;
 }
 
 .waveform-grid {
@@ -7891,6 +8095,59 @@
 .waveform-svg          { display: block; height: 40px; width: 100%; }
 .waveform-svg--ruler   { height: 22px; }
 
+/* Click-to-hide affordance on signal labels: cursor changes, the small
+   eye-slash icon to the right fades in on hover so the user has visible
+   confirmation that the row is interactive. Keeps the existing label flex
+   layout intact — the icon just becomes the trailing flex item. */
+.waveform-row__label--clickable { cursor: pointer; }
+.waveform-row__label-eye {
+    margin-left: auto;
+    opacity: 0;
+    transition: opacity 120ms ease-in-out;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+.waveform-row__label--clickable:hover .waveform-row__label-eye { opacity: 0.7; }
+.waveform-row__label--clickable:hover { background-color: var(--surface-2); }
+
+/* Toolbar-level chip-bar listing currently-hidden signals. Each chip restores
+   a single signal on click; the trailing "Show all" button bulk-restores. The
+   bar only renders when at least one signal is hidden, so it doesn't add
+   visual weight to the common case. */
+.waveform-viewer__hidden {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background-color: var(--surface-2);
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: var(--fs-xs);
+}
+.waveform-viewer__hidden-label {
+    color: var(--text-muted);
+    font-weight: 600;
+}
+.waveform-hidden-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 2px 8px;
+    background-color: var(--surface-0);
+    border: 1px solid var(--border-default);
+    border-radius: 999px;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: var(--fs-xs);
+    color: var(--text-strong);
+    cursor: pointer;
+    transition: background-color 120ms ease, border-color 120ms ease;
+}
+.waveform-hidden-chip:hover {
+    background-color: var(--surface-1);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
 /* Hover cursor: vertical guide line + time chip injected by
    kmilaAttachWaveformHover. Both elements sit inside .waveform-viewer__body
    in content coordinates; the JS recomputes positions on mousemove/scroll
@@ -7950,6 +8207,189 @@
     position: absolute;
     top: 8px; right: 8px;
     margin: 0;
+}
+
+
+/* ----------------------------------------------------------------------------
+   Sidebar background-sim controls — pause / resume / stop visible while
+   Sim.RunningProjectId == this project, so a user who navigated away from
+   /editor/{id} can still steer their long sim without coming back.
+   ---------------------------------------------------------------------------- */
+
+/* Inline "47%" chip in the project row label. Sits between the name and the
+   pulse dot. Kept narrow + muted so it doesn't dominate the row. */
+.kmila-nav-item__progress-text {
+    margin-left: auto;
+    padding: 0 6px;
+    font-size: 0.7rem;
+    font-variant-numeric: tabular-nums;
+    color: rgba(255, 255, 255, 0.7);
+    flex-shrink: 0;
+}
+[dir="rtl"] .kmila-nav-item__progress-text { margin-left: 0; margin-right: auto; }
+
+/* When the % chip is present, the pulse dot should sit immediately after it,
+   not push to the row edge. Removing margin-left:auto on pulse only when a
+   sibling % is present keeps the layout tight. */
+.kmila-nav-item__progress-text + .kmila-nav-item__pulse {
+    margin-left: 0;
+}
+
+/* Pause / Resume / Stop always visible while running — unlike the trash
+   button, which hides until hover. The controls need to be reachable on
+   touch devices and on first sight, since this is the whole point of the
+   background-sim surface. */
+.kmila-nav-item--running .kmila-nav-item__actions {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* Make room on the right of the project name for the always-on controls. */
+.kmila-nav-item--running .kmila-nav-item__main {
+    padding-right: 64px;
+}
+[dir="rtl"] .kmila-nav-item--running .kmila-nav-item__main {
+    padding-right: var(--space-4);
+    padding-left: 64px;
+}
+
+/* The default action:hover turns red (matches the trash semantics).
+   For Pause / Resume that's misleading — use the accent color instead.
+   Only the Stop button (--danger) keeps the red hover. */
+.kmila-nav-item__action:not(.kmila-nav-item__action--danger):hover {
+    background-color: rgba(255, 255, 255, 0.18);
+    color: #ffffff;
+}
+
+.kmila-nav-item__action--danger:hover {
+    background-color: rgba(239, 68, 68, 0.35);
+    color: #ffffff;
+}
+
+/* Slim progress strip pinned to the bottom of the row. 2px so it reads as
+   an accent stripe rather than a chunky bar. */
+.kmila-nav-item__progress {
+    position: absolute;
+    left: var(--space-4);
+    right: var(--space-4);
+    bottom: 2px;
+    height: 2px;
+    background-color: rgba(255, 255, 255, 0.08);
+    border-radius: 1px;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.kmila-nav-item__progress-fill {
+    display: block;
+    height: 100%;
+    background-color: var(--kmila-accent);
+    transition: width var(--duration-base) var(--ease-standard);
+}
+
+.kmila-nav-item--running .kmila-nav-item__progress-fill {
+    background: linear-gradient(
+        90deg,
+        var(--kmila-accent) 0%,
+        color-mix(in srgb, var(--kmila-accent) 60%, transparent) 50%,
+        var(--kmila-accent) 100%
+    );
+    background-size: 200% 100%;
+    animation: kmilaShimmerProgress 1.8s linear infinite;
+}
+
+/* Collapsed (rail) mode: progress strip + % text don't fit. Drop them; the
+   pulse dot at the corner still signals "running." Stop button slides to the
+   left of the pulse so it's reachable via the rail's hover popover layer. */
+.kmila-sidebar--collapsed .kmila-nav-item__progress,
+.kmila-sidebar--collapsed .kmila-nav-item__progress-text {
+    display: none;
+}
+
+
+/* ----------------------------------------------------------------------------
+   Project card running state — same affordances as the sidebar, with more
+   horizontal room so we can spell out "Running 47%" in a pill.
+   ---------------------------------------------------------------------------- */
+
+.project-card--running {
+    border-color: color-mix(in srgb, var(--kmila-accent) 35%, var(--border-default));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--kmila-accent) 25%, transparent),
+                var(--shadow-2);
+}
+
+/* Always show actions when running — same reasoning as the sidebar:
+   controls must be reachable at first glance. */
+.project-card--running .project-card__actions {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* "Running · 47%" / "Paused · 47%" pill next to the project name. */
+.project-card__running-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: var(--space-2);
+    padding: 2px var(--space-2);
+    border-radius: 999px;
+    background-color: color-mix(in srgb, var(--kmila-accent) 15%, transparent);
+    color: var(--kmila-accent);
+    font-size: 0.72rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    vertical-align: middle;
+}
+[dir="rtl"] .project-card__running-badge {
+    margin-left: 0;
+    margin-right: var(--space-2);
+}
+
+.project-card__running-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: var(--kmila-accent);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--kmila-accent) 60%, transparent);
+    animation: kmilaRunPulse 1.6s ease-out infinite;
+    flex-shrink: 0;
+}
+
+/* The progress strip sits below the description, hugging the body width. */
+.project-card__progress {
+    margin-top: var(--space-2);
+    height: 3px;
+    background-color: var(--surface-3);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.project-card__progress-fill {
+    display: block;
+    height: 100%;
+    background: linear-gradient(
+        90deg,
+        var(--kmila-accent) 0%,
+        color-mix(in srgb, var(--kmila-accent) 60%, transparent) 50%,
+        var(--kmila-accent) 100%
+    );
+    background-size: 200% 100%;
+    animation: kmilaShimmerProgress 1.8s linear infinite;
+    transition: width var(--duration-base) var(--ease-standard);
+}
+
+/* Resume button — the "primary" action while paused. Tinted accent so the
+   user can tell it apart from the stop button at a glance. */
+.project-card__action--accent {
+    background-color: color-mix(in srgb, var(--kmila-accent) 18%, var(--surface-2));
+    border-color: color-mix(in srgb, var(--kmila-accent) 40%, var(--border-subtle));
+    color: var(--kmila-accent);
+}
+
+.project-card__action--accent:hover {
+    background-color: color-mix(in srgb, var(--kmila-accent) 28%, var(--surface-2));
+    color: var(--kmila-accent);
+    border-color: var(--kmila-accent);
 }
 
 
@@ -8866,9 +9306,14 @@
 }
 
 
-/* ── Schematic / Waveform: gesture cues + responsive info ────────────────── */
+/* ── Schematic / Flow: gesture cues + responsive info ────────────────────
+   NOTE: .waveform-viewer__body intentionally excluded — the waveform uses
+   native scroll (signals are row-structured; 2D pan adds nothing beyond
+   what scroll provides, and pan-zoom's cached natural-size bounds went
+   stale whenever signals were hidden, letting the user drag content into
+   empty space). Schematic and flow are free-form canvases that genuinely
+   need the gesture surface. */
 .schematic-viewer__body,
-.waveform-viewer__body,
 .flow-diagram__body {
     /* Pointer events handle the drag; native scroll competes otherwise. */
     touch-action: none;
@@ -8884,7 +9329,6 @@
     -webkit-user-drag: none;
 }
 .schematic-viewer__body:active,
-.waveform-viewer__body:active,
 .flow-diagram__body:active { cursor: grabbing; }
 
 /* Hover-only feedback in the schematic stays for desktop, but on touch we
@@ -9014,35 +9458,99 @@
 
 
 /* ── Modals: full-bleed + sticky footer on phones ─────────────────────────── */
+/* Goal: on phones the modal fills the viewport, the body scrolls, and the
+   action footer is always reachable. Concrete iPhone-11 bugs the rule
+   block has to defend against (see 2026-05-23 screenshot):
+     • Header text overlaps the iOS status bar — modals are `position: fixed`
+       at top: 0 and bypass the app-wide `.status-bar-safe-area` sticky div,
+       so the header itself needs `env(safe-area-inset-top)` padding.
+     • `.modal-dialog-centered` sets `align-items: center` and uses
+       `--bs-modal-margin` in its min-height calc — neutralise both so the
+       dialog actually fills 100dvh end-to-end.
+     • Flex children need `min-height: 0` to be allowed to shrink; without
+       it the modal-body grows past 100dvh and pushes the footer offscreen.
+     • BlazorBootstrap's ConfirmDialog wraps buttons in an inner
+       `<div class="d-grid gap-2 d-flex justify-content-md-end">` — the
+       d-flex declaration wins, so a column-reverse on `.modal-footer`
+       alone never reached the buttons. Override the INNER wrapper.
+     • Long unbreakable strings (filesystem paths in the remove-project
+       dialog) overflow horizontally without `overflow-wrap: anywhere`. */
 @media (max-width: 640.98px) {
-    .modal-dialog {
+    .modal-dialog,
+    .modal-dialog-centered,
+    .modal-dialog-scrollable {
+        --bs-modal-margin: 0;
         margin: 0 !important;
         max-width: 100% !important;
+        width: 100% !important;
         height: 100dvh !important;
+        max-height: 100dvh !important;
+        min-height: 100dvh !important;
+        align-items: stretch !important;
     }
     .modal-content {
         height: 100% !important;
+        max-height: 100dvh !important;
+        min-height: 0;
         border-radius: 0 !important;
         border: none !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+    /* Push header content below the iOS notch/status bar. Modal bypasses
+       the app-wide safe-area div because it paints over it. */
+    .modal-header {
+        padding-top: calc(var(--space-3) + env(safe-area-inset-top, 0px)) !important;
+        padding-left: calc(var(--space-3) + env(safe-area-inset-left, 0px)) !important;
+        padding-right: calc(var(--space-3) + env(safe-area-inset-right, 0px)) !important;
+        align-items: flex-start;
     }
     .modal-body {
         overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
         flex: 1 1 auto;
+        min-height: 0;
         padding: var(--space-4) !important;
+        /* Long unbreakable strings (filesystem paths, URLs) must wrap
+           anywhere instead of overflowing the viewport. */
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+    .modal-body p,
+    .modal-body code,
+    .modal-body pre {
+        overflow-wrap: anywhere;
+        word-break: break-word;
     }
     .modal-footer {
         position: sticky;
         bottom: 0;
+        flex: 0 0 auto;
         background-color: var(--surface-2);
         z-index: 1;
-        flex-direction: column-reverse !important;
         align-items: stretch !important;
         gap: var(--space-2);
+        padding-left: calc(var(--space-3) + env(safe-area-inset-left, 0px));
+        padding-right: calc(var(--space-3) + env(safe-area-inset-right, 0px));
         padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
     }
-    .modal-footer .btn {
+    /* BlazorBootstrap ConfirmDialog wraps buttons in this inner div with
+       d-flex; the wider selector also catches Bootstrap variants that
+       don't use the d-grid helper. */
+    .modal-footer > .d-grid,
+    .modal-footer > div:has(> .btn),
+    .modal-footer > div:has(> button) {
+        display: flex !important;
+        flex-direction: column-reverse !important;
         width: 100%;
+        gap: var(--space-2);
+        margin: 0 !important;
+    }
+    .modal-footer .btn,
+    .modal-footer button {
+        width: 100% !important;
         min-height: 44px;
+        margin: 0 !important;
     }
     /* The export modal already stacks; this just reinforces. */
     .kmila-export-form { max-height: none !important; }
@@ -10454,6 +10962,15 @@
 @keyframes kmila-gate-pulse {
     0%   { stroke-width: 3.6; }
     100% { stroke-width: 2.4; }
+}
+
+/* Spotlight mode: gates not on the live propagation path fade out so the
+   firing gate + its hot wires read at a glance. Input/output terminals
+   never get this class (they stay as layout anchors). Opt-in via
+   doc.spotlight in the .gates.json sidecar. */
+.kmila-gate-node--dimmed {
+    opacity: 0.22;
+    transition: opacity 220ms ease-out;
 }
 
 .kmila-gate-label {

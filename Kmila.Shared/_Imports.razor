@@ -27,7 +27,11 @@
 @inject ProgramBuilder Builder
 @inject ProjectFiles ProjectFiles
 @inject IJSRuntime JS
-@inject ToastService ToastService
+@* Custom toast service. Preserves BB's `ToastService.Notify(ToastMessage)`
+   call-site signature, so all existing `ToastService.Notify(...)` callers
+   keep compiling. The actual UI is rendered by `<KmilaToastHost />` mounted
+   in MainLayout. *@
+@inject KmilaToastService ToastService
 @inject NavigationManager NavigationManager
 @inject SelectedFPGA SelectedFPGA
 @inject Traductor Traductor

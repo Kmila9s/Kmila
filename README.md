@@ -5,8 +5,13 @@
 **Author:** Ulrich Tamayo Daniel
 **Email:** dulricht1700@alumno.ipn.mx
 **Email 2:** danielulrichtamayo@gmail.com
-**Version:** 1.14.1
-**Last Updated:** May 1, 2026
+**Version:** 1.19.0
+**Last Updated:** May 22, 2026
+
+> **Recent changelog highlights** (full details in [`Documentacion/`](../../Documentacion/)):
+> - `CHANGELOG_waveform_overhaul_2026-05-22.md` — backlog #8 / #9 / #10 closed: per-signal hide via row-click, hover time cursor, pan-zoom detached from waveform (Schematic + Flow keep it), fit-to-width Reset, zoom range extended to `[200, 2 400 000] px`, the "triple scrollbar" UX issue resolved.
+> - `CHANGELOG_v1.19.md` — nested IEEE calls (`to_integer(unsigned(addr))`) now flow end-to-end through parser → synth → runtime (#29).
+> - `CHANGELOG_concepts_module_2026-05-17.md` — `/concepts` end-to-end (lessons + Blockly exercises + ExecutionPlayer) and the Editor's Replay dock tab.
 
 ## 1. Overview
 
@@ -449,7 +454,7 @@ The `Kmila.Shared` project contains the core logic, UI components, and data mode
 *   **ResourceProgressBar.razor** — Slim pill-shaped progress bar with four color tiers (success 0–59 %, info 60–79, warning 80–99, danger 100+). Danger tier uses a pulsing diagonal-stripe fill for visual urgency without being obnoxious.
 *   **RunBar.razor** — Horizontal strip between Monaco and the dock. FPGA reference chip · time number input + scale select · secondary **Build** · primary **Run** with state machine (Idle → Building… → Pause/Stop → Resume → Run again) · overflow menu (Save · New file). Progress line animates under the bar while running.
 *   **StatusBar.razor** — Thin bottom bar. File info (unsaved dot · mono filename · Ln/Col · language chip) on the left; build status chip + resource % of selected FPGA + sim status chip on the right. Build/resource chips are clickable and jump to the matching dock tab.
-*   **WaveformViewer.razor** — Digital-waveform chart per signal via Chart.js (largely unchanged content; chrome tokenized).
+*   **WaveformViewer.razor** — Inline-SVG digital waveform renderer. Each signal renders a step-function trace (std_logic) or diamond/value-label trace (vectors) into its own `<svg>` strip; the time ruler is a shared sticky-bottom row. **Native overflow scroll** on both axes (pan-zoom intentionally NOT attached here — the body is row-structured, not free-form like Schematic/Flow). Toolbar gives **Zoom-In / Zoom-Out / Reset** with `× 2` steps and a `[200, 2 400 000] px` range; **Reset = fit-to-width** via `kmilaWaveformFitWidth`. **Click any signal label** to hide that row; restored via a chip-bar above the body (hidden set also filters VCD + SVG + PNG exports). Sticky chrome: label column pinned left with a depth-shadow; ruler pinned bottom. JS-side **hover cursor** (`kmilaAttachWaveformHover`) draws a vertical guide + time chip following the mouse so the student can read off any transition's exact time without projecting down to the ruler. Supports a separate **compare mode** when given a list of `SimulationSnapshot`s — N traces overlaid per signal with palette colors. Full architectural narrative + diagrams in [`Documentacion/CHANGELOG_waveform_overhaul_2026-05-22.md`](../../Documentacion/CHANGELOG_waveform_overhaul_2026-05-22.md) and the WaveformViewer section in [`Documentacion/ARCHITECTURE.md`](../../Documentacion/ARCHITECTURE.md).
 
 #### Layout
 *   **MainLayout.razor** — Shell: mounts `NavMenu` + `TopBar` + content article. Applies `.content--wide` when the current route is `/editor/…` so the workbench fills the full viewport (ordinary pages keep the 1440 px reading cap). Subscribes to `NavigationManager.LocationChanged` so the class flips immediately on navigation.
@@ -563,7 +568,7 @@ classDiagram
 *   **RecentProjectsTracker.cs** — Bounded MRU of recently opened projects, surfaced on Home and ProjectsView. Trims when the cap is reached.
 *   **ProjectBundleService.cs** — Export/import of full project bundles (project + files + active configuration) for sharing assignments between students or handing in homework.
 *   **UserAssetStore.cs** — Filesystem abstraction for user-supplied assets (custom VHDL packages, lesson attachments, exported waveforms). Centralises path resolution across MAUI / Web hosts.
-*   **WaveformExporter.cs** — Renders the current `SignalHistory` to `.vcd`, `.csv`, or formatted text for handoff to GTKWave or external tooling.
+*   **WaveformExporter.cs** — Static helper that renders a `WaveformData` to a standalone SVG string (`BuildSvg`) and paginates a long time range into fixed-span pages (`PaginateRange`) for multi-page exports. **VCD** output is built directly inside `WaveformViewer.BuildVcd` (closer to the per-signal hide filter); **PNG** is the SVG rasterised through the shared `kmilaSvgToPngBase64` canvas helper. All three honour the per-signal hide set ([`CHANGELOG_waveform_overhaul_2026-05-22.md`](../../Documentacion/CHANGELOG_waveform_overhaul_2026-05-22.md) §1).
 *   **SimulationSnapshotStore.cs** — Persists past simulation runs (signals, ports, time bounds) so the Runs dock tab can show history and the Compare action can diff them.
 *   **StimulusBuilder.cs** — Translates the editor's port-moments timeline into the `List<StimulusEvent>` shape that `Interpreter.Models.SimulationConfig` expects, including expansion of clock-mode ports into auto-toggling `ClockConfig`s.
 *   **SignalCursorBus.cs** — Cross-component event bus for "selected signal" + "cursor at time T" so `WaveformViewer`, `SchematicViewer`, and `PortsPanel` stay synchronised on hover/click without component-to-component wiring.
@@ -986,7 +991,7 @@ All areas of the codebase now have complete XML documentation:
 *   **ResourceProgressBar.razor** - Pill progress bar with success/info/warning/danger tiers.
 *   **RunBar.razor** - Build/Run/Pause/Stop state machine above the dock.
 *   **StatusBar.razor** - File info · build status · resource % · sim state.
-*   **WaveformViewer.razor** - Chart.js digital-waveform chart per signal.
+*   **WaveformViewer.razor** - Inline-SVG digital waveform renderer (no Chart.js). Native scroll, click-to-hide labels, hover time cursor, fit-to-width Reset. See [`Documentacion/CHANGELOG_waveform_overhaul_2026-05-22.md`](../../Documentacion/CHANGELOG_waveform_overhaul_2026-05-22.md).
 
 #### Pages
 *   **Editor.razor** - Workbench page; marshals `ProgramBuilder` events into `SimulationParameters` + `BuildLog`.

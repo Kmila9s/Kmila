@@ -21,6 +21,7 @@
 @inject Kmila.Shared.Services.ConceptProgressStore ConceptProgress
 @inject Kmila.Shared.Services.ConceptCatalog ConceptCatalog
 @inject Kmila.Shared.Services.SimulationParameters Sim
+@inject Kmila.Shared.Services.ProgramBuilder Builder
 @inject Kmila.Shared.Services.Practice.PracticeCatalog PracticeCatalog
 @inject Kmila.Shared.Services.Practice.PracticeAttemptStore PracticeAttempts
 
@@ -119,8 +120,10 @@
                     {
                         var href = $"/editor/{project.Id}";
                         var isRunning = Sim.RunningProjectId == project.Id;
+                        var isPaused  = isRunning && Sim.State == SimState.Paused;
+                        var pct       = (int)Math.Round(Sim.Progress);
                         <div class="kmila-nav-item kmila-nav-item--project @ActiveClass(href, exact: true) @(isRunning ? "kmila-nav-item--running" : "")"
-                             data-tooltip="@(isRunning ? $"{project.Name} — {Traductor.T("SIDEBAR_PROJECT_RUNNING")}" : project.Name)">
+                             data-tooltip="@(isRunning ? $"{project.Name} — {(isPaused ? Traductor.T("SIDEBAR_PROJECT_PAUSED") : Traductor.T("SIDEBAR_PROJECT_RUNNING"))} {pct}%" : project.Name)">
                             <a href="@href" class="kmila-nav-item__main"
                                @onclick="OnNavClicked"
                                aria-label="@string.Format(Traductor.T("NAV_OPEN_PROJECT"), project.Name)">
@@ -129,18 +132,57 @@
                                 <span class="kmila-nav-item__label">@project.Name</span>
                                 @if (isRunning)
                                 {
+                                    <span class="kmila-nav-item__progress-text">@pct%</span>
                                     <span class="kmila-nav-item__pulse" title="@Traductor.T("SIDEBAR_PROJECT_RUNNING")" aria-hidden="true"></span>
                                 }
                             </a>
-                            <span class="kmila-nav-item__actions">
-                                <button type="button" class="kmila-nav-item__action"
-                                        @onclick="() => RemoveProjectAsync(project)"
-                                        @onclick:stopPropagation="true"
-                                        aria-label="@string.Format(Traductor.T("NAV_REMOVE_PROJECT"), project.Name)"
-                                        title="@string.Format(Traductor.T("NAV_REMOVE_PROJECT"), project.Name)">
-                                    <Icon Name="IconName.Trash" />
-                                </button>
-                            </span>
+                            @if (isRunning)
+                            {
+                                <span class="kmila-nav-item__actions">
+                                    @if (isPaused)
+                                    {
+                                        <button type="button" class="kmila-nav-item__action"
+                                                @onclick="OnResumeSimulation"
+                                                @onclick:stopPropagation="true"
+                                                aria-label="@Traductor.T("SIM_RESUME")"
+                                                title="@Traductor.T("SIM_RESUME")">
+                                            <Icon Name="IconName.PlayFill" />
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <button type="button" class="kmila-nav-item__action"
+                                                @onclick="OnPauseSimulation"
+                                                @onclick:stopPropagation="true"
+                                                aria-label="@Traductor.T("SIM_PAUSE")"
+                                                title="@Traductor.T("SIM_PAUSE")">
+                                            <Icon Name="IconName.PauseFill" />
+                                        </button>
+                                    }
+                                    <button type="button" class="kmila-nav-item__action kmila-nav-item__action--danger"
+                                            @onclick="OnStopSimulation"
+                                            @onclick:stopPropagation="true"
+                                            aria-label="@Traductor.T("SIM_STOP")"
+                                            title="@Traductor.T("SIM_STOP")">
+                                        <Icon Name="IconName.StopFill" />
+                                    </button>
+                                </span>
+                                <div class="kmila-nav-item__progress" role="progressbar" aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100">
+                                    <div class="kmila-nav-item__progress-fill" style="width: @pct%;"></div>
+                                </div>
+                            }
+                            else
+                            {
+                                <span class="kmila-nav-item__actions">
+                                    <button type="button" class="kmila-nav-item__action"
+                                            @onclick="() => RemoveProjectAsync(project)"
+                                            @onclick:stopPropagation="true"
+                                            aria-label="@string.Format(Traductor.T("NAV_REMOVE_PROJECT"), project.Name)"
+                                            title="@string.Format(Traductor.T("NAV_REMOVE_PROJECT"), project.Name)">
+                                        <Icon Name="IconName.Trash" />
+                                    </button>
+                                </span>
+                            }
                         </div>
                     }
                 </div>
@@ -327,6 +369,43 @@
     /// user has navigated away from the Editor.
     /// </summary>
     private void OnSimChanged() => InvokeAsync(StateHasChanged);
+
+    /// <summary>
+    /// Pauses the active simulation from the sidebar. Mirrors the Run-bar's
+    /// pause handler (<c>Editor.OnPauseSimulation</c>): the singleton
+    /// <see cref="ProgramBuilder"/> drives the underlying timer, and
+    /// <see cref="SimulationParameters.SetState"/> flips the state machine so
+    /// every subscribed surface (Run bar, sidebar, project card) re-renders.
+    /// </summary>
+    private void OnPauseSimulation()
+    {
+        if (Sim.State != SimState.Running) return;
+        Builder.PauseTimer();
+        Sim.SetState(SimState.Paused);
+    }
+
+    /// <summary>Resumes a paused simulation from the sidebar.</summary>
+    private void OnResumeSimulation()
+    {
+        if (Sim.State != SimState.Paused) return;
+        Builder.ContinueTimer();
+        Sim.SetState(SimState.Running);
+    }
+
+    /// <summary>
+    /// Stops the active simulation from the sidebar. Mirrors
+    /// <c>Editor.OnStopSimulation</c>: stops the timer, transitions to
+    /// Complete, zeros progress, and clears the RunningProjectId so the
+    /// row drops back to its idle layout.
+    /// </summary>
+    private void OnStopSimulation()
+    {
+        if (Sim.State != SimState.Running && Sim.State != SimState.Paused) return;
+        Builder.StopTimer();
+        Sim.SetState(SimState.Complete);
+        Sim.SetProgress(0);
+        Sim.EndRun();
+    }
 
     private async void OnProjectListChanged()
     {

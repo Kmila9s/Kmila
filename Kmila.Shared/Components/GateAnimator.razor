@@ -3,7 +3,10 @@
 
     Walks a hand-authored GateAnimationDoc step by step. Each step drives:
       • the value chips on every node (0/1/U/…),
-      • the wire stroke colour (hot when source value == "1"),
+      • the wire stroke colour (hot when source value == "1", and — for
+        wires that declare `activeFor` — only when one of those gate ids
+        is also in step.active, so a fan-out can light only the branch
+        that actually fired),
       • a pulse outline on nodes listed in step.active,
       • the same tape transport as ExecutionPlayer (play/pause/step±/restart, 0.5×/1×/2×, Space/←/→/R).
 
@@ -33,13 +36,17 @@
                  xmlns="http://www.w3.org/2000/svg"
                  role="img"
                  aria-label="@Traductor.T("CONCEPTS_PLAYER_GATES")">
-                @* Wires render first so node bodies sit on top of them. *@
-                @foreach (var w in Doc?.Wires ?? new())
+                @* Wires render first so node bodies sit on top of them.
+                   Cold wires are emitted BEFORE hot wires so that, when two
+                   share a trunk segment (typical fan-out from the auto-router),
+                   the hot stroke paints on top of the cold one — otherwise the
+                   trunk visually looks cold whenever a later JSON-order wire
+                   happens to be the cold one. *@
+                @foreach (var w in OrderedWires())
                 {
-                    var v = ValueOf(w.Source);
-                    var hot = IsHot(v);
+                    var hot = IsWireHot(w);
                     var color = ColorOf(w.Source);
-                    var d = string.IsNullOrEmpty(w.Path) ? AutoPath(w.From, w.To) : w.Path;
+                    var d = string.IsNullOrEmpty(w.Path) ? AutoPath(w.From, w.To, LaneOf(w)) : w.Path;
                     if (string.IsNullOrEmpty(d)) continue;
                     <path d="@d"
                           class="kmila-gate-wire @(hot ? "kmila-gate-wire--hot" : "kmila-gate-wire--cold")"
@@ -65,8 +72,9 @@
                     var value = ValueOf(n.Id);
                     var active = IsActive(n.Id);
                     var changed = HasChanged(n.Id, value);
+                    var dimmed = Doc?.Spotlight == true && !IsGateLive(n);
                     var chipColor = IsHot(value) ? ColorOf(n.Id) : string.Empty;
-                    <g class="kmila-gate-node @(active ? "kmila-gate-node--active" : "") @(changed ? "kmila-gate-node--changed" : "")"
+                    <g class="kmila-gate-node @(active ? "kmila-gate-node--active" : "") @(changed ? "kmila-gate-node--changed" : "") @(dimmed ? "kmila-gate-node--dimmed" : "")"
                        transform="@($"translate({Fmt(n.X)},{Fmt(n.Y)})")">
                         @RenderShape(n)
                         @RenderLabel(n)
@@ -213,6 +221,16 @@
     /// </summary>
     private Dictionary<string, string> _colors = new();
 
+    /// <summary>
+    /// Auto-router lane index per wire. Filled by <see cref="RecomputeLanes"/>
+    /// when <c>Doc.StaggerLanes</c> is true; empty otherwise. Each wire's
+    /// elbow column is pulled inward by <c>lane * LaneSpacing</c> so wires
+    /// converging at the same destination column drop in distinct verticals
+    /// instead of stacking on top of each other.
+    /// </summary>
+    private Dictionary<GateWire, int> _lanes = new();
+    private const double LaneSpacing = 6.0;
+
     public int CurrentIndex => _currentIndex;
     private int TotalSteps => Math.Max(Doc?.Steps.Count ?? 0, 1);
     private bool IsAtEnd => (Doc?.Steps.Count ?? 0) == 0 || _currentIndex >= (Doc!.Steps.Count - 1);
@@ -244,6 +262,7 @@
             _currentIndex = 0;
             _previousValues = new();
             RegenerateColors();
+            RecomputeLanes();
             UpdateCurrentNote();
         }
         else
@@ -289,6 +308,42 @@
 
     private string ColorOf(string id) =>
         _colors.TryGetValue(id, out var c) && !string.IsNullOrEmpty(c) ? c : "var(--kmila-accent, #4f8cff)";
+
+    /// <summary>
+    /// Groups auto-routed wires by destination column (rounded to the nearest
+    /// 4px) and assigns each one a lane index within its group. Only runs
+    /// when <c>Doc.StaggerLanes</c> opts in — otherwise <see cref="_lanes"/>
+    /// stays empty and every wire falls back to lane 0 (original geometry).
+    /// Groups with a single member also get no lane assignment so the typical
+    /// "one wire per pin" case stays untouched.
+    /// </summary>
+    private void RecomputeLanes()
+    {
+        _lanes = new Dictionary<GateWire, int>();
+        if (Doc == null || !Doc.StaggerLanes) return;
+
+        var byDestX = new Dictionary<int, List<GateWire>>();
+        foreach (var w in Doc.Wires)
+        {
+            if (!string.IsNullOrEmpty(w.Path)) continue; // manual path skips the router
+            var dest = ResolveEndpoint(w.To);
+            if (dest == null) continue;
+            var key = (int)Math.Round(dest.Value.X / 4.0) * 4;
+            if (!byDestX.TryGetValue(key, out var list))
+            {
+                list = new List<GateWire>();
+                byDestX[key] = list;
+            }
+            list.Add(w);
+        }
+        foreach (var kv in byDestX)
+        {
+            if (kv.Value.Count < 2) continue;
+            for (int i = 0; i < kv.Value.Count; i++) _lanes[kv.Value[i]] = i;
+        }
+    }
+
+    private int LaneOf(GateWire w) => _lanes.TryGetValue(w, out var l) ? l : 0;
 
     // ─── Auto-router ─────────────────────────────────────────────────────
     // Resolves "nodeId" / "nodeId.port" strings to absolute SVG coords and
@@ -501,7 +556,7 @@
         };
     }
 
-    private string AutoPath(string from, string to)
+    private string AutoPath(string from, string to, int lane = 0)
     {
         var a = ResolveEndpoint(from);
         var b = ResolveEndpoint(to);
@@ -516,9 +571,12 @@
         // Pick an elbow column. Stop 20px before the destination so the wire
         // approaches the gate body horizontally. If the destination is left
         // of (or close to) the source, fall back to the midpoint to avoid
-        // backtracking visuals.
-        var elbow = x2 - 20;
-        if (elbow <= x1 + 4) elbow = (x1 + x2) / 2.0;
+        // backtracking visuals. `lane` (assigned by RecomputeLanes) shifts the
+        // column inward so wires landing at the same dest column drop in
+        // distinct vertical channels instead of stacking.
+        var laneOffset = lane * LaneSpacing;
+        var elbow = x2 - 20 - laneOffset;
+        if (elbow <= x1 + 4) elbow = (x1 + x2) / 2.0 - laneOffset;
 
         return $"M{Fmt(x1)},{Fmt(y1)} L{Fmt(elbow)},{Fmt(y1)} L{Fmt(elbow)},{Fmt(y2)} L{Fmt(x2)},{Fmt(y2)}";
     }
@@ -655,8 +713,119 @@
         return false;
     }
 
-    private bool IsActive(string id) =>
-        CurrentStep.Active != null && CurrentStep.Active.Contains(id, StringComparer.OrdinalIgnoreCase);
+    /// <summary>
+    /// A node is "active" for visual pulsing when the author marked it in
+    /// <c>step.active</c> AND its current output value is hot (logic 1).
+    /// Drops gates that just fell 1→0: their output net is now cold, no hot
+    /// wires touch them, but the pulse outline implies signal flow — students
+    /// who associate the pulse with "this is firing" get confused (decoder
+    /// step 4: g_and2 was pulsing even though it stopped firing). Authors who
+    /// want falling events surfaced should rely on the lesson note or the
+    /// value-chip transition, not the pulse outline.
+    /// <para>
+    /// Manual-path demos whose wires don't carry a <c>from</c> spec can't be
+    /// resolved by <see cref="GateOutputValue"/> — the resolver returns an
+    /// empty string. We fall back to the pre-filter "pulse whenever in
+    /// step.active" semantic for those cases so the gate highlighting stays
+    /// intact. The filter only narrows where we have enough graph info.
+    /// </para>
+    /// </summary>
+    private bool IsActive(string id)
+    {
+        if (CurrentStep.Active == null) return false;
+        if (!CurrentStep.Active.Contains(id, StringComparer.OrdinalIgnoreCase)) return false;
+        var value = GateOutputValue(id);
+        if (string.IsNullOrEmpty(value)) return true;
+        return IsHot(value);
+    }
+
+    /// <summary>
+    /// Resolves a gate's current output value. Tries <c>step.values[nodeId]</c>
+    /// directly first; if that's empty (the typical case — authors key values
+    /// by the wire's <c>source</c> id like <c>"y0"</c>, not the gate id like
+    /// <c>"g_and0"</c>) it scans wires whose <c>from</c> originates at this
+    /// node and uses the wire's source as the value-table key. Returns the
+    /// empty string when nothing matches — <see cref="IsHot"/> treats that as
+    /// cold, which is the safe default.
+    /// </summary>
+    private string GateOutputValue(string nodeId)
+    {
+        var direct = ValueOf(nodeId);
+        if (!string.IsNullOrEmpty(direct)) return direct;
+        if (Doc == null) return string.Empty;
+        foreach (var w in Doc.Wires)
+        {
+            if (string.IsNullOrEmpty(w.From)) continue;
+            var fromNode = StripPort(w.From);
+            if (string.Equals(fromNode, nodeId, StringComparison.OrdinalIgnoreCase))
+                return ValueOf(w.Source);
+        }
+        return string.Empty;
+    }
+
+    private static string StripPort(string spec)
+    {
+        if (string.IsNullOrEmpty(spec)) return spec;
+        var dot = spec.IndexOf('.');
+        return dot < 0 ? spec : spec.Substring(0, dot);
+    }
+
+    /// <summary>
+    /// Gates a wire's hot state on its optional <c>activeFor</c> set. Empty
+    /// (the default) → unconditional pass: the wire's hotness stays purely
+    /// source-driven (back-compat). Non-empty → the wire is allowed to glow
+    /// only when at least one listed node id is currently active via
+    /// <see cref="IsActive"/>, which means the target gate is both in
+    /// <c>step.active</c> AND outputting logic 1. This stops a wire from
+    /// glowing into a gate that just stopped firing.
+    /// </summary>
+    private bool WireGateOpen(GateWire w)
+    {
+        if (w.ActiveFor == null || w.ActiveFor.Count == 0) return true;
+        foreach (var id in w.ActiveFor)
+        {
+            if (IsActive(id)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>True iff the wire should paint with its source colour this step.</summary>
+    private bool IsWireHot(GateWire w) => IsHot(ValueOf(w.Source)) && WireGateOpen(w);
+
+    /// <summary>
+    /// Spotlight liveness test: a node is "live" this step if (a) it's a
+    /// terminal — those always stay visible as layout anchors — or (b) its
+    /// output is hot, or (c) any incoming wire is hot. Drives the
+    /// <c>kmila-gate-node--dimmed</c> class when <c>Doc.Spotlight</c> is on.
+    /// </summary>
+    private bool IsGateLive(GateNode n)
+    {
+        var kind = (n.Kind ?? string.Empty).ToLowerInvariant();
+        if (kind == "input" || kind == "output") return true;
+        if (IsHot(GateOutputValue(n.Id))) return true;
+        if (Doc == null) return false;
+        foreach (var w in Doc.Wires)
+        {
+            if (!IsWireHot(w)) continue;
+            var toNode = StripPort(w.To);
+            if (string.Equals(toNode, n.Id, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Yields wires in render order: cold first, hot last. SVG paints in
+    /// document order, so emitting hot wires after cold ones guarantees the
+    /// hot stroke wins on any segment two wires share (typical fan-out from
+    /// the auto-router). Inside each band the original JSON order is kept so
+    /// authors can still control overpaint between two hot wires.
+    /// </summary>
+    private IEnumerable<GateWire> OrderedWires()
+    {
+        if (Doc == null) yield break;
+        foreach (var w in Doc.Wires) if (!IsWireHot(w)) yield return w;
+        foreach (var w in Doc.Wires) if (IsWireHot(w))  yield return w;
+    }
 
     private bool HasChanged(string id, string value)
     {

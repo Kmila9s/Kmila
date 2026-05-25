@@ -1123,6 +1123,24 @@ window.downloadFile = function (fileName, content) {
 })();
 
 
+/* ─── Waveform fit-to-width helper ────────────────────────────────────────
+ * Returns the trace width that would make the grid (label column + trace)
+ * exactly fit the visible body. The caller clamps this against the zoom
+ * floor/ceiling. Returns -1 if the body isn't measurable (prerender or
+ * detached); the caller should fall back to its BaseWidth in that case.
+ * --------------------------------------------------------------------- */
+window.kmilaWaveformFitWidth = function (bodySel, labelW) {
+    const body = (typeof bodySel === 'string')
+        ? document.querySelector(bodySel) : bodySel;
+    if (!body) return -1;
+    const w = body.clientWidth;
+    if (!(w > 0)) return -1;
+    // Subtract a few pixels of buffer so the body doesn't show a scrollbar
+    // from sub-pixel rounding at the exact-fit boundary.
+    return Math.max(0, Math.floor(w - (labelW || 160) - 2));
+};
+
+
 /* ─── Tiny haptic helper (Android-only; iOS Safari ignores) ──────────────── */
 window.kmilaHaptic = function (kind) {
     if (!navigator.vibrate) return;
@@ -1432,5 +1450,40 @@ window.kmilaDisposeMonacoBreakpoints = function () {
     if (decos.length > 0) {
         editor.deltaDecorations(decos, []);
         _kmilaBpDecos.set(editor, []);
+    }
+};
+
+// =====================================================================
+// Browser-Notification bridge — invoked from Kmila.Shared.Services.
+// WebSimEndNotifier when a simulation finishes. Mirrors the MAUI
+// notifier's contract so the Coordinator can fire-and-forget regardless
+// of target. Permission is requested lazily on first call: the prompt
+// has clear context ("you just finished a sim, want these going
+// forward?") rather than being an out-of-context boot prompt.
+//
+// Most browsers suppress the OS-level banner when the tab is
+// foregrounded — that's the desired behavior, because the in-app
+// toast covers that case. Background / minimized tabs get the banner.
+// =====================================================================
+window.kmilaNotifySimEnd = async function (title, body) {
+    try {
+        if (typeof window.Notification === 'undefined') return; // unsupported
+        let permission = Notification.permission;
+        if (permission === 'default') {
+            permission = await Notification.requestPermission();
+        }
+        if (permission !== 'granted') return;
+
+        // tag = stable id → re-firing replaces the previous one instead
+        // of stacking. Avoids notification pileups on long sessions.
+        new Notification(title || 'Kmila', {
+            body: body || '',
+            tag: 'kmila-sim-end',
+            silent: false
+        });
+    } catch {
+        // Notification API can throw on some platforms (e.g. iOS Safari
+        // when called outside a user gesture). Swallow — the in-app toast
+        // already provides the foreground signal.
     }
 };

@@ -133,6 +133,60 @@ public class SimulationParameters
         OnChange?.Invoke();
     }
 
+    /// <summary>
+    /// "Most recent finished run" cache so a user who navigated away from
+    /// the Editor while the sim was running (or right as it ended) can
+    /// click back into the project and still see the result. After the
+    /// 5-minute window (<see cref="LastRunRecoveryWindow"/>) the cache is
+    /// dropped on the next <see cref="TryGetRecentRun"/> read so it isn't
+    /// pinned forever on a long-idle session.
+    /// </summary>
+    public int? LastCompletedProjectId { get; private set; }
+    /// <summary>Timestamp (UTC) of the most recent finished run.</summary>
+    public DateTime? LastCompletedAt { get; private set; }
+    /// <summary>Snapshot of the most recent finished waveform — Editor restores from this on revisit.</summary>
+    public WaveformData? LastWaveform { get; private set; }
+
+    /// <summary>How long after a run ends the recovery cache stays warm.</summary>
+    public static TimeSpan LastRunRecoveryWindow { get; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Stamps the recovery cache. Called by the SimulationCoordinator on
+    /// <see cref="ProgramBuilder.OnSimulationCompleted"/> so the cache is
+    /// populated regardless of whether the Editor was mounted at the time.
+    /// </summary>
+    public void StampCompleted(int projectId, WaveformData? wave)
+    {
+        LastCompletedProjectId = projectId;
+        LastCompletedAt        = DateTime.UtcNow;
+        LastWaveform           = wave;
+        OnChange?.Invoke();
+    }
+
+    /// <summary>
+    /// Reads the recovery cache. Returns <c>false</c> (and lazily clears
+    /// the cache) when the cached run isn't for <paramref name="projectId"/>,
+    /// when there's no cached run, or when the entry has aged past
+    /// <see cref="LastRunRecoveryWindow"/>. The lazy clear keeps memory
+    /// flat on long idle sessions without needing a separate timer.
+    /// </summary>
+    public bool TryGetRecentRun(int projectId, out WaveformData? wave)
+    {
+        wave = null;
+        if (LastCompletedProjectId == null || LastCompletedAt == null) return false;
+        if (DateTime.UtcNow - LastCompletedAt.Value > LastRunRecoveryWindow)
+        {
+            LastCompletedProjectId = null;
+            LastCompletedAt        = null;
+            LastWaveform           = null;
+            OnChange?.Invoke();
+            return false;
+        }
+        if (LastCompletedProjectId != projectId) return false;
+        wave = LastWaveform;
+        return wave != null;
+    }
+
     public event Action? OnChange;
 
     /// <summary>

@@ -2,6 +2,7 @@
 @page "/projects/{Option}"
 @implements IDisposable
 @inject Kmila.Shared.Services.SimulationParameters Sim
+@inject Kmila.Shared.Services.ProgramBuilder Builder
 
 <PageTitle>@Traductor.T("NAV_PROJECTS")</PageTitle>
 
@@ -103,13 +104,25 @@
         <div class="projects-grid">
             @foreach (var project in Filtered)
             {
-                <article class="project-card">
+                var isRunning = Sim.RunningProjectId == project.Id;
+                var isPaused  = isRunning && Sim.State == SimState.Paused;
+                var pct       = (int)Math.Round(Sim.Progress);
+                <article class="project-card @(isRunning ? "project-card--running" : "")">
                     <a href="@($"/editor/{project.Id}")" class="project-card__link" aria-label="@project.Name">
                         <div class="project-card__avatar">
                             <Icon Name="IconName.FileEarmarkCode" />
                         </div>
                         <div class="project-card__body">
-                            <h3 class="project-card__name">@project.Name</h3>
+                            <h3 class="project-card__name">
+                                @project.Name
+                                @if (isRunning)
+                                {
+                                    <span class="project-card__running-badge" title="@(isPaused ? Traductor.T("SIDEBAR_PROJECT_PAUSED") : Traductor.T("SIDEBAR_PROJECT_RUNNING"))">
+                                        <span class="project-card__running-dot" aria-hidden="true"></span>
+                                        @(isPaused ? Traductor.T("RUN_STATE_PAUSED") : Traductor.T("RUN_STATE_RUNNING")) · @pct%
+                                    </span>
+                                }
+                            </h3>
                             @if (!string.IsNullOrWhiteSpace(project.Description))
                             {
                                 <p class="project-card__description">@project.Description</p>
@@ -119,6 +132,12 @@
                                 <p class="project-card__description project-card__description--muted">
                                     @Traductor.T("PROJECTS_NO_DESCRIPTION")
                                 </p>
+                            }
+                            @if (isRunning)
+                            {
+                                <div class="project-card__progress" role="progressbar" aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100">
+                                    <div class="project-card__progress-fill" style="width: @pct%;"></div>
+                                </div>
                             }
                         </div>
                         <div class="project-card__meta">
@@ -130,19 +149,55 @@
                     </a>
 
                     <div class="project-card__actions" aria-label="@Traductor.T("PROJECTS_OPTIONS")">
-                        <a href="@($"/editor/{project.Id}")"
-                           class="project-card__action"
-                           title="@Traductor.T("PROJECTS_OPEN")">
-                            <Icon Name="IconName.BoxArrowUpRight" />
-                        </a>
-                        <button type="button"
-                                class="project-card__action project-card__action--danger"
-                                title="@Traductor.T("PROJECTS_REMOVE")"
-                                @onclick="() => RemoveProjectAsync(project)"
-                                @onclick:preventDefault
-                                @onclick:stopPropagation>
-                            <Icon Name="IconName.Trash" />
-                        </button>
+                        @if (isRunning)
+                        {
+                            @if (isPaused)
+                            {
+                                <button type="button"
+                                        class="project-card__action project-card__action--accent"
+                                        title="@Traductor.T("SIM_RESUME")"
+                                        @onclick="OnResumeSimulation"
+                                        @onclick:preventDefault
+                                        @onclick:stopPropagation>
+                                    <Icon Name="IconName.PlayFill" />
+                                </button>
+                            }
+                            else
+                            {
+                                <button type="button"
+                                        class="project-card__action"
+                                        title="@Traductor.T("SIM_PAUSE")"
+                                        @onclick="OnPauseSimulation"
+                                        @onclick:preventDefault
+                                        @onclick:stopPropagation>
+                                    <Icon Name="IconName.PauseFill" />
+                                </button>
+                            }
+                            <button type="button"
+                                    class="project-card__action project-card__action--danger"
+                                    title="@Traductor.T("SIM_STOP")"
+                                    @onclick="OnStopSimulation"
+                                    @onclick:preventDefault
+                                    @onclick:stopPropagation>
+                                <Icon Name="IconName.StopFill" />
+                            </button>
+                        }
+                        else
+                        {
+                            <a href="@($"/editor/{project.Id}")"
+                               class="project-card__action"
+                               title="@Traductor.T("PROJECTS_OPEN")">
+                                <Icon Name="IconName.BoxArrowUpRight" />
+                            </a>
+                            <button type="button"
+                                    class="project-card__action project-card__action--danger"
+                                    title="@Traductor.T("PROJECTS_REMOVE")"
+                                    @onclick="() => RemoveProjectAsync(project)"
+                                    @onclick:preventDefault
+                                    @onclick:stopPropagation>
+                                <Icon Name="IconName.Trash" />
+                            </button>
+                        }
                     </div>
                 </article>
             }
@@ -176,13 +231,22 @@
 
     private void OnLanguageChanged() => InvokeAsync(StateHasChanged);
 
+    /// <summary>
+    /// Re-render whenever the global simulation state changes so the running
+    /// project's card picks up progress / pause / stop transitions even while
+    /// the user lingers on /projects with a long sim in the background.
+    /// </summary>
+    private void OnSimChanged() => InvokeAsync(StateHasChanged);
+
     public void Dispose()
     {
         Traductor.StaticOnLangChanged -= OnLanguageChanged;
+        Sim.OnChange -= OnSimChanged;
     }
 
     protected override async Task OnInitializedAsync()
     {
+        Sim.OnChange += OnSimChanged;
         try
         {
             _projects = await Projects.GetListAsync() ?? new();
@@ -195,6 +259,41 @@
         {
             _loading = false;
         }
+    }
+
+    /// <summary>
+    /// Pauses the active simulation directly from a project card. Mirrors
+    /// the sidebar / Run-bar handler so the user can park a long sim without
+    /// jumping into the editor.
+    /// </summary>
+    private void OnPauseSimulation()
+    {
+        if (Sim.State != SimState.Running) return;
+        Builder.PauseTimer();
+        Sim.SetState(SimState.Paused);
+    }
+
+    /// <summary>Resumes a paused simulation from a project card.</summary>
+    private void OnResumeSimulation()
+    {
+        if (Sim.State != SimState.Paused) return;
+        Builder.ContinueTimer();
+        Sim.SetState(SimState.Running);
+    }
+
+    /// <summary>
+    /// Stops the active simulation from a project card. EndRun is called
+    /// defensively in case the Editor isn't currently mounted (and therefore
+    /// can't react to the engine's OnSimulationEnded event); when Editor
+    /// is mounted, its handler will re-run the same cleanup as a no-op.
+    /// </summary>
+    private void OnStopSimulation()
+    {
+        if (Sim.State != SimState.Running && Sim.State != SimState.Paused) return;
+        Builder.StopTimer();
+        Sim.SetState(SimState.Complete);
+        Sim.SetProgress(0);
+        Sim.EndRun();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

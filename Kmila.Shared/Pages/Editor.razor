@@ -471,7 +471,10 @@
         Builder.OnSimulationCompleted     += OnSimulationDataReady;
         Builder.OnSimulationProgressUpdate += OnSimulationProgressUpdate;
         Builder.OnSimulationEnded         += OnSimulationEnded;
-        Builder.OnProgressAdvanced        += OnProgressAdvanced;
+        // OnProgressAdvanced is owned by SimulationCoordinator (singleton/
+        // per-circuit) so progress keeps flowing into Sim even when the
+        // Editor isn't mounted. Editor only needs to react to UI-relevant
+        // events here.
         Builder.OnEngineReady             += OnEngineReadyForLiveReplay;
         Replay.OnBreakpointsChanged       += OnBreakpointsChangedRepaint;
         Replay.OnLiveChanged              += OnReplayLiveChangedForTabBadge;
@@ -718,18 +721,46 @@
         // Record the open for the sidebar MRU so the top-10 reflects actual usage.
         _ = Recent.TouchAsync(_projectId);
 
-        // Wipe per-project runtime state
-        Sim.SetState(SimState.Idle);
-        Sim.SetProgress(0);
-        Sim.ClearPortMoments();
-        Log.Clear();
-        _waveformData = null;
+        // Re-attach path: if a simulation for THIS project is still in flight
+        // (the user navigated away mid-run and came back), skip the wipe so
+        // the live progress / state / port moments / log / replay survive.
+        // The future OnSimulationProgressUpdate ticks repopulate _waveformData
+        // from the next frame onward; OnSimulationCompleted (which fires with
+        // the full SignalHistory) then fills in everything when the sim ends.
+        bool reattach = Sim.RunningProjectId == newProjectId
+                        && (Sim.State == SimState.Running || Sim.State == SimState.Paused);
 
-        // Clear the step-replay state so the new project's Replay tab opens
-        // on its empty hint instead of showing the previous project's run.
-        // ReplayState is scoped per-circuit, so this only resets the slot we
-        // share between tabs, not anyone else's.
-        Replay.Set(null);
+        // Recover path: no live sim, but a run for THIS project finished
+        // within the last few minutes (the user clicked away right when it
+        // completed and is coming back to inspect the result). Repopulate
+        // _waveformData from Sim.LastWaveform so the Waveform tab + run-bar
+        // state look exactly as they did before they left, instead of resetting
+        // to the Idle "no run yet" surface. See SimulationParameters
+        // .LastRunRecoveryWindow for the timeout.
+        bool recovered = false;
+        if (!reattach && Sim.TryGetRecentRun(newProjectId, out var cachedWave) && cachedWave != null)
+        {
+            _waveformData = cachedWave;
+            Sim.SetState(SimState.Complete);
+            Sim.SetProgress(100);
+            recovered = true;
+        }
+
+        if (!reattach && !recovered)
+        {
+            // Wipe per-project runtime state
+            Sim.SetState(SimState.Idle);
+            Sim.SetProgress(0);
+            Sim.ClearPortMoments();
+            Log.Clear();
+            _waveformData = null;
+
+            // Clear the step-replay state so the new project's Replay tab opens
+            // on its empty hint instead of showing the previous project's run.
+            // ReplayState is scoped per-circuit, so this only resets the slot we
+            // share between tabs, not anyone else's.
+            Replay.Set(null);
+        }
 
         // Drop every tab from the previous project — never carry buffers
         // across project switches. CloseAllTabsAsync handles model disposal
@@ -879,9 +910,10 @@
     {
         InvokeAsync(() =>
         {
-            Sim.SetState(SimState.Complete);
-            Sim.SetProgress(100);
-            Sim.EndRun();
+            // Sim.SetState(Complete) / SetProgress(100) / EndRun() are now
+            // owned by SimulationCoordinator so they fire regardless of
+            // whether the Editor is mounted. Editor only handles its own
+            // UI side-effects here.
             Log.Success(ended
                 ? Traductor.T("SIM_LOG_ENDED_OK")
                 : Traductor.T("SIM_LOG_ENDED_STOPPED"));
@@ -901,13 +933,6 @@
         });
     }
 
-    /// <summary>
-    /// Progress tick from the simulation timer. Thread-safe via InvokeAsync.
-    /// </summary>
-    private void OnProgressAdvanced(double progress)
-    {
-        InvokeAsync(() => Sim.SetProgress(progress));
-    }
     /// <summary>
     /// Materialises Monaco TextModels for any tab that was opened
     /// before the corresponding pane's editor finished initialising —
@@ -1829,17 +1854,11 @@ end architecture behavioral;",
             _lastBuiltTime  = Sim.Time;
             _lastBuiltScale = Sim.Scale;
 
-            // Fire-and-forget snapshot so the Runs tab picks it up on next
-            // render. Capture failures are logged but never block the UI.
-            if (_projectId > 0 && wd != null && wd.Signals.Count > 0)
-            {
-                _ = Snapshots.CaptureAsync(
-                    projectId: _projectId,
-                    waveform : wd,
-                    time     : Sim.Time,
-                    scale    : Sim.Scale.ToString(),
-                    fpgaModel: SelectedFPGA?.FPGA?.Model);
-            }
+            // Snapshot capture lives in SimulationCoordinator now so the
+            // run is persisted even when the Editor isn't mounted at the
+            // moment the sim ends (long sims, user navigated to /projects).
+            // Removing the duplicate here also avoids double-captures when
+            // both surfaces are alive.
 
             // Phase A of the live-simulation playback: convert the captured
             // waveform into an ExecutionTimelineDoc and push it into the
@@ -2396,7 +2415,7 @@ end architecture behavioral;",
         Builder.OnSimulationCompleted     -= OnSimulationDataReady;
         Builder.OnSimulationProgressUpdate -= OnSimulationProgressUpdate;
         Builder.OnSimulationEnded         -= OnSimulationEnded;
-        Builder.OnProgressAdvanced        -= OnProgressAdvanced;
+        // OnProgressAdvanced subscription lives on SimulationCoordinator now.
         Builder.OnEngineReady             -= OnEngineReadyForLiveReplay;
         Replay.OnBreakpointsChanged       -= OnBreakpointsChangedRepaint;
         Replay.OnLiveChanged              -= OnReplayLiveChangedForTabBadge;

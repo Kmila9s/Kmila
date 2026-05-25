@@ -147,6 +147,20 @@ public class Program
         builder.Services.AddScoped<SimulationParameters>();
         builder.Services.AddScoped<BuildLog>();
 
+        // Persistent bridge from ProgramBuilder engine events into Sim.
+        // Scoped (= per-circuit) on Web because SimulationParameters is also
+        // scoped — a singleton Coordinator can't capture a scoped Sim. The
+        // Coordinator subscribes to the shared singleton ProgramBuilder; when
+        // a circuit ends, Dispose unsubscribes so the singleton doesn't leak
+        // references to dead Sim instances. Eagerly resolved by MainLayout.
+        builder.Services.AddScoped<SimulationCoordinator>();
+
+        // Sim-end notifier — browser Notification API on Web via JS interop.
+        // Permission requested lazily on first fire so the prompt has clear
+        // context. Most browsers suppress the banner when the tab is
+        // foregrounded — the in-app toast covers that case.
+        builder.Services.AddScoped<ISimEndNotifier, WebSimEndNotifier>();
+
         // In-app logs (/logs page). Construct the store eagerly so we can hand
         // the same instance to the logger provider and to the DI container —
         // .NET's logging pipeline doesn't hand out IServiceProvider at the
@@ -390,6 +404,11 @@ public class Program
 
         // BlazorBootstrap provides Bootstrap-based Blazor UI components
         builder.Services.AddBlazorBootstrap();
+
+        // Custom toast service — replaces BB's ToastService at the inject layer
+        // (see _Imports.razor). Scoped per-circuit so toasts don't leak across
+        // simultaneous Blazor Server users.
+        builder.Services.AddScoped<KmilaToastService>();
 
         var app = builder.Build();
 

@@ -68,6 +68,28 @@
             }
         </div>
 
+        @if (_hiddenSignals.Count > 0)
+        {
+            <div class="waveform-viewer__hidden">
+                <Icon Name="IconName.EyeSlash" />
+                <span class="waveform-viewer__hidden-label">@Traductor.T("WAVEFORM_HIDDEN_PREFIX")</span>
+                @foreach (var hidden in _hiddenSignals.OrderBy(s => s, StringComparer.Ordinal))
+                {
+                    var hiddenName = hidden;
+                    <button type="button" class="waveform-hidden-chip"
+                            @onclick="() => RestoreSignal(hiddenName)"
+                            title="@Traductor.T("WAVEFORM_RESTORE_SIGNAL")">
+                        <span>@hidden</span>
+                        <Icon Name="IconName.XLg" />
+                    </button>
+                }
+                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--sm"
+                        @onclick="RestoreAllSignals">
+                    @Traductor.T("WAVEFORM_SHOW_ALL")
+                </button>
+            </div>
+        }
+
         <div class="waveform-viewer__body"
              data-view-start-ns="0"
              data-view-end-ns="@compareMaxNs"
@@ -84,20 +106,28 @@
 
                 @foreach (var name in signalNames)
                 {
+                    // Per-signal hide (backlog #9). Hidden set is keyed by
+                    // name so it applies across every snapshot's track here.
+                    if (_hiddenSignals.Contains(name)) continue;
                     var per = _compareTracks
                         .Select(t => (Track: t, Sig: t.Data.Signals.FirstOrDefault(s =>
                             string.Equals(s.Name, name, StringComparison.Ordinal))))
                         .Where(x => x.Sig != null)
                         .ToList();
                     var first = per.First().Sig!;
+                    var signalName = name;
                     <div class="waveform-row">
-                        <div class="waveform-row__label">
+                        <div class="waveform-row__label waveform-row__label--clickable"
+                             @onclick="() => ToggleHidden(signalName)"
+                             role="button"
+                             title="@Traductor.T("WAVEFORM_HIDE_SIGNAL")">
                             <span class="waveform-signal-chip waveform-signal-chip--@first.PortType.ToLowerInvariant()">@first.PortType</span>
                             <span class="waveform-signal-name">@first.Name</span>
                             @if (first.BitWidth > 1)
                             {
                                 <span class="waveform-signal-width">[@first.BitWidth]</span>
                             }
+                            <Icon Name="IconName.EyeSlash" class="waveform-row__label-eye" />
                         </div>
                         <div class="waveform-row__track" style="width: @(trackWidthPx)px;">
                             @((MarkupString)BuildCompareTraceSvg(name, per, trackWidthPx, maxNs))
@@ -169,6 +199,28 @@ else if (Data != null && Data.Signals.Count > 0)
             </div>
         </header>
 
+        @if (_hiddenSignals.Count > 0)
+        {
+            <div class="waveform-viewer__hidden">
+                <Icon Name="IconName.EyeSlash" />
+                <span class="waveform-viewer__hidden-label">@Traductor.T("WAVEFORM_HIDDEN_PREFIX")</span>
+                @foreach (var hidden in _hiddenSignals.OrderBy(s => s, StringComparer.Ordinal))
+                {
+                    var hiddenName = hidden;
+                    <button type="button" class="waveform-hidden-chip"
+                            @onclick="() => RestoreSignal(hiddenName)"
+                            title="@Traductor.T("WAVEFORM_RESTORE_SIGNAL")">
+                        <span>@hidden</span>
+                        <Icon Name="IconName.XLg" />
+                    </button>
+                }
+                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--sm"
+                        @onclick="RestoreAllSignals">
+                    @Traductor.T("WAVEFORM_SHOW_ALL")
+                </button>
+            </div>
+        }
+
         <div class="waveform-viewer__body"
              data-view-start-ns="@viewStartNs"
              data-view-end-ns="@viewEndNs"
@@ -180,15 +232,24 @@ else if (Data != null && Data.Signals.Count > 0)
                     // Honor the eye toggle: when off, clk / clock rows hide.
                     // The data remains in Data + the exported VCD.
                     if (!_showClock && IsClockName(signal.Name)) continue;
+                    // Per-signal hide (backlog #9): click on the label adds
+                    // the name to _hiddenSignals; restore via the toolbar
+                    // chip-bar. VCD export honors the same set.
+                    if (_hiddenSignals.Contains(signal.Name)) continue;
                     var color  = GetSignalColor(signal);
+                    var signalName = signal.Name;
                     <div class="waveform-row">
-                        <div class="waveform-row__label">
+                        <div class="waveform-row__label waveform-row__label--clickable"
+                             @onclick="() => ToggleHidden(signalName)"
+                             role="button"
+                             title="@Traductor.T("WAVEFORM_HIDE_SIGNAL")">
                             <span class="waveform-signal-chip waveform-signal-chip--@signal.PortType.ToLowerInvariant()">@signal.PortType</span>
                             <span class="waveform-signal-name">@signal.Name</span>
                             @if (signal.BitWidth > 1)
                             {
                                 <span class="waveform-signal-width">[@signal.BitWidth]</span>
                             }
+                            <Icon Name="IconName.EyeSlash" class="waveform-row__label-eye" />
                         </div>
                         <div class="waveform-row__track" style="width: @(trackWidthPx)px;">
                             @((MarkupString)BuildTraceSvg(signal, trackWidthPx, color, viewStartNs, viewEndNs))
@@ -276,52 +337,48 @@ else if (Data != null && Data.Signals.Count > 0)
     };
 
     /// <summary>
-    /// Pan-zoom JS handle. Re-bound on the first render of either render branch
-    /// (compare vs single) so swapping modes still works. Body is the gesture
-    /// surface; the SVG strips inside still own their own zoom buttons.
-    /// </summary>
-    private int _panZoomId = -1;
-    private bool _panZoomBound;
-    /// <summary>
     /// Handle for the JS hover-cursor helper (vertical guide line + time
     /// chip that follow the mouse over the body). Bound on first render of
     /// either rendering branch; detached on Dispose.
     /// </summary>
+    /// <remarks>
+    /// Pan-zoom used to be attached here too (1-finger drag pan, 2-finger
+    /// pinch zoom, ctrl+wheel zoom). It was removed because:
+    /// (a) the body has native overflow scroll on both axes, so pan was
+    ///     duplicated;
+    /// (b) waveform data is row-structured — 2D pan adds nothing over
+    ///     scroll, unlike the schematic/flow canvases;
+    /// (c) the gesture's clampPan cached the natural content size at
+    ///     attach time, so hiding signals (backlog #9) left the bounds
+    ///     stale and the user could drag the grid into empty space.
+    /// Toolbar zoom buttons cover the (rare) need to change ratio.
+    /// </remarks>
     private int _hoverId = -1;
+
+    // Auto-fit-on-first-render was tried briefly and reverted: for dense sims
+    // (e.g. 10 ns clock over 40 µs = 4000 transitions) fitting the entire
+    // waveform into the panel width compressed every transition into a
+    // sub-pixel sliver and the trace rendered as a solid block. Default
+    // `BaseWidth = 1200 px` gives readable clock detail for typical sims;
+    // users who actually want "show everything" hit the Reset button which
+    // does fit-to-width on demand.
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // Re-bind whenever the wrapper might have remounted.
-        if (_panZoomBound && _panZoomId > 0 && _hoverId > 0) return;
+        if (_hoverId > 0) return;
         try
         {
-            if (!_panZoomBound || _panZoomId <= 0)
-            {
-                _panZoomId = await JS.InvokeAsync<int>("kmilaAttachPanZoom",
-                    ".waveform-viewer__body",
-                    new { targetSelector = ".waveform-grid", minScale = 0.5, maxScale = 4 });
-                _panZoomBound = _panZoomId > 0;
-            }
-            if (_hoverId <= 0)
-            {
-                _hoverId = await JS.InvokeAsync<int>("kmilaAttachWaveformHover",
-                    ".waveform-viewer__body");
-            }
+            _hoverId = await JS.InvokeAsync<int>("kmilaAttachWaveformHover",
+                ".waveform-viewer__body");
         }
         catch
         {
-            // Prerender / no JS — toolbar zoom is still functional and the
-            // hover indicator just doesn't render.
+            // Prerender / no JS — hover indicator just doesn't render.
         }
     }
 
     public void Dispose()
     {
-        if (_panZoomId > 0)
-        {
-            try { _ = JS.InvokeVoidAsync("kmilaDetachPanZoom", _panZoomId).AsTask(); }
-            catch { }
-        }
         if (_hoverId > 0)
         {
             try { _ = JS.InvokeVoidAsync("kmilaDetachWaveformHover", _hoverId).AsTask(); }
@@ -365,6 +422,21 @@ else if (Data != null && Data.Signals.Count > 0)
     private int _zoomWidth = BaseWidth;
 
     /// <summary>
+    /// Per-signal hide set. Click on a row's label adds the signal name here;
+    /// the toolbar chip-bar lets the user restore individual signals or all
+    /// of them at once. Backlog #9: applies to both view AND VCD export so
+    /// the exported file mirrors what the student is actually looking at.
+    /// </summary>
+    private HashSet<string> _hiddenSignals = new(StringComparer.Ordinal);
+
+    private void ToggleHidden(string name)
+    {
+        if (!_hiddenSignals.Add(name)) _hiddenSignals.Remove(name);
+    }
+    private void RestoreSignal(string name) => _hiddenSignals.Remove(name);
+    private void RestoreAllSignals() => _hiddenSignals.Clear();
+
+    /// <summary>
     /// When false, clock rows (signals named clk/clock) are hidden from the
     /// grid. Data is unchanged — VCD export and the underlying snapshot
     /// still include the clock. Default on.
@@ -374,15 +446,60 @@ else if (Data != null && Data.Signals.Count > 0)
     private static bool IsClockName(string name)
         => Kmila.Shared.Services.StimulusBuilder.IsClockPortName(name);
 
-    // Zoom ceiling raised from 24000 → 96000 so per-cycle value labels stay
-    // visible on long simulations: BuildTraceSvg hides the vector label when
-    // its plateau is < 24 px wide, which kicked in for a 10 ns clock period
-    // on any sim longer than ~10 µs. At 96000 px wide, a 10 ns plateau in a
-    // 40 µs sim renders ~24 px — labels render through the typical workload.
-    // Lower bound is just below the 1200 px BaseWidth so ZoomOut still steps.
-    private void ZoomIn()    => _zoomWidth = Math.Min((int)(_zoomWidth * 1.5), 96000);
-    private void ZoomOut()   => _zoomWidth = Math.Max((int)(_zoomWidth / 1.5),   600);
-    private void ZoomReset() => _zoomWidth = BaseWidth;
+    // Zoom range tuning:
+    //
+    //  Ceiling 2 400 000 px (24× the original 96 000): tuned upward in
+    //  three passes — 96 000 → 200 000 → 600 000 → 2 400 000 — as users
+    //  reported the trace still looked like a solid block on long sims.
+    //  At 2.4 M, 100 MHz over 1 ms (100 k cycles) renders ~24 px per cycle
+    //  (clearly readable); 50 MHz over 50 µs gets ~960 px per cycle (way
+    //  more than needed, but no harm at extreme zoom). Note: at this
+    //  ceiling the per-trace SVG string is multi-megabyte and the browser
+    //  has to render a 2.4 M-px-wide canvas — performance is acceptable
+    //  on desktop Chrome/Firefox but may stutter on iOS Safari. If we
+    //  start hearing render-lag complaints, the right fix is virtualised
+    //  rendering (only emit path commands for the visible time window),
+    //  not lowering the ceiling.
+    //
+    //  Floor 200 px (down from 600): pan-zoom's pinch-scale used to let
+    //  the trace shrink continuously to fit narrow panels; without it,
+    //  mobile + half-width docks couldn't fit the full waveform at any
+    //  toolbar zoom-out level.
+    //
+    //  Step factor 2× (up from 1.5×): hitting the ceiling from the 1200 px
+    //  default used to take 11 clicks; it now takes 8. Steps stay
+    //  integer-multiplicative so Zoom-In followed by Zoom-Out returns to
+    //  the exact same value (was the case at 1.5× too thanks to int cast,
+    //  but 2× makes the round-trip obvious).
+    private const int ZoomFloor   = 200;
+    private const int ZoomCeiling = 2_400_000;
+    private void ZoomIn()  => _zoomWidth = Math.Min(_zoomWidth * 2, ZoomCeiling);
+    private void ZoomOut() => _zoomWidth = Math.Max(_zoomWidth / 2, ZoomFloor);
+
+    /// <summary>
+    /// "Fit to width" reset. Asks JS for the body's available client width,
+    /// subtracts the sticky label column, and sets _zoomWidth so the whole
+    /// trace exactly fills the panel — i.e. "show the whole sim, no scroll".
+    /// Falls back to BaseWidth (1200) if JS isn't available (prerender,
+    /// disposed body). Replaces the old reset which used a fixed 1200 px
+    /// regardless of panel size, leaving narrow layouts with a sideways
+    /// scrollbar even after Reset.
+    /// </summary>
+    private async Task ZoomReset()
+    {
+        try
+        {
+            var fit = await JS.InvokeAsync<int>("kmilaWaveformFitWidth",
+                ".waveform-viewer__body", 160);
+            if (fit > 0)
+            {
+                _zoomWidth = Math.Clamp(fit, ZoomFloor, ZoomCeiling);
+                return;
+            }
+        }
+        catch { /* prerender / no JS — fall through to BaseWidth */ }
+        _zoomWidth = BaseWidth;
+    }
 
     /// <summary>
     /// Resolves the visible time window for the current render frame.
@@ -716,9 +833,17 @@ else if (Data != null && Data.Signals.Count > 0)
         sb.AppendLine($"$timescale {Data.TimescaleNs} ns $end");
         sb.AppendLine("$scope module top $end");
 
+        // Honor the per-signal hide set so the exported VCD mirrors what the
+        // student is actually looking at (backlog #9). The clock eye toggle
+        // is intentionally NOT applied here — the clock is structural and
+        // most VCD consumers expect it; the hidden set is the explicit one.
+        var exported = Data.Signals
+            .Where(s => !_hiddenSignals.Contains(s.Name))
+            .ToList();
+
         var ids = new Dictionary<string, string>();
         int next = 33; // '!' — first printable VCD identifier
-        foreach (var signal in Data.Signals)
+        foreach (var signal in exported)
         {
             var id = ((char)next).ToString();
             ids[signal.Name] = id;
@@ -730,7 +855,7 @@ else if (Data != null && Data.Signals.Count > 0)
 
         // Merge every signal's transitions into one time-sorted stream.
         var stream = new SortedDictionary<long, List<(string Id, double? V, int W)>>();
-        foreach (var signal in Data.Signals)
+        foreach (var signal in exported)
         {
             foreach (var t in signal.Transitions)
             {
@@ -797,6 +922,18 @@ else if (Data != null && Data.Signals.Count > 0)
         var pages = WaveformExporter.PaginateRange(req.FromNs, req.ToNs, req.PageSpanNs).ToList();
         if (pages.Count == 0) return;
 
+        // Filter hidden signals out of the exported SVG/PNG too (backlog #9).
+        // WaveformData.Signals is init-only, so build a thin clone when needed
+        // — the per-signal Transitions lists are shared by reference, no copy.
+        var exportData = _hiddenSignals.Count == 0
+            ? Data
+            : new WaveformData
+            {
+                TotalTicks  = Data.TotalTicks,
+                TimescaleNs = Data.TimescaleNs,
+                Signals     = Data.Signals.Where(s => !_hiddenSignals.Contains(s.Name)).ToList()
+            };
+
         // Per-page width: keep the on-screen track width as the canvas size
         // for single-page; scale it down a touch for multi-page so each
         // file is readable rather than a 24 000 px monster.
@@ -816,7 +953,7 @@ else if (Data != null && Data.Signals.Count > 0)
                 string title = pages.Count == 1
                     ? $"{FormatRangeForTitle(startNs, endNs)}"
                     : $"{FormatRangeForTitle(startNs, endNs)}  ·  page {i + 1}/{pages.Count}";
-                string svg = WaveformExporter.BuildSvg(Data, startNs, endNs, pageWidth, _showClock, title);
+                string svg = WaveformExporter.BuildSvg(exportData, startNs, endNs, pageWidth, _showClock, title);
 
                 string fileName = pages.Count == 1
                     ? $"{baseName}.{ext}"
