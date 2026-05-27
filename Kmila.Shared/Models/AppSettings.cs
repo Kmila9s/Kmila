@@ -68,6 +68,18 @@ public class AppSettings
     /// </summary>
     public const string KEY_LIBRARY_BUILD_MODE = "KMILA_LIBRARY_BUILD_MODE";
 
+    /// <summary>
+    /// Key for the opt-in live-replay accumulation toggle. When "true",
+    /// <c>ReplayState</c> records every delta-cycle frame into the live
+    /// timeline while a simulation runs, so the user can scrub frame-by-frame
+    /// while it's still going. When "false" (default), only the post-hoc
+    /// replay built at end-of-sim is available — the heavy per-frame snapshot
+    /// allocation that can grow into GB-territory on long runs is skipped.
+    /// Stored as "true" / "false" strings; any other value falls back to
+    /// false on read.
+    /// </summary>
+    public const string KEY_LIVE_REPLAY_DURING_RUN = "KMILA_LIVE_REPLAY_DURING_RUN";
+
     #endregion
 }
 

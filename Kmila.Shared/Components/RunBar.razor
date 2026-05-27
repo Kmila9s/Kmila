@@ -24,6 +24,12 @@
 <div class="run-bar @(Sim.State == SimState.Running ? "run-bar--running" : "")">
     <div class="run-bar__row">
 
+      @* Config cluster — what to simulate. Grouped so the responsive ladder
+         (container queries in pages.css) can keep these editable while the
+         action buttons to the right shed labels / fold into the burger as
+         the bar narrows. *@
+      <div class="run-bar__config">
+
         @* FPGA reference chip. When nothing is selected we flag it in the
            danger tone so students know this is the blocker for Build/Run.
            Clicking the chip opens the FPGA picker (Settings → FPGA section
@@ -100,8 +106,12 @@
                 </button>
             }
         </div>
+      </div>@* end .run-bar__config *@
 
-        <div class="run-bar__spacer"></div>
+      @* Action cluster — Build / Run / Stop / file actions / overflow. The
+         ladder drops the secondary labels first, then folds Build + Save +
+         New File into the burger; Run + Stop always stay inline. *@
+      <div class="run-bar__actions">
 
         @* Build button (secondary). Shows spinner when explicitly building. *@
         <button type="button"
@@ -112,12 +122,12 @@
             @if (IsExplicitBuilding)
             {
                 <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
-                <span>@Traductor.T("SIM_BUILDING")</span>
+                <span class="run-bar__btn-label">@Traductor.T("SIM_BUILDING")</span>
             }
             else
             {
                 <Icon Name="IconName.Tools" />
-                <span>@Traductor.T("SIM_BUILD")</span>
+                <span class="run-bar__btn-label">@Traductor.T("SIM_BUILD")</span>
             }
         </button>
 
@@ -224,6 +234,7 @@
                 </div>
             }
         </div>
+      </div>@* end .run-bar__actions *@
     </div>
 
     @* Progress line — only rendered while running, fills left-to-right *@

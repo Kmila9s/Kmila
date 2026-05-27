@@ -593,34 +593,72 @@
     private async Task RefreshRunsCountAsync()
     {
         if (_projectId <= 0) { _runsCount = 0; return; }
-        _runsCount = (await Snapshots.ListForProjectAsync(_projectId)).Count;
+        // CountForProjectAsync issues a single SELECT COUNT(*) — used to be
+        // ListForProjectAsync(...).Count, which materialised every row
+        // including the multi-MB WaveformJson column just for the badge
+        // number. That was responsible for a chunk of the post-run memory
+        // spike when returning to /editor.
+        _runsCount = await Snapshots.CountForProjectAsync(_projectId);
     }
 
-    private Task LoadSnapshotAsync(Kmila.Shared.Models.SimulationSnapshot snap)
+    private async Task LoadSnapshotAsync(Kmila.Shared.Models.SimulationSnapshot snap)
     {
-        var wd = Kmila.Shared.Models.WaveformData.FromJson(snap.WaveformJson);
+        // Row may be a metadata-only summary from the Runs panel (no
+        // WaveformJson column). Re-fetch via GetByIdAsync so we have the
+        // payload to deserialise into WaveformData.
+        var full = string.IsNullOrEmpty(snap.WaveformJson)
+            ? await Snapshots.GetByIdAsync(snap.Id)
+            : snap;
+        if (full == null || string.IsNullOrEmpty(full.WaveformJson))
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                Traductor.T("RUNS_LOAD_FAILED"), ToastType.Danger));
+            return;
+        }
+        var wd = Kmila.Shared.Models.WaveformData.FromJson(full.WaveformJson);
         if (wd == null)
         {
             ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
                 Traductor.T("RUNS_LOAD_FAILED"), ToastType.Danger));
-            return Task.CompletedTask;
+            return;
         }
         _waveformData = wd;
-        _lastBuiltTime  = snap.Time;
-        _ = Enum.TryParse<TimeScale>(snap.Scale, out var scale);
+        _lastBuiltTime  = full.Time;
+        _ = Enum.TryParse<TimeScale>(full.Scale, out var scale);
         _lastBuiltScale = scale;
         _compareSnapshots = null;
         DockState.SetActive(EditorTab.Waveforms);
         StateHasChanged();
-        return Task.CompletedTask;
     }
 
-    private Task OpenCompareAsync(List<Kmila.Shared.Models.SimulationSnapshot> picks)
+    private async Task OpenCompareAsync(List<Kmila.Shared.Models.SimulationSnapshot> picks)
     {
-        _compareSnapshots = picks;
+        // Compare picks coming from the Runs panel are metadata-only — they
+        // know which rows the user selected but don't carry WaveformJson.
+        // Fetch each full row before handing to the viewer so the compare
+        // tracks have data to render. Done sequentially to keep SQLite
+        // pressure modest; the picks count is bounded by the UI.
+        var hydrated = new List<Kmila.Shared.Models.SimulationSnapshot>(picks.Count);
+        foreach (var pick in picks)
+        {
+            if (!string.IsNullOrEmpty(pick.WaveformJson))
+            {
+                hydrated.Add(pick);
+                continue;
+            }
+            var full = await Snapshots.GetByIdAsync(pick.Id);
+            if (full != null && !string.IsNullOrEmpty(full.WaveformJson))
+                hydrated.Add(full);
+        }
+        if (hydrated.Count < 2)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                Traductor.T("RUNS_LOAD_FAILED"), ToastType.Danger));
+            return;
+        }
+        _compareSnapshots = hydrated;
         DockState.SetActive(EditorTab.Waveforms);
         StateHasChanged();
-        return Task.CompletedTask;
     }
 
     private void ClearCompare()
@@ -741,6 +779,15 @@
         if (!reattach && Sim.TryGetRecentRun(newProjectId, out var cachedWave) && cachedWave != null)
         {
             _waveformData = cachedWave;
+            // Seed the staleness guards BEFORE the SetState/SetProgress calls
+            // below fire Sim.OnChange. Without this, OnSimParamsChanged sees
+            // _lastBuiltTime/_lastBuiltScale at their defaults (0 / US) and
+            // wipes the just-recovered waveform because Sim.Time/Scale don't
+            // match. The cached run was built against the current Sim.Time
+            // and Sim.Scale (Sim is scoped per-circuit and Time/Scale only
+            // mutate on user input), so they're the right values to record.
+            _lastBuiltTime  = Sim.Time;
+            _lastBuiltScale = Sim.Scale;
             Sim.SetState(SimState.Complete);
             Sim.SetProgress(100);
             recovered = true;

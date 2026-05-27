@@ -151,6 +151,31 @@ public class ReplayState
     private DateTime _lastUiNudge = DateTime.MinValue;
 
     /// <summary>
+    /// Opt-in: when true, every delta-cycle frame is appended to
+    /// <see cref="LiveDoc"/> so the user can scrub frame-by-frame while a sim
+    /// is still running. When false (default), the live engine is still
+    /// attached — Pause / Resume / Step controls and breakpoints keep
+    /// working — but the heavy per-frame snapshot accumulation is skipped
+    /// entirely. Settings page lets the user flip it; we read the persisted
+    /// value on app boot (see MainLayout).
+    /// </summary>
+    /// <remarks>
+    /// Even when on, the live tape is capped at
+    /// <see cref="LiveDocFrameCap"/> entries with FIFO eviction so a runaway
+    /// simulation can't OOM the browser tab.
+    /// </remarks>
+    public bool LiveReplayDuringRun { get; set; } = false;
+
+    /// <summary>
+    /// Hard cap on the number of <see cref="TimelineStep"/> entries kept in
+    /// <see cref="LiveDoc"/> while accumulating. 5000 frames covers any
+    /// reasonable pedagogical inspection (more than the eye can absorb
+    /// scrolling); older frames roll off the front when the cap is hit.
+    /// Not user-tunable — the on/off toggle is the user-facing knob.
+    /// </summary>
+    public const int LiveDocFrameCap = 5000;
+
+    /// <summary>
     /// Wire the engine into this scope. The Editor calls this right after
     /// constructing the SimulationRunner for the upcoming run. Replaces any
     /// previous engine and seeds a fresh live-timeline doc so the Replay
@@ -171,13 +196,26 @@ public class ReplayState
         _liveSource = sourceCode ?? string.Empty;
         _liveValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         _liveLineMap = BuildLiveLineMap(_liveSource);
-        LiveDoc = new ExecutionTimelineDoc
+
+        // Only build the live tape doc when the opt-in setting is on. When
+        // off, the OnFrameEmitted handler still attaches — breakpoints + the
+        // pause/resume/step controls all rely on the live engine — but the
+        // per-frame snapshot allocation that dominates memory is skipped
+        // (see OnLiveFrameEmitted).
+        if (LiveReplayDuringRun)
         {
-            Code = _liveSource,
-            Language = "vhdl",
-            SignalOrder = new List<string>(),
-            Steps = new List<TimelineStep>()
-        };
+            LiveDoc = new ExecutionTimelineDoc
+            {
+                Code = _liveSource,
+                Language = "vhdl",
+                SignalOrder = new List<string>(),
+                Steps = new List<TimelineStep>()
+            };
+        }
+        else
+        {
+            LiveDoc = null;
+        }
         LiveFrameTick = 0;
         engine.OnFrameEmitted += OnLiveFrameEmitted;
         OnLiveChanged?.Invoke();
@@ -216,72 +254,93 @@ public class ReplayState
     /// </summary>
     private void OnLiveFrameEmitted(FrameEmittedArgs args)
     {
-        if (LiveDoc == null) return;
+        // Cheap path when the user hasn't opted into live accumulation:
+        // resolve only what breakpoints need (the union of changed-signal
+        // source lines) and skip the per-frame snapshot dictionary that
+        // dominates memory on long sims. Pause/Resume/Step still work —
+        // they read LiveEngine directly, not the doc.
+        bool accumulate = LiveReplayDuringRun && LiveDoc != null;
 
-        // Snapshot value for every changed signal. Phase B+ Deep AST:
-        // prefer the engine's AST-precise source line (one per signal, the
-        // exact firing branch) over the regex map (all assignment lines
-        // for the signal). Falls back to the map only when the engine
-        // didn't tag the change.
-        var lineSet = new SortedSet<int>();
+        // We still need the lineSet to fire breakpoints even when not
+        // accumulating, but skip it altogether when there are no
+        // breakpoints AND we're not accumulating — that's the truly
+        // zero-allocation fast path on a long opt-out run.
+        bool needLineSet = accumulate || Breakpoints.Count > 0;
+
+        SortedSet<int>? lineSet = needLineSet ? new SortedSet<int>() : null;
+
         foreach (var sig in args.ChangedSignals)
         {
             var name = sig.Name ?? string.Empty;
             if (string.IsNullOrEmpty(name)) continue;
-            _liveValues[name] = sig.Value?.ToString() ?? "U";
 
-            if (args.SourceLines.TryGetValue(sig, out var astLine) && astLine > 0)
-            {
-                lineSet.Add(astLine);
-            }
-            else if (_liveLineMap.TryGetValue(name, out var lines))
-            {
-                foreach (var ln in lines) lineSet.Add(ln);
-            }
-        }
+            // _liveValues is only consumed by the accumulation snapshot;
+            // skip updating it when nobody will read it.
+            if (accumulate)
+                _liveValues[name] = sig.Value?.ToString() ?? "U";
 
-        // Compute a stable signal-order: append any new signal names to the
-        // doc's SignalOrder the first time they appear. Existing positions
-        // are preserved so the side table doesn't reshuffle across frames.
-        // Phase D: also stamp SignalMeta with the variable's port type so
-        // the filter UI can group by IN / OUT / INOUT / INTERNAL.
-        foreach (var sig in args.ChangedSignals)
-        {
-            var name = sig.Name ?? string.Empty;
-            if (string.IsNullOrEmpty(name)) continue;
-            if (!LiveDoc.SignalOrder.Contains(name))
-                LiveDoc.SignalOrder.Add(name);
-            if (!LiveDoc.SignalMeta.ContainsKey(name))
+            if (lineSet != null)
             {
-                LiveDoc.SignalMeta[name] = sig.IsPort
-                    ? sig.PortType.ToString()
-                    : "INTERNAL";
+                if (args.SourceLines.TryGetValue(sig, out var astLine) && astLine > 0)
+                {
+                    lineSet.Add(astLine);
+                }
+                else if (_liveLineMap.TryGetValue(name, out var lines))
+                {
+                    foreach (var ln in lines) lineSet.Add(ln);
+                }
             }
         }
 
-        // Use simulation-time (tick * resolution + delta) as the step
-        // ordinal. Mirrors what SignalHistory.RecordChanges does internally,
-        // so the live tape aligns with the post-hoc tape's time scale.
-        var t = (int)(args.Tick * 1000) + args.Delta;
-        var snapshot = new Dictionary<string, string>(_liveValues);
-
-        LiveDoc.Steps.Add(new TimelineStep
+        if (accumulate)
         {
-            T = t,
-            HighlightLines = lineSet.ToList(),
-            Signals = snapshot,
-            Note = new Dictionary<string, string>
+            // Compute a stable signal-order + port-type metadata. Existing
+            // positions are preserved so the side table doesn't reshuffle.
+            foreach (var sig in args.ChangedSignals)
             {
-                ["en"] = $"t = {t} ns",
-                ["es"] = $"t = {t} ns"
+                var name = sig.Name ?? string.Empty;
+                if (string.IsNullOrEmpty(name)) continue;
+                if (!LiveDoc!.SignalOrder.Contains(name))
+                    LiveDoc.SignalOrder.Add(name);
+                if (!LiveDoc.SignalMeta.ContainsKey(name))
+                {
+                    LiveDoc.SignalMeta[name] = sig.IsPort
+                        ? sig.PortType.ToString()
+                        : "INTERNAL";
+                }
             }
-        });
-        LiveFrameTick++;
 
-        // Phase E: breakpoint check — if any signal that changed this frame
-        // is mapped to a breakpointed line, pause the engine. The user sees
-        // the player land on this frame and can inspect the state.
-        if (Breakpoints.Count > 0)
+            var t = (int)(args.Tick * 1000) + args.Delta;
+            var snapshot = new Dictionary<string, string>(_liveValues);
+
+            LiveDoc!.Steps.Add(new TimelineStep
+            {
+                T = t,
+                HighlightLines = lineSet!.ToList(),
+                Signals = snapshot,
+                Note = new Dictionary<string, string>
+                {
+                    ["en"] = $"t = {t} ns",
+                    ["es"] = $"t = {t} ns"
+                }
+            });
+            LiveFrameTick++;
+
+            // Hard FIFO cap so an extreme run still terminates with bounded
+            // memory. The user-facing on/off toggle warns about the cost;
+            // this is the safety net that catches the cases where they
+            // forget. 5000 frames ≫ what anyone can usefully scrub.
+            if (LiveDoc.Steps.Count > LiveDocFrameCap)
+            {
+                int excess = LiveDoc.Steps.Count - LiveDocFrameCap;
+                LiveDoc.Steps.RemoveRange(0, excess);
+            }
+        }
+
+        // Phase E: breakpoint check — still fires whether we accumulate or
+        // not. The lineSet computation above honoured Breakpoints.Count > 0
+        // so this branch only runs when we actually have a set to check.
+        if (lineSet != null && Breakpoints.Count > 0)
         {
             foreach (var ln in lineSet)
             {
@@ -294,13 +353,17 @@ public class ReplayState
             }
         }
 
-        // Throttle the OnChange nudge to ~10 Hz; the doc keeps growing
-        // between nudges, the UI just doesn't redraw every frame.
-        var now = DateTime.UtcNow;
-        if ((now - _lastUiNudge).TotalMilliseconds >= 100)
+        // Throttle the OnChange nudge to ~10 Hz. Only relevant when
+        // accumulating — there's nothing for the panel to re-render
+        // otherwise (the post-hoc replay doc is what shows after the run).
+        if (accumulate)
         {
-            _lastUiNudge = now;
-            OnChange?.Invoke();
+            var now = DateTime.UtcNow;
+            if ((now - _lastUiNudge).TotalMilliseconds >= 100)
+            {
+                _lastUiNudge = now;
+                OnChange?.Invoke();
+            }
         }
     }
 

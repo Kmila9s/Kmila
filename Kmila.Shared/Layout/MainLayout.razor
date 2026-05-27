@@ -34,6 +34,7 @@
    currently mounted — otherwise navigating away mid-run freezes the
    sidebar / projects-card "background sim" surfaces. *@
 @inject SimulationCoordinator SimulationCoordinator
+@inject Kmila.Shared.Services.ReplayState Replay
 
 @if (!_isLoading)
 {
@@ -101,6 +102,18 @@ else
         // Pass the settings reader callback for reactive language changes
         var savedLanguage = await DbContext.GetSettingAsync(AppSettings.KEY_LANGUAGE);
         await Traductor.InitializeAsync(savedLanguage, DbContext.GetSettingAsync);
+
+        // Apply the persisted live-replay-during-run preference before the
+        // first sim has a chance to fire. Default off — see ReplayState for
+        // the memory rationale. The setting page mutates the same property +
+        // re-persists; we only read here.
+        try
+        {
+            var raw = await DbContext.GetSettingAsync(AppSettings.KEY_LIVE_REPLAY_DURING_RUN);
+            Replay.LiveReplayDuringRun =
+                string.Equals(raw, "true", StringComparison.OrdinalIgnoreCase);
+        }
+        catch { /* missing key / DB blip — keep the default-off behaviour */ }
 
         // Mark loading complete - this ensures children render after translations are ready
         // Without this, components would display keys like "HOME_FEATURE_PROTOTYPING" instead of translated text

@@ -90,6 +90,66 @@ public class SimulationSnapshotStore
         }
     }
 
+    /// <summary>
+    /// Metadata-only list — returns the same <see cref="SimulationSnapshot"/>
+    /// rows as <see cref="ListForProjectAsync"/>, but the heavy
+    /// <see cref="SimulationSnapshot.WaveformJson"/> column is left as
+    /// <c>string.Empty</c>. The Runs tab and the Editor's runs-badge call
+    /// this so opening a project doesn't pull all 50 captured waveforms
+    /// (potentially gigabytes of JSON) into the Blazor heap just to render
+    /// labels + counts.
+    /// </summary>
+    /// <remarks>
+    /// Callers that actually need the waveform payload (loading a single
+    /// run into the viewer, comparing multiple runs, exporting) must
+    /// re-fetch the row via <see cref="GetByIdAsync"/>, which still returns
+    /// the full record.
+    /// </remarks>
+    public async Task<List<SimulationSnapshot>> ListMetadataAsync(int projectId)
+    {
+        try
+        {
+            await _db.InitDBAsync();
+            // Raw SQL projection — sqlite-net's AsyncTableQuery doesn't
+            // support arbitrary .Select, and we explicitly do NOT want the
+            // WaveformJson column to make it into the result set.
+            var rows = await _db.QueryAsync<SimulationSnapshot>(
+                "SELECT Id, ProjectId, CreatedAt, Label, Time, Scale, FpgaModel, " +
+                "SignalCount, SampleCount, Pinned FROM SimulationSnapshots " +
+                "WHERE ProjectId = ? ORDER BY CreatedAt DESC",
+                projectId);
+            return rows ?? new();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SnapshotStore] List metadata failed for project {P}", projectId);
+            return new();
+        }
+    }
+
+    /// <summary>
+    /// Cheap row count for the Runs-tab badge — issues a single
+    /// <c>COUNT(*)</c> instead of materialising every row (which is what
+    /// <see cref="ListForProjectAsync"/> used to do when the Editor just
+    /// wanted <c>.Count</c>). Defaults to 0 on DB error so badge rendering
+    /// never throws.
+    /// </summary>
+    public async Task<int> CountForProjectAsync(int projectId)
+    {
+        try
+        {
+            await _db.InitDBAsync();
+            return await _db.SimulationSnapshots
+                .Where(s => s.ProjectId == projectId)
+                .CountAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SnapshotStore] Count failed for project {P}", projectId);
+            return 0;
+        }
+    }
+
     public async Task<SimulationSnapshot?> GetByIdAsync(int snapshotId)
     {
         try

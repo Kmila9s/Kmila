@@ -199,7 +199,11 @@ else
     private async Task ReloadAsync()
     {
         if (ProjectId <= 0) { _snapshots = new(); return; }
-        _snapshots = await Snapshots.ListForProjectAsync(ProjectId);
+        // ListMetadataAsync omits the heavy WaveformJson column — the panel
+        // only needs labels + counts + flags. Single-row open + export +
+        // compare-hydrate paths re-fetch the full row via GetByIdAsync when
+        // they actually need the waveform payload.
+        _snapshots = await Snapshots.ListMetadataAsync(ProjectId);
         // Drop stale selection ids so the count stays honest after deletes.
         _selected.IntersectWith(_snapshots.Select(s => s.Id));
     }
@@ -288,13 +292,25 @@ else
 
     private async Task ExportAsync(SimulationSnapshot snap)
     {
+        // The row carried by the Runs list is metadata-only (no WaveformJson
+        // — see ReloadAsync). Re-fetch the full record from SQLite before
+        // serialising so the exported file actually contains the waveform.
+        var full = string.IsNullOrEmpty(snap.WaveformJson)
+            ? await Snapshots.GetByIdAsync(snap.Id)
+            : snap;
+        if (full == null || string.IsNullOrEmpty(full.WaveformJson))
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                Traductor.T("RUNS_EXPORT_FAILED"), ToastType.Danger));
+            return;
+        }
         // Ship the full row as a JSON file. On Web the IFileExportService
         // routes through the kmilaDownloadText JS helper; on MAUI it writes
         // to ~/Documents/Kmila/Runs/.
-        var payload = System.Text.Json.JsonSerializer.Serialize(snap,
+        var payload = System.Text.Json.JsonSerializer.Serialize(full,
             new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
-        var safe = SanitizeFile(snap.Label);
-        var fileName = $"kmila-run-{snap.Id}-{safe}.json";
+        var safe = SanitizeFile(full.Label);
+        var fileName = $"kmila-run-{full.Id}-{safe}.json";
         var result = await Export.SaveTextAsync(ExportCategory.Runs, fileName, "application/json", payload);
         if (result.Saved)
         {

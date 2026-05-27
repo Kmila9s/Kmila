@@ -1140,6 +1140,113 @@ window.kmilaWaveformFitWidth = function (bodySel, labelW) {
     return Math.max(0, Math.floor(w - (labelW || 160) - 2));
 };
 
+/* ─── Waveform viewport / scroll observer ─────────────────────────────────
+ *
+ * Used by the virtualised renderer: the .waveform-viewer__body still
+ * scrolls horizontally over the FULL content width (pxPerNs × totalNs),
+ * but the SVG paths inside each row only render the visible time window.
+ * This module is what tells Blazor when the visible window changes —
+ * scroll, resize, or zoom — so it can rebuild the windowed SVGs.
+ *
+ * The handler is debounced to one animation frame: scroll fires faster
+ * than Blazor can render, and coalescing per-frame keeps the perf budget
+ * tight on long sims with hundreds of transitions per visible window.
+ *
+ *   kmilaAttachWaveformWindow(bodySelector, dotNetRef) → id
+ *     Subscribes to scroll + resize on the body. Calls
+ *     dotNetRef.invokeMethodAsync('OnWaveformWindow', scrollLeft, clientWidth)
+ *     once per RAF when either changes. Also fires once immediately so the
+ *     initial render has correct values.
+ *   kmilaWaveformGetViewport(bodySelector) → number
+ *     One-shot read of the body's clientWidth, used for initial sizing
+ *     and the Reset / fit-to-width path. -1 when the body isn't ready.
+ *   kmilaDetachWaveformWindow(id) → void
+ *     Cleanup. Idempotent.
+ * --------------------------------------------------------------------- */
+(function () {
+    const handles = new Map();
+    let nextId = 1;
+
+    function attach(bodySel, dotNetRef) {
+        const body = (typeof bodySel === 'string')
+            ? document.querySelector(bodySel) : bodySel;
+        if (!body || !dotNetRef) return -1;
+        // Don't double-attach to the same body; replace if the caller
+        // somehow forgot to detach (component re-mounted without dispose).
+        if (body.__kmilaWindowId) detach(body.__kmilaWindowId);
+
+        let rafPending = false;
+        let lastScroll = -1;
+        let lastWidth  = -1;
+
+        function fire() {
+            const s = body.scrollLeft;
+            const w = body.clientWidth;
+            if (s === lastScroll && w === lastWidth) return;
+            lastScroll = s;
+            lastWidth  = w;
+            try {
+                dotNetRef.invokeMethodAsync('OnWaveformWindow', s, w);
+            } catch (_) {
+                // Blazor side may have torn down between RAF and the
+                // callback — fine, the next detach will clean us up.
+            }
+        }
+
+        function schedule() {
+            if (rafPending) return;
+            rafPending = true;
+            requestAnimationFrame(function () {
+                rafPending = false;
+                fire();
+            });
+        }
+
+        body.addEventListener('scroll', schedule, { passive: true });
+
+        const ro = (typeof ResizeObserver !== 'undefined')
+            ? new ResizeObserver(schedule) : null;
+        if (ro) ro.observe(body);
+
+        const id = nextId++;
+        handles.set(id, { body, schedule, ro });
+        body.__kmilaWindowId = id;
+        // Fire once on the next frame so the Blazor side has the initial
+        // (scrollLeft=0, clientWidth=current) pair to size against.
+        schedule();
+        return id;
+    }
+
+    function detach(id) {
+        const h = handles.get(id);
+        if (!h) return;
+        try { h.body.removeEventListener('scroll', h.schedule); } catch (_) {}
+        try { if (h.ro) h.ro.disconnect(); } catch (_) {}
+        h.body.__kmilaWindowId = null;
+        handles.delete(id);
+    }
+
+    window.kmilaAttachWaveformWindow = attach;
+    window.kmilaDetachWaveformWindow = detach;
+    window.kmilaWaveformGetViewport  = function (bodySel) {
+        const body = (typeof bodySel === 'string')
+            ? document.querySelector(bodySel) : bodySel;
+        if (!body) return -1;
+        const w = body.clientWidth;
+        return w > 0 ? w : -1;
+    };
+    // Programmatic scroll helper — used by ZoomReset and Zoom-in/out to
+    // re-centre the view on the previously-visible time after pxPerNs
+    // changes. Pass body.scrollLeft directly; values are clamped by the
+    // browser to [0, scrollWidth - clientWidth].
+    window.kmilaWaveformScrollTo = function (bodySel, leftPx) {
+        const body = (typeof bodySel === 'string')
+            ? document.querySelector(bodySel) : bodySel;
+        if (!body) return;
+        body.scrollLeft = Math.max(0, leftPx | 0);
+    };
+})();
+
 
 /* ─── Tiny haptic helper (Android-only; iOS Safari ignores) ──────────────── */
 window.kmilaHaptic = function (kind) {

@@ -231,12 +231,6 @@ public class WaveformData
         ulong maxTick = maxTime > 0 ? (ulong)(maxTime / 1000) : 0;
         ulong totalTicks = maxTick + 1;
 
-        // ChartValues / DisplayLabels are no longer computed: they were a
-        // legacy uniform-sample path for an earlier Chart.js renderer and
-        // nothing reads them anymore (the SVG viewer plots Transitions
-        // directly). The previous backward-scan fill was O(totalTicks/step)
-        // dictionary searches per signal — the dominant cost on long runs.
-
         var waveformSignals = new List<WaveformSignal>();
 
         // Process each signal sorted by port type (IN first, then OUT, INOUT, INTERNAL)
@@ -311,8 +305,6 @@ public class WaveformData
                 BitWidth = bitWidth,
                 PortType = portType,
                 Transitions = transitions
-                // ChartValues / DisplayLabels intentionally left as their
-                // default empty lists — see comment above near sampleStep.
             });
         }
 
@@ -506,23 +498,10 @@ public class WaveformSignal
     public string PortType { get; init; } = "INTERNAL";
 
     /// <summary>
-    /// Chart values: one per time label.
-    /// For std_logic: 0.0 or 1.0. For vectors: integer value. Null for undefined.
-    /// </summary>
-    public List<double?> ChartValues { get; init; } = new();
-
-    /// <summary>
-    /// Display labels for transition points (used by datalabels plugin).
-    /// Null for std_logic, hex/decimal string at transitions for vectors.
-    /// </summary>
-    public List<string?> DisplayLabels { get; init; } = new();
-
-    /// <summary>
     /// Raw transitions in (time-ns, numeric-value) form — one entry per real
     /// change in the signal's history, with no downsampling. This is what
     /// the SVG waveform renderer plots: a step function from one transition
-    /// to the next. Authoritative over <see cref="ChartValues"/>, which
-    /// remains for any legacy code still expecting a uniform sample grid.
+    /// to the next.
     /// </summary>
     public List<WaveformTransition> Transitions { get; init; } = new();
 }

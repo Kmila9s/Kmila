@@ -34,8 +34,12 @@
        still get a row — missing traces just drop out, so the viewer never
        hides a signal the student wants to see. *@
     // Hoisted so the body element can stamp data-view-end-ns for the JS hover.
-    var compareTrackWidthPx = _zoomWidth;
+    // Compare mode keeps the old "wide SVG" rendering — width derives from
+    // the same pxPerNs that single-mode uses, capped so the toolbar can't
+    // overshoot the browser's max scroll width when several runs overlay.
     var compareMaxNs = _compareTracks.Max(t => (long)t.Data.TotalTicks * t.Data.TimescaleNs);
+    var compareTrackWidthPx = (int)Math.Clamp(
+        _pxPerNs * Math.Max(1L, compareMaxNs), 200, 200_000);
     <section class="waveform-viewer waveform-viewer--compare" aria-label="@Traductor.T("WAVEFORM_VIEWER")">
         <header class="waveform-viewer__toolbar">
             <div class="waveform-viewer__title">
@@ -147,10 +151,19 @@
 }
 else if (Data != null && Data.Signals.Count > 0)
 {
-    // Hoisted out of the inner markup so the body element can stamp
-    // data-view-start-ns / data-view-end-ns for the JS hover cursor.
-    var trackWidthPx = _zoomWidth;
-    var (viewStartNs, viewEndNs) = GetViewBounds();
+    // Virtualised render geometry (see GetViewBounds + OnWaveformWindow):
+    //   contentWidthPx     — total width of the scrollable area
+    //                        (pxPerNs × totalNs). Sets the body's scroll
+    //                        width so native horizontal scroll works.
+    //   visibleTrackPx     — width of the SVG actually rendered per row.
+    //                        Equals the body's clientWidth minus the
+    //                        sticky label column. The path inside is
+    //                        clipped to the current time window so it
+    //                        stays small regardless of total sim length.
+    long maxNs = (long)Data.TotalTicks * Math.Max(1, Data.TimescaleNs);
+    long contentWidthPx = ComputeContentWidthPx(maxNs);
+    int visibleTrackPx = ComputeVisibleTrackPx();
+    var (viewStartNs, viewEndNs) = GetViewBounds(maxNs, visibleTrackPx);
     <section class="waveform-viewer" aria-label="@Traductor.T("WAVEFORM_VIEWER")">
         <header class="waveform-viewer__toolbar">
             <div class="waveform-viewer__title">
@@ -251,8 +264,10 @@ else if (Data != null && Data.Signals.Count > 0)
                             }
                             <Icon Name="IconName.EyeSlash" class="waveform-row__label-eye" />
                         </div>
-                        <div class="waveform-row__track" style="width: @(trackWidthPx)px;">
-                            @((MarkupString)BuildTraceSvg(signal, trackWidthPx, color, viewStartNs, viewEndNs))
+                        <div class="waveform-row__track" style="width: @(contentWidthPx)px;">
+                            <div class="waveform-row__track-view" style="width: @(visibleTrackPx)px;">
+                                @((MarkupString)BuildTraceSvg(signal, visibleTrackPx, color, viewStartNs, viewEndNs))
+                            </div>
                         </div>
                     </div>
                 }
@@ -260,8 +275,10 @@ else if (Data != null && Data.Signals.Count > 0)
                 @* Shared time ruler — last row. *@
                 <div class="waveform-row waveform-row--ruler">
                     <div class="waveform-row__label"></div>
-                    <div class="waveform-row__track" style="width: @(trackWidthPx)px;">
-                        @((MarkupString)BuildRulerSvg(trackWidthPx, viewStartNs, viewEndNs))
+                    <div class="waveform-row__track" style="width: @(contentWidthPx)px;">
+                        <div class="waveform-row__track-view" style="width: @(visibleTrackPx)px;">
+                            @((MarkupString)BuildRulerSvg(visibleTrackPx, viewStartNs, viewEndNs))
+                        </div>
                     </div>
                 </div>
             </div>
@@ -355,26 +372,99 @@ else if (Data != null && Data.Signals.Count > 0)
     /// </remarks>
     private int _hoverId = -1;
 
-    // Auto-fit-on-first-render was tried briefly and reverted: for dense sims
-    // (e.g. 10 ns clock over 40 µs = 4000 transitions) fitting the entire
-    // waveform into the panel width compressed every transition into a
-    // sub-pixel sliver and the trace rendered as a solid block. Default
-    // `BaseWidth = 1200 px` gives readable clock detail for typical sims;
-    // users who actually want "show everything" hit the Reset button which
-    // does fit-to-width on demand.
+    // ─── Virtualised rendering state ─────────────────────────────────────
+    //
+    // The previous renderer set a single `_zoomWidth` (int, up to 2.4 M px)
+    // and built the SVG path for the FULL run at that pixel width. That
+    // produced multi-megabyte path strings on every render and forced the
+    // browser to paint a screen-sized SVG element, both of which exploded
+    // RAM on long sims as the user zoomed in.
+    //
+    // The new model splits the two concerns:
+    //   _pxPerNs       — current zoom (px per nanosecond). Sets the OUTER
+    //                    .waveform-row__track width (pxPerNs × totalNs),
+    //                    which drives the body's native horizontal scroll.
+    //   _scrollLeftPx  — pushed by JS via OnWaveformWindow. Combined with
+    //                    pxPerNs to compute the visible time window.
+    //   _viewportWidthPx — pushed by JS. The SVG inside each row is sized
+    //                    to roughly clientWidth − labelWidth and lives in
+    //                    a position:sticky inner div, so the actual
+    //                    rendered path only ever covers the visible time
+    //                    window. Re-renders on scroll are O(visible
+    //                    transitions), not O(total).
+    private double _pxPerNs       = 0.0;
+    private double _scrollLeftPx  = 0.0;
+    private double _viewportWidthPx = 0.0;
+
+    // Per-row label column width — kept in sync with the inline CSS rule
+    // on .waveform-row__label. If the CSS rule changes, update this too;
+    // GetViewBounds / ComputeVisibleTrackPx subtract it from clientWidth
+    // when sizing the windowed SVG.
+    private const int LabelWidthPx = 160;
+
+    // Watchdog so we recompute the initial pxPerNs whenever the WaveformData
+    // instance changes (new sim run, snapshot loaded, etc.). Reference
+    // equality is enough — the live-merge path mutates the same instance,
+    // so it does NOT trip this guard and the user's zoom is preserved.
+    private WaveformData? _lastData;
+
+    // JS-side handle for the scroll/resize observer.
+    private int _windowId = -1;
+    private DotNetObjectReference<WaveformViewer>? _windowDotNetRef;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (_hoverId > 0) return;
-        try
+        if (_hoverId <= 0)
         {
-            _hoverId = await JS.InvokeAsync<int>("kmilaAttachWaveformHover",
-                ".waveform-viewer__body");
+            try
+            {
+                _hoverId = await JS.InvokeAsync<int>("kmilaAttachWaveformHover",
+                    ".waveform-viewer__body");
+            }
+            catch { /* prerender / no JS — hover indicator just doesn't render */ }
         }
-        catch
+
+        // Attach the windowing observer on the first render after we have
+        // signals to show. Doing it earlier (when Data is null) would
+        // bind to a body element whose .waveform-grid hasn't materialised
+        // yet, which the observer copes with but adds a no-op fire.
+        if (_windowId <= 0 && Data != null && Data.Signals.Count > 0)
         {
-            // Prerender / no JS — hover indicator just doesn't render.
+            try
+            {
+                _windowDotNetRef ??= DotNetObjectReference.Create(this);
+                _windowId = await JS.InvokeAsync<int>(
+                    "kmilaAttachWaveformWindow",
+                    ".waveform-viewer__body",
+                    _windowDotNetRef);
+                // One-shot viewport read so the very first render frame
+                // has a sensible visible-track width before the observer's
+                // first RAF fires (which can race with Blazor's next
+                // render, leaving the user with a zero-width SVG for a
+                // single frame).
+                var w = await JS.InvokeAsync<double>(
+                    "kmilaWaveformGetViewport", ".waveform-viewer__body");
+                if (w > 0) _viewportWidthPx = w;
+                EnsureInitialZoom();
+                StateHasChanged();
+            }
+            catch { /* JS not ready — observer will retry on next render */ }
         }
+    }
+
+    /// <summary>
+    /// JS scroll/resize callback. Fires at most once per animation frame
+    /// (the JS side coalesces) with the body's current <c>scrollLeft</c>
+    /// and <c>clientWidth</c>. Drives the windowed render — both the
+    /// visible time bounds and the sticky SVG's pixel width are derived
+    /// from these.
+    /// </summary>
+    [JSInvokable]
+    public Task OnWaveformWindow(double scrollLeft, double clientWidth)
+    {
+        if (clientWidth > 0) _viewportWidthPx = clientWidth;
+        _scrollLeftPx = scrollLeft;
+        return InvokeAsync(StateHasChanged);
     }
 
     public void Dispose()
@@ -384,10 +474,29 @@ else if (Data != null && Data.Signals.Count > 0)
             try { _ = JS.InvokeVoidAsync("kmilaDetachWaveformHover", _hoverId).AsTask(); }
             catch { }
         }
+        if (_windowId > 0)
+        {
+            try { _ = JS.InvokeVoidAsync("kmilaDetachWaveformWindow", _windowId).AsTask(); }
+            catch { }
+        }
+        _windowDotNetRef?.Dispose();
     }
 
     protected override void OnParametersSet()
     {
+        // Detect a fresh WaveformData reference (new sim, loaded snapshot)
+        // and reset zoom + scroll so the user opens on the natural
+        // "everything fits" view. The live-merge path mutates the same
+        // instance so this branch doesn't fire on every progress tick.
+        if (!ReferenceEquals(_lastData, Data))
+        {
+            _lastData = Data;
+            _pxPerNs = 0;        // recomputed on next render via EnsureInitialZoom
+            _scrollLeftPx = 0;
+            // No DOM scrollTo here — first render will set up fresh content
+            // width and the browser's scrollLeft snaps to 0 by itself.
+        }
+
         if (Snapshots != null && Snapshots.Count >= 2)
         {
             // Reuse previously-deserialised WaveformData by snapshot Id —
@@ -417,10 +526,6 @@ else if (Data != null && Data.Signals.Count > 0)
         }
     }
 
-    // Default width keeps the whole sim visible at 1× in a ~1400 px workbench.
-    private const int BaseWidth = 1200;
-    private int _zoomWidth = BaseWidth;
-
     /// <summary>
     /// Per-signal hide set. Click on a row's label adds the signal name here;
     /// the toolbar chip-bar lets the user restore individual signals or all
@@ -446,79 +551,171 @@ else if (Data != null && Data.Signals.Count > 0)
     private static bool IsClockName(string name)
         => Kmila.Shared.Services.StimulusBuilder.IsClockPortName(name);
 
-    // Zoom range tuning:
+    // ─── Zoom geometry ──────────────────────────────────────────────────
     //
-    //  Ceiling 2 400 000 px (24× the original 96 000): tuned upward in
-    //  three passes — 96 000 → 200 000 → 600 000 → 2 400 000 — as users
-    //  reported the trace still looked like a solid block on long sims.
-    //  At 2.4 M, 100 MHz over 1 ms (100 k cycles) renders ~24 px per cycle
-    //  (clearly readable); 50 MHz over 50 µs gets ~960 px per cycle (way
-    //  more than needed, but no harm at extreme zoom). Note: at this
-    //  ceiling the per-trace SVG string is multi-megabyte and the browser
-    //  has to render a 2.4 M-px-wide canvas — performance is acceptable
-    //  on desktop Chrome/Firefox but may stutter on iOS Safari. If we
-    //  start hearing render-lag complaints, the right fix is virtualised
-    //  rendering (only emit path commands for the visible time window),
-    //  not lowering the ceiling.
+    // pxPerNs ranges are derived per-sim rather than hard-coded because
+    // a "reasonable" zoom level depends on totalNs:
     //
-    //  Floor 200 px (down from 600): pan-zoom's pinch-scale used to let
-    //  the trace shrink continuously to fit narrow panels; without it,
-    //  mobile + half-width docks couldn't fit the full waveform at any
-    //  toolbar zoom-out level.
+    //   floor   = visibleTrackPx / totalNs   → the whole sim fits in the
+    //             viewport with no horizontal scroll. The Reset button
+    //             targets this value.
+    //   ceiling = 256 × floor (or ≥ 10 px/ns, whichever is larger) →
+    //             ~8 doublings from Reset. At 100 MHz × 1 ms (1 µs / 10 ns
+    //             half-period) and a 1200 px viewport, floor is ~0.0012
+    //             px/ns and ceiling ~0.31 px/ns, putting each half-period
+    //             at ~3 px at max zoom (the SVG path now stays bounded
+    //             because we render only the visible window).
     //
-    //  Step factor 2× (up from 1.5×): hitting the ceiling from the 1200 px
-    //  default used to take 11 clicks; it now takes 8. Steps stay
-    //  integer-multiplicative so Zoom-In followed by Zoom-Out returns to
-    //  the exact same value (was the case at 1.5× too thanks to int cast,
-    //  but 2× makes the round-trip obvious).
-    private const int ZoomFloor   = 200;
-    private const int ZoomCeiling = 2_400_000;
-    private void ZoomIn()  => _zoomWidth = Math.Min(_zoomWidth * 2, ZoomCeiling);
-    private void ZoomOut() => _zoomWidth = Math.Max(_zoomWidth / 2, ZoomFloor);
+    // ZoomBy preserves the time-centre of the visible window so zoom-in
+    // doesn't snap to scrollLeft=0 — the user keeps looking at the same
+    // moment in time.
+    private long ContentScrollWidthCap => 33_000_000;  // browser scroll-width safe cap
 
-    /// <summary>
-    /// "Fit to width" reset. Asks JS for the body's available client width,
-    /// subtracts the sticky label column, and sets _zoomWidth so the whole
-    /// trace exactly fills the panel — i.e. "show the whole sim, no scroll".
-    /// Falls back to BaseWidth (1200) if JS isn't available (prerender,
-    /// disposed body). Replaces the old reset which used a fixed 1200 px
-    /// regardless of panel size, leaving narrow layouts with a sideways
-    /// scrollbar even after Reset.
-    /// </summary>
-    private async Task ZoomReset()
+    private long ComputeContentWidthPx(long maxNs)
     {
-        try
-        {
-            var fit = await JS.InvokeAsync<int>("kmilaWaveformFitWidth",
-                ".waveform-viewer__body", 160);
-            if (fit > 0)
-            {
-                _zoomWidth = Math.Clamp(fit, ZoomFloor, ZoomCeiling);
-                return;
-            }
-        }
-        catch { /* prerender / no JS — fall through to BaseWidth */ }
-        _zoomWidth = BaseWidth;
+        if (maxNs <= 0) return Math.Max(1, ComputeVisibleTrackPx());
+        if (_pxPerNs <= 0) return Math.Max(1, ComputeVisibleTrackPx());
+        // Live mode disables horizontal scroll — the SVG renders only the
+        // trailing window, so there's nothing to scroll past. Clamping the
+        // content width to the visible width here keeps the body's
+        // scrollLeft at 0.
+        if (IsLive) return Math.Max(1, ComputeVisibleTrackPx());
+        double raw = _pxPerNs * maxNs;
+        if (raw > ContentScrollWidthCap) raw = ContentScrollWidthCap;
+        if (raw < ComputeVisibleTrackPx()) raw = ComputeVisibleTrackPx();
+        return (long)Math.Ceiling(raw);
+    }
+
+    private int ComputeVisibleTrackPx()
+    {
+        double w = _viewportWidthPx > 0 ? _viewportWidthPx : 1200;
+        int v = (int)Math.Round(w - LabelWidthPx - 2);
+        return Math.Max(50, v);
     }
 
     /// <summary>
     /// Resolves the visible time window for the current render frame.
     /// Live mode: trailing slice of fixed duration ending at the latest
-    /// observed time, with the start clamped to 0 and the end pinned to
-    /// at least <see cref="LiveWindowNs"/> so the early-run case (very
-    /// little data yet) still draws into a full-width axis instead of a
-    /// thin sliver. Static mode: the full simulation range, matching the
-    /// historical behaviour the zoom / scroll controls expect.
+    /// observed time. Static mode: derived from the JS-reported
+    /// <c>scrollLeft</c> and <c>clientWidth</c> + the current
+    /// <see cref="_pxPerNs"/> — only the visible time range gets path
+    /// commands emitted, regardless of total sim length.
     /// </summary>
-    private (long startNs, long endNs) GetViewBounds()
+    private (long startNs, long endNs) GetViewBounds(long maxNs, int visibleTrackPx)
     {
-        long maxNs = (long)(Data?.TotalTicks ?? 0) * (Data?.TimescaleNs ?? 1);
-        if (!IsLive)
-            return (0, maxNs);
+        if (IsLive)
+        {
+            long endNs = Math.Max(maxNs, LiveWindowNs);
+            long startNs = Math.Max(0, endNs - LiveWindowNs);
+            return (startNs, endNs);
+        }
+        if (_pxPerNs <= 0 || maxNs <= 0)
+            return (0, Math.Max(1L, maxNs));
 
-        long endNs = Math.Max(maxNs, LiveWindowNs);
-        long startNs = Math.Max(0, endNs - LiveWindowNs);
-        return (startNs, endNs);
+        long visibleNs = (long)Math.Max(1, Math.Round(visibleTrackPx / _pxPerNs));
+        long startNsCalc = (long)Math.Round(_scrollLeftPx / _pxPerNs);
+        long maxStart = Math.Max(0, maxNs - visibleNs);
+        if (startNsCalc < 0) startNsCalc = 0;
+        if (startNsCalc > maxStart) startNsCalc = maxStart;
+        long endNsCalc = Math.Min(maxNs, startNsCalc + visibleNs);
+        if (endNsCalc <= startNsCalc) endNsCalc = startNsCalc + 1;
+        return (startNsCalc, endNsCalc);
+    }
+
+    /// <summary>
+    /// Picks a pxPerNs that fits the entire sim in the viewport with no
+    /// horizontal scroll — i.e. the "Reset" / "show everything" view.
+    /// Called whenever Data changes (see OnParametersSet) so a freshly
+    /// loaded run opens at a sensible default; the toolbar's Reset button
+    /// also routes through here.
+    /// </summary>
+    private void EnsureInitialZoom()
+    {
+        if (_pxPerNs > 0) return;
+        ulong totalTicks = Data?.TotalTicks ?? 0UL;
+        int timescale = Math.Max(1, Data?.TimescaleNs ?? 1);
+        long maxNs = (long)totalTicks * timescale;
+        if (maxNs <= 0) return;
+        int visiblePx = ComputeVisibleTrackPx();
+        _pxPerNs = (double)visiblePx / maxNs;
+    }
+
+    private async Task ZoomIn()  => await ZoomBy(2.0);
+    private async Task ZoomOut() => await ZoomBy(0.5);
+
+    /// <summary>
+    /// Multiplies <see cref="_pxPerNs"/> by <paramref name="factor"/> while
+    /// keeping the visible time centre stable — without this the body's
+    /// scrollLeft snaps to 0 after every zoom click and the user loses
+    /// their place. Clamps to a per-sim floor (everything fits) and
+    /// ceiling (8 doublings above floor).
+    /// </summary>
+    private async Task ZoomBy(double factor)
+    {
+        ulong totalTicks = Data?.TotalTicks ?? 0UL;
+        int timescale = Math.Max(1, Data?.TimescaleNs ?? 1);
+        long maxNs = (long)totalTicks * timescale;
+        if (maxNs <= 0) return;
+        int visiblePx = ComputeVisibleTrackPx();
+
+        double centreNs = _pxPerNs > 0
+            ? (_scrollLeftPx + visiblePx / 2.0) / _pxPerNs
+            : maxNs / 2.0;
+
+        double floor   = (double)visiblePx / maxNs;        // entire sim fits
+        double ceiling = Math.Max(floor * 256.0, 10.0);    // arbitrary upper bound (10 px/ns ≈ insane)
+        double newPxPerNs = Math.Clamp(_pxPerNs * factor, floor, ceiling);
+        if (Math.Abs(newPxPerNs - _pxPerNs) < 1e-12) return;
+        _pxPerNs = newPxPerNs;
+
+        // Re-centre on the previously-visible time-centre.
+        double newScroll = centreNs * _pxPerNs - visiblePx / 2.0;
+        long newContent = ComputeContentWidthPx(maxNs);
+        if (newScroll < 0) newScroll = 0;
+        double maxScroll = Math.Max(0, newContent - visiblePx);
+        if (newScroll > maxScroll) newScroll = maxScroll;
+        _scrollLeftPx = newScroll;
+
+        StateHasChanged();
+        try
+        {
+            await JS.InvokeVoidAsync(
+                "kmilaWaveformScrollTo", ".waveform-viewer__body", (int)newScroll);
+        }
+        catch { /* prerender / no JS — DOM will sync on next observer fire */ }
+    }
+
+    /// <summary>
+    /// "Show the whole sim, no scroll." Re-reads the viewport width in
+    /// case the panel was resized since the last observer fire, then sets
+    /// <see cref="_pxPerNs"/> to the value that makes content width equal
+    /// visible width. Replaces the old <c>BaseWidth = 1200</c> reset which
+    /// ignored panel size.
+    /// </summary>
+    private async Task ZoomReset()
+    {
+        ulong totalTicks = Data?.TotalTicks ?? 0UL;
+        int timescale = Math.Max(1, Data?.TimescaleNs ?? 1);
+        long maxNs = (long)totalTicks * timescale;
+        if (maxNs <= 0) return;
+        try
+        {
+            var w = await JS.InvokeAsync<double>(
+                "kmilaWaveformGetViewport", ".waveform-viewer__body");
+            if (w > 0) _viewportWidthPx = w;
+        }
+        catch { /* prerender / no JS — fall through with whatever we have */ }
+
+        int visiblePx = ComputeVisibleTrackPx();
+        _pxPerNs = (double)visiblePx / Math.Max(1L, maxNs);
+        _scrollLeftPx = 0;
+        StateHasChanged();
+        try
+        {
+            await JS.InvokeVoidAsync(
+                "kmilaWaveformScrollTo", ".waveform-viewer__body", 0);
+        }
+        catch { /* fine */ }
     }
 
     /// <summary>
@@ -934,12 +1131,16 @@ else if (Data != null && Data.Signals.Count > 0)
                 Signals     = Data.Signals.Where(s => !_hiddenSignals.Contains(s.Name)).ToList()
             };
 
-        // Per-page width: keep the on-screen track width as the canvas size
-        // for single-page; scale it down a touch for multi-page so each
-        // file is readable rather than a 24 000 px monster.
+        // Per-page width: mirror the on-screen pxPerNs across the page's
+        // time span, clamped so a single page stays under 1800 px (readable
+        // on a normal screen) and multi-page exports never go below 800 px
+        // per page. We can't reuse the body's visible width anymore — that
+        // shows only a window, not the full export range.
+        long pageSpanNs = Math.Max(1L, req.PageSpanNs ?? 1L);
+        int pageWidthHint = (int)Math.Round(_pxPerNs * pageSpanNs);
         int pageWidth = pages.Count == 1
-            ? Math.Min(_zoomWidth, 1800)
-            : Math.Min(1600, Math.Max(800, _zoomWidth));
+            ? Math.Clamp(pageWidthHint, 800, 1800)
+            : Math.Clamp(pageWidthHint, 800, 1600);
 
         string baseName = SanitizeFileName($"kmila-waveform_{FormatRangeForFilename(req.FromNs, req.ToNs)}");
         string ext = req.Format == WaveformExportFormat.Svg ? "svg" : "png";

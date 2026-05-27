@@ -4394,18 +4394,49 @@
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-1);
-    overflow: hidden;
+    /* The bar reacts to its OWN width, not the viewport — a split / narrow
+       editor dock has a cramped bar even on a wide screen, which viewport
+       media queries can't see. The responsive ladder lives in
+       `@container runbar (...)` blocks below. */
+    container-type: inline-size;
+    container-name: runbar;
+    /* overflow:hidden was removed: the burger dropdown is now a plain
+       absolute panel anchored to the bar and must escape the card edges.
+       The progress line rounds its own bottom corners instead (see below).
+       Note: container-type implies `contain: layout`, but NOT paint
+       containment, so absolute children still render outside the box. */
 }
 
 .run-bar__row {
     display: flex;
     align-items: center;
-    gap: var(--space-2);
+    gap: var(--space-3);
     padding: var(--space-2) var(--space-3);
-    flex-wrap: wrap;
+    /* One row, always. The ladder sheds content before it would ever wrap,
+       so flex-wrap is off — wrapping was the whole UX complaint. */
+    flex-wrap: nowrap;
+    justify-content: space-between;
 }
 
-.run-bar__spacer { flex: 1 1 auto; min-width: 0; }
+/* Config cluster (FPGA · duration · clock). Grows to absorb the slack so the
+   action cluster is pushed to the trailing edge; min-width:0 lets the FPGA
+   chip ellipsis when the bar gets tight instead of forcing a wrap. */
+.run-bar__config {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+/* Action cluster (Build · Run · Stop · Save · New · burger). Never shrinks —
+   the buttons stay their natural size; the ladder hides them in stages. */
+.run-bar__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex: 0 0 auto;
+}
 
 
 /* FPGA reference chip */
@@ -4618,10 +4649,15 @@
 }
 
 
-/* Progress bar under the row — fills L→R during running */
+/* Progress bar under the row — fills L→R during running. Rounds its own
+   bottom corners + clips the fill, since `.run-bar` no longer has
+   overflow:hidden (the burger dropdown needs to escape the card). */
 .run-bar__progress {
     height: 3px;
     background-color: var(--surface-3);
+    border-bottom-left-radius: var(--radius-lg);
+    border-bottom-right-radius: var(--radius-lg);
+    overflow: hidden;
 }
 
 .run-bar__progress-fill {
@@ -4648,44 +4684,55 @@
 }
 
 
-/* Responsive: on narrow viewports the row still wraps, and the Run button
-   goes full-width below the inputs so it's always thumb-reachable. */
-@media (max-width: 640.98px) {
-    .run-bar__fpga { max-width: 100%; }
-    .run-bar__build,
-    .run-bar__run {
-        flex: 1 1 40%;
-        justify-content: center;
-    }
-    .run-bar__spacer { display: none; }
+/* ── Responsive ladder — keyed on the BAR's own width (container query) ──
+   The bar degrades in deliberate stages instead of wrapping. Each stage is
+   a max-width on the `runbar` container, so a split editor dock collapses
+   exactly like a small screen does — same model, both cases.
+
+   ROOMY  (default, > 860px) : everything with labels.
+   SNUG   (≤ 860px)          : secondary action labels → icon-only.
+   TIGHT  (≤ 640px)          : Build + Save + New fold into the burger.
+   CRAMPED(≤ 430px)          : compress config pills; Run grows to fill. */
+
+/* SNUG — Build / Save / New shed their text, keep their icons. Run (the
+   primary CTA) keeps its label. */
+@container runbar (max-width: 860px) {
+    .run-bar__btn-label,
+    .run-bar__file-btn-label { display: none; }
+    .run-bar__build { min-width: 0; }
 }
 
-/* Mobile: collapse Build + Save + New File into the overflow burger so the
-   bar fits one row. Run + Stop stay inline (primary CTAs you want one tap
-   away from a running simulation). The RunBar itself is pinned to the
-   viewport bottom (above the dock) on mobile, so the menu is anchored as
-   `position: fixed` just above the bar — the previous `bottom: 100%`
-   anchor depended on the burger's flex-wrap row, which could place the
-   panel off-screen when the row wrapped onto a fresh line. */
-@media (max-width: 768px) {
-    .run-bar__overflow { display: inline-flex; }
-    /* `.kmila-btn` (buttons.css, loaded after pages.css) sets
-       `display: inline-flex` at the same specificity, so we need a
-       compound selector to win the cascade and actually hide the inline
-       Build / Save / New File buttons on phones. */
+/* TIGHT — fold the secondary actions into the burger. Run + Stop stay
+   inline so you can always react to a running sim in one tap. The compound
+   `.run-bar` selector wins over `.kmila-btn { display:inline-flex }` from
+   buttons.css (loaded after pages.css). */
+@container runbar (max-width: 640px) {
     .run-bar .run-bar__build,
     .run-bar .run-bar__file-btn { display: none; }
+    .run-bar__overflow { display: inline-flex; }
+}
+
+/* CRAMPED — tiny phones / very narrow split. Tighten the config pills and
+   let Run expand into the leftover width so it stays a comfortable tap
+   target. */
+@container runbar (max-width: 430px) {
+    .run-bar__row { gap: var(--space-2); }
+    .run-bar__config { gap: var(--space-1); }
+    .run-bar__fpga { max-width: 124px; padding-inline: var(--space-2); }
+    .run-bar__time-input { width: 56px; }
+    .run-bar__clock .run-bar__time-input { max-width: 52px; }
+    .run-bar__run { min-width: 0; flex: 1 1 auto; }
+}
+
+/* Mobile-only: the bar is pinned to the viewport bottom (see the
+   max-width:768px block far below), so the burger dropdown must open
+   UPWARD instead of down. It's a plain absolute panel anchored to the
+   burger now (no more position:fixed) — the old fixed anchor existed only
+   to survive flex-wrap, which no longer happens. */
+@media (max-width: 768px) {
     .run-bar__overflow-panel {
-        position: fixed;
         top: auto;
-        left: max(var(--space-3), env(safe-area-inset-left, 0px));
-        right: max(var(--space-3), env(safe-area-inset-right, 0px));
-        bottom: calc(
-            var(--dock-h) + var(--runbar-h)
-            + env(safe-area-inset-bottom, 0px) + 4px
-        );
-        min-width: 0;
-        max-width: none;
+        bottom: calc(100% + 4px);
     }
 }
 
@@ -8089,7 +8136,26 @@
     position: relative;
     background-color: var(--surface-1);
     flex-shrink: 0;
-    /* width set inline from _zoomWidth */
+    /* width set inline — equals the FULL content width (pxPerNs × totalNs)
+       so the body has something wide to scroll. The actual SVG inside
+       lives in .waveform-row__track-view (below) and renders only the
+       visible time window, regardless of the track's outer width. */
+}
+
+/* Virtualised render surface. Sits inside .waveform-row__track at
+   position: sticky; left: 160px so it stays glued to the visible
+   viewport (right after the sticky label column) as the user scrolls
+   horizontally. The SVG inside is sized to the visible viewport width
+   only (set inline) — never to the full content width — so neither the
+   path string nor the rendered SVG element scale with total sim length.
+   Width is updated by Blazor whenever JS reports a resize/scroll. */
+.waveform-row__track-view {
+    position: sticky;
+    left: 160px;
+    height: 100%;
+    /* width set inline — equals body.clientWidth - 160 (approx).
+       The SVG inside renders at this exact size; transitions outside
+       the visible time window are skipped by BuildTraceSvg. */
 }
 
 .waveform-svg          { display: block; height: 40px; width: 100%; }
@@ -9278,7 +9344,9 @@
         transition: bottom var(--duration-base) var(--ease-standard);
     }
     .run-bar__row {
-        flex-wrap: wrap;
+        /* No wrap on mobile either — the container ladder (TIGHT/CRAMPED)
+           folds content into the burger so one row always fits. */
+        flex-wrap: nowrap;
         gap: var(--space-2);
         padding-block: var(--space-1);
     }

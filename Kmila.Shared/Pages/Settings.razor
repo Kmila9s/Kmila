@@ -17,6 +17,7 @@
 @inject Projects ProjectsRepo
 @inject GitHubAuth GitHubAuth
 @inject LibraryCompiler.Services.LibraryCompiler LibCompiler
+@inject Kmila.Shared.Services.ReplayState Replay
 @implements IDisposable
 
 <PageTitle>@Traductor.T("NAV_SETTINGS")</PageTitle>
@@ -120,6 +121,29 @@
                     TickResolutionMode.Adaptive      => "SETTINGS_TICK_RES_ADAPTIVE_DESC",
                     _                                 => "SETTINGS_TICK_RES_DEFAULT_DESC"
                 })</p>
+
+                <div class="settings-row">
+                    <div class="settings-row__label">
+                        <strong>@Traductor.T("SETTINGS_LIVE_REPLAY_TITLE")</strong>
+                        <small>@Traductor.T("SETTINGS_LIVE_REPLAY_HINT")</small>
+                    </div>
+                    <div class="settings-row__control">
+                        <label class="form-check form-switch mb-0">
+                            <input type="checkbox"
+                                   class="form-check-input"
+                                   role="switch"
+                                   checked="@_liveReplayDuringRun"
+                                   @onchange="OnLiveReplayChanged" />
+                        </label>
+                    </div>
+                </div>
+                @if (_liveReplayDuringRun)
+                {
+                    <p class="settings-card__hint settings-card__hint--warn">
+                        <Icon Name="IconName.ExclamationTriangleFill" />
+                        <span>@Traductor.T("SETTINGS_LIVE_REPLAY_WARN")</span>
+                    </p>
+                }
             </div>
         </article>
 
@@ -689,6 +713,14 @@
     private LibraryCompiler.Services.LibraryBuildMode _libBuildMode =
         LibraryCompiler.Services.LibraryBuildMode.Persistent;
 
+    /// <summary>
+    /// Current opt-in for live frame-by-frame replay accumulation. Default
+    /// off — see <see cref="ReplayState.LiveReplayDuringRun"/> for the
+    /// memory rationale (per-frame snapshot growth dominates GB-scale leaks
+    /// on long sims).
+    /// </summary>
+    private bool _liveReplayDuringRun;
+
     /// <summary>Projects available to export — loaded alongside user assets.</summary>
     private List<Kmila.Shared.Models.Project> _projects = new();
     private int _exportProjectId;
@@ -727,6 +759,13 @@
         var libRaw = await DbContext.GetSettingAsync(AppSettings.KEY_LIBRARY_BUILD_MODE);
         _libBuildMode = LibraryBuildModeExtensions.ParseToken(libRaw);
 
+        // Live-replay-during-run toggle. The actual setter lives on
+        // ReplayState (mutated below in OnLiveReplayChanged); MainLayout
+        // also reads this key on app boot so the gate is in place before
+        // the first run. Reading from Replay here keeps the UI honest if
+        // the user toggled it from another route in the same session.
+        _liveReplayDuringRun = Replay.LiveReplayDuringRun;
+
         // Account state — restore the cached account from the saved
         // token (no-op if logged out), then subscribe to the auth
         // service so sign-in / sign-out from elsewhere (TopBar pill)
@@ -754,6 +793,22 @@
     /// singleton LibraryCompiler. The next build sees the new policy
     /// without an app restart; already-cached artifacts stay valid.
     /// </summary>
+    /// <summary>
+    /// Persists the live-replay toggle and applies it to the scoped
+    /// <see cref="ReplayState"/> immediately so the next Run honours it.
+    /// Already-running sims keep their existing setting until they end —
+    /// the gate is read at <c>AttachLive</c> time.
+    /// </summary>
+    private async Task OnLiveReplayChanged(ChangeEventArgs e)
+    {
+        _liveReplayDuringRun = e.Value is bool b ? b : false;
+        Replay.LiveReplayDuringRun = _liveReplayDuringRun;
+        await DbContext.SetSettingAsync(
+            AppSettings.KEY_LIVE_REPLAY_DURING_RUN,
+            _liveReplayDuringRun ? "true" : "false");
+        StateHasChanged();
+    }
+
     private async Task OnLibBuildModeChanged(ChangeEventArgs e)
     {
         _libBuildMode = LibraryBuildModeExtensions.ParseToken(e.Value?.ToString());
