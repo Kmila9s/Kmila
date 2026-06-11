@@ -70,6 +70,24 @@
                         <KmilaTextSizeSwitcher />
                     </div>
                 </div>
+
+                @* Welcome tour controls — wipes every kmila.tutorialSeen.* flag
+                   so per-route tours fire again next time the user visits each
+                   view. Useful both for replay and for QA. *@
+                <div class="settings-row">
+                    <div class="settings-row__label">
+                        <strong>@Traductor.T("SETTINGS_TUTORIAL_TITLE")</strong>
+                        <small>@Traductor.T("SETTINGS_TUTORIAL_HINT")</small>
+                    </div>
+                    <div class="settings-row__control">
+                        <button type="button"
+                                class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                                @onclick="ResetTutorialsAsync">
+                            <Icon Name="IconName.ArrowCounterclockwise" />
+                            <span>@Traductor.T("SETTINGS_TUTORIAL_REPLAY")</span>
+                        </button>
+                    </div>
+                </div>
             </div>
         </article>
 
@@ -451,6 +469,28 @@
                     <Icon Name="IconName.JournalText" />
                     <span>@Traductor.T("SETTINGS_OPEN_LOGS")</span>
                 </a>
+            </div>
+        </article>
+
+        @* --- Privacy --- *@
+        <article class="settings-card">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--success">
+                    <Icon Name="IconName.ShieldLock" />
+                </span>
+                <div class="settings-card__head-text">
+                    <h2>@Traductor.T("SETTINGS_PRIVACY_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("SETTINGS_PRIVACY_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                <p>@Traductor.T("SETTINGS_PRIVACY_DESC")</p>
+                <div class="settings-card__actions">
+                    <a href="/privacy" class="kmila-btn kmila-btn--primary">
+                        <Icon Name="IconName.ShieldLock" />
+                        <span>@Traductor.T("SETTINGS_PRIVACY_OPEN")</span>
+                    </a>
+                </div>
             </div>
         </article>
 
@@ -1214,6 +1254,27 @@
         {
             _submitting = false;
             StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Clears every <c>kmila.tutorialSeen.*</c> flag in localStorage so the
+    /// per-route welcome tours fire again on subsequent visits. Fires a
+    /// toast on success; silent fallback if the JS engine is unreachable.
+    /// </summary>
+    private async Task ResetTutorialsAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("kmilaTutorial.reset");
+            ToastService.Notify(Message(
+                Traductor.T("COMMON_MESSAGE"),
+                Traductor.T("SETTINGS_TUTORIAL_RESET_DONE"),
+                ToastType.Info));
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
         }
     }
 

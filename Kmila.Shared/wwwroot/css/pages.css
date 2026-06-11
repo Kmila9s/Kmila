@@ -37,6 +37,29 @@
     flex-direction: column;
 }
 
+/* Slim footer at the bottom of every page. Lives inside .kmila-shell__main
+   so it scrolls with the page, not pinned. Holds the Privacy link. */
+.kmila-shell__footer {
+    padding: var(--space-3) var(--space-4);
+    border-top: 1px solid var(--border-subtle);
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-3);
+    background: transparent;
+}
+
+.kmila-shell__footer a {
+    color: var(--text-muted);
+    text-decoration: none;
+}
+
+.kmila-shell__footer a:hover {
+    color: var(--text-strong);
+    text-decoration: underline;
+}
+
 
 /* ============================================================================
    Sidebar
@@ -7869,6 +7892,31 @@
     box-shadow: var(--shadow-1);
 }
 
+/* Banner shown on the Waveforms tab when the user opened a saved run while a
+   live simulation for the same project is still in flight. The "return to
+   live run" button drops the suspension and rehydrates from the engine. */
+.waveform-saved-banner {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    margin-bottom: var(--space-2);
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    font-size: var(--fs-sm);
+    color: var(--text-2);
+}
+
+.waveform-saved-banner > span {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.waveform-saved-banner > .kmila-btn {
+    flex: 0 0 auto;
+}
+
 .waveform-viewer__toolbar {
     display: flex;
     align-items: center;
@@ -10542,6 +10590,63 @@
     stroke-width: 3;
 }
 
+/* #3 — schematic step-through: the gate whose source line just produced a
+   transition pulses; the wires carrying the changed signals glow. Kept above
+   the dim/trace rules visually by using !important on stroke so it reads even
+   when a trace selection is also active. */
+.schematic-cell.is-active-step > path:first-child {
+    stroke: var(--accent, #f59e0b) !important;
+    stroke-width: 3 !important;
+    animation: kmila-schem-pulse 1s ease-in-out infinite;
+    transform-box: fill-box;
+    transform-origin: center;
+}
+.schematic-cell.is-active-step {
+    opacity: 1 !important;
+}
+.schematic-wire.is-active-step {
+    stroke: var(--accent, #f59e0b) !important;
+    stroke-width: 4 !important;
+    opacity: 1 !important;
+    animation: kmila-schem-wire-pulse 1s ease-in-out infinite;
+}
+@keyframes kmila-schem-pulse {
+    0%, 100% { filter: drop-shadow(0 0 0 transparent); }
+    50%      { filter: drop-shadow(0 0 4px var(--accent, #f59e0b)); }
+}
+@keyframes kmila-schem-wire-pulse {
+    0%, 100% { opacity: .65; }
+    50%      { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .schematic-cell.is-active-step > path:first-child,
+    .schematic-wire.is-active-step { animation: none; }
+}
+
+/* #3 — live step-through control bar (Debug mode over a running sim). */
+.schematic-debug-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background-color: var(--surface-2);
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: var(--fs-sm);
+    flex-wrap: wrap;
+}
+.schematic-debug-bar__status {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    font-weight: 600;
+    color: var(--accent, #f59e0b);
+}
+.schematic-debug-bar__hint {
+    flex: 1 1 12rem;
+    min-width: 0;
+    color: var(--text-2, #64748b);
+}
+
 .schematic-basket {
     position: absolute;
     bottom: 1rem;
@@ -11236,6 +11341,19 @@
     background-color: color-mix(in srgb, var(--success, #10b981) 8%, var(--surface-2));
     border: 1px solid color-mix(in srgb, var(--success, #10b981) 30%, var(--border-subtle));
     border-radius: var(--radius-sm);
+    flex-wrap: wrap;
+}
+
+/* Live-control buttons (Resume / Pause / Step Forward) must keep their
+   icon + label inline. `.kmila-btn` uses `overflow: hidden` so wrapped
+   text would clip — `nowrap` keeps the label on one line, `flex-shrink: 0`
+   stops a narrow parent from squeezing the button below its content
+   width. Applied to both the schematic debug bar and the replay panel
+   live row so the same buttons read identically in both surfaces. */
+.kmila-replay__live-controls > .kmila-btn,
+.schematic-debug-bar > .kmila-btn {
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .kmila-replay__live-hint {
@@ -11348,6 +11466,16 @@
 }
 .kmila-replay__bp-list li span { flex: 1; }
 
+/* Untracked breakpoint warning (#4): the line maps to no signal change, so
+   the engine can never pause there. Mute the row + show a warning glyph. */
+.kmila-replay__bp-list li.is-untracked { opacity: .72; }
+.kmila-replay__bp-list li .kmila-replay__bp-warn {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    color: var(--warning, #f59e0b);
+}
+
 /* ── Phase D: signal-table filter UI ──────────────────────────────────────
    Surfaces only on big designs (≥12 signals with ≥2 distinct port types).
    Search box on top, port-type chips + group-by checkbox underneath.       */
@@ -11434,6 +11562,21 @@
 }
 .kmila-bp-glyph:hover::after {
     background: color-mix(in srgb, var(--danger, #ef4444) 80%, white);
+}
+
+/* Untracked breakpoint (#4): the line maps to no signal assignment, so the
+   engine can never pause there. Render it hollow + muted so it reads as
+   "set but inert" rather than a live red dot. The hover tooltip (set in
+   kmilaSetMonacoBreakpoints) explains why. */
+.kmila-bp-glyph--untracked::after {
+    background: transparent;
+    border: 1.5px dashed var(--text-3, #9ca3af);
+    box-shadow: none;
+    width: 9px;
+    height: 9px;
+}
+.kmila-bp-glyph--untracked:hover::after {
+    background: color-mix(in srgb, var(--text-3, #9ca3af) 25%, transparent);
 }
 
 /* ── Editor card: Code / Step Replay tab strip (Phase B+ follow-up 3) ─────
@@ -11558,12 +11701,21 @@
 }
 
 .kmila-block-editor__canvas {
-    height: 420px;
+    /* The workspace is the whole point of the exercise view — give it real
+       viewport budget. Reasoning: lesson chrome (crumb + title + chips +
+       brief) above and the Run/Reset row + match banner below together
+       eat ~25vh; what's left should be the workspace. Bumped 2026-05-28
+       after Daniel noted the previous 760px cap still felt cramped. */
+    height: 88vh;
+    min-height: 640px;
     width: 100%;
 }
 
 @media (max-width: 720px) {
-    .kmila-block-editor__canvas { height: 320px; }
+    .kmila-block-editor__canvas {
+        height: 78vh;
+        min-height: 480px;
+    }
 }
 
 .kmila-exercise-actions {
@@ -11594,6 +11746,408 @@
 .kmila-exercise-match--miss {
     border-color: color-mix(in srgb, var(--warning, #f59e0b) 60%, var(--border-subtle));
     background-color: color-mix(in srgb, var(--warning, #f59e0b) 8%, var(--surface-2));
+}
+
+/* ── kmila-blocks engine (replaces Blockly) ────────────────────────────────
+   DOM-based block renderer for /concepts/exercise/*. Three style families
+   live inside .kmila-block-root: the palette (flyout templates on the left),
+   the canvas (free-positioned top-level blocks + their nested children),
+   and the trash icon (drag-to-delete). Block colors follow the original
+   pedagogical palette (step indigo / gate sky / signal emerald / clock
+   amber / accent blue) so the lesson narrative still maps. Everything else
+   — surfaces, borders, focus rings — comes from pages.css tokens so dark
+   mode is automatic via [data-bs-theme="dark"]. */
+
+.kmila-block-root {
+    display: flex;
+    height: 100%;
+    width: 100%;
+    background-color: var(--surface-1);
+    overflow: hidden;
+    --kmila-block-step:    #6366f1;
+    --kmila-block-gate:    #0ea5e9;
+    --kmila-block-signal:  #10b981;
+    --kmila-block-clock:   #f59e0b;
+    --kmila-block-accent:  #4f8cff;
+    --kmila-block-raw:     #64748b;
+}
+
+.kmila-block-palette {
+    width: 160px;
+    flex: 0 0 160px;
+    background-color: var(--surface-2);
+    border-right: 1px solid var(--border-subtle);
+    padding: var(--space-3);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: flex-start;
+}
+
+@media (max-width: 720px) {
+    .kmila-block-palette { width: 132px; flex-basis: 132px; padding: var(--space-2); }
+}
+
+.kmila-block-palette__sep {
+    width: 100%;
+    height: 1px;
+    background-color: var(--border-subtle);
+    margin: var(--space-1) 0;
+}
+
+.kmila-block-canvas {
+    flex: 1 1 auto;
+    position: relative;
+    overflow: auto;
+    background-image:
+        radial-gradient(circle, color-mix(in srgb, var(--border-subtle) 60%, transparent) 1px, transparent 1px);
+    background-size: 20px 20px;
+    background-position: 0 0;
+    min-height: 100%;
+}
+
+.kmila-block-trash {
+    position: absolute;
+    bottom: var(--space-3);
+    right:  var(--space-3);
+    width:  44px;
+    height: 44px;
+    background-color: var(--surface-2);
+    border: 1px dashed var(--border-default);
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    color: var(--text-muted);
+    pointer-events: none;
+    z-index: 50;
+    transition: transform 120ms ease, color 120ms ease, border-color 120ms ease, background-color 120ms ease;
+}
+
+.kmila-block-trash--active {
+    transform: scale(1.15);
+    color: #ef4444;
+    border-color: #ef4444;
+    background-color: color-mix(in srgb, #ef4444 12%, var(--surface-2));
+}
+
+/* ── Block atoms ───────────────────────────────────────────────────────── */
+
+.kmila-block {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 2px;
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: #fff;
+    font: 500 0.9rem/1.2 inherit;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.20), inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+    user-select: none;
+    touch-action: none;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    cursor: grab;
+    transition: box-shadow 120ms ease, transform 120ms ease, opacity 120ms ease;
+    vertical-align: middle;
+}
+
+.kmila-block:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+}
+
+.kmila-block:active,
+.kmila-block.kmila-block--dragging {
+    cursor: grabbing;
+}
+
+.kmila-block--dragging {
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+    transform: rotate(-1deg);
+    opacity: 0.94;
+}
+
+.kmila-block--over-trash {
+    opacity: 0.55;
+    transform: scale(0.9) rotate(-2deg);
+}
+
+.kmila-block--palette {
+    cursor: grab;
+    transform: none;
+}
+
+.kmila-block--palette select,
+.kmila-block--palette .kmila-block__field--dropdown {
+    pointer-events: none;
+}
+
+.kmila-block--palette:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(15, 23, 42, 0.25), inset 0 0 0 1px rgba(255, 255, 255, 0.20);
+}
+
+.kmila-block--step    { background-color: var(--kmila-block-step);    }
+.kmila-block--gate    { background-color: var(--kmila-block-gate);    }
+.kmila-block--signal  { background-color: var(--kmila-block-signal);  }
+.kmila-block--clock   { background-color: var(--kmila-block-clock);   }
+.kmila-block--accent  { background-color: var(--kmila-block-accent);  }
+
+/* Inline expression atoms keep the pill shape via `--has-output` below;
+   declaration-row blocks (port, signal_decl) that ALSO carry `--signal`
+   intentionally stay as rounded rectangles so a row like
+   `name : in std_logic` doesn't render as a giant emerald oval. */
+
+/* Raw-VHDL fallback blocks (Phase 0 round-trip safety). Greyed surface,
+   dashed border + monospace text so the student visually distinguishes
+   "constructs the catalog could fully represent" from "verbatim text the
+   parser punted on". The TEXT input keeps native editability — students
+   can still tweak the verbatim source if they want — but the styling
+   signals "this is a fallback, not authored blocks". */
+.kmila-block--raw {
+    background-color: var(--kmila-block-raw);
+    border: 1px dashed rgba(255, 255, 255, 0.45);
+    opacity: 0.92;
+}
+
+/* Simulator-error decoration (Step 7 of backlog #16). The C# diagnostic
+   path matches error lines against the emitter's {line → blockId} map
+   and asks the JS bridge to apply this class to the offending blocks.
+   Red glow + double-outline reads as "broken" without being so jarring
+   that healthy blocks become hard to read by contrast. */
+.kmila-block--error {
+    outline: 2px solid #ef4444;
+    outline-offset: 1px;
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.25);
+    animation: kmila-block-error-pulse 1.2s ease-out 2;
+}
+@keyframes kmila-block-error-pulse {
+    0%   { box-shadow: 0 0 0 0   rgba(239, 68, 68, 0.55); }
+    100% { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.25); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .kmila-block--error { animation: none; }
+}
+.kmila-block--raw .kmila-block__field--label {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0.85;
+}
+.kmila-block--raw .kmila-block__field--text {
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 0.82rem;
+    background-color: rgba(0, 0, 0, 0.25);
+}
+
+/* Value blocks (output-bearing) get a pill shape so they read as expressions. */
+.kmila-block--has-output {
+    border-radius: 999px;
+    padding: 6px 14px;
+}
+.kmila-block--has-output.kmila-block--gate {
+    border-radius: 12px; /* gates stay rounded-rect for hierarchy */
+    padding: 6px 10px;
+}
+
+.kmila-block__row {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: nowrap;
+}
+
+.kmila-block__field--label {
+    color: rgba(255, 255, 255, 0.95);
+    white-space: nowrap;
+}
+
+.kmila-block__field--dropdown {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-color: rgba(255, 255, 255, 0.18);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.30);
+    border-radius: 6px;
+    padding: 3px 22px 3px 8px;
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    background-image:
+        linear-gradient(45deg, transparent 50%, #fff 50%),
+        linear-gradient(135deg, #fff 50%, transparent 50%);
+    background-position:
+        calc(100% - 12px) calc(50% - 1px),
+        calc(100% - 7px)  calc(50% - 1px);
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+}
+
+.kmila-block__field--dropdown:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 1px;
+}
+
+.kmila-block__field--dropdown option {
+    color: var(--text-default);
+    background-color: var(--surface-1);
+}
+
+/* Free-text fields (entity name, signal name, sensitivity list, …).
+   Same chrome as dropdowns — translucent surface on the block's tint — so
+   the two field kinds read as members of the same family. */
+.kmila-block__field--text {
+    appearance: none;
+    -webkit-appearance: none;
+    background-color: rgba(255, 255, 255, 0.18);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.30);
+    border-radius: 6px;
+    padding: 3px 8px;
+    font: inherit;
+    font-size: 0.85rem;
+    min-width: 0;
+}
+.kmila-block__field--text::placeholder {
+    color: rgba(255, 255, 255, 0.55);
+}
+.kmila-block__field--text:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 1px;
+}
+
+/* Labels above statement slots (e.g. "then" / "else" inside the if-block,
+   "declarations" / "begin" inside architecture). Tiny, low-key — they
+   exist to disambiguate adjacent body slots, not to compete with the
+   block's content. */
+.kmila-block__statement-label {
+    font-size: 0.72rem;
+    text-transform: lowercase;
+    letter-spacing: 0.04em;
+    color: rgba(255, 255, 255, 0.78);
+    padding: 2px 0 0 6px;
+}
+
+/* ── Slots (value / statement / next) ─────────────────────────────────── */
+
+.kmila-slot {
+    box-sizing: border-box;
+    transition: background-color 120ms ease, outline-color 120ms ease;
+}
+
+.kmila-block__value {
+    display: inline-flex;
+    align-items: center;
+    min-width: 38px;
+    min-height: 22px;
+    padding: 0;
+    border-radius: 999px;
+    background-color: rgba(0, 0, 0, 0.18);
+    outline: 1px dashed rgba(255, 255, 255, 0.35);
+    outline-offset: -1px;
+    vertical-align: middle;
+}
+.kmila-block__value:not(:empty) {
+    background-color: transparent;
+    outline: none;
+    min-width: 0;
+    min-height: 0;
+    padding: 0;
+}
+
+.kmila-block__statement {
+    margin-top: 4px;
+    margin-left: 14px;
+    padding: 4px 6px 4px 6px;
+    min-height: 24px;
+    background-color: rgba(0, 0, 0, 0.18);
+    border-radius: 6px;
+    outline: 1px dashed rgba(255, 255, 255, 0.30);
+    outline-offset: -1px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+}
+.kmila-block__statement:not(:empty) {
+    outline: none;
+    padding: 4px;
+}
+
+/* When a statement slot accumulates many children (entity with 10+ ports,
+   architecture with a long DECLS list), cap visible height and let the
+   slot scroll internally. Keeps the parent block compact so it doesn't
+   crowd or push other top-level stacks off-screen. */
+.kmila-block__statement {
+    max-height: 60vh;
+    overflow-y: auto;
+    overflow-x: visible;
+}
+
+.kmila-block__next-slot {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.kmila-block__next-slot > .kmila-block {
+    margin-top: 4px;
+}
+
+.kmila-block__statement > .kmila-block {
+    margin-top: 0;
+}
+
+.kmila-block__statement > .kmila-block + .kmila-block {
+    margin-top: 4px;
+}
+
+/* Snap preview — slot glows white when the dragged block will land here. */
+.kmila-slot--snap {
+    outline: 2px solid #fff !important;
+    outline-offset: 0;
+    background-color: rgba(255, 255, 255, 0.35) !important;
+    animation: kmila-slot-pulse 600ms ease-in-out infinite alternate;
+}
+
+@keyframes kmila-slot-pulse {
+    from { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.6); }
+    to   { box-shadow: 0 0 0 6px rgba(255, 255, 255, 0); }
+}
+
+/* ── Dark-mode polish ──────────────────────────────────────────────────
+   Tokens already give us the surfaces; we just lift the canvas dot grid
+   to a slightly higher contrast so it reads on the slate-900 background. */
+
+[data-bs-theme="dark"] .kmila-block-canvas {
+    background-image:
+        radial-gradient(circle, color-mix(in srgb, var(--border-subtle) 80%, transparent) 1px, transparent 1px);
+}
+
+[data-bs-theme="dark"] .kmila-block {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.10);
+}
+
+[data-bs-theme="dark"] .kmila-block-trash {
+    background-color: var(--surface-3, var(--surface-2));
+}
+
+/* ── Reduced-motion respect ───────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+    .kmila-block,
+    .kmila-block-trash,
+    .kmila-slot {
+        transition: none;
+    }
+    .kmila-slot--snap {
+        animation: none;
+    }
+    .kmila-block--dragging {
+        transform: none;
+    }
 }
 
 /* ── End-of-lesson micro-quiz ───────────────────────────────────────────── */
@@ -11685,4 +12239,131 @@
 .kmila-quizlet__feedback--miss {
     border-color: color-mix(in srgb, var(--danger, #ef4444) 60%, var(--border-subtle));
     background-color: color-mix(in srgb, var(--danger, #ef4444) 8%, var(--surface-2));
+}
+
+
+/* ============================================================================
+   Welcome tour (kmila-tutorial.js) — first-run coachmark overlay.
+   Sits above modals but below toasts so a toast can still surface during
+   the tour if something asynchronous fires.
+   ============================================================================ */
+
+.kmila-tour {
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--z-toast, 1080) - 1);
+    pointer-events: none; /* children opt back in */
+}
+
+.kmila-tour__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    pointer-events: auto;
+    animation: kmila-tour-fade-in 200ms var(--ease-standard, ease-out);
+}
+
+.kmila-tour__spotlight {
+    position: absolute;
+    pointer-events: none;
+    border-radius: var(--radius-md, 8px);
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
+    transition: top 200ms ease, left 200ms ease, width 200ms ease, height 200ms ease;
+}
+
+.kmila-tour__card {
+    position: absolute;
+    pointer-events: auto;
+    background: var(--surface-1, #fff);
+    color: var(--text-strong, #111);
+    border: 1px solid var(--border-default, rgba(0,0,0,0.15));
+    border-radius: var(--radius-md, 8px);
+    box-shadow: var(--shadow-3, 0 12px 32px rgba(0,0,0,0.25));
+    padding: var(--space-4, 16px);
+    transition: top 200ms ease, left 200ms ease;
+    max-width: calc(100vw - 24px);
+}
+
+.kmila-tour__step {
+    font-size: var(--fs-xs, 11px);
+    color: var(--text-muted, #666);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: var(--space-2, 8px);
+}
+
+.kmila-tour__title {
+    font-size: var(--fs-lg, 18px);
+    font-weight: 600;
+    margin: 0 0 var(--space-2, 8px);
+}
+
+.kmila-tour__body {
+    font-size: var(--fs-sm, 14px);
+    line-height: 1.5;
+    margin: 0 0 var(--space-3, 12px);
+    color: var(--text-default, #222);
+}
+
+.kmila-tour__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2, 8px);
+}
+
+.kmila-tour__spacer { flex: 1; }
+
+.kmila-tour__btn {
+    border: 1px solid var(--border-default, rgba(0,0,0,0.15));
+    background: var(--surface-2, #f5f5f5);
+    color: var(--text-strong, #111);
+    border-radius: var(--radius-sm, 6px);
+    padding: 6px 12px;
+    font-size: var(--fs-sm, 14px);
+    cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease;
+}
+
+.kmila-tour__btn:hover { background: var(--surface-3, #ececec); }
+
+.kmila-tour__btn--ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--text-muted, #555);
+}
+
+.kmila-tour__btn--ghost:hover {
+    background: var(--surface-2, #f5f5f5);
+    color: var(--text-strong, #111);
+}
+
+.kmila-tour__btn--primary {
+    background: var(--kmila-primary, #4f46e5);
+    border-color: var(--kmila-primary, #4f46e5);
+    color: #fff;
+}
+
+.kmila-tour__btn--primary:hover {
+    background: var(--kmila-primary-dark, #4338ca);
+    border-color: var(--kmila-primary-dark, #4338ca);
+}
+
+@keyframes kmila-tour-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .kmila-tour__backdrop { animation: none; }
+    .kmila-tour__spotlight, .kmila-tour__card { transition: none; }
+}
+
+/* Mobile: shrink the card and center it instead of side-anchoring. */
+@media (max-width: 640.98px) {
+    .kmila-tour__card {
+        left: 12px !important;
+        right: 12px !important;
+        width: auto !important;
+        max-width: calc(100vw - 24px);
+    }
 }

@@ -151,6 +151,95 @@ public class ReplayState
     private DateTime _lastUiNudge = DateTime.MinValue;
 
     /// <summary>
+    /// Set of 1-based source lines that carry at least one signal/variable
+    /// assignment, i.e. lines the engine can actually pause on when a
+    /// breakpoint is set. Rebuilt alongside <see cref="_liveLineMap"/> from
+    /// the source whenever <see cref="AttachLive"/> or
+    /// <see cref="RefreshLineMap"/> runs. Used by the Editor (#4) to flag
+    /// breakpoints dropped on untrackable lines (conditions, declarations,
+    /// blank lines) so the user knows they'll never fire.
+    /// </summary>
+    private HashSet<int> _trackedLines = new();
+
+    /// <summary>
+    /// Read-only view of <see cref="_trackedLines"/>.
+    /// </summary>
+    public IReadOnlyCollection<int> TrackedLines => _trackedLines;
+
+    /// <summary>
+    /// Fired whenever the trackable-line set is rebuilt (after
+    /// <see cref="RefreshLineMap"/> or <see cref="AttachLive"/>). Lets the
+    /// breakpoint list UI re-evaluate which breakpoints are inert without
+    /// polling — separate from <see cref="OnBreakpointsChanged"/> so the
+    /// Editor's repaint→refresh path doesn't loop.
+    /// </summary>
+    public event Action? OnLineMapChanged;
+
+    // ─── #3: schematic step-through ──────────────────────────────────────
+
+    private int[] _liveActiveLines = Array.Empty<int>();
+    private string[] _liveActiveSignals = Array.Empty<string>();
+    private DateTime _lastStepNudge = DateTime.MinValue;
+
+    /// <summary>
+    /// Opt-in: when true, every delta-cycle frame records which source lines
+    /// and signals changed (see <see cref="LiveActiveLines"/> /
+    /// <see cref="LiveActiveSignals"/>) and fires <see cref="OnLiveStepChanged"/>
+    /// so the schematic can pulse the executing cell (#3). Off by default —
+    /// the SchematicViewer flips it on while its Debug mode is showing over a
+    /// live run, and back off when it leaves Debug mode, so the per-frame
+    /// bookkeeping only runs when something is actually watching.
+    /// </summary>
+    public bool TrackActiveLines { get; set; }
+
+    /// <summary>
+    /// 1-based source lines whose signals changed in the most recent delta.
+    /// The schematic maps these to cells (via <c>Cell.SourceLine</c>) and
+    /// pulses them. Only meaningful while <see cref="TrackActiveLines"/> is on
+    /// (or a breakpoint set / live accumulation forced the per-frame lineset).
+    /// </summary>
+    public IReadOnlyList<int> LiveActiveLines => _liveActiveLines;
+
+    /// <summary>Names of the signals that changed in the most recent delta.</summary>
+    public IReadOnlyList<string> LiveActiveSignals => _liveActiveSignals;
+
+    /// <summary>
+    /// Fired after each delta's active lines/signals are recorded (throttled
+    /// to ~10 Hz during a free run, immediate when the engine ends the frame
+    /// paused — i.e. on a breakpoint hit or a single Step). Separate from
+    /// <see cref="OnLiveChanged"/> because that one fires from the UI thread
+    /// before the next frame's data exists.
+    /// </summary>
+    public event Action? OnLiveStepChanged;
+
+    /// <summary>
+    /// True when the given 1-based line carries a signal/variable assignment
+    /// that a breakpoint could pause on. False for conditions, declarations,
+    /// comments, blank lines — anything the engine emits no transition for.
+    /// Reflects the last source the map was built from (see
+    /// <see cref="RefreshLineMap"/>).
+    /// </summary>
+    public bool IsLineTracked(int line) => _trackedLines.Contains(line);
+
+    /// <summary>
+    /// Rebuild the signal→line map (and <see cref="TrackedLines"/>) from the
+    /// current editor source WITHOUT a live run. The Editor calls this when
+    /// breakpoints change so it can classify each breakpoint as trackable or
+    /// not before the user ever hits Run. During a run <see cref="AttachLive"/>
+    /// rebuilds it from the saved file content.
+    /// </summary>
+    public void RefreshLineMap(string source)
+    {
+        _liveSource = source ?? string.Empty;
+        _liveLineMap = BuildLiveLineMap(_liveSource);
+        _trackedLines = _liveLineMap.Values.SelectMany(v => v).ToHashSet();
+        // #5: condition lines (if / elsif / case-when arms) are now valid
+        // breakpoint targets too, so they count as "tracked" for the #4 warning.
+        _trackedLines.UnionWith(BuildConditionLines(_liveSource));
+        OnLineMapChanged?.Invoke();
+    }
+
+    /// <summary>
     /// Opt-in: when true, every delta-cycle frame is appended to
     /// <see cref="LiveDoc"/> so the user can scrub frame-by-frame while a sim
     /// is still running. When false (default), the live engine is still
@@ -190,12 +279,18 @@ public class ReplayState
         // Stop subscribing to whatever was attached before — switching
         // engines mid-session is rare but should leave no dangling handlers.
         if (LiveEngine != null)
+        {
             LiveEngine.OnFrameEmitted -= OnLiveFrameEmitted;
+            LiveEngine.OnConditionEvaluated -= OnLiveConditionEvaluated;
+        }
 
         LiveEngine = engine;
         _liveSource = sourceCode ?? string.Empty;
         _liveValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         _liveLineMap = BuildLiveLineMap(_liveSource);
+        _trackedLines = _liveLineMap.Values.SelectMany(v => v).ToHashSet();
+        _trackedLines.UnionWith(BuildConditionLines(_liveSource));
+        OnLineMapChanged?.Invoke();
 
         // Only build the live tape doc when the opt-in setting is on. When
         // off, the OnFrameEmitted handler still attaches — breakpoints + the
@@ -218,6 +313,7 @@ public class ReplayState
         }
         LiveFrameTick = 0;
         engine.OnFrameEmitted += OnLiveFrameEmitted;
+        engine.OnConditionEvaluated += OnLiveConditionEvaluated;
         OnLiveChanged?.Invoke();
     }
 
@@ -230,11 +326,17 @@ public class ReplayState
     public void DetachLive()
     {
         if (LiveEngine != null)
+        {
             LiveEngine.OnFrameEmitted -= OnLiveFrameEmitted;
+            LiveEngine.OnConditionEvaluated -= OnLiveConditionEvaluated;
+        }
         LiveEngine = null;
         LiveDoc = null;
         LiveFrameTick = 0;
+        _liveActiveLines = Array.Empty<int>();
+        _liveActiveSignals = Array.Empty<string>();
         OnLiveChanged?.Invoke();
+        OnLiveStepChanged?.Invoke();
     }
 
     /// <summary>
@@ -265,7 +367,7 @@ public class ReplayState
         // accumulating, but skip it altogether when there are no
         // breakpoints AND we're not accumulating — that's the truly
         // zero-allocation fast path on a long opt-out run.
-        bool needLineSet = accumulate || Breakpoints.Count > 0;
+        bool needLineSet = accumulate || Breakpoints.Count > 0 || TrackActiveLines;
 
         SortedSet<int>? lineSet = needLineSet ? new SortedSet<int>() : null;
 
@@ -353,6 +455,31 @@ public class ReplayState
             }
         }
 
+        // #3: record the active lines/signals for the schematic step-through.
+        // The arrays are always populated so the UI can read them on demand,
+        // but the OnLiveStepChanged nudge only fires when the engine is
+        // actually paused (post-Step, post-breakpoint). During free run the
+        // highlight set churns too fast to read AND re-rendering the
+        // schematic 10× per second starves the UI thread when many cells
+        // are present — what the user perceives as "step forward freezes
+        // the sim". OnLiveChanged still fires from LiveStep/LivePause/
+        // LiveResume so consumers see the data right after a pause boundary
+        // through that path.
+        if (TrackActiveLines)
+        {
+            _liveActiveLines = lineSet != null ? lineSet.ToArray() : Array.Empty<int>();
+            _liveActiveSignals = args.ChangedSignals
+                .Select(s => s.Name ?? string.Empty)
+                .Where(n => n.Length > 0)
+                .ToArray();
+
+            if (LiveEngine?.IsPaused == true)
+            {
+                _lastStepNudge = DateTime.UtcNow;
+                OnLiveStepChanged?.Invoke();
+            }
+        }
+
         // Throttle the OnChange nudge to ~10 Hz. Only relevant when
         // accumulating — there's nothing for the panel to re-render
         // otherwise (the post-hoc replay doc is what shows after the run).
@@ -364,6 +491,38 @@ public class ReplayState
                 _lastUiNudge = now;
                 OnChange?.Invoke();
             }
+        }
+    }
+
+    /// <summary>
+    /// #5: a non-sequential branch was taken (an <c>if</c>/<c>elsif</c>
+    /// condition that went true, or a <c>case</c> arm that matched), carrying
+    /// the 1-based source line. Pauses the engine if a breakpoint sits on that
+    /// line — the signal-transition path can't catch these because the
+    /// condition itself produces no signal change. Also feeds the schematic
+    /// step-through so the cell on the condition line pulses.
+    /// </summary>
+    private void OnLiveConditionEvaluated(int line)
+    {
+        if (line <= 0) return;
+
+        if (TrackActiveLines)
+        {
+            _liveActiveLines = new[] { line };
+            _liveActiveSignals = Array.Empty<string>();
+            bool pausedNow = LiveEngine?.IsPaused ?? false;
+            var now = DateTime.UtcNow;
+            if (pausedNow || (now - _lastStepNudge).TotalMilliseconds >= 100)
+            {
+                _lastStepNudge = now;
+                OnLiveStepChanged?.Invoke();
+            }
+        }
+
+        if (Breakpoints.Contains(line))
+        {
+            LiveEngine?.Pause();
+            OnLiveChanged?.Invoke();
         }
     }
 
@@ -406,6 +565,38 @@ public class ReplayState
         return map;
     }
 
+    /// <summary>
+    /// #5: scan for lines that hold a breakpoint-able branch condition — an
+    /// <c>if</c> / <c>elsif</c> keyword or a <c>case</c> <c>when</c> arm. These
+    /// are the lines the engine's <c>OnConditionEvaluated</c> can pause on, so
+    /// they're "tracked" for the #4 untracked-breakpoint warning even though no
+    /// signal assignment lives there. Mirrors the parser's per-keyword line
+    /// capture closely enough for the gutter hint (exact pausing still comes
+    /// from the parser-captured line, not this regex).
+    /// </summary>
+    private static HashSet<int> BuildConditionLines(string source)
+    {
+        var set = new HashSet<int>();
+        if (string.IsNullOrEmpty(source)) return set;
+        var lines = source.Replace("\r\n", "\n").Split('\n');
+        // Leading-keyword match: `if` / `elsif` / `when` at the start of the
+        // (trimmed) line. Excludes `end if` / `end case` since those don't lead
+        // with the keyword. Conditional-assignment `when` lines also carry a
+        // `<=`, so they're already tracked via the assignment scan regardless.
+        var rx = new System.Text.RegularExpressions.Regex(
+            @"^\s*(if|elsif|when)\b",
+            System.Text.RegularExpressions.RegexOptions.Compiled
+            | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            var commentIdx = line.IndexOf("--", StringComparison.Ordinal);
+            if (commentIdx >= 0) line = line.Substring(0, commentIdx);
+            if (rx.IsMatch(line)) set.Add(i + 1);
+        }
+        return set;
+    }
+
     /// <summary>Cooperative pause — no-op if no engine is attached.</summary>
     public void LivePause()
     {
@@ -424,9 +615,56 @@ public class ReplayState
     /// Advance by exactly one delta cycle. Implies a prior Pause; the
     /// engine re-pauses itself after one frame fires.
     /// </summary>
+    /// <remarks>
+    /// <c>StepOneDelta</c> works by temporarily calling <c>Resume</c> on the
+    /// engine and subscribing a one-shot <c>OnFrameEmitted</c> handler that
+    /// sets <c>_isRunning = false</c> again after a single frame. That means
+    /// when <c>StepOneDelta</c> returns, the engine is still resumed (the
+    /// frame hasn't fired yet) — so an immediate <c>OnLiveChanged.Invoke()</c>
+    /// here would see <c>IsLivePaused == false</c>, disable the Step button
+    /// in the UI, and leave it stuck disabled because nothing nudges the UI
+    /// again after the engine's internal one-shot handler flips
+    /// <c>_isRunning</c> back to false.
+    ///
+    /// Fix: subscribe a second one-shot handler AFTER calling
+    /// <c>StepOneDelta</c>. Subscription order is invocation order, so the
+    /// engine's internal one-shot runs first (re-pauses the engine), then
+    /// ours runs and fires <c>OnLiveChanged</c> — by which time
+    /// <c>IsLivePaused</c> is correctly true and the Step button re-enables.
+    /// We skip this dance when the engine wasn't paused to begin with
+    /// (StepOneDelta would be a no-op then).
+    /// </remarks>
     public void LiveStep()
     {
-        LiveEngine?.StepOneDelta();
-        OnLiveChanged?.Invoke();
+        if (LiveEngine == null)
+        {
+            OnLiveChanged?.Invoke();
+            return;
+        }
+
+        bool wasPaused = LiveEngine.IsPaused;
+        LiveEngine.StepOneDelta();
+
+        if (wasPaused)
+        {
+            Action<FrameEmittedArgs>? followUp = null;
+            followUp = _ =>
+            {
+                var engine = LiveEngine;
+                if (engine != null && followUp != null)
+                {
+                    engine.OnFrameEmitted -= followUp;
+                }
+                OnLiveChanged?.Invoke();
+            };
+            LiveEngine.OnFrameEmitted += followUp;
+        }
+        else
+        {
+            // Engine was already running — StepOneDelta is a no-op. Fire
+            // OnLiveChanged anyway so subscribers can react to whatever
+            // state the user observed.
+            OnLiveChanged?.Invoke();
+        }
     }
 }

@@ -1,5 +1,6 @@
 using Kmila.Web.Components;
 using Kmila.Shared.Services;
+using Kmila.Shared.Services.Api;
 using Kmila.Shared.Services.Export;
 using Kmila.Web.Services;
 using Kmila.Shared.Repositories;
@@ -410,6 +411,10 @@ public class Program
         // simultaneous Blazor Server users.
         builder.Services.AddScoped<KmilaToastService>();
 
+        // Headless simulation API consumed by the SimulatorBench harness and
+        // other automation. See Documentacion/HANDOFF_simulator_bench_api.md.
+        builder.Services.AddSimulationApi();
+
         var app = builder.Build();
 
         // Apply the saved library-build mode (Settings → Build mode) to the
@@ -482,6 +487,9 @@ public class Program
         app.MapRazorComponents<App>()
             .AddInteractiveServerRenderMode()
             .AddAdditionalAssemblies(typeof(Kmila.Shared._Imports).Assembly);
+
+        // Mount /api/v1 endpoints for headless simulation (bench harness).
+        app.MapSimulationApi();
 
         app.Run();
     }

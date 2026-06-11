@@ -26,12 +26,28 @@ public static class StimulusBuilder
         TimeSpan duration,
         int tickResNs = TimeClock.NS_PER_TICK,
         int systemClockMhz = 50)
+        => BuildConfigNs(entity, portMoments,
+            totalNs: (long)Math.Round(duration.TotalSeconds * 1e9),
+            tickResNs: tickResNs,
+            systemClockMhz: systemClockMhz);
+
+    /// <summary>
+    /// Direct nanosecond-precision overload for callers that need sub-100ns
+    /// durations (the API/SimulatorBench). TimeSpan ticks are 100ns, so the
+    /// regular <see cref="BuildConfig"/> rounds anything under 100ns to 0
+    /// and silently truncates the run.
+    /// </summary>
+    public static SimulationConfig BuildConfigNs(
+        Entity entity,
+        List<PortMomentConfiguration>? portMoments,
+        long totalNs,
+        int tickResNs = TimeClock.NS_PER_TICK,
+        int systemClockMhz = 50)
     {
         ArgumentNullException.ThrowIfNull(entity);
 
         // Convert duration to ticks
-        double totalNs = duration.TotalSeconds * 1e9;
-        ulong totalTicks = (ulong)(totalNs / tickResNs);
+        ulong totalTicks = (ulong)(totalNs / Math.Max(1, tickResNs));
         if (totalTicks == 0) totalTicks = 1;
 
         var clocks = new List<ClockConfig>();
@@ -168,12 +184,23 @@ public static class StimulusBuilder
             try { autoClkPort.PortType = Constants.PortType.IN; } catch { /* read-only proxy — harmless */ }
         }
 
-        clocks.Add(new ClockConfig
+        // If the caller has already provided explicit stimulus for the
+        // clock signal (e.g. SimulatorBench's autoStimulus feeding clk
+        // transitions derived from a GHDL VCD), don't ALSO auto-inject a
+        // clock — that would race with the externally-driven schedule and
+        // produce double-edge artifacts. Bench Phase F bug #13 fix.
+        bool clkStimProvided = autoClkPort != null &&
+            stimuli.Any(s => ReferenceEquals(s.Signal, autoClkPort) ||
+                             string.Equals(s.Signal?.Name, autoClkPort.Name, StringComparison.OrdinalIgnoreCase));
+        if (!clkStimProvided)
         {
-            Signal = autoClkPort,
-            HalfPeriodTicks = halfPeriodTicks,
-            InitialHigh = false
-        });
+            clocks.Add(new ClockConfig
+            {
+                Signal = autoClkPort,
+                HalfPeriodTicks = halfPeriodTicks,
+                InitialHigh = false
+            });
+        }
 
         // Sort stimuli by tick
         stimuli.Sort((a, b) => a.Tick.CompareTo(b.Tick));

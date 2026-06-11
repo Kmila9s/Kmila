@@ -84,31 +84,16 @@
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
     <script src="_content/Blazor.Bootstrap/blazor.bootstrap.js"></script>
 
-    <!-- Blockly — visual-programming engine for the /concepts exercises.
-         Self-hosted so MAUI works offline. Load order matters:
-           1. blockly_compressed.js — the core (defines Blockly.inject, FieldDropdown, Blocks, …).
-           2. blocks_compressed.js  — standard block library (Blockly's built-ins
-                                      assume Blockly.libraryBlocks is populated).
-           3. msg/en.js             — i18n strings for default labels/tooltips.
-           4. concepts-blocks.js    — our custom block types + JS interop bridge.
-
-         Loaded *before* BlazorMonaco on purpose. Monaco's loader.js installs an
-         AMD `define()` global and triggers an async `require()` to bootstrap
-         its editor modules; if we set `define = undefined` after Monaco has
-         loaded (the previous shim approach), that async callback can fire
-         inside the shim window and Monaco's lazy module load throws silently,
-         leaving `monaco.editor.getEditors()` permanently empty — which then
-         shows up as BlazorMonaco's "Couldn't find the editor with id ..."
-         error on every page that mounts a StandaloneCodeEditor. Loading
-         Blockly first — when `define` doesn't exist yet — lets the Blockly
-         UMD wrapper take its plain-browser branch (`root.Blockly = factory()`)
-         without interference, and Monaco then owns `define` for the rest of
-         the page lifetime. See [[project_blockly_bundling_gotcha]] memory
-         entry for the full history; previous "shim" approach retired. -->
-    <script src="_content/Kmila.Shared/lib/blockly/blockly_compressed.js"></script>
-    <script src="_content/Kmila.Shared/lib/blockly/blocks_compressed.js"></script>
-    <script src="_content/Kmila.Shared/lib/blockly/en.js"></script>
-    <script src="_content/Kmila.Shared/js/concepts-blocks.js"></script>
+    <!-- kmila-blocks: our own visual-programming engine for /concepts/exercise/*.
+         Replaces Blockly entirely; no external dependency, no UMD/AMD interplay
+         with Monaco's loader, no 1MB of vendored library files. Block JSON
+         format matches Blockly's workspaces.save() shape so BlockProgram.cs
+         and the exercise fingerprint catalogs work unchanged. -->
+    <script src="_content/Kmila.Shared/js/kmila-blocks.js"></script>
+    <!-- VHDL author block family: registers the entity / arch / process /
+         if / assign + expression atom block types used by Editor's Blocks
+         tab. Pure registry calls; harmless to load app-wide. -->
+    <script src="_content/Kmila.Shared/js/kmila-blocks-vhdl.js"></script>
 
     <script src="_content/BlazorMonaco/jsInterop.js"></script>
     <script src="_content/BlazorMonaco/lib/monaco-editor/min/vs/loader.js"></script>
@@ -129,6 +114,8 @@
     <script src="_content/Kmila.Shared/js/lesson-code.js?v=20260522a"></script>
     <!-- Kmila app utilities (file download, etc.) -->
     <script src="_content/Kmila.Shared/js/app.js?v=20260527a"></script>
+    <!-- Welcome tour (first-run coachmark overlay) — kmila-tutorial.js -->
+    <script src="_content/Kmila.Shared/js/kmila-tutorial.js?v=3"></script>
     <script src="_framework/blazor.webview.js" autostart="false"></script>
 
 </body>

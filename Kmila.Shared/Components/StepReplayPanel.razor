@@ -31,28 +31,31 @@
              aria-label="@Traductor.T("EDITOR_REPLAY_LIVE_CONTROLS")">
             @if (Replay.IsLivePaused)
             {
-                <button type="button" class="kmila-btn-icon kmila-btn-icon--accent"
-                        title="@Traductor.T("CONCEPTS_PLAYER_PLAY")"
-                        aria-label="@Traductor.T("CONCEPTS_PLAYER_PLAY")"
+                <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--sm"
+                        title="@Traductor.T("SIM_RESUME")"
+                        aria-label="@Traductor.T("SIM_RESUME")"
                         @onclick="OnResumeLive">
                     <Icon Name="IconName.PlayFill" />
+                    <span>@Traductor.T("SIM_RESUME")</span>
                 </button>
             }
             else
             {
-                <button type="button" class="kmila-btn-icon kmila-btn-icon--accent"
-                        title="@Traductor.T("CONCEPTS_PLAYER_PAUSE")"
-                        aria-label="@Traductor.T("CONCEPTS_PLAYER_PAUSE")"
+                <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--sm"
+                        title="@Traductor.T("SIM_PAUSE")"
+                        aria-label="@Traductor.T("SIM_PAUSE")"
                         @onclick="OnPauseLive">
                     <Icon Name="IconName.PauseFill" />
+                    <span>@Traductor.T("SIM_PAUSE")</span>
                 </button>
             }
-            <button type="button" class="kmila-btn-icon"
+            <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
                     title="@Traductor.T("CONCEPTS_PLAYER_STEP_FORWARD")"
                     aria-label="@Traductor.T("CONCEPTS_PLAYER_STEP_FORWARD")"
                     disabled="@(!Replay.IsLivePaused)"
                     @onclick="OnStepLive">
                 <Icon Name="IconName.SkipEnd" />
+                <span>@Traductor.T("CONCEPTS_PLAYER_STEP_FORWARD")</span>
             </button>
             <span class="kmila-replay__live-hint">
                 @Traductor.T("EDITOR_REPLAY_LIVE_HINT")
@@ -91,8 +94,16 @@
                     @foreach (var bp in OrderedBreakpoints())
                     {
                         var line = bp;
-                        <li>
+                        var untracked = Replay.TrackedLines.Count > 0 && !Replay.IsLineTracked(line);
+                        <li class="@(untracked ? "is-untracked" : "")">
                             <span>@string.Format(Traductor.T("EDITOR_REPLAY_BREAKPOINTS_AT_LINE"), line)</span>
+                            @if (untracked)
+                            {
+                                <span class="kmila-replay__bp-warn"
+                                      title="@Traductor.T("EDITOR_BP_UNTRACKED_WARN")">
+                                    <Icon Name="IconName.ExclamationTriangle" />
+                                </span>
+                            }
                             <button type="button" class="kmila-btn-icon"
                                     title="@Traductor.T("EDITOR_REPLAY_BREAKPOINTS_REMOVE")"
                                     aria-label="@Traductor.T("EDITOR_REPLAY_BREAKPOINTS_REMOVE")"
@@ -160,6 +171,7 @@ else
         Replay.OnChange              += OnReplayChanged;
         Replay.OnLiveChanged         += OnReplayChanged;
         Replay.OnBreakpointsChanged  += OnReplayChanged;
+        Replay.OnLineMapChanged      += OnReplayChanged;
     }
 
     private void OnReplayChanged() => InvokeAsync(StateHasChanged);
@@ -202,5 +214,6 @@ else
         Replay.OnChange              -= OnReplayChanged;
         Replay.OnLiveChanged         -= OnReplayChanged;
         Replay.OnBreakpointsChanged  -= OnReplayChanged;
+        Replay.OnLineMapChanged      -= OnReplayChanged;
     }
 }

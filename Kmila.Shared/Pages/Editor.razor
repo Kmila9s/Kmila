@@ -41,6 +41,13 @@
                     <span>@Traductor.T("EDITOR_VIEW_CODE")</span>
                 </button>
                 <button type="button"
+                        class="kmila-btn-tab @(_editorCardTab == EditorCardTab.Blocks ? "is-active" : "")"
+                        role="tab" aria-selected="@(_editorCardTab == EditorCardTab.Blocks ? "true" : "false")"
+                        @onclick="() => SwitchEditorCardTabAsync(EditorCardTab.Blocks)">
+                    <Icon Name="IconName.PuzzleFill" />
+                    <span>@Traductor.T("EDITOR_VIEW_BLOCKS")</span>
+                </button>
+                <button type="button"
                         class="kmila-btn-tab @(_editorCardTab == EditorCardTab.Replay ? "is-active" : "")"
                         role="tab" aria-selected="@(_editorCardTab == EditorCardTab.Replay ? "true" : "false")"
                         disabled="@(!Replay.IsLiveActive && Replay.Current == null)"
@@ -170,6 +177,17 @@
 
             </div> @* /editor-workbench__view--code *@
 
+            @* Blocks view — VHDL author surface (backlog #16). Always
+               mounted so the kmila-blocks workspace state survives tab
+               switches. Run / build while in this tab emits VHDL into the
+               active Monaco buffer first, then falls through to the
+               normal pipeline; see <see cref="SyncBlocksToCodeAsync"/>. *@
+            <div class="editor-workbench__view editor-workbench__view--blocks"
+                 style="@(_editorCardTab == EditorCardTab.Blocks ? "" : "display:none")">
+                <BlockEditor @ref="_vhdlBlockEditor"
+                             Toolbox="@VhdlBlockEmitter.ToolboxJson" />
+            </div>
+
             @* Step Replay view — sibling tab of Code. Always mounted so its
                internal Monaco / decorations survive tab switches. *@
             <div class="editor-workbench__view editor-workbench__view--replay"
@@ -253,8 +271,21 @@
                 }
                 else if (_waveformData != null && _waveformData.Signals.Count > 0)
                 {
+                    @if (_liveMergeSuspended && LiveRunOwnsThisProject)
+                    {
+                        <div class="waveform-saved-banner" role="status">
+                            <Icon Name="IconName.InfoCircle" />
+                            <span>@Traductor.T("EDITOR_VIEWING_SAVED_LIVE")</span>
+                            <button type="button"
+                                    class="kmila-btn kmila-btn--accent kmila-btn--sm"
+                                    @onclick="ReturnToLiveRun">
+                                <Icon Name="IconName.Broadcast" />
+                                <span>@Traductor.T("EDITOR_RETURN_TO_LIVE")</span>
+                            </button>
+                        </div>
+                    }
                     <WaveformViewer Data="_waveformData"
-                                    IsLive="@(Sim.State == SimState.Running)"
+                                    IsLive="@(!_liveMergeSuspended && Sim.State == SimState.Running)"
                                     OnExportVcd="HandleVcdExport" />
                 }
                 else if (Sim.State == SimState.Complete)
@@ -304,6 +335,7 @@
 }
 </section>
 <Modal @ref="_multiUseModal" />
+<ConfirmDialog @ref="_closeTabDialog" />
 @code {
     /// <summary>
     /// Gets or sets the project identifier.
@@ -315,6 +347,13 @@
     private FilesCard _filesCard = new();
     private FlowDiagramViewer? _flowDiagram;
     private Modal _multiUseModal = new();
+    /// <summary>
+    /// BlazorBootstrap ConfirmDialog used by <see cref="CloseTabAsync"/> when
+    /// the tab has unsaved changes. Replaces a native <c>window.confirm</c>
+    /// JS prompt so the close flow uses the same themed modal as the rest of
+    /// the app (Projects delete, Runs delete, FilesCard delete).
+    /// </summary>
+    private ConfirmDialog _closeTabDialog = new();
     private List<ProjectFile> _projectFiles { get; set; } = new();
 
     /// <summary>
@@ -508,6 +547,10 @@
         var source = _openedFile?.Content ?? string.Empty;
         Replay.AttachLive(engine, source);
 
+        // A fresh run owns the waveform again — drop any leftover suspension
+        // from inspecting a saved run during the previous run.
+        _liveMergeSuspended = false;
+
         // Phase B+ (follow-up 2): auto-switch the editor card to the
         // Step Replay tab so the user sees the live pause/resume UI from
         // the moment Run starts. Only fires when at least one breakpoint
@@ -532,6 +575,46 @@
     private int _liveMergeInflight;
 
     /// <summary>
+    /// True while the user is inspecting a SAVED run (single snapshot or a
+    /// compare) on the Waveforms tab even though a live simulation for this
+    /// project is still in flight. While set, the live progress/completion
+    /// merges leave <see cref="_waveformData"/> alone so the saved run the
+    /// user opened isn't clobbered by incoming live frames. Cleared when the
+    /// user returns to the live view, when a fresh run starts, or when the
+    /// in-flight run completes (its result is then one click away in Runs).
+    /// </summary>
+    private bool _liveMergeSuspended;
+
+    /// <summary>
+    /// True when a live sim for the currently-open project is Running/Paused.
+    /// Used to decide whether opening a saved run should suspend live merges
+    /// and whether the "return to live run" affordance applies.
+    /// </summary>
+    private bool LiveRunOwnsThisProject
+        => Sim.RunningProjectId == _projectId
+           && (Sim.State == SimState.Running || Sim.State == SimState.Paused);
+
+    /// <summary>
+    /// Rebuild <see cref="_waveformData"/> from the live engine's current
+    /// <c>SignalHistory</c> so a mid-run reattach (or "return to live") shows
+    /// the run-so-far immediately instead of a blank panel until the next
+    /// progress tick lands. No-op (returns false) when no engine is attached
+    /// or it hasn't recorded any samples yet.
+    /// </summary>
+    private bool HydrateWaveformFromLiveEngine()
+    {
+        var engine = Replay.LiveEngine;
+        if (engine == null) return false;
+        var live = WaveformData.CreateEmpty(Builder.LastTickResNs);
+        live.MergeFrom(engine.History);
+        if (live.Signals.Count == 0) return false;
+        _waveformData   = live;
+        _lastBuiltTime  = Sim.Time;
+        _lastBuiltScale = Sim.Scale;
+        return true;
+    }
+
+    /// <summary>
     /// Builder progress tick — runs on a thread-pool thread. Marshals back
     /// to the Blazor sync context, lazy-creates the live WaveformData on
     /// first arrival, then appends only the transitions added since the
@@ -540,6 +623,10 @@
     /// </summary>
     private void OnSimulationProgressUpdate(Interpreter.Services.SignalHistory history)
     {
+        // Don't clobber a saved run the user opened mid-flight — see
+        // _liveMergeSuspended. The live run keeps recording into the engine's
+        // own SignalHistory regardless; we just stop mirroring it here.
+        if (_liveMergeSuspended) return;
         if (System.Threading.Interlocked.Exchange(ref _liveMergeInflight, 1) == 1) return;
         InvokeAsync(() =>
         {
@@ -627,6 +714,10 @@
         _ = Enum.TryParse<TimeScale>(full.Scale, out var scale);
         _lastBuiltScale = scale;
         _compareSnapshots = null;
+        // If a live sim for this project is still running, stop mirroring its
+        // frames into _waveformData so the saved run the user just opened
+        // isn't overwritten. The "return to live run" banner restores it.
+        _liveMergeSuspended = LiveRunOwnsThisProject;
         DockState.SetActive(EditorTab.Waveforms);
         StateHasChanged();
     }
@@ -657,6 +748,9 @@
             return;
         }
         _compareSnapshots = hydrated;
+        // Suspend live mirroring while comparing saved runs over a live sim,
+        // same rationale as LoadSnapshotAsync.
+        _liveMergeSuspended = LiveRunOwnsThisProject;
         DockState.SetActive(EditorTab.Waveforms);
         StateHasChanged();
     }
@@ -664,6 +758,32 @@
     private void ClearCompare()
     {
         _compareSnapshots = null;
+        // If the live run is still going, snap back to it; otherwise just drop
+        // the compare overlay and keep whatever single waveform was showing.
+        if (_liveMergeSuspended && LiveRunOwnsThisProject)
+        {
+            _liveMergeSuspended = false;
+            HydrateWaveformFromLiveEngine();
+        }
+        else
+        {
+            _liveMergeSuspended = false;
+        }
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Return from a saved-run / compare view back to the still-running live
+    /// simulation: drop the suspension and rehydrate the waveform from the
+    /// engine's current history so it picks up live frames again.
+    /// </summary>
+    private void ReturnToLiveRun()
+    {
+        _liveMergeSuspended = false;
+        _compareSnapshots = null;
+        if (!HydrateWaveformFromLiveEngine())
+            _waveformData = WaveformData.CreateEmpty(Builder.LastTickResNs);
+        DockState.SetActive(EditorTab.Waveforms);
         StateHasChanged();
     }
 
@@ -754,7 +874,13 @@
     {
         _projectId = newProjectId;
         _project = await Projects.GetByAsync(_projectId);
-        _projectFiles = await ProjectFiles.GetProjectFilesAsync(_project);
+        var allFiles = await ProjectFiles.GetProjectFilesAsync(_project);
+        // Partition: user-visible .vhd / .md / etc. go into _projectFiles
+        // (the existing pipeline); .bvhdl sidecars stash separately so
+        // they never appear in the file picker but are reachable by
+        // FindBvhdlSidecar for save/load.
+        _projectFiles  = allFiles.Where(f => !IsBvhdlSidecar(f)).ToList();
+        _sidecarFiles  = allFiles.Where(IsBvhdlSidecar).ToList();
 
         // Record the open for the sidebar MRU so the top-10 reflects actual usage.
         _ = Recent.TouchAsync(_projectId);
@@ -793,6 +919,18 @@
             recovered = true;
         }
 
+        // Reattach: hydrate the waveform from the engine's current
+        // SignalHistory immediately so the Waveforms tab shows the run-so-far
+        // instead of a blank panel until the next progress tick. Dispose
+        // nulled _waveformData when the user navigated away, so without this
+        // the tab stays empty until OnSimulationProgressUpdate fires the next
+        // frame (~200 ms, but arbitrarily long on sims with rare transitions).
+        if (reattach)
+        {
+            _liveMergeSuspended = false;
+            HydrateWaveformFromLiveEngine();
+        }
+
         if (!reattach && !recovered)
         {
             // Wipe per-project runtime state
@@ -801,6 +939,7 @@
             Sim.ClearPortMoments();
             Log.Clear();
             _waveformData = null;
+            _liveMergeSuspended = false;
 
             // Clear the step-replay state so the new project's Replay tab opens
             // on its empty hint instead of showing the previous project's run.
@@ -1319,6 +1458,38 @@
             // separate JS argument and the JS handler would see only the
             // first marker as a bare object instead of an array.
             await JS.InvokeVoidAsync("kmilaSetMonacoMarkers", (object)markers);
+
+            // Mirror Monaco's squiggles onto the Blocks tab when we have
+            // a line→blockId map from the last emit (#16 Step 7). Error
+            // lines that don't map to a block (e.g. library/use headers,
+            // blank lines) are silently dropped.
+            if (_vhdlBlockEditor != null)
+            {
+                var errorIds = new HashSet<string>();
+                foreach (var d in diags)
+                {
+                    if (d.Severity != global::Parser.Models.DiagnosticSeverity.Error) continue;
+                    if (_vhdlBlockLineMap.TryGetValue(d.Line, out var id)) errorIds.Add(id);
+                    else
+                    {
+                        // Fall back to the closest block start at or before this line.
+                        int bestLine = -1;
+                        foreach (var k in _vhdlBlockLineMap.Keys)
+                        {
+                            if (k <= d.Line && k > bestLine) bestLine = k;
+                        }
+                        if (bestLine > 0) errorIds.Add(_vhdlBlockLineMap[bestLine]);
+                    }
+                }
+                if (errorIds.Count > 0)
+                {
+                    await _vhdlBlockEditor.HighlightAsync(errorIds, "kmila-block--error");
+                }
+                else
+                {
+                    await _vhdlBlockEditor.ClearHighlightAsync("kmila-block--error");
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -1327,7 +1498,14 @@
     }
 
     /// <summary>Explicit Build button click — just runs the build and stops.</summary>
-    private async Task OnBuildRequested() => await RunBuildAsync();
+    private async Task OnBuildRequested()
+    {
+        if (_editorCardTab == EditorCardTab.Blocks)
+        {
+            await SyncBlocksToCodeAsync();
+        }
+        await RunBuildAsync();
+    }
 
     /// <summary>
     /// Run button click. Auto-builds first if the last state wasn't
@@ -1336,8 +1514,18 @@
     /// </summary>
     private async Task OnRunRequested()
     {
+        // Blocks-mode Run always rebuilds: the user edited blocks since
+        // the last build but Sim.State may still say BuiltOk because
+        // Monaco's content hasn't changed yet. Sync to Monaco then force
+        // a fresh build before running.
+        if (_editorCardTab == EditorCardTab.Blocks)
+        {
+            await SyncBlocksToCodeAsync();
+            var rebuilt = await RunBuildAsync();
+            if (!rebuilt) return;
+        }
         // Auto-build when stale
-        if (Sim.State != SimState.BuiltOk && Sim.State != SimState.Complete && Sim.State != SimState.BuildError)
+        else if (Sim.State != SimState.BuiltOk && Sim.State != SimState.Complete && Sim.State != SimState.BuildError)
         {
             var ok = await RunBuildAsync();
             if (!ok) return;
@@ -1351,6 +1539,17 @@
 
         var ports = Sim.GetPortMomentsForRun();
         var duration = Sim.GetDuration();
+
+        // Clear stale waveform data from the previous run. RunBuildAsync
+        // already does this when a build is needed, but the no-rebuild
+        // path (Sim.State was BuiltOk / Complete) used to skip the reset
+        // and the WaveformViewer kept showing the prior trace. The bug
+        // surfaced most clearly when re-running with breakpoints: the
+        // engine pauses early so few new transitions land, MergeFrom's
+        // same-state skip / same-tick collapse suppress them against the
+        // old transitions list, and the user sees "the last waveform".
+        _waveformData = null;
+        _liveMergeSuspended = false;
 
         Sim.SetState(SimState.Running);
         Sim.SetProgress(0);
@@ -1457,7 +1656,17 @@
     private void OnPauseSimulation()
     {
         Builder.PauseTimer();
+        // Set Sim.State BEFORE LivePause so the OnLiveChanged handler
+        // running synchronously from LivePause sees the new state and
+        // doesn't duplicate the SetState+Log work itself.
         Sim.SetState(SimState.Paused);
+        // Also pause the engine so the StepReplayPanel/SchematicViewer
+        // controls reflect the same state and Step Forward becomes usable.
+        // No-op when the engine isn't attached or is already paused.
+        if (Replay.IsLiveActive && !Replay.IsLivePaused)
+        {
+            Replay.LivePause();
+        }
         Log.Info(Traductor.T("SIM_LOG_PAUSED"));
         StateHasChanged();
     }
@@ -1466,6 +1675,13 @@
     {
         Builder.ContinueTimer();
         Sim.SetState(SimState.Running);
+        // Mirror on the engine layer. If the engine self-paused at a
+        // breakpoint, the user expects RunBar Resume to actually
+        // resume execution — not just unblock the (unpaused) tick loop.
+        if (Replay.IsLivePaused)
+        {
+            Replay.LiveResume();
+        }
         Log.Info(Traductor.T("SIM_LOG_RESUMED"));
         StateHasChanged();
     }
@@ -1493,6 +1709,11 @@
                 if(result){
                     _originalContent = _openedFile.Content;
                     _hasUnsavedChanges = false;
+                    // Persist the block-workspace sidecar so the next open
+                    // restores the authored block layout instead of a
+                    // regex-parsed approximation. No-op when the workspace
+                    // is empty (user has only ever edited in Code mode).
+                    await SaveBvhdlSidecarAsync(_openedFile);
                 }
                 ToastService.Notify(Message(
                     result ? Traductor.T("COMMON_OK") : Traductor.T("COMMON_ERROR"),
@@ -1718,8 +1939,7 @@ end architecture behavioral;",
             {
                 _bpDotNetRef ??= DotNetObjectReference.Create(this);
                 await JS.InvokeVoidAsync("kmilaInitMonacoBreakpoints", _bpDotNetRef);
-                await JS.InvokeVoidAsync("kmilaSetMonacoBreakpoints",
-                    Replay.Breakpoints.ToArray());
+                await RepaintBreakpointsAsync();
             }
             catch (Exception ex)
             {
@@ -1742,7 +1962,42 @@ end architecture behavioral;",
     /// </summary>
     private EditorCardTab _editorCardTab = EditorCardTab.Code;
 
-    public enum EditorCardTab { Code, Replay }
+    public enum EditorCardTab { Code, Blocks, Replay }
+
+    private BlockEditor? _vhdlBlockEditor;
+    private readonly VhdlBlockEmitter _vhdlEmitter = new();
+    private readonly VhdlBlockBuilder _vhdlBuilder = new();
+
+    // Latest VHDL line→blockId map from the most recent Blocks→Code
+    // sync. Used by the diagnostic path to highlight blocks whose
+    // emitted lines the simulator complained about.
+    private Dictionary<int, string> _vhdlBlockLineMap = new();
+
+    // Sidecar .bvhdl files (block workspace JSON) shadow their .vhd
+    // counterparts but stay hidden from the file picker / tab strip —
+    // they're project metadata, not user-edited files. Stored alongside
+    // the visible project files in the SQLite ProjectFile table so the
+    // existing persistence pipeline picks them up for free.
+    private List<ProjectFile> _sidecarFiles = new();
+
+    private const string BvhdlExtension = ".bvhdl";
+
+    private static bool IsBvhdlSidecar(ProjectFile f) =>
+        f.FileName.EndsWith(BvhdlExtension, StringComparison.OrdinalIgnoreCase);
+
+    private static string GetSidecarName(string vhdFileName) =>
+        Path.GetFileNameWithoutExtension(vhdFileName) + BvhdlExtension;
+
+    private ProjectFile? FindBvhdlSidecar(ProjectFile? vhdFile)
+    {
+        if (vhdFile == null) return null;
+        var sidecarName = GetSidecarName(vhdFile.FileName);
+        return _sidecarFiles.FirstOrDefault(f =>
+            string.Equals(f.FileName, sidecarName, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(f.DirectoryPath ?? string.Empty,
+                             vhdFile.DirectoryPath ?? string.Empty,
+                             StringComparison.OrdinalIgnoreCase));
+    }
 
     /// <summary>
     /// Switches the editor card between Code and Step Replay. When
@@ -1754,8 +2009,26 @@ end architecture behavioral;",
     private async Task SwitchEditorCardTabAsync(EditorCardTab tab)
     {
         if (_editorCardTab == tab) return;
+        var previous = _editorCardTab;
         _editorCardTab = tab;
         StateHasChanged();
+
+        // Leaving Blocks for Code emits the current workspace into the
+        // active Monaco buffer so the student sees their authored design
+        // as VHDL the moment they switch (#16 Step 2).
+        if (previous == EditorCardTab.Blocks && tab == EditorCardTab.Code)
+        {
+            await SyncBlocksToCodeAsync();
+        }
+        // Entering Blocks from Code parses the active VHDL buffer into a
+        // workspace so the student sees their hand-written source as
+        // blocks (#16 Step 3). Unsupported constructs surface as raw
+        // blocks; the round-trip Emitter then spits them back unchanged.
+        else if (previous == EditorCardTab.Code && tab == EditorCardTab.Blocks)
+        {
+            await SyncCodeToBlocksAsync();
+        }
+
         if (tab == EditorCardTab.Code)
         {
             try
@@ -1770,10 +2043,198 @@ end architecture behavioral;",
     }
 
     /// <summary>
+    /// Phase 0 of backlog #16: emit canonical VHDL from the kmila-blocks
+    /// workspace and push it into the active Monaco buffer. Called from
+    /// the tab-switch (Blocks → Code) and from the Build / Run handlers
+    /// while the Blocks tab is active. Bails silently when the workspace
+    /// is empty / un-mounted — there's nothing to sync yet.
+    /// </summary>
+    private async Task SyncBlocksToCodeAsync()
+    {
+        if (_vhdlBlockEditor == null) return;
+        var ws = await _vhdlBlockEditor.SerializeAsync();
+        if (string.IsNullOrWhiteSpace(ws)) return;
+        var vhdl = _vhdlEmitter.Emit(ws);
+        if (string.IsNullOrEmpty(vhdl)) return;
+        if (_pane?.Monaco == null) return;
+        try
+        {
+            await _pane.Monaco.SetValue(vhdl);
+            // Capture the freshly-built line → blockId map so the
+            // diagnostic publisher can decorate offending blocks the
+            // next time the simulator surfaces errors.
+            _vhdlBlockLineMap = new Dictionary<int, string>(_vhdlEmitter.LastBlockLineMap);
+
+            // Monaco's content event won't auto-dirty Sim.State, so a
+            // subsequent Run in Code mode would otherwise simulate the
+            // previous binary. Force back to Idle so the rebuild branch
+            // in OnRunRequested kicks in.
+            if (Sim.State == SimState.BuiltOk || Sim.State == SimState.Complete)
+            {
+                Sim.SetState(SimState.Idle);
+            }
+        }
+        catch { /* Monaco may not be mounted yet — fine */ }
+    }
+
+    /// <summary>
+    /// Reverse of <see cref="SyncBlocksToCodeAsync"/> — read the active
+    /// Monaco buffer, parse with <see cref="VhdlBlockBuilder"/>, and
+    /// load the workspace JSON into the kmila-blocks canvas. Constructs
+    /// the block library doesn't yet recognize become raw-VHDL blocks
+    /// so the source survives round-trip even when the recognizer is
+    /// incomplete.
+    /// </summary>
+    private async Task SyncCodeToBlocksAsync()
+    {
+        if (_vhdlBlockEditor == null) return;
+        if (_pane?.Monaco == null) return;
+
+        // If a sidecar .bvhdl exists, load it directly — it preserves the
+        // block layout / authored shape the regex re-parse can't recover.
+        // Falls back to parsing the live Monaco buffer otherwise.
+        var sidecar = FindBvhdlSidecar(_openedFile);
+        if (sidecar != null && !string.IsNullOrWhiteSpace(sidecar.Content))
+        {
+            await _vhdlBlockEditor.LoadAsync(sidecar.Content);
+            return;
+        }
+
+        string source;
+        try { source = await _pane.Monaco.GetValue(); }
+        catch { return; }
+
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            // Empty buffer — clear the workspace so the student gets a
+            // blank canvas rather than the previous state.
+            await _vhdlBlockEditor.ClearAsync();
+            return;
+        }
+
+        var workspaceJson = _vhdlBuilder.Build(source);
+        if (!string.IsNullOrWhiteSpace(workspaceJson))
+        {
+            await _vhdlBlockEditor.LoadAsync(workspaceJson);
+        }
+
+        // Surface a heads-up when constructs the catalog doesn't recognize
+        // were preserved as raw VHDL fallback blocks. Lets the student
+        // know nothing was lost but some pieces aren't in proper blocks yet.
+        if (_vhdlBuilder.LastRawCount > 0)
+        {
+            ToastService.Notify(Message(
+                Traductor.T("EDITOR_BLOCKS_RAW_TITLE"),
+                string.Format(Traductor.T("EDITOR_BLOCKS_RAW_BODY"), _vhdlBuilder.LastRawCount),
+                ToastType.Warning));
+        }
+    }
+
+    /// <summary>
+    /// Persist the current kmila-blocks workspace as a sidecar .bvhdl
+    /// file next to <paramref name="vhdFile"/>. Skips silently when the
+    /// workspace is empty (user has only edited in Code mode) so we
+    /// don't pollute pure-text projects with empty sidecars. Backlog
+    /// #16 Step 5.
+    /// </summary>
+    private async Task SaveBvhdlSidecarAsync(ProjectFile vhdFile)
+    {
+        if (_vhdlBlockEditor == null || vhdFile == null) return;
+
+        // Don't write sidecars next to non-VHDL files (markdown, etc.).
+        var ext = Path.GetExtension(vhdFile.FileName);
+        if (!string.Equals(ext, ".vhd", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(ext, ".vhdl", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        string? workspaceJson;
+        try { workspaceJson = await _vhdlBlockEditor.SerializeAsync(); }
+        catch { return; }
+        if (string.IsNullOrWhiteSpace(workspaceJson)) return;
+
+        // Treat an empty top-level array as "no workspace to persist"
+        // — keeps pure-code projects from gaining empty sidecars on save.
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(workspaceJson);
+            if (doc.RootElement.TryGetProperty("blocks", out var b1)
+                && b1.TryGetProperty("blocks", out var arr)
+                && arr.ValueKind == System.Text.Json.JsonValueKind.Array
+                && arr.GetArrayLength() == 0)
+            {
+                return;
+            }
+        }
+        catch { return; }
+
+        var sidecarName = GetSidecarName(vhdFile.FileName);
+        var existing = _sidecarFiles.FirstOrDefault(f =>
+            string.Equals(f.FileName, sidecarName, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(f.DirectoryPath ?? string.Empty,
+                             vhdFile.DirectoryPath ?? string.Empty,
+                             StringComparison.OrdinalIgnoreCase));
+
+        if (existing != null)
+        {
+            existing.Content = workspaceJson;
+            existing.Project = _project;
+            try { await ProjectFiles.UpdateAsync(existing); }
+            catch (Exception ex) { Logger.LogWarning(ex, "[Editor] .bvhdl sidecar update failed"); }
+        }
+        else
+        {
+            var sidecar = new ProjectFile
+            {
+                FileName      = sidecarName,
+                DirectoryPath = vhdFile.DirectoryPath,
+                Content       = workspaceJson,
+                ProjectId     = vhdFile.ProjectId,
+                Project       = _project
+            };
+            try
+            {
+                var ok = await ProjectFiles.CreateAsync(sidecar);
+                if (ok) _sidecarFiles.Add(sidecar);
+            }
+            catch (Exception ex) { Logger.LogWarning(ex, "[Editor] .bvhdl sidecar create failed"); }
+        }
+    }
+
+    /// <summary>
     /// Replay state's OnLiveChanged ticks the editor-card tab's badge
     /// (running / paused) — wired in <see cref="OnInitialized"/>.
+    ///
+    /// Also mirrors the engine's pause/resume state into <see cref="Sim.State"/>
+    /// so the RunBar reflects the real state when the engine self-pauses at
+    /// a breakpoint (no RunBar button click involved). Deliberately does
+    /// NOT call <c>Builder.PauseTimer/ContinueTimer</c> — pausing
+    /// SimulationRunner at the tick level breaks Step Forward (which only
+    /// flips engine-level flags and needs SimulationRunner to keep calling
+    /// <c>engine.RunTimeStepAsync</c> to actually process the frame).
+    /// Engine pause alone is enough: when the engine is paused the next
+    /// <c>engine.RunTimeStepAsync</c> call blocks at <c>WaitForResumeAsync</c>,
+    /// so SimulationRunner effectively pauses too — just inside the engine
+    /// call, where Step Forward's <c>Resume()</c> can unblock it.
     /// </summary>
-    private void OnReplayLiveChangedForTabBadge() => InvokeAsync(StateHasChanged);
+    private void OnReplayLiveChangedForTabBadge()
+    {
+        if (Replay.IsLiveActive)
+        {
+            if (Replay.IsLivePaused && Sim.State == SimState.Running)
+            {
+                Sim.SetState(SimState.Paused);
+                Log.Info(Traductor.T("SIM_LOG_PAUSED"));
+            }
+            else if (!Replay.IsLivePaused && Sim.State == SimState.Paused)
+            {
+                Sim.SetState(SimState.Running);
+                Log.Info(Traductor.T("SIM_LOG_RESUMED"));
+            }
+        }
+        InvokeAsync(StateHasChanged);
+    }
 
     /// <summary>
     /// Phase B+ Deep AST (follow-up): invoked from JS when the user clicks
@@ -1796,15 +2257,53 @@ end architecture behavioral;",
     /// </summary>
     private void OnBreakpointsChangedRepaint()
     {
-        InvokeAsync(async () =>
+        InvokeAsync(RepaintBreakpointsAsync);
+    }
+
+    /// <summary>
+    /// Repaints the Monaco gutter with the current breakpoint set, flagging
+    /// any breakpoint that sits on a line with no signal assignment (#4).
+    /// Refreshes the trackable-line map from the live editor content first so
+    /// the warning is accurate even before the user runs the sim — breakpoints
+    /// on conditions (<c>if reset = '1' then</c>), declarations or blank lines
+    /// get a dimmed glyph + a "this will never pause" tooltip.
+    /// </summary>
+    private async Task RepaintBreakpointsAsync()
+    {
+        try
         {
+            string source = string.Empty;
             try
             {
-                await JS.InvokeVoidAsync("kmilaSetMonacoBreakpoints",
-                    Replay.Breakpoints.ToArray());
+                if (_pane?.Monaco != null)
+                    source = await _pane.Monaco.GetValue() ?? string.Empty;
             }
-            catch { /* Monaco may not be mounted — fine */ }
-        });
+            catch { /* Monaco may not be mounted in headless / test paths */ }
+
+            // Refresh the map from current content when we could read it.
+            // Otherwise lean on whatever the last run/refresh built — only
+            // compute the untracked set when we actually have a map, so we
+            // never spuriously dim every breakpoint before any source exists.
+            bool haveMap;
+            if (!string.IsNullOrEmpty(source))
+            {
+                Replay.RefreshLineMap(source);
+                haveMap = true;
+            }
+            else
+            {
+                haveMap = Replay.TrackedLines.Count > 0;
+            }
+
+            var all = Replay.Breakpoints.ToArray();
+            var untracked = haveMap
+                ? all.Where(l => !Replay.IsLineTracked(l)).ToArray()
+                : Array.Empty<int>();
+
+            await JS.InvokeVoidAsync("kmilaSetMonacoBreakpoints",
+                all, untracked, Traductor.T("EDITOR_BP_UNTRACKED_WARN"));
+        }
+        catch { /* Monaco may not be mounted — fine */ }
     }
 
     /// <summary>
@@ -1888,18 +2387,33 @@ end architecture behavioral;",
             // to the full FromSignalHistory path when no progress fires
             // landed (very short sims, or runs that errored out before the
             // timer had a chance to tick).
-            WaveformData? wd = _waveformData;
-            if (wd != null)
+            WaveformData? wd;
+            if (_liveMergeSuspended)
             {
-                wd.MergeFrom(history);
+                // The user is inspecting a saved run / compare while this live
+                // sim ran. Don't yank their view — build the completed run off
+                // to the side so the replay doc still gets it, and leave
+                // _waveformData pointing at the saved run. The finished run is
+                // captured as a snapshot (SimulationCoordinator) and cached
+                // (Sim.LastWaveform), so it's one click away in the Runs tab.
+                wd = WaveformData.FromSignalHistory(history, Builder.LastTickResNs);
+                _liveMergeSuspended = false;
             }
             else
             {
-                wd = WaveformData.FromSignalHistory(history, Builder.LastTickResNs);
-                _waveformData = wd;
+                wd = _waveformData;
+                if (wd != null)
+                {
+                    wd.MergeFrom(history);
+                }
+                else
+                {
+                    wd = WaveformData.FromSignalHistory(history, Builder.LastTickResNs);
+                    _waveformData = wd;
+                }
+                _lastBuiltTime  = Sim.Time;
+                _lastBuiltScale = Sim.Scale;
             }
-            _lastBuiltTime  = Sim.Time;
-            _lastBuiltScale = Sim.Scale;
 
             // Snapshot capture lives in SimulationCoordinator now so the
             // run is persisted even when the Editor isn't mounted at the
@@ -2135,15 +2649,26 @@ end architecture behavioral;",
         {
             try
             {
-                var ok = await JS.InvokeAsync<bool>("confirm",
-                    string.Format(Traductor.T("EDITOR_TAB_CLOSE_CONFIRM"), tab.File?.FileName ?? "?"));
+                var options = new ConfirmDialogOptions
+                {
+                    YesButtonColor     = ButtonColor.Danger,
+                    NoButtonColor      = ButtonColor.Secondary,
+                    AutoFocusYesButton = false,
+                    YesButtonText      = Traductor.T("EDITOR_TAB_CLOSE"),
+                    NoButtonText       = Traductor.T("COMMON_GO_BACK")
+                };
+                var ok = await _closeTabDialog.ShowAsync(
+                    Traductor.T("EDITOR_UNSAVED"),
+                    string.Format(Traductor.T("EDITOR_TAB_CLOSE_CONFIRM"), tab.File?.FileName ?? "?"),
+                    string.Empty,
+                    options);
                 if (!ok) return;
             }
             catch
             {
-                // No JS confirm available (server prerender, sandboxed
-                // iframe). Fall through and close — losing one tab's
-                // dirty state is preferable to a permanently stuck UI.
+                // Dialog couldn't render (prerender / disposed). Fall through
+                // and close — losing one tab's dirty state is preferable to
+                // a permanently stuck UI.
             }
         }
 

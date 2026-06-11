@@ -35,6 +35,7 @@
 @using Kmila.Shared.Models.Schematic
 @using Kmila.Shared.Services
 @inject SignalCursorBus Cursor
+@inject ReplayState Replay
 @inject Microsoft.Extensions.Logging.ILogger<SchematicViewer> Logger
 @inject Microsoft.JSInterop.IJSRuntime JS
 @implements IDisposable
@@ -120,6 +121,55 @@ else
                 </button>
             </div>
         </header>
+
+        @* #3: live step-through control bar. Shown whenever a simulation is
+           in flight, regardless of view mode — students who paused from the
+           RunBar shouldn't have to switch to Debug mode just to find a
+           Resume button. Pause / Resume / Step drive the engine via
+           ReplayState; the executing cell pulses (CellCssClasses is-active-step).
+           Set breakpoints from the editor gutter or the Replay tab to stop on a
+           specific line. *@
+        @if (Replay.IsLiveActive)
+        {
+            <div class="schematic-debug-bar" role="group"
+                 aria-label="@Traductor.T("EDITOR_REPLAY_LIVE_CONTROLS")">
+                <span class="schematic-debug-bar__status">
+                    <Icon Name="IconName.RecordCircle" />
+                    @(Replay.IsLivePaused
+                        ? Traductor.T("EDITOR_REPLAY_LIVE_PAUSED")
+                        : Traductor.T("EDITOR_REPLAY_LIVE_RUNNING"))
+                </span>
+                @if (Replay.IsLivePaused)
+                {
+                    <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--sm"
+                            title="@Traductor.T("SIM_RESUME")"
+                            aria-label="@Traductor.T("SIM_RESUME")"
+                            @onclick="() => Replay.LiveResume()">
+                        <Icon Name="IconName.PlayFill" />
+                        <span>@Traductor.T("SIM_RESUME")</span>
+                    </button>
+                }
+                else
+                {
+                    <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--sm"
+                            title="@Traductor.T("SIM_PAUSE")"
+                            aria-label="@Traductor.T("SIM_PAUSE")"
+                            @onclick="() => Replay.LivePause()">
+                        <Icon Name="IconName.PauseFill" />
+                        <span>@Traductor.T("SIM_PAUSE")</span>
+                    </button>
+                }
+                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                        title="@Traductor.T("CONCEPTS_PLAYER_STEP_FORWARD")"
+                        aria-label="@Traductor.T("CONCEPTS_PLAYER_STEP_FORWARD")"
+                        disabled="@(!Replay.IsLivePaused)"
+                        @onclick="() => Replay.LiveStep()">
+                    <Icon Name="IconName.SkipEnd" />
+                    <span>@Traductor.T("CONCEPTS_PLAYER_STEP_FORWARD")</span>
+                </button>
+                <span class="schematic-debug-bar__hint">@Traductor.T("SCHEMATIC_DEBUG_LIVE_HINT")</span>
+            </div>
+        }
 
         @if (_layout.Netlist.Diagnostics.Count > 0)
         {
@@ -413,6 +463,42 @@ else
     {
         Cursor.OnChange += OnCursorChanged;
         Traductor.StaticOnLangChanged += StateHasChangedSafe;
+        // #3: schematic step-through. OnLiveStepChanged fires per delta (with
+        // the active source lines); OnLiveChanged fires on attach/detach +
+        // pause/resume so the debug control bar swaps its buttons.
+        Replay.OnLiveStepChanged += OnLiveStepChanged;
+        Replay.OnLiveChanged     += OnLiveStepChanged;
+        // Live-step pulsing now works in every view mode (not just Debug)
+        // so the ReplayState needs to do per-frame active-line bookkeeping
+        // whenever this viewer is mounted. The flag flips back off when
+        // the viewer is disposed.
+        Replay.TrackActiveLines = true;
+    }
+
+    /// <summary>Re-render when the live engine steps so the executing cell pulses.</summary>
+    private void OnLiveStepChanged()
+    {
+        RefreshActiveStepCache();
+        StateHasChangedSafe();
+    }
+
+    // #3: per-render caches of which cells/wires are "executing" this delta,
+    // refreshed on each step nudge so CellCssClasses/WireCssClasses stay O(1).
+    private HashSet<int> _activeStep = new();
+    private HashSet<string> _activeStepSignals = new(StringComparer.OrdinalIgnoreCase);
+
+    private void RefreshActiveStepCache()
+    {
+        if (Replay.IsLiveActive)
+        {
+            _activeStep = ActiveStepLines();
+            _activeStepSignals = new HashSet<string>(Replay.LiveActiveSignals, StringComparer.OrdinalIgnoreCase);
+        }
+        else
+        {
+            _activeStep = new();
+            _activeStepSignals = new(StringComparer.OrdinalIgnoreCase);
+        }
     }
 
     /// <summary>
@@ -518,8 +604,40 @@ else
     private void SetMode(ViewMode m)
     {
         _mode = m;
+        // TrackActiveLines stays on independent of mode — live-step pulses
+        // are useful in Synthesis/Naive too (set in OnInitialized).
+        RefreshActiveStepCache();
         StateHasChanged();
     }
+
+    /// <summary>
+    /// True when Debug mode is showing over a live (running/paused)
+    /// simulation — the schematic then pulses the executing cell and offers
+    /// pause / resume / step controls (#3).
+    /// </summary>
+    private bool IsLiveDebug => _mode == ViewMode.Debug && Replay.IsLiveActive;
+
+    /// <summary>
+    /// 1-based source lines whose signals changed in the latest delta, as an
+    /// int set for fast membership tests against <c>Cell.SourceLine</c>.
+    /// </summary>
+    private HashSet<int> ActiveStepLines()
+    {
+        var set = new HashSet<int>();
+        foreach (var ln in Replay.LiveActiveLines) set.Add(ln);
+        return set;
+    }
+
+    /// <summary>
+    /// True when the cell's source line is among the lines that changed in
+    /// the latest delta. <c>Cell.SourceLine</c> is a 1-based line number kept
+    /// as a string; synthetic cells (null) never pulse.
+    /// </summary>
+    private bool IsCellActiveStep(Cell c, HashSet<int> active)
+        => active.Count > 0
+           && c.SourceLine != null
+           && int.TryParse(c.SourceLine, out var ln)
+           && active.Contains(ln);
 
     private void Zoom(double factor)
     {
@@ -1089,6 +1207,11 @@ else
         }
         if (_selectedCellId == c.Id) sb.Append(" is-selected");
         if (_selCells.Contains(c.Id)) sb.Append(" is-multi-selected");
+        // #3: pulse the cell whose source line just produced a transition.
+        // Active whenever a live simulation is attached — students reading
+        // the schematic in Synthesis or Naive mode shouldn't have to switch
+        // to Debug just to see which gate is firing right now.
+        if (Replay.IsLiveActive && IsCellActiveStep(c, _activeStep)) sb.Append(" is-active-step");
         return sb.ToString();
     }
 
@@ -1116,6 +1239,9 @@ else
         }
         if (_selectedNetId == net.Id) sb.Append(" is-selected");
         if (_selNets.Contains(net.Id)) sb.Append(" is-multi-selected");
+        // #3: light the wire carrying a signal that just changed — works
+        // across all view modes whenever a live engine is attached.
+        if (Replay.IsLiveActive && _activeStepSignals.Contains(net.Name)) sb.Append(" is-active-step");
         return sb.ToString();
     }
 
@@ -1537,6 +1663,10 @@ else
     {
         Cursor.OnChange -= OnCursorChanged;
         Traductor.StaticOnLangChanged -= StateHasChangedSafe;
+        Replay.OnLiveStepChanged -= OnLiveStepChanged;
+        Replay.OnLiveChanged     -= OnLiveStepChanged;
+        // Stop the per-frame bookkeeping when no schematic is watching.
+        Replay.TrackActiveLines = false;
         if (_panZoomId > 0)
         {
             try { _ = JS.InvokeVoidAsync("kmilaDetachPanZoom", _panZoomId).AsTask(); }

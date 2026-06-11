@@ -1518,7 +1518,11 @@ window.kmilaInitMonacoBreakpoints = function (dotNetRef) {
     return true;
 };
 
-window.kmilaSetMonacoBreakpoints = function (lineNumbers) {
+// lineNumbers: every breakpoint line. untrackedLines: the subset that maps
+// to no signal assignment, so the engine can never pause there (#4). Those
+// get a dimmed glyph + a warning tooltip so the user knows the breakpoint
+// won't fire. untrackedMsg is the localized warning, computed Blazor-side.
+window.kmilaSetMonacoBreakpoints = function (lineNumbers, untrackedLines, untrackedMsg) {
     const editor = _kmilaFindEditorMonaco();
     if (!editor) return;
     const model = editor.getModel();
@@ -1527,18 +1531,31 @@ window.kmilaSetMonacoBreakpoints = function (lineNumbers) {
     const maxLine = model.getLineCount();
     const safe = (Array.isArray(lineNumbers) ? lineNumbers : [])
         .filter(n => Number.isInteger(n) && n >= 1 && n <= maxLine);
+    const untracked = new Set((Array.isArray(untrackedLines) ? untrackedLines : [])
+        .filter(n => Number.isInteger(n)));
+    const warnMsg = (typeof untrackedMsg === 'string' && untrackedMsg.length > 0)
+        ? untrackedMsg
+        : 'No signal transitions on this line — this breakpoint will never pause.';
 
-    const newDecos = safe.map(ln => ({
-        range: new monaco.Range(ln, 1, ln, 1),
-        options: {
-            isWholeLine: false,
-            glyphMarginClassName: 'kmila-bp-glyph',
-            // Hover message in Monaco's native tooltip (best-effort i18n —
-            // the dictionary string is computed Blazor-side and not piped
-            // through here; users mostly recognise the dot icon).
-            glyphMarginHoverMessage: { value: '**Breakpoint** — line ' + ln }
-        }
-    }));
+    const newDecos = safe.map(ln => {
+        const isUntracked = untracked.has(ln);
+        return {
+            range: new monaco.Range(ln, 1, ln, 1),
+            options: {
+                isWholeLine: false,
+                glyphMarginClassName: isUntracked
+                    ? 'kmila-bp-glyph kmila-bp-glyph--untracked'
+                    : 'kmila-bp-glyph',
+                // Hover message in Monaco's native tooltip. Untracked lines
+                // carry the warning; tracked lines keep the simple label.
+                glyphMarginHoverMessage: {
+                    value: isUntracked
+                        ? '⚠ ' + warnMsg
+                        : '**Breakpoint** — line ' + ln
+                }
+            }
+        };
+    });
 
     const prev = _kmilaBpDecos.get(editor) || [];
     const next = editor.deltaDecorations(prev, newDecos);

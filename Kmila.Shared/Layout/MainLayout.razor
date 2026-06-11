@@ -58,6 +58,13 @@
             <article class="content px-4">
                 @Body
             </article>
+
+            @* Slim footer — privacy link lives here so it's reachable from
+               every page without crowding the sidebar. Markup is intentionally
+               minimal; styling lives in .kmila-shell__footer (pages.css). *@
+            <footer class="kmila-shell__footer">
+                <a href="/privacy">@Traductor.T("FOOTER_PRIVACY")</a>
+            </footer>
         </main>
     </div>
 }
@@ -120,6 +127,91 @@ else
         _isLoading = false;
     }
 
+    /// <summary>
+    /// Per-route welcome tour. Fires the first time a user lands on each
+    /// major view (Home, Projects, Editor, Learn, Concepts, Practice,
+    /// Settings). Steps come from <see cref="TourCatalog"/>; the JS engine
+    /// owns the localStorage flag per tour, sets it on Skip/Finish, and
+    /// polls for the first step's DOM target up to ~1.5 s so we don't fire
+    /// before the page has hydrated.
+    /// </summary>
+    private bool _layoutReady;
+    private string? _lastTourRoute;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_isLoading) return;
+
+        // First render after the loading spinner clears — subscribe to
+        // navigation + fire the tour for the initial route.
+        if (!_layoutReady)
+        {
+            _layoutReady = true;
+            NavigationManager.LocationChanged += OnRouteChanged;
+            await TryFireTourForCurrentRouteAsync();
+        }
+    }
+
+    private async void OnRouteChanged(object? sender,
+        Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        try { await TryFireTourForCurrentRouteAsync(); }
+        catch { /* tour is non-essential */ }
+    }
+
+    /// <summary>
+    /// Resolves the current path to a <see cref="RouteTour"/>, checks the
+    /// JS-side seen flag, and fires <c>kmilaTutorial.startWhenReady</c> if
+    /// the user hasn't seen it. Bails out fast for routes with no tour
+    /// authored (e.g. /logs, /privacy, sub-routes that share the editor
+    /// tour).
+    /// </summary>
+    private async Task TryFireTourForCurrentRouteAsync()
+    {
+        var path = new Uri(NavigationManager.Uri).AbsolutePath;
+        if (string.Equals(path, _lastTourRoute, StringComparison.OrdinalIgnoreCase))
+            return; // avoid double-firing on same-route re-renders
+        _lastTourRoute = path;
+
+        var tour = TourCatalog.GetForRoute(path, Traductor.T);
+        if (tour == null) return;
+
+        try
+        {
+            var seen = await JS.InvokeAsync<bool>("kmilaTutorial.hasSeen", tour.StorageKey);
+            if (seen) return;
+
+            // Brief delay so the route's components have a moment to mount
+            // before the engine starts polling for the first selector. The
+            // engine's own startWhenReady retries for ~1.5 s on top of this.
+            await Task.Delay(200);
+
+            var stepsPayload = new object[tour.Steps.Count];
+            for (int i = 0; i < tour.Steps.Count; i++)
+            {
+                var s = tour.Steps[i];
+                stepsPayload[i] = new { target = s.Target, title = s.Title, body = s.Body };
+            }
+
+            var labels = new
+            {
+                next   = Traductor.T("TUTORIAL_NEXT"),
+                back   = Traductor.T("TUTORIAL_BACK"),
+                skip   = Traductor.T("TUTORIAL_SKIP"),
+                finish = Traductor.T("TUTORIAL_FINISH"),
+                stepOf = Traductor.T("TUTORIAL_STEP_OF"),
+            };
+            var options = new { storageKey = tour.StorageKey };
+
+            await JS.InvokeVoidAsync("kmilaTutorial.startWhenReady",
+                stepsPayload, labels, options);
+        }
+        catch
+        {
+            // Tour engine not loaded, JS interop blocked, etc. Silent.
+        }
+    }
+
 
     /// <summary>
     /// Handles language change events from the Traductor service.
@@ -136,5 +228,6 @@ else
     public void Dispose()
     {
         Traductor.StaticOnLangChanged -= OnLanguageChanged;
+        NavigationManager.LocationChanged -= OnRouteChanged;
     }
 }
