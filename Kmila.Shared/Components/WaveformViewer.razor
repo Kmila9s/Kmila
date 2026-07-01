@@ -24,6 +24,7 @@
 @using Kmila.Shared.Models
 @inject Microsoft.Extensions.Logging.ILogger<Kmila.Shared.Components.WaveformViewer> Logger
 @inject Microsoft.JSInterop.IJSRuntime JS
+@inject Kmila.Shared.Services.ReplayState Replay
 @implements IDisposable
 
 @if (_compareTracks != null && _compareTracks.Count >= 2)
@@ -171,24 +172,30 @@ else if (Data != null && Data.Signals.Count > 0)
                 <strong>@Traductor.T("WAVEFORM_VIEWER")</strong>
                 <span class="waveform-viewer__chip">@Data.Signals.Count @Traductor.T("WAVEFORM_SIGNALS")</span>
             </div>
+            @* slot/inline-toolbar — single family (Family-11 .kmila-btn) across the whole
+               row so the baseline stays flat. Was: 3 circular Family-14 zoom buttons
+               mixed with Family-11 clock toggle and Family-11 accent exports. Exports
+               now share the same ghost-primary variant + a slim divider so the row
+               stops fighting for "primary toolbar action" attention. *@
             <div class="waveform-viewer__actions">
-                @* Zoom controls are disabled while a live simulation is
-                   driving the viewer — the trailing-window view doesn't
-                   pan, so changing the zoom on it would just move the
-                   visible slice off-screen. They re-enable automatically
-                   when the run ends and the viewer reverts to full-range. *@
-                <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
-                        @onclick="ZoomIn" disabled="@IsLive"
+                @* Zoom controls. In live mode they adjust the trailing-window
+                   duration (zoom in → smaller window → larger transitions);
+                   in static mode they scale the pixels-per-nanosecond ratio
+                   and keep the viewport centred on the previously-visible
+                   time. Reset snaps back to the natural full-range view
+                   (static) or the default 10 µs window (live). *@
+                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                        @onclick="ZoomIn"
                         aria-label="@Traductor.T("WAVEFORM_ZOOM_IN")" title="@Traductor.T("WAVEFORM_ZOOM_IN")">
                     <Icon Name="IconName.ZoomIn" />
                 </button>
-                <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
-                        @onclick="ZoomOut" disabled="@IsLive"
+                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                        @onclick="ZoomOut"
                         aria-label="@Traductor.T("WAVEFORM_ZOOM_OUT")" title="@Traductor.T("WAVEFORM_ZOOM_OUT")">
                     <Icon Name="IconName.ZoomOut" />
                 </button>
-                <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
-                        @onclick="ZoomReset" disabled="@IsLive"
+                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                        @onclick="ZoomReset"
                         aria-label="@Traductor.T("WAVEFORM_ZOOM_RESET")" title="@Traductor.T("WAVEFORM_ZOOM_RESET")">
                     <Icon Name="IconName.ArrowCounterclockwise" />
                 </button>
@@ -198,13 +205,26 @@ else if (Data != null && Data.Signals.Count > 0)
                         aria-pressed="@_showClock">
                     <Icon Name="@(_showClock ? IconName.EyeFill : IconName.EyeSlash)" />
                 </button>
-                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--accent kmila-btn--sm"
+                @* UX-N-014: Time-breakpoint toggle. Clicking adds a breakpoint
+                   at the END of the currently visible window so the next Run
+                   pauses there. ReplayState fires the pause from
+                   OnLiveFrameEmitted when the engine tick crosses the bp ns. *@
+                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                        @onclick="HandleAddTimeBreakpoint"
+                        aria-label="@Traductor.T("WAVEFORM_TIME_BP_ADD")"
+                        title="@Traductor.T("WAVEFORM_TIME_BP_ADD")">
+                    <Icon Name="IconName.RecordCircle" />
+                </button>
+
+                <span class="waveform-viewer__divider" aria-hidden="true"></span>
+
+                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
                         @onclick="OpenExportModalAsync" disabled="@IsLive"
                         title="@Traductor.T("WAVEFORM_EXPORT_IMAGE")">
                     <Icon Name="IconName.Image" />
                     <span>@Traductor.T("WAVEFORM_EXPORT_IMAGE_SHORT")</span>
                 </button>
-                <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--sm"
+                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
                         @onclick="HandleVcdExport" title="@Traductor.T("WAVEFORM_EXPORT_VCD")">
                     <Icon Name="IconName.Download" />
                     <span>VCD</span>
@@ -272,11 +292,15 @@ else if (Data != null && Data.Signals.Count > 0)
                     </div>
                 }
 
-                @* Shared time ruler — last row. *@
+                @* Shared time ruler — last row. UX-N-014 follow-up: clickable
+                   ruler. Tapping a time-position adds a waveform breakpoint
+                   right there. The click handler receives offsetX which we
+                   project back to ns using the current view bounds. *@
                 <div class="waveform-row waveform-row--ruler">
                     <div class="waveform-row__label"></div>
                     <div class="waveform-row__track" style="width: @(contentWidthPx)px;">
-                        <div class="waveform-row__track-view" style="width: @(visibleTrackPx)px;">
+                        <div class="waveform-row__track-view" style="width: @(visibleTrackPx)px;"
+                             @onclick="@(e => OnRulerClick(e, visibleTrackPx, viewStartNs, viewEndNs))">
                             @((MarkupString)BuildRulerSvg(visibleTrackPx, viewStartNs, viewEndNs))
                         </div>
                     </div>
@@ -289,7 +313,7 @@ else if (Data != null && Data.Signals.Count > 0)
 @* Export modal — shared between live and static modes (only opens in static
    mode; the toolbar button is disabled while IsLive). Mounted outside the
    conditional branches above so it survives every render. *@
-<Modal @ref="_exportModal" Title="@Traductor.T("EXPORT_MODAL_TITLE")" />
+<Modal @ref="_exportModal" Title="@Traductor.T("EXPORT_MODAL_TITLE")" Size="ModalSize.Large" />
 
 @code {
     [Parameter] public WaveformData? Data { get; set; }
@@ -308,12 +332,32 @@ else if (Data != null && Data.Signals.Count > 0)
     [Parameter] public bool IsLive { get; set; }
 
     /// <summary>
-    /// Trailing window length while <see cref="IsLive"/> is true. 10 µs
+    /// Default trailing-window length while <see cref="IsLive"/> is true. 10 µs
     /// fits the sample design's interesting features (the bit6 ripple
     /// period is ~2.5 µs, and the enable pause window is 5 µs) without
-    /// dropping frame rate when the bottom bits are toggling fast.
+    /// dropping frame rate when the bottom bits are toggling fast. The user
+    /// can now zoom the trailing window while paused — see
+    /// <see cref="_liveWindowNs"/>.
     /// </summary>
-    private const long LiveWindowNs = 10_000;
+    private const long DefaultLiveWindowNs = 10_000;
+
+    /// <summary>
+    /// Min / max trailing-window length the user can zoom to. 200 ns covers
+    /// a handful of delta cycles on the fastest reasonable clocks; 1 s gives
+    /// the user a "show me the whole recent run" view without going so wide
+    /// that the path-coalescing path falls apart.
+    /// </summary>
+    private const long MinLiveWindowNs =       200;
+    private const long MaxLiveWindowNs = 1_000_000_000;
+
+    /// <summary>
+    /// Current trailing-window length, mutated by <see cref="ZoomBy"/> /
+    /// <see cref="ZoomReset"/> while <see cref="IsLive"/> is true. Reset
+    /// back to <see cref="DefaultLiveWindowNs"/> when the sim ends and the
+    /// viewer flips back to static mode (so the next live run starts at
+    /// the default).
+    /// </summary>
+    private long _liveWindowNs = DefaultLiveWindowNs;
 
     /// <summary>
     /// Multi-snapshot compare mode. When non-null and populated with ≥2
@@ -493,6 +537,7 @@ else if (Data != null && Data.Signals.Count > 0)
             _lastData = Data;
             _pxPerNs = 0;        // recomputed on next render via EnsureInitialZoom
             _scrollLeftPx = 0;
+            _liveWindowNs = DefaultLiveWindowNs;
             // No DOM scrollTo here — first render will set up fresh content
             // width and the browser's scrollLeft snaps to 0 by itself.
         }
@@ -605,8 +650,8 @@ else if (Data != null && Data.Signals.Count > 0)
     {
         if (IsLive)
         {
-            long endNs = Math.Max(maxNs, LiveWindowNs);
-            long startNs = Math.Max(0, endNs - LiveWindowNs);
+            long endNs = Math.Max(maxNs, _liveWindowNs);
+            long startNs = Math.Max(0, endNs - _liveWindowNs);
             return (startNs, endNs);
         }
         if (_pxPerNs <= 0 || maxNs <= 0)
@@ -652,6 +697,23 @@ else if (Data != null && Data.Signals.Count > 0)
     /// </summary>
     private async Task ZoomBy(double factor)
     {
+        // Live mode: zoom adjusts the trailing-window duration directly.
+        // factor > 1 → "zoom in" = smaller window = larger transitions on
+        // screen. factor < 1 → "zoom out" = wider window so the user can
+        // see more recent history at once. _pxPerNs is irrelevant here
+        // because ComputeContentWidthPx clamps to viewport width in live
+        // mode (no horizontal scroll); the path simply rescales to fit.
+        if (IsLive)
+        {
+            if (factor <= 0) return;
+            long target = (long)Math.Round(_liveWindowNs / factor);
+            target = Math.Clamp(target, MinLiveWindowNs, MaxLiveWindowNs);
+            if (target == _liveWindowNs) return;
+            _liveWindowNs = target;
+            StateHasChanged();
+            return;
+        }
+
         ulong totalTicks = Data?.TotalTicks ?? 0UL;
         int timescale = Math.Max(1, Data?.TimescaleNs ?? 1);
         long maxNs = (long)totalTicks * timescale;
@@ -694,6 +756,15 @@ else if (Data != null && Data.Signals.Count > 0)
     /// </summary>
     private async Task ZoomReset()
     {
+        // Live mode: snap the trailing window back to its default.
+        if (IsLive)
+        {
+            if (_liveWindowNs == DefaultLiveWindowNs) return;
+            _liveWindowNs = DefaultLiveWindowNs;
+            StateHasChanged();
+            return;
+        }
+
         ulong totalTicks = Data?.TotalTicks ?? 0UL;
         int timescale = Math.Max(1, Data?.TimescaleNs ?? 1);
         long maxNs = (long)totalTicks * timescale;
@@ -970,7 +1041,10 @@ else if (Data != null && Data.Signals.Count > 0)
         long spanNs = viewEndNs - viewStartNs;
         if (spanNs <= 0) { sb.Append("</svg>"); return sb.ToString(); }
 
-        int labelCount = 12;
+        // Density: aim for ~one label per 80 px so 10-char strings like
+        // "1.23 µs" don't overlap on narrow mobile viewports. Clamp [2..12]
+        // so the ruler still reads as a ruler at extremes.
+        int labelCount = Math.Clamp(widthPx / 80, 2, 12);
         for (int i = 0; i <= labelCount; i++)
         {
             double frac = (double)i / labelCount;
@@ -1018,6 +1092,67 @@ else if (Data != null && Data.Signals.Count > 0)
         catch (Exception ex)
         {
             Logger.LogError($"[WaveformViewer] VCD export failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// UX-N-014: invoked from the toolbar pin-button. Adds a waveform-time
+    /// breakpoint at the END of the currently visible window so the next
+    /// Run pauses there. ReplayState fires the pause from
+    /// <c>OnLiveFrameEmitted</c> once the engine tick crosses the bp ns.
+    /// Toast lets the user undo with another tap (toggle behaviour).
+    /// </summary>
+    /// <summary>
+    /// UX-N-014 follow-up: click anywhere on the time ruler to toggle a
+    /// waveform breakpoint at that time. Projects mouse/touch X back to ns
+    /// using the visible window bounds.
+    /// </summary>
+    private void OnRulerClick(Microsoft.AspNetCore.Components.Web.MouseEventArgs e,
+                              int widthPx, long viewStartNs, long viewEndNs)
+    {
+        try
+        {
+            long spanNs = viewEndNs - viewStartNs;
+            if (spanNs <= 0 || widthPx <= 0) return;
+            double frac = Math.Clamp(e.OffsetX / widthPx, 0.0, 1.0);
+            long ns = viewStartNs + (long)(frac * spanNs);
+            // Snap to nearest 10 ns (canonical timescale) so the breakpoint
+            // sits exactly on an engine tick boundary — no fuzzy crossings.
+            ns = (ns + 5) / 10 * 10;
+            Replay.ToggleTimeBreakpoint(ns);
+            var added = Replay.TimeBreakpoints.Contains(ns);
+            var msg = string.Format(
+                Traductor.T(added ? "WAVEFORM_TIME_BP_ADDED" : "WAVEFORM_TIME_BP_REMOVED"),
+                FormatAxisLabel(ns));
+            ToastService.Notify(Kmila.Shared.Models.ToastMessages.Message(
+                Traductor.T("WAVEFORM_TIME_BP_TITLE"), msg, ToastType.Info));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError($"[WaveformViewer] Ruler click bp failed: {ex.Message}");
+        }
+    }
+
+    private void HandleAddTimeBreakpoint()
+    {
+        try
+        {
+            // Use the sim's total simulated time as the breakpoint anchor.
+            // A click on the toolbar pin while looking at the post-run wave
+            // marks the END of the current sim — the next Run pauses there.
+            long bpNs = (long)(Data?.TotalTicks ?? 0UL) * (long)(Data?.TimescaleNs ?? 1L);
+            if (bpNs <= 0) return;
+            Replay.ToggleTimeBreakpoint(bpNs);
+            var added = Replay.TimeBreakpoints.Contains(bpNs);
+            var msg = string.Format(
+                Traductor.T(added ? "WAVEFORM_TIME_BP_ADDED" : "WAVEFORM_TIME_BP_REMOVED"),
+                FormatAxisLabel(bpNs));
+            ToastService.Notify(Kmila.Shared.Models.ToastMessages.Message(
+                Traductor.T("WAVEFORM_TIME_BP_TITLE"), msg, ToastType.Info));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError($"[WaveformViewer] Time breakpoint toggle failed: {ex.Message}");
         }
     }
 

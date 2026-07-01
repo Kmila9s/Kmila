@@ -19,6 +19,6 @@ public class ToastMessages
             Title = Title,
             Message = Message,
             Type = Type,
-            HelpText = $"{DateTime.Now}"
+            HelpText = DateTime.Now.ToString("t")
         };
 }

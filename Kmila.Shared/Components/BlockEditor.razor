@@ -18,6 +18,43 @@
 
 <div class="kmila-block-editor">
     <div id="@_workspaceId" class="kmila-block-editor__canvas"></div>
+
+    @* Phase G (2026-06-28): floating toolbar — overlays the canvas
+       top-end. Hidden until the workspace mounts so it doesn't flicker on
+       prerender. On phone widths the .kmila-block-root flips to column +
+       bottom-sheet palette, so the toolbar floats above the palette band
+       and stays reachable. *@
+    @if (_mounted && !ReadOnly)
+    {
+        <div class="kmila-block-toolbar" role="toolbar"
+             aria-label="@Traductor.T("BLOCK_EDITOR_TOOLBAR_ARIA")">
+            <button type="button" class="kmila-block-toolbar__btn"
+                    title="@Traductor.T("BLOCK_EDITOR_UNDO")"
+                    aria-label="@Traductor.T("BLOCK_EDITOR_UNDO")"
+                    @onclick="UndoAsync">
+                <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
+            </button>
+            <button type="button" class="kmila-block-toolbar__btn"
+                    title="@Traductor.T("BLOCK_EDITOR_REDO")"
+                    aria-label="@Traductor.T("BLOCK_EDITOR_REDO")"
+                    @onclick="RedoAsync">
+                <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+            </button>
+            <span class="kmila-block-toolbar__sep" aria-hidden="true"></span>
+            <button type="button" class="kmila-block-toolbar__btn"
+                    title="@Traductor.T("BLOCK_EDITOR_FIT")"
+                    aria-label="@Traductor.T("BLOCK_EDITOR_FIT")"
+                    @onclick="FitAsync">
+                <i class="bi bi-aspect-ratio" aria-hidden="true"></i>
+            </button>
+            <button type="button" class="kmila-block-toolbar__btn kmila-block-toolbar__btn--danger"
+                    title="@Traductor.T("BLOCK_EDITOR_CLEAR")"
+                    aria-label="@Traductor.T("BLOCK_EDITOR_CLEAR")"
+                    @onclick="() => ClearAsync()">
+                <i class="bi bi-trash" aria-hidden="true"></i>
+            </button>
+        </div>
+    }
 </div>
 
 @code {
@@ -73,6 +110,11 @@
             await JS.InvokeVoidAsync("kmilaBlocklyInit",
                 _workspaceId, toolboxArg, ReadOnly, _dotnetRef);
             _mounted = true;
+            // Phase G (2026-06-28) — re-render so the floating toolbar
+            // (which is gated on `_mounted`) becomes visible. Without
+            // this, the toolbar stays hidden because Blazor doesn't
+            // observe private-field mutations.
+            StateHasChanged();
 
             if (!string.IsNullOrEmpty(InitialStateJson))
             {
@@ -111,6 +153,29 @@
     {
         if (!_mounted) return;
         try { await JS.InvokeVoidAsync("kmilaBlocklyClear", _workspaceId); }
+        catch { }
+    }
+
+    // Phase G (2026-06-28) — floating toolbar bindings. Each method
+    // delegates to the JS engine's existing undo/redo stacks (50-entry
+    // cap) and to the new scroll-to-origin fit helper. Errors swallowed
+    // because the toolbar is best-effort UX, never gating the workflow.
+    private async Task UndoAsync()
+    {
+        if (!_mounted) return;
+        try { await JS.InvokeVoidAsync("kmilaBlocksUndo", _workspaceId); }
+        catch { }
+    }
+    private async Task RedoAsync()
+    {
+        if (!_mounted) return;
+        try { await JS.InvokeVoidAsync("kmilaBlocksRedo", _workspaceId); }
+        catch { }
+    }
+    private async Task FitAsync()
+    {
+        if (!_mounted) return;
+        try { await JS.InvokeVoidAsync("kmilaBlocksFit", _workspaceId); }
         catch { }
     }
 

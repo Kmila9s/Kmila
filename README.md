@@ -34,14 +34,15 @@ Kmila-9s is a free, open-source, multiplatform academic platform focused on the 
 ### Key Features
 
 *   **Dynamic Variable Visualization:** Observe the states of signals, ports, and internal variables at any time via the Waveforms dock tab.
+*   **Visual Runtime Mode (canvas-driven interactive sim):** A fourth editor view-tab alongside **Code · Blocks · Step replay · Visual**. Drop LEDs, Buttons, Switches, LED arrays, Steppers, and 7-segment displays onto a virtual breadboard and wire each pin to a design port (with optional bit-slice syntax like `count[3]` or `bus[7:4]`). Hit Run — the canvas runs infinite-time alongside the simulator, with a runbar exposing speed slider, custom ms/tick override, Pause/Continue, scrub-slider over the frame ring, and tick breakpoints. Optional contact-bounce simulation on Buttons + wire-visualization overlay. Designs persist as a `.kviz` JSON sidecar next to the `.vhd`. See `Documentacion/VISUAL_MODE.md` for the widget contract + `HANDOFF_visual_runtime_2026-06-24.md` for design history.
 *   **VHDL IDE with Monaco intelligence:** Hover for rich documentation on keywords/types/IEEE functions, Ctrl+click to jump to signal / port / entity declarations in the current file, Shift+F12 for references, auto-complete covering the full VHDL keyword set + user declarations + ten ready-to-insert snippets (entity, clocked process, counter, shift register…). Minimap with smart auto-hide on narrow viewports. All keyword docs translate with the UI language.
-*   **Single-surface workbench:** The Editor page is a workbench — Monaco at the top, a **Run bar** for build/run/pause/stop with full state machine, a **bottom dock** with seven tabs (Entities · Schematic · Ports · Waveforms · Runs · Files · Output), and a **status bar** showing file info + resource % + sim state. No simulation modal; everything is one scroll.
+*   **Single-surface workbench:** The Editor page is a workbench — Monaco at the top with **four view-tabs** (Code · Blocks · Step replay · Visual), a **Run bar** for build/run/pause/stop with full state machine, a **bottom dock** with seven tabs (Entities · Schematic · Ports · Waveforms · Runs · Files · Output), and a **status bar** showing file info + resource % + sim state. No simulation modal; everything is one scroll.
 *   **Schematic dock tab:** A new dock tab renders the synthesised netlist for the selected entity (`SchematicViewer.razor`, backed by `Interpreter.Synthesis.Synthesizer` and the `LayeredLayout` placement pass). Lets students cross-reference behavioural VHDL against its inferred structural form.
 *   **Runs history dock tab:** The **Runs** tab lists past simulation runs persisted via `SimulationSnapshotStore`, so students can compare results between code edits without re-running every time.
 *   **Lesson mode:** Two new pages — `Learn.razor` (catalog) and `LessonView.razor` (per-lesson reader) — render the bundled lessons sourced from `LessonCatalog`, with progress saved by `LessonProgressStore`.
 *   **FPGA Resource Validation:** Pick a target device in the TopBar chip (searchable across 34 devices — AMD/Xilinx Spartan-6 and Artix-7, Intel/Altera Cyclone IV E, and Lattice iCE40 HX / iCE40 UltraPlus / ECP5; full JSON catalogue under `App/Kmila/Devices/`). Resource chip in the status bar stays green → amber → red as the design grows relative to the selected device. Clickable to jump to the Entities tab.
 *   **Configurations on the fly:** Save / load named simulation setups (FPGA + time + port moments) from a TopBar pill — round-trip through SQLite, no file management needed.
-*   **Sample project template:** One click creates a ready-to-build 4-bit counter project *and* a companion simulation config — three clicks to a running waveform on first use.
+*   **Examples gallery (4 pre-wired projects):** "Examples" button on the Projects page opens a card grid: **Demo Board** (every visual widget at once — counter, heartbeat LED, 7-seg, stepper, LED array), **Counter Clock** (two decimal 7-segs counting 00 → 99 with overflow LED), **Traffic Light FSM** (3-state Moore), **8-bit Shift Register** (eight individual LEDs each wired to one bit via slice syntax). One click creates the project + drops you onto the Visual tab with the canvas already wired — five clicks total from a fresh install to a running animation.
 *   **In-app Logs viewer:** Every `ILogger<T>` write in the app lands in the `/logs` page with filtering, auto-scroll, pause, and level gating. Useful on mobile / MAUI where there's no console to watch.
 *   **Cross-Platform:** Built with .NET 9 and MAUI. Installs on **Windows, macOS, Android, iOS, and iPadOS**. A Blazor Server web version covers **Linux**.
 *   **Multilingual Support:** Full i18n across 7 languages — English, Spanish, French, German, Chinese, Japanese, Arabic (with RTL flipping of layouts, borders and chevrons). VHDL keyword docs translate too (EN + ES currently full; FR / DE / CH / JP / AR fall back to English until translated). Preferences persist via SQLite + `localStorage`.
@@ -426,8 +427,9 @@ The `Kmila.Shared` project contains the core logic, UI components, and data mode
 
 #### Pages
 *   **Home.razor** — Landing page: hero band with logo lockup + primary CTA, overview copy, features bento grid (six cards with size variation), closing CTA panel.
-*   **ProjectsView.razor** — Project list as responsive card grid (auto-fill at 280px track). Header with live search, count pill, primary **Create new** CTA and ghost **Try a sample** CTA. Empty / no-match states. Per-project hover reveal of Open + Delete kebab (Rename inline). `/projects/create` route auto-opens the create modal.
-*   **Editor.razor** — Workbench: Monaco at top, **RunBar** (build / run state machine + time + scale + FPGA chip), **EditorDock** (7 tabs: Entities · Schematic · Ports · Waveforms · Runs · Files · Output), **StatusBar**. Handles per-project reload via `OnParametersSetAsync`, marshals `ProgramBuilder` events into `SimulationParameters` + `BuildLog`, auto-switches the active dock tab on build/run transitions.
+*   **ProjectsView.razor** — Project list as responsive card grid (auto-fill at 280px track). Header with live search, count pill, primary **Create new** CTA, ghost **Try a sample** CTA, and **Examples** gallery button that opens a modal showing the pre-wired catalog (Demo Board · Counter Clock · Traffic Light FSM · 8-bit Shift Register). Each catalog entry creates the project with its `.kviz` sidecar and jumps straight onto the Visual tab. Empty / no-match states. Per-project hover reveal of Open + Delete kebab (Rename inline). `/projects/create` route auto-opens the create modal.
+*   **Editor.razor** — Workbench: Monaco at top with **four view-tabs** (Code · Blocks · Step replay · Visual — the 4th is the visual-runtime canvas, see `Components/VisualRun/`), **RunBar** (build / run state machine + time + scale + FPGA chip), **EditorDock** (7 tabs: Entities · Schematic · Ports · Waveforms · Runs · Files · Output), **StatusBar**. Handles per-project reload via `OnParametersSetAsync`, marshals `ProgramBuilder` events into `SimulationParameters` + `BuildLog`, auto-switches the active dock tab on build/run transitions. The Visual view-tab is lazy-mounted on first visit (`_visualVisited` latch) — it parses + holds a `VisualRunCoordinator`, so it's heavier than the other tabs.
+*   **Visual.razor** — Thin route wrapper for `/visual/{ProjectId}` direct URL access. Renders `<VisualPanel EmbeddedMode="false">` with a full header (back-button + project title) — same component the Editor's Visual view-tab uses with `EmbeddedMode="true"` to suppress the header. Useful for share-links + Playwright tests.
 *   **Learn.razor** — Lesson catalog. Reads from `LessonCatalog`, paints lesson cards with progress badges sourced from `LessonProgressStore`. Entry point for the in-app teaching path that complements the interactive editor.
 *   **LessonView.razor** — Per-lesson reader. Renders Markdown content via `MarkdownRenderer`, marks completion in `LessonProgressStore`, and links back to a sample editor session when a lesson has an associated VHDL exercise.
 *   **Settings.razor** — Skeleton preference surface with four token-styled cards (Appearance, Editor, Simulation, Diagnostics). Diagnostics card links to the Logs viewer.
@@ -436,7 +438,7 @@ The `Kmila.Shared` project contains the core logic, UI components, and data mode
 #### Components
 *   **Breadcrumbs.razor** — Live breadcrumb trail rendered inside the TopBar. Walks `NavigationManager.Uri` for `/`, `/projects`, `/projects/create`, `/editor/{id}`; for editor routes, looks up the project name. Re-renders on `LocationChanged` + `StaticOnLangChanged`. Truncates to last 2 crumbs under 641 px.
 *   **ConfigurationsPill.razor** — TopBar dropdown for named simulation configs. Pill trigger shows current name with a warning-dot when `SimulationParameters.IsDirty`. Popover lists saved configs with checkmark on the active one and a hover-reveal delete; actions include Save changes, inline Save as, and deleting by name. All round-trips through `ConfigurationService`.
-*   **EditorDock.razor** — Bottom dock on the Editor page. Tab strip with seven slots (Entities · Schematic · Ports · Waveforms · Runs · Files · Output) rendered via named `RenderFragment` parameters and driven by `EditorTab` enum entries. Collapse toggle at the far end, per-tab count pills (Entities, Files, Runs) or ready dots (Waveforms, Output). Active tab + collapsed state + dock height persisted via `EditorDockState` service + `localStorage`.
+*   **EditorDock.razor** — Bottom dock on the Editor page. Tab strip with seven slots (Entities · Schematic · Ports · Waveforms · Runs · Files · Output) rendered via named `RenderFragment` parameters and driven by `EditorTab` enum entries. Collapse toggle at the far end, per-tab count pills (Entities, Files, Runs) or ready dots (Waveforms, Output). Active tab + collapsed state + dock height persisted via `EditorDockState` service + `localStorage`. **Independent of `EditorCardTab`** — the dock lives below the Editor's 4-tab view-switcher (Code / Blocks / Step replay / Visual) and stays active regardless of which view-tab is selected at the top.
 *   **EditorTabStrip.razor** — Standalone strip extracted from the dock so the same tab UI can render outside the Editor page when needed (e.g. landing previews of the workbench layout).
 *   **EnhancedRangeSlider.razor** — Token-styled dual-thumb range slider component used by the time / scale controls and the schematic zoom UI; handles touch + keyboard parity.
 *   **RunsPanel.razor** — Content for the **Runs** dock tab. Lists past simulation snapshots saved through `SimulationSnapshotStore`, exposes "Re-run", "Compare", and "Delete" affordances per row. Loads purely by `ProjectId` (no `Sim.State` gate), so saved runs are browsable even while a live sim is in flight; opening one mid-run suspends the live waveform merge (`Editor._liveMergeSuspended`) and a "Return to live run" banner restores the live view.
@@ -455,6 +457,19 @@ The `Kmila.Shared` project contains the core logic, UI components, and data mode
 *   **RunBar.razor** — Horizontal strip between Monaco and the dock. FPGA reference chip · time number input + scale select · secondary **Build** · primary **Run** with state machine (Idle → Building… → Pause/Stop → Resume → Run again) · overflow menu (Save · New file). Progress line animates under the bar while running.
 *   **StatusBar.razor** — Thin bottom bar. File info (unsaved dot · mono filename · Ln/Col · language chip) on the left; build status chip + resource % of selected FPGA + sim status chip on the right. Build/resource chips are clickable and jump to the matching dock tab.
 *   **WaveformViewer.razor** — Inline-SVG digital waveform renderer. Each signal renders a step-function trace (std_logic) or diamond/value-label trace (vectors) into its own `<svg>` strip; the time ruler is a shared sticky-bottom row. **Native overflow scroll** on both axes (pan-zoom intentionally NOT attached here — the body is row-structured, not free-form like Schematic/Flow). Toolbar gives **Zoom-In / Zoom-Out / Reset** with `× 2` steps and a `[200, 2 400 000] px` range; **Reset = fit-to-width** via `kmilaWaveformFitWidth`. **Click any signal label** to hide that row; restored via a chip-bar above the body (hidden set also filters VCD + SVG + PNG exports). Sticky chrome: label column pinned left with a depth-shadow; ruler pinned bottom. JS-side **hover cursor** (`kmilaAttachWaveformHover`) draws a vertical guide + time chip following the mouse so the student can read off any transition's exact time without projecting down to the ruler. Supports a separate **compare mode** when given a list of `SimulationSnapshot`s — N traces overlaid per signal with palette colors. Full architectural narrative + diagrams in [`Documentacion/CHANGELOG_waveform_overhaul_2026-05-22.md`](../../Documentacion/CHANGELOG_waveform_overhaul_2026-05-22.md) and the WaveformViewer section in [`Documentacion/ARCHITECTURE.md`](../../Documentacion/ARCHITECTURE.md).
+
+#### Components — Visual Runtime (`Components/VisualRun/`)
+*   **VisualPanel.razor** — The visual-runtime canvas as a self-contained component. Mounted by `Visual.razor` (full-page) and by `Editor.razor` (4th view-tab, `EmbeddedMode="true"`). Owns the toolbar (add widget · wire · save · run/stop · settings), runbar (speed slider 0.5×/1×/10×/Free + custom ms-per-tick input + Pause/Continue + scrub slider + tick-breakpoint chips), properties pane (per-widget config including button bounce checkbox), wire-overlay SVG (dashed lines from each widget pin to a port-name chip at the canvas edge), and the `KMILA_VISUAL_RING_BUFFER` setting read. Parameters: `ProjectId`, `EmbeddedMode` (true suppresses the page-header bar so the Editor's breadcrumb + view-tab strip stand in).
+*   **VisualCanvas.razor** — Drag-and-position grid that renders the widget list out of `KvizDoc.Components` and surfaces selection + drag-move + delete events back to its parent. Wraps each widget in a `.kviz-cell` with `@onpointerdown`; the canvas itself takes pointer-move/up for drag math (ClientX/Y deltas).
+*   **LedWidget.razor** — Single LED bound to one `std_logic` port. ON / OFF / `'Z'` / `'X'` palettes; flat or glow render mode per config.
+*   **ButtonWidget.razor** — Momentary push button. Press = drive `'1'`, release = drive `'0'` (or whichever values the config maps). When `config.bounce: true`, press / release enqueue 6 ticks of alternating chatter through `VisualRunCoordinator.EnqueueBounce(port, values)` — drained one value per tick so slowing the speed slider reveals each cycle.
+*   **SwitchWidget.razor** — Latching toggle. Click flips between two values, the canvas redraws the lever, and the bound port holds the new value until the next click.
+*   **LedArrayWidget.razor** — N-bit row of LEDs bound to a `std_logic_vector` port (or per-bit via the bit-slice UI). Per-bit ON / OFF readout based on `LatestSlicedValue`.
+*   **StepperWidget.razor** — 4-coil unipolar stepper graphic with rotor. Bound to four single-bit pins (`phaseA / phaseB / Ān / B̄n`); decodes the energized coils into rotor angle.
+*   **SevenSegmentWidget.razor** — 7-segment digit. **Raw mode**: 8 single-bit pins (a..g + dp), each lit by its own port value. **Decoded mode**: a single 4-bit `value` pin driven through `HexPatterns[]` lookup (digits 0–F).
+
+#### Components — Visual Wiring
+*   **VisualWiringModal.razor** — Wiring overlay. Direction-filtered dropdowns (only IN-ports for input widgets, only OUT-ports for output widgets); per-widget pin set adapts to widget type (e.g., 7-seg mode-dependent). Multi-bit ports expand into per-bit options via `IsMultiBitPin` + `CompatibleOptions(pin)` — selecting `bus[3]` writes `name[3]` into the binding.
 
 #### Layout
 *   **MainLayout.razor** — Shell: mounts `NavMenu` + `TopBar` + content article. Applies `.content--wide` when the current route is `/editor/…` so the workbench fills the full viewport (ordinary pages keep the 1440 px reading cap). Subscribes to `NavigationManager.LocationChanged` so the class flips immediately on navigation.
@@ -579,6 +594,14 @@ classDiagram
 *   **FeedbackHelper.cs** — Glue for the user-feedback flow: opens GitHub issue templates pre-filled with environment + recent log lines from `AppLogStore`.
 *   **GitHubAuth.cs** — Optional sign-in helper for the feedback path; used to attach an authenticated identity to issue submissions when the user opts in.
 *   **ConsoleToLoggerWriter.cs** — Redirects raw `Console.Out` writes (used by older parser/interpreter paths) into `ILogger<T>` so they end up in the Logs page alongside structured logs.
+
+**Visual Runtime services (`Services/VisualRun/`):**
+*   **VisualRunCoordinator.cs** — Drives `DeltaCycleEngine` one tick at a time on its own loop task; no engine fork. Between ticks drains `InputStateMap` into bound design input ports via `Variable.Value =`, which triggers `SignalAttributeHandler._activeFlags` and natural external-stimulus propagation. **Owns**: auto-clock (8-tick half-period default, skips ports listed in the `userDrivenPorts` ctor arg) · `CustomTickDelayMs` override · `TickBreakpoints` HashSet + `OnBreakpointHit` event + `_lastBreakTick` sentinel · `LatestSlicedValue(binding)` slice-aware port read · `EnqueueBounce(port, values)` chatter FIFO (drained one entry per tick) · async `WaitForStopAsync` for clean Stop-render. Read the seam paragraph in `Documentacion/VISUAL_MODE.md` before changing anything here — `DeltaCycleEngine` is intentionally untouched.
+*   **InputStateMap.cs** — Thread-safe `port-name → value` dictionary. Buttons / switches / steppers write through it; coordinator reads from it once per tick.
+*   **FrameRing.cs** — Bounded ring buffer of past tick snapshots (`KMILA_VISUAL_RING_BUFFER` setting, default 2000). Powers the scrub slider via `Nearest(tick)` / `TryGetByTick(tick)`. While paused, the page writes the scrub-frame's `PortValues` directly into `port.Value` so widgets re-read (Resume's first tick overwrites).
+*   **KvizDoc.cs / KvizSerializer.cs** — Schema v1 JSON sidecar (`*.kviz`) sitting next to the matching `.vhd`. Holds the widget list (id · type · position · port bindings · config). The Projects gallery seeds these for the 4 catalog examples.
+*   **VisualSpeed.cs** — Speed enum (Half / Normal / Fast / Free) + `FromSliderIndex(int)` / `ToSliderIndex()` mapping. `CustomTickDelayMs` on the coordinator overrides this when non-null.
+*   **SliceHelper.cs** — Binding-string parser. `Parse("bus[7:0]") → (portName: "bus", BitSlice(7, 0))`. `Extract(fullValue, slice)` returns the substring of a `std_logic_vector` after MSB-first indexing. Used everywhere a widget reads a multi-bit port.
 
 **UI state services (shared across components — avoid component → component wiring):**
 *   **SidebarState.cs** — Drives the custom sidebar: `IsCollapsed` (desktop rail mode) + `IsMobileOpen` (off-canvas drawer). TopBar hamburger toggles the drawer, sidebar subscribes for re-render.
@@ -1858,9 +1881,57 @@ Parser 40/40 + **2/2 new negative fixtures** (`test_negative_unknown_type.vhdl`,
 
 ---
 
+## 19.quater. Practicas-hardening sweep (2026-06-22 → 2026-06-23)
+
+Two consecutive sessions chasing five ESCOM Arquitectura de Computadoras practicas (P1–P4) through the Kmila simulator and a real MachXO2 FPGA. **Operating rule throughout: Kmila adapts to handle the codes, never the other way around.** No practica VHDL was modified for sim-only compatibility.
+
+Phases shipped (full per-fix detail in `Interpreter/README.md` changelog and `Documentacion/HANDOFF_practicas_2026-06-23.md`):
+
+- **0/1** — SimulatorBench baseline + new regression cases locking the multi-hop + constant-array bug classes.
+- **2′** — constant `std_logic_vector` arrays as positional aggregates; element-size-aware `DeferredIndex` / `DynamicIndex`; expression-mode dynamic index for `rom(to_integer(unsigned(addr)))`; `Variable.operator==` reference-check trap.
+- **B** — named-association aggregates `(0 => pack(170), …, others => …)` + real user-defined function bodies registered in `PackageRegistry` + `CachedScope` perf.
+- **D** — case-statement identifier resolution + slice selector extraction.
+- **E** — P2A unblock: slice-arg passing through standard functions, INTEGER comparison string fallback (enum literals), `*` width = leftW + rightW.
+- **F** — P22 / P3 / P4 status pass. **F.P4** — function-body capture for any `if/case/loop`-nested body, `'length` + array attributes, generic-default substitution in `SourceElaborator`.
+- **G.1** — P22 ROM rewrite **paused + reverted** per user request after Phase H opened.
+- **H.3** — engine perf: concurrent-task sensitivity gating. **P22 12× faster.**
+- **H.1** — direct entity instantiation `entity work.X(arch) port map(...)` verified end-to-end (no code change — already worked via `SourceElaborator`).
+- **I.1** — `.vcd` artifacts ship via `insert_project.py`.
+
+**End-of-session state (2026-06-23):**
+
+- **SimulatorBench: 115/115 PASS** (13 new regression cases 120–132).
+- **P1: 5/5 PASS.**
+- **P2A: ACC = 56, halted = 1** — matches GHDL bit-for-bit and user FPGA-verified on the MachXO2.
+- **P22 / P3:** parse + simulate; CPU FSM doesn't fully execute due to ROM-content gaps (P22) and elaboration interactions (P3).
+- **P4:** parses + simulates clean in ~4 s for 2 µs.
+
+All ~10 files changed in this sweep are uncommitted (per the user's no-git rule). Full file list + resume commands live in `Documentacion/HANDOFF_practicas_2026-06-23.md`.
+
+### Continuation 2026-06-24 — handoff §6 follow-up
+
+Closed §6 items 1, 3, 5, 6. Items 2 (P22 ROM rewrite) and 4 (P3/P22 ROM content) re-confirmed deferred — both are practica-edit work. **Zero practica VHDL modified.**
+
+- **§6 item 1** — `(others => 'X')` initial-value eager expansion at signal-construction site (`Interpreter/Services/VariableSyntetizer.cs`). Bench case 133 locks the behaviour.
+- **§6 item 3 (P3 root cause)** — RHS `(others => '0')` aggregate marker preserved through `Operation.cs::ParseOthersAggregate` and expanded at write time via new `SignalScheduler.cs::ExpandAggregateMarker` helper. Bench case 134 locks it. **P3 internal CPU registers now initialise clean at t = 0**; remaining ACC stall is a practica content bug (eq_sel mux OR-masking — same pattern as P22 Phase G.1) and is out of scope per the rule.
+- **§6 item 5** — `*` width tripwire (bench case 135) locks the Phase E `leftW + rightW` numeric_std-aligned widening. No code change.
+- **§6 item 6** — function-body caller-scope binding tripwire (bench case 136). Passes today; the elaborator's per-instance renaming creates distinct `FunctionDefinition` entries so there is no cache collision in practice. Workaround proven correct; no code change.
+
+**End-of-continuation state (2026-06-24):**
+
+- **SimulatorBench: 119/119 PASS** (4 new locks 133–136).
+- **P1: 5/5 PASS.** **P2A: ACC = 56, halted = 1** — preserved.
+- **P3:** parse + simulate; internal-register marker leak fixed; ACC still stalls due to practica `eq_sel` mux design.
+- **P22 / P4:** parse + simulate cleanly, no regression.
+- **Playwright `00-smoke` + `03-editor/build-run`:** 5/5 PASS.
+
+Per-fix detail in `Interpreter/README.md` Changelog (Continuation 2026-06-24) and `Documentacion/HANDOFF_practicas_2026-06-23.md` §10.
+
+---
+
 ## 20. Contact
 
 For questions, support, or feedback, please open an issue on our GitHub repository or contact the development team through the project page.
 
 ---
-*Last Updated: 2026-05-17 (polish pass + step-replay + Blockly slate-brand theme + parser strictness)*
+*Last Updated: 2026-06-24 (practicas-hardening §6 follow-up: SimulatorBench 115→119/119 PASS, P3 register marker leak fixed, `*` + function-body rebind tripwires locked)*

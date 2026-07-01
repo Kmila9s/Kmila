@@ -66,7 +66,10 @@
                         <div class="learn-hero__progress-fill" style="width: @(pct)%"></div>
                     </div>
                     <div class="learn-hero__progress-meta">
-                        <span class="learn-hero__progress-count">@_totalDone / @_totalLessons</span>
+                        @* `dir="ltr"` protects the numeric pair against RTL bidi
+                           reordering — without it AR locale shows "31 / 0" instead
+                           of "0 / 31". *@
+                        <span class="learn-hero__progress-count" dir="ltr">@_totalDone / @_totalLessons</span>
                         <span class="learn-hero__progress-label">@Traductor.T("LEARN_LESSONS_DONE")</span>
                     </div>
                 </div>
@@ -76,22 +79,26 @@
 
     @* Quick filters — same pattern as Practice. Tapping the active chip
        again clears the filter. *@
+    @* slot/segmented-control — chips wrapped in a pill background so the filter
+       reads as one segmented control, not 6 free-floating buttons. *@
     <div class="catalog-filters" role="group" aria-label="@Traductor.T("CATALOG_FILTERS_LABEL")">
         <div class="catalog-filters__row">
             <span class="catalog-filters__label">@Traductor.T("LEARN_FILTER_LEVEL")</span>
-            <button type="button"
-                    class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm filter-chip @(_levelFilter == null ? "filter-chip--active is-active" : "")"
-                    @onclick="() => SetLevel(null)">
-                @Traductor.T("CATALOG_FILTER_ALL")
-            </button>
-            @foreach (var lvl in _allLevels)
-            {
+            <div class="kmila-slot-segmented">
                 <button type="button"
-                        class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm filter-chip filter-chip--@LevelClass(lvl) @(_levelFilter == lvl ? "filter-chip--active is-active" : "")"
-                        @onclick="() => SetLevel(lvl)">
-                    @LevelLabel(lvl)
+                        class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm filter-chip @(_levelFilter == null ? "filter-chip--active is-active" : "")"
+                        @onclick="() => SetLevel(null)">
+                    @Traductor.T("CATALOG_FILTER_ALL")
                 </button>
-            }
+                @foreach (var lvl in _allLevels)
+                {
+                    <button type="button"
+                            class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm filter-chip filter-chip--@LevelClass(lvl) @(_levelFilter == lvl ? "filter-chip--active is-active" : "")"
+                            @onclick="() => SetLevel(lvl)">
+                        @LevelLabel(lvl)
+                    </button>
+                }
+            </div>
         </div>
     </div>
 

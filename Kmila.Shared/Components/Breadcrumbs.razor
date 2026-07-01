@@ -76,8 +76,17 @@
 
     private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
     {
-        Rebuild();
-        InvokeAsync(StateHasChanged);
+        // When the route reaches /editor/{id} for a project that was created
+        // in this same session, the projects list captured at OnInitialized may
+        // not yet include it — the crumb then degrades to the raw "1" id.
+        // Re-load + rebuild on every navigation so the trail always reflects
+        // current truth.
+        InvokeAsync(async () =>
+        {
+            await LoadProjectsAsync();
+            Rebuild();
+            StateHasChanged();
+        });
     }
 
     private void OnLanguageChanged()
@@ -130,6 +139,25 @@
                     var name = _projects.FirstOrDefault(p => p.Id == projectId)?.Name ?? segments[1];
                     crumbs.Add(new(name, null, IconName.FileEarmarkCode));
                 }
+                break;
+
+            case "learn":
+                crumbs.Add(new(Traductor.T("NAV_LEARN"), "/learn", IconName.MortarboardFill));
+                break;
+            case "practice":
+                crumbs.Add(new(Traductor.T("NAV_PRACTICE"), "/practice", IconName.PuzzleFill));
+                break;
+            case "concepts":
+                crumbs.Add(new(Traductor.T("NAV_CONCEPTS"), "/concepts", IconName.Diagram3));
+                break;
+            case "settings":
+                crumbs.Add(new(Traductor.T("NAV_SETTINGS"), null, IconName.Gear));
+                break;
+            case "logs":
+                crumbs.Add(new(Traductor.T("NAV_LOGS"), null, IconName.JournalText));
+                break;
+            case "privacy":
+                crumbs.Add(new(Traductor.T("FOOTER_PRIVACY"), null, IconName.ShieldLock));
                 break;
 
             default:

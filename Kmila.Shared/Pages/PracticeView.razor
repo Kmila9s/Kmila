@@ -111,9 +111,14 @@
                                 }
                             </tbody>
                         </table>
+                        @{
+                            var hiddenCount = _exercise.TestCases.Count - 1;
+                            var hiddenKey = hiddenCount == 1
+                                ? "PRACTICE_HIDDEN_TESTS_ONE"
+                                : "PRACTICE_HIDDEN_TESTS_OTHER";
+                        }
                         <p class="practice-testcase__hidden">
-                            @string.Format(Traductor.T("PRACTICE_HIDDEN_TESTS_FMT"),
-                                _exercise.TestCases.Count - 1)
+                            @string.Format(Traductor.T(hiddenKey), hiddenCount)
                         </p>
                     </div>
                 }
@@ -258,7 +263,9 @@
                                           OnDidChangeModelContent="OnEditorChanged" />
                 </div>
                 <div class="practice-actions">
-                    <button type="button" class="kmila-btn kmila-btn--ghost"
+                    @* slot/section-actions — Export is a neutral secondary; explicit
+                       --primary so it doesn't default to --accent and compete with Submit. *@
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary"
                             @onclick="OpenExportModalAsync"
                             disabled="@(_grading || _pastAttempts.Count == 0)"
                             title="@(_pastAttempts.Count == 0 ? Traductor.T("PRACTICE_EXPORT_NO_ATTEMPTS") : null)">
@@ -364,7 +371,7 @@
         // through EditorOptions.Value below — handled by Monaco itself.
         if (_monacoReady && _monaco != null && _exercise != null && _seededExerciseId != _exercise.Id)
         {
-            try { await _monaco.SetValue(_exercise.StarterVhdl); }
+            try { await _monaco.SetValue(ResolveStarter()); }
             catch { /* tolerate transient init races on rapid nav */ }
             _seededExerciseId = _exercise.Id;
 
@@ -381,6 +388,17 @@
     private async Task OnMonacoInitAsync()
     {
         _monacoReady = true;
+
+        // Race: `EditorOptions` factory runs synchronously at first render, but
+        // `OnParametersSetAsync` awaits `Catalog.GetAsync` to fetch `_exercise`.
+        // On mobile / cold-start the catalog await yields before Monaco init,
+        // so the factory captured `_exercise == null` and seeded an empty
+        // buffer. Re-seed here once we have both Monaco and the exercise.
+        if (_exercise != null && _monaco != null)
+        {
+            try { await _monaco.SetValue(ResolveStarter()); }
+            catch { }
+        }
         _seededExerciseId = _exercise?.Id;
 
         try
@@ -419,12 +437,31 @@
             FontSize = 16,
             TabSize = 4,
             InsertSpaces = true,
-            WordWrap = "on",
+            WordWrap = "wordWrapColumn",
+            WordWrapColumn = 100,
+            WordWrapBreakAfterCharacters = " \t})];>",
             ScrollBeyondLastLine = false,
             RenderWhitespace = "selection",
             Minimap = new EditorMinimapOptions { Enabled = false },
-            Value = _exercise?.StarterVhdl ?? string.Empty,
+            Value = ResolveStarter(),
         };
+
+    /// <summary>
+    /// Returns the exercise's StarterVhdl if present, otherwise a generic
+    /// scaffold so the editor never opens fully blank. An empty buffer left
+    /// students staring at a single line "1" with no orientation as to what
+    /// VHDL construct was expected (audit 2026-06-14 I-02).
+    /// </summary>
+    private string ResolveStarter()
+    {
+        var starter = _exercise?.StarterVhdl;
+        if (!string.IsNullOrWhiteSpace(starter)) return starter!;
+        if (_exercise == null) return string.Empty;
+        var title = PracticeCatalog.Localize(_exercise.Titles, _lang, _exercise.Id);
+        var header = string.Format(Traductor.T("PRACTICE_STARTER_HEADER"), title);
+        var todo = Traductor.T("PRACTICE_STARTER_TODO");
+        return $"-- {header}\nlibrary IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\n\n-- {todo}\n";
+    }
 
     private async Task SubmitAsync()
     {
@@ -491,7 +528,7 @@
     private async Task ResetCodeAsync()
     {
         if (_exercise == null || _monaco == null || !_monacoReady) return;
-        await _monaco.SetValue(_exercise.StarterVhdl);
+        await _monaco.SetValue(ResolveStarter());
         _verdict = null;
         _solved = false;
         // Re-apply the lock since SetValue resets the buffer's line count.

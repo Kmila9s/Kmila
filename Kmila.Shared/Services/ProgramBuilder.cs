@@ -624,18 +624,34 @@ public class ProgramBuilder : IDisposable
             .CompileAsync(requestedPackages, BuildExecutionMode.Linear, ct)
             .ConfigureAwait(false);
 
+        // Wipe the type registry before re-seeding from this build's libraries.
+        // Without this, a previous project's type names leak into the current
+        // build's "did you mean" suggestions (polish-pass Q3, 2026-06-18).
+        global::Parser.Services.UserTypeRegistry.Instance.Clear();
+
         foreach (var lib in compiled)
         {
             foreach (var sym in lib.Functions)
             {
-                if (sym.Kind != LibrarySymbolKind.Function && sym.Kind != LibrarySymbolKind.Procedure)
-                    continue;
-                FunctionRegistry.Instance.Register(new FunctionDefinition
+                switch (sym.Kind)
                 {
-                    Name        = sym.Name,
-                    PackageName = lib.LibraryName,
-                    IsPure      = sym.Kind == LibrarySymbolKind.Function
-                });
+                    case LibrarySymbolKind.Function:
+                    case LibrarySymbolKind.Procedure:
+                        FunctionRegistry.Instance.Register(new FunctionDefinition
+                        {
+                            Name        = sym.Name,
+                            PackageName = lib.LibraryName,
+                            IsPure      = sym.Kind == LibrarySymbolKind.Function
+                        });
+                        break;
+                    case LibrarySymbolKind.Type:
+                        // Surface user-defined types to the parser's typo
+                        // suggestion path so `coeficient_array_t` →
+                        // `coefficient_array_t` when the library declared it.
+                        global::Parser.Services.UserTypeRegistry.Instance.Register(sym.Name);
+                        break;
+                    // Constants don't participate in port-type suggestions.
+                }
             }
         }
     }

@@ -1,0 +1,145 @@
+@namespace Kmila.Shared.Components.VisualRun
+@using Kmila.Shared.Services.VisualRun
+
+@*
+    The canvas owns the drag state and listens for pointermove/pointerup
+    at its own root. Each widget binds its own @onpointerdown to a
+    callback we pass through (no per-widget wrap div, no full-canvas
+    pointer-events:none — both made the touch path brittle).
+    Drag math uses client-coord deltas so the widget's local offset
+    coordinate system doesn't matter.
+*@
+
+<div class="kviz-canvas @(EditMode ? "kviz-canvas--edit" : "kviz-canvas--run") @(Doc.Canvas.Background == "grid" ? "kviz-canvas--grid" : "")"
+     style="width:@(Doc.Canvas.Width)px; height:@(Doc.Canvas.Height)px;"
+     @onpointermove="OnCanvasPointerMove"
+     @onpointerup="OnCanvasPointerUp"
+     @onpointerleave="OnCanvasPointerUp"
+     @ondragover:preventDefault="true"
+     @ondragover="@(e => {})"
+     @ondrop="@OnCanvasDrop">
+    <CascadingValue Name="FrameVersion" Value="@FrameVersion" IsFixed="false">
+        @foreach (var c in Doc.Components)
+        {
+            var localC = c;
+            var isSelected = SelectedId == c.Id;
+            switch (c.Type)
+            {
+                case "led":
+                    <LedWidget Comp="@localC" Coordinator="@Coordinator" EditMode="@EditMode"
+                               Selected="@isSelected"
+                               OnPointerDownExternal="(e) => OnWidgetPointerDown(e, localC)" />
+                    break;
+                case "button":
+                    <ButtonWidget Comp="@localC" Coordinator="@Coordinator" EditMode="@EditMode"
+                                  Selected="@isSelected"
+                                  OnPointerDownExternal="(e) => OnWidgetPointerDown(e, localC)" />
+                    break;
+                case "switch":
+                    <SwitchWidget Comp="@localC" Coordinator="@Coordinator" EditMode="@EditMode"
+                                  Selected="@isSelected"
+                                  IsOn="@IsSwitchOn(localC)"
+                                  OnPointerDownExternal="(e) => OnWidgetPointerDown(e, localC)"
+                                  OnToggleRequested="(v) => RequestSwitchToggle(localC, v)" />
+                    break;
+                case "led-array":
+                    <LedArrayWidget Comp="@localC" Coordinator="@Coordinator" EditMode="@EditMode"
+                                    Selected="@isSelected"
+                                    OnPointerDownExternal="(e) => OnWidgetPointerDown(e, localC)" />
+                    break;
+                case "stepper":
+                    <StepperWidget Comp="@localC" Coordinator="@Coordinator" EditMode="@EditMode"
+                                   Selected="@isSelected"
+                                   OnPointerDownExternal="(e) => OnWidgetPointerDown(e, localC)" />
+                    break;
+                case "seven-seg":
+                    <SevenSegmentWidget Comp="@localC" Coordinator="@Coordinator" EditMode="@EditMode"
+                                        Selected="@isSelected"
+                                        OnPointerDownExternal="(e) => OnWidgetPointerDown(e, localC)" />
+                    break;
+                default:
+                    <div class="kviz-unknown" style="left:@(localC.Position.X)px; top:@(localC.Position.Y)px;">
+                        @localC.Type
+                    </div>
+                    break;
+            }
+        }
+    </CascadingValue>
+    @if (Doc.Components.Count == 0)
+    {
+        <div class="kviz-canvas-empty">
+            <div>@EmptyHint</div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public KvizDoc Doc { get; set; } = default!;
+    [Parameter] public VisualRunCoordinator? Coordinator { get; set; }
+    [Parameter] public bool EditMode { get; set; } = true;
+    [Parameter] public int FrameVersion { get; set; }
+    [Parameter] public string EmptyHint { get; set; } = "Drag widgets from the palette to start.";
+    [Parameter] public EventCallback OnLayoutChanged { get; set; }
+    [Parameter] public string? SelectedId { get; set; }
+    [Parameter] public EventCallback<string?> SelectedIdChanged { get; set; }
+    // Switch state is owned by the page (so it survives Run/Stop cycles
+    // — the coordinator is recreated each Run). Canvas just forwards.
+    [Parameter] public Func<KvizComponent, bool>? IsSwitchOnLookup { get; set; }
+    [Parameter] public EventCallback<(KvizComponent, bool)> OnSwitchToggle { get; set; }
+
+    /// <summary>
+    /// Fires when an HTML5 drag from the WidgetPalette is dropped on the
+    /// canvas. The args carry the cursor's offset relative to this element,
+    /// which VisualPanel uses to spawn the dragged widget at the drop point
+    /// instead of the historical default coordinate.
+    /// </summary>
+    [Parameter] public EventCallback<Microsoft.AspNetCore.Components.Web.DragEventArgs> OnDrop { get; set; }
+
+    private async Task OnCanvasDrop(Microsoft.AspNetCore.Components.Web.DragEventArgs e)
+    {
+        if (OnDrop.HasDelegate) await OnDrop.InvokeAsync(e);
+    }
+
+    private bool IsSwitchOn(KvizComponent c) => IsSwitchOnLookup?.Invoke(c) ?? false;
+
+    private async Task RequestSwitchToggle(KvizComponent c, bool newValue)
+    {
+        if (OnSwitchToggle.HasDelegate) await OnSwitchToggle.InvokeAsync((c, newValue));
+    }
+
+    private KvizComponent? _dragTarget;
+    private double _dragStartPointerX;
+    private double _dragStartPointerY;
+    private double _dragStartCompX;
+    private double _dragStartCompY;
+
+    private async Task OnWidgetPointerDown(Microsoft.AspNetCore.Components.Web.PointerEventArgs e, KvizComponent c)
+    {
+        if (SelectedIdChanged.HasDelegate) await SelectedIdChanged.InvokeAsync(c.Id);
+        if (!EditMode) return;
+        _dragTarget = c;
+        // Track *pointer* deltas in client space; the widget's own
+        // OffsetX/Y would be relative to its small box and resets to 0
+        // each pointerdown — useless for the running diff we need on
+        // pointermove. Client space matches the canvas's untransformed
+        // CSS-pixel grid 1:1.
+        _dragStartPointerX = e.ClientX;
+        _dragStartPointerY = e.ClientY;
+        _dragStartCompX = c.Position.X;
+        _dragStartCompY = c.Position.Y;
+    }
+
+    private void OnCanvasPointerMove(Microsoft.AspNetCore.Components.Web.PointerEventArgs e)
+    {
+        if (_dragTarget == null) return;
+        _dragTarget.Position.X = Math.Max(0, _dragStartCompX + (e.ClientX - _dragStartPointerX));
+        _dragTarget.Position.Y = Math.Max(0, _dragStartCompY + (e.ClientY - _dragStartPointerY));
+    }
+
+    private async Task OnCanvasPointerUp()
+    {
+        if (_dragTarget == null) return;
+        _dragTarget = null;
+        if (OnLayoutChanged.HasDelegate) await OnLayoutChanged.InvokeAsync();
+    }
+}

@@ -124,7 +124,7 @@ public class MauiSimEndNotifier : ISimEndNotifier
             .SetSmallIcon(Android.Resource.Drawable.SymActionEmail)
             .SetAutoCancel(true);
 
-        try { notifManager.Notify(notificationId: Math.Abs(Guid.NewGuid().GetHashCode()), builder.Build()); }
+        try { notifManager.Notify(Math.Abs(Guid.NewGuid().GetHashCode()), builder.Build()); }
         catch (Exception ex) { _log.LogWarning(ex, "[MauiSimEndNotifier] notify failed"); }
         return Task.CompletedTask;
     }

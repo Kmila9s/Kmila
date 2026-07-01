@@ -26,16 +26,21 @@
     }
     else if (_error != null)
     {
-        <div class="alert alert-danger" role="alert">@_error</div>
-        <button type="button" class="kmila-btn kmila-btn--accent" @onclick="StartAsync">
-            <Icon Name="IconName.ArrowClockwise" />
-            <span>@Traductor.T("COMMON_RETRY")</span>
-        </button>
+        @* slot/banner-cta — retry trails the alert text instead of floating below. *@
+        <div class="alert alert-danger" role="alert">
+            <div class="kmila-slot-banner">
+                <span>@_error</span>
+                <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--sm" @onclick="StartAsync">
+                    <Icon Name="IconName.ArrowClockwise" />
+                    <span>@Traductor.T("COMMON_RETRY")</span>
+                </button>
+            </div>
+        </div>
     }
     else if (_code == null)
     {
         <div class="github-login__loading">
-            <Spinner Type="SpinnerType.Border" Color="SpinnerColor.Primary" />
+            <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
             <span>@Traductor.T("GH_LOGIN_REQUESTING")</span>
         </div>
     }
@@ -77,7 +82,7 @@
                 <div>
                     <div class="github-login__step-title">@Traductor.T("GH_LOGIN_AUTHORIZE")</div>
                     <div class="github-login__waiting">
-                        <Spinner Type="SpinnerType.Border" Color="SpinnerColor.Primary" />
+                        <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
                         <span>@Traductor.T("GH_LOGIN_WAITING")</span>
                     </div>
                 </div>

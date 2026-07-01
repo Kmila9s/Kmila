@@ -110,6 +110,17 @@ public class ReplayState
     public bool IsLivePaused => LiveEngine?.IsPaused ?? false;
 
     /// <summary>
+    /// When the user hits Resume after a breakpoint pause, they're saying
+    /// "let it run." Respecting subsequent breakpoints on the same run would
+    /// trap them in a pause/resume ping-pong they didn't ask for. This flag
+    /// suppresses the OnLiveFrameEmitted breakpoint check until the user
+    /// explicitly pauses again, starts a new run, or steps. Step + Pause
+    /// reset it. Matches the "Resume = run to end" mental model the user
+    /// surfaced in the 2026-06-14 feedback pass.
+    /// </summary>
+    private bool _breakpointsMutedUntilPause;
+
+    /// <summary>
     /// The growing per-frame timeline built while the simulation runs. Each
     /// engine delta appends one <see cref="TimelineStep"/>. Null until
     /// <see cref="AttachLive"/> is called with a source string; the post-hoc
@@ -136,12 +147,32 @@ public class ReplayState
     /// </summary>
     public HashSet<int> Breakpoints { get; } = new();
 
-    /// <summary>Fired whenever a breakpoint is toggled — UI redraws gutter glyphs.</summary>
+    /// <summary>
+    /// Waveform-side time breakpoints (UX-N-014). Each entry is an absolute
+    /// time in nanoseconds. When a live frame's <c>maxTimeMoment</c> crosses
+    /// a value in this set, <see cref="DeltaCycleEngine.Pause"/> fires. This
+    /// is the complement to the line-based <see cref="Breakpoints"/> — lets
+    /// students stop the sim at a fixed time without hunting for the right
+    /// VHDL line. Persists alongside line breakpoints across runs.
+    /// </summary>
+    public HashSet<long> TimeBreakpoints { get; } = new();
+
+    /// <summary>Per-run last tick observed by the time-breakpoint check; lets us detect crossings.</summary>
+    private ulong _prevTimeBpTick;
+
+    /// <summary>Fired whenever a breakpoint (line or time) is toggled — UI redraws.</summary>
     public event Action? OnBreakpointsChanged;
 
     public void ToggleBreakpoint(int line)
     {
         if (!Breakpoints.Remove(line)) Breakpoints.Add(line);
+        OnBreakpointsChanged?.Invoke();
+    }
+
+    /// <summary>Toggle a waveform time breakpoint at <paramref name="ns"/> nanoseconds.</summary>
+    public void ToggleTimeBreakpoint(long ns)
+    {
+        if (!TimeBreakpoints.Remove(ns)) TimeBreakpoints.Add(ns);
         OnBreakpointsChanged?.Invoke();
     }
 
@@ -287,6 +318,8 @@ public class ReplayState
         LiveEngine = engine;
         _liveSource = sourceCode ?? string.Empty;
         _liveValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        _prevTimeBpTick = 0; // reset crossing tracker so the first frame after Run can hit a time breakpoint
+        _breakpointsMutedUntilPause = false; // every new run starts with bps live
         _liveLineMap = BuildLiveLineMap(_liveSource);
         _trackedLines = _liveLineMap.Values.SelectMany(v => v).ToHashSet();
         _trackedLines.UnionWith(BuildConditionLines(_liveSource));
@@ -312,6 +345,13 @@ public class ReplayState
             LiveDoc = null;
         }
         LiveFrameTick = 0;
+        // Enable per-frame active-line bookkeeping for the lifetime of this
+        // engine. Used to be flipped on/off by SchematicViewer mounting,
+        // which left the data empty when the user ran a sim without
+        // visiting the Diagram tab — the Editor's Monaco line highlight
+        // path (added 2026-06-10) needs this populated too. The opposite
+        // flip happens in DetachLive.
+        TrackActiveLines = true;
         engine.OnFrameEmitted += OnLiveFrameEmitted;
         engine.OnConditionEvaluated += OnLiveConditionEvaluated;
         OnLiveChanged?.Invoke();
@@ -335,6 +375,10 @@ public class ReplayState
         LiveFrameTick = 0;
         _liveActiveLines = Array.Empty<int>();
         _liveActiveSignals = Array.Empty<string>();
+        // Pair with the AttachLive flip — once nothing is alive to read
+        // active-line data, stop populating it on the next live engine
+        // (until something asks for it again).
+        TrackActiveLines = false;
         OnLiveChanged?.Invoke();
         OnLiveStepChanged?.Invoke();
     }
@@ -439,10 +483,28 @@ public class ReplayState
             }
         }
 
+        // #3: record the active lines/signals BEFORE firing any consumer
+        // events. Previously the breakpoint branch fired OnLiveChanged
+        // first and then the TrackActiveLines branch populated the arrays,
+        // so any subscriber reading Replay.LiveActiveLines from that
+        // OnLiveChanged invocation saw the PREVIOUS frame's data (or
+        // empty on the first frame) — schematic + Monaco line highlights
+        // both fell out of sync as a result.
+        if (TrackActiveLines)
+        {
+            _liveActiveLines = lineSet != null ? lineSet.ToArray() : Array.Empty<int>();
+            _liveActiveSignals = args.ChangedSignals
+                .Select(s => s.Name ?? string.Empty)
+                .Where(n => n.Length > 0)
+                .ToArray();
+        }
+
         // Phase E: breakpoint check — still fires whether we accumulate or
         // not. The lineSet computation above honoured Breakpoints.Count > 0
         // so this branch only runs when we actually have a set to check.
-        if (lineSet != null && Breakpoints.Count > 0)
+        // Skipped while breakpoints are muted (user pressed Resume); that
+        // mute stays in effect until the next explicit Pause, Step, or run.
+        if (lineSet != null && Breakpoints.Count > 0 && !_breakpointsMutedUntilPause)
         {
             foreach (var ln in lineSet)
             {
@@ -455,29 +517,40 @@ public class ReplayState
             }
         }
 
-        // #3: record the active lines/signals for the schematic step-through.
-        // The arrays are always populated so the UI can read them on demand,
-        // but the OnLiveStepChanged nudge only fires when the engine is
-        // actually paused (post-Step, post-breakpoint). During free run the
+        // UX-N-014: waveform-side time breakpoints. Fire when the engine's
+        // tick crosses any breakpoint time. Timescale is 10 ns per tick
+        // (canonical Kmila scale); convert tick → ns and pause on the first
+        // frame that reaches or passes a breakpoint. The previous-tick check
+        // avoids re-firing on the same boundary across multiple deltas.
+        // Honor the same `_breakpointsMutedUntilPause` flag as line bps.
+        if (TimeBreakpoints.Count > 0 && args.Tick != _prevTimeBpTick && !_breakpointsMutedUntilPause)
+        {
+            long nowNs = (long)args.Tick * 10L;
+            long prevNs = (long)_prevTimeBpTick * 10L;
+            foreach (var bpNs in TimeBreakpoints)
+            {
+                if (bpNs > prevNs && bpNs <= nowNs)
+                {
+                    LiveEngine?.Pause();
+                    OnLiveChanged?.Invoke();
+                    break;
+                }
+            }
+            _prevTimeBpTick = args.Tick;
+        }
+
+        // OnLiveStepChanged nudge only fires when the engine is actually
+        // paused (post-Step, post-breakpoint). During free run the
         // highlight set churns too fast to read AND re-rendering the
         // schematic 10× per second starves the UI thread when many cells
         // are present — what the user perceives as "step forward freezes
         // the sim". OnLiveChanged still fires from LiveStep/LivePause/
-        // LiveResume so consumers see the data right after a pause boundary
-        // through that path.
-        if (TrackActiveLines)
+        // LiveResume so consumers see the data right after a pause
+        // boundary through that path.
+        if (TrackActiveLines && LiveEngine?.IsPaused == true)
         {
-            _liveActiveLines = lineSet != null ? lineSet.ToArray() : Array.Empty<int>();
-            _liveActiveSignals = args.ChangedSignals
-                .Select(s => s.Name ?? string.Empty)
-                .Where(n => n.Length > 0)
-                .ToArray();
-
-            if (LiveEngine?.IsPaused == true)
-            {
-                _lastStepNudge = DateTime.UtcNow;
-                OnLiveStepChanged?.Invoke();
-            }
+            _lastStepNudge = DateTime.UtcNow;
+            OnLiveStepChanged?.Invoke();
         }
 
         // Throttle the OnChange nudge to ~10 Hz. Only relevant when
@@ -600,13 +673,24 @@ public class ReplayState
     /// <summary>Cooperative pause — no-op if no engine is attached.</summary>
     public void LivePause()
     {
+        // Re-arm breakpoint enforcement: the user explicitly stopped the run,
+        // so the next free run should hit breakpoints again.
+        _breakpointsMutedUntilPause = false;
         LiveEngine?.Pause();
         OnLiveChanged?.Invoke();
     }
 
     /// <summary>Cooperative resume — no-op if no engine is attached.</summary>
+    /// <remarks>
+    /// Resume means "let the sim run to the end". Breakpoints are muted
+    /// until the user pauses again, starts a new run, or steps. Without
+    /// this the user got trapped in a pause/resume ping-pong every time
+    /// a process touched a bp line — they expected "Resume = continue,
+    /// stop nagging" and the old behavior felt broken.
+    /// </remarks>
     public void LiveResume()
     {
+        _breakpointsMutedUntilPause = true;
         LiveEngine?.Resume();
         OnLiveChanged?.Invoke();
     }
@@ -642,6 +726,10 @@ public class ReplayState
             return;
         }
 
+        // Step Forward is the surgical control — it deliberately respects
+        // breakpoints. Reset the Resume-mute so the user can resume bp
+        // enforcement just by stepping once.
+        _breakpointsMutedUntilPause = false;
         bool wasPaused = LiveEngine.IsPaused;
         LiveEngine.StepOneDelta();
 

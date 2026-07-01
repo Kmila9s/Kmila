@@ -1,0 +1,1075 @@
+@namespace Kmila.Shared.Components.VisualRun
+@implements IDisposable
+@using Kmila.Shared.Models
+@using Kmila.Shared.Repositories
+@using Kmila.Shared.Services.VisualRun
+@using Kmila.Shared.Modals
+@using Parser.Models
+@using Interpreter.Services
+@inject Projects ProjectsRepo
+@inject ProjectFiles ProjectFilesRepo
+@inject Microsoft.AspNetCore.Components.NavigationManager Nav
+
+@*
+    VisualPanel — the reusable canvas surface. Used in two places:
+      • `Pages/Visual.razor` route `/visual/{ProjectId}` (EmbeddedMode=false)
+      • Editor.razor's view-tabs strip (Code · Blocks · Replay · Visual) where
+        it lives inline as the 4th view (EmbeddedMode=true). The Editor
+        surrounds it with its own breadcrumb + tab strip, so the panel's
+        own header is hidden to avoid the title bar duplication.
+
+    State is fully self-contained: the panel parses the project's entity on
+    OnParametersSetAsync and owns its own VisualRunCoordinator. When the
+    Editor mounts a VisualPanel inline, the panel re-parses (cheap), which
+    means the Visual surface is always coherent with the on-disk project,
+    even after a Code-tab Build that touched the VHDL.
+*@
+
+<section class="visual-page @(EmbeddedMode ? "visual-page--embedded" : "")">
+    @if (!EmbeddedMode)
+    {
+        <header class="visual-page__header">
+            <button class="kmila-btn-icon" @onclick="GoBack"
+                    title="@Traductor.T("VISUAL_BACK")"
+                    aria-label="@Traductor.T("VISUAL_BACK")">←</button>
+            <div class="visual-page__title">
+                <span class="visual-page__project">@(_project?.Name ?? "")</span>
+                <span class="visual-page__entity">@(_entity?.Name ?? Traductor.T("VISUAL_NO_ENTITY"))</span>
+            </div>
+            <div class="visual-page__toolbar">
+                @RenderToolbar()
+            </div>
+        </header>
+    }
+    else
+    {
+        <div class="visual-page__toolbar visual-page__toolbar--embedded">
+            @RenderToolbar()
+        </div>
+    }
+
+    @* Phase 2 run controls — speed slider + custom delay + Pause/Continue +
+       scrub slider + tick breakpoints. Visible only while running or paused. *@
+    @if (_coord != null && (_coord.IsRunning || _coord.IsPaused))
+    {
+        <div class="visual-page__runbar">
+            <div class="visual-page__runbar-row">
+                <label class="visual-page__runbar-cell">
+                    <small>@Traductor.T("VISUAL_SPEED")</small>
+                    <input type="range" min="0" max="3" step="1"
+                           class="visual-page__speed-slider"
+                           value="@((int)_speedIndex)"
+                           @oninput="OnSpeedSliderInput" />
+                    <span class="visual-page__speed-label">@SpeedLabel</span>
+                </label>
+                <label class="visual-page__runbar-cell">
+                    <small>@Traductor.T("VISUAL_MS_PER_TICK")</small>
+                    <input type="number" min="0" max="2000" step="1"
+                           class="kmila-input visual-page__delay-input"
+                           placeholder="@Traductor.T("VISUAL_DELAY_AUTO")"
+                           value="@(_customDelayMs?.ToString() ?? "")"
+                           @onchange="OnCustomDelayChange" />
+                </label>
+                <button class="kmila-btn visual-page__pause-btn"
+                        data-testid="visual-pause-continue"
+                        @onclick="TogglePause">
+                    @(_coord.IsPaused ? "▶ " : "⏸ ")@Traductor.T(_coord.IsPaused ? "VISUAL_CONTINUE" : "VISUAL_PAUSE")
+                </button>
+                <span class="visual-page__tick-readout">
+                    @Traductor.T("VISUAL_TICK") <code>@_coord.CurrentTick</code>
+                    @if (_lastBreakHitTick is { } hitTick)
+                    {
+                        <span class="visual-page__bp-hit"> · @Traductor.T("VISUAL_BREAKPOINT") @hitTick</span>
+                    }
+                </span>
+            </div>
+
+            @{
+                var hasFrames = _coord.Frames.Count > 0;
+                var canScrub = _coord.IsPaused && hasFrames;
+            }
+            <div class="visual-page__runbar-row visual-page__runbar-row--scrub @(canScrub ? "" : "visual-page__runbar-row--disabled")">
+                <label class="visual-page__runbar-cell visual-page__runbar-cell--grow">
+                    <small>@Traductor.T("VISUAL_SCRUB")</small>
+                    <input type="range"
+                           min="@_coord.Frames.OldestTick"
+                           max="@_coord.Frames.NewestTick"
+                           step="1"
+                           class="visual-page__scrub-slider"
+                           value="@_scrubTick"
+                           disabled="@(!canScrub)"
+                           @oninput="OnScrubInput" />
+                    <span class="visual-page__scrub-readout">
+                        @if (canScrub) { @($"{Traductor.T("VISUAL_TICK")} {_scrubTick} / [{_coord.Frames.OldestTick}..{_coord.Frames.NewestTick}]") }
+                        else { <em>@Traductor.T("VISUAL_SCRUB_HINT")</em> }
+                    </span>
+                </label>
+            </div>
+
+            <div class="visual-page__runbar-row visual-page__runbar-row--bp">
+                <label class="visual-page__runbar-cell">
+                    <small>@Traductor.T("VISUAL_PAUSE_AT_TICK")</small>
+                    <input type="number" min="0" step="1"
+                           class="kmila-input visual-page__bp-input"
+                           value="@_bpInput"
+                           @onchange="OnBpInputChange" />
+                </label>
+                <button class="kmila-btn" data-testid="visual-bp-add" @onclick="AddBreakpoint">@Traductor.T("VISUAL_BP_ADD")</button>
+                @if (_coord.TickBreakpoints.Count > 0)
+                {
+                    <div class="visual-page__bp-list">
+                        @foreach (var bp in _coord.TickBreakpoints.OrderBy(t => t))
+                        {
+                            var b = bp;
+                            <button class="visual-page__bp-chip"
+                                    title="@Traductor.T("VISUAL_BP_REMOVE_TITLE")"
+                                    @onclick="() => RemoveBreakpoint(b)">
+                                @b ×
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    @if (_loadError is not null)
+    {
+        <div class="visual-page__error">@_loadError</div>
+    }
+
+    <div class="visual-page__workspace">
+        @* Widget palette — left rail; replaces the toolbar add-buttons.
+           Disabled while a run is in flight so the user can't add widgets
+           mid-trace (matches the old per-button disabled guard). HTML5 DnD
+           is wired through OnDragStart/OnDragEnd: the dragged widget type
+           lives in _paletteDraggedType until the canvas drop fires. *@
+        <WidgetPalette OnSelected="OnPaletteSelected"
+                       OnDragStart="OnPaletteDragStart"
+                       OnDragEnd="OnPaletteDragEnd"
+                       Disabled="@(_coord?.IsRunning == true)" />
+
+        <div class="visual-page__canvas-stack">
+            <VisualCanvas Doc="@_doc"
+                          Coordinator="@_coord"
+                          EditMode="@(_coord?.IsRunning != true)"
+                          FrameVersion="@_frameVersion"
+                          EmptyHint="@EmptyHintText"
+                          OnLayoutChanged="MarkDirty"
+                          SelectedId="@_selectedId"
+                          SelectedIdChanged="@OnSelectedIdChanged"
+                          IsSwitchOnLookup="@IsSwitchOn"
+                          OnSwitchToggle="@OnSwitchToggle"
+                          OnDrop="@OnCanvasDrop" />
+
+            @* Phase 3 wire-visualization overlay. SVG sits on top of the
+               canvas with pointer-events: none so it never steals clicks
+               from widgets. Inner SVG content is built in code-behind as a
+               MarkupString because Razor's parser treats lowercase <text>
+               as a reserved escape construct, which collides with SVG's
+               <text> element. Lines go from each placed widget's anchor to
+               a port-name label hanging off the right canvas edge. *@
+            @if (_showWires && _doc.Components.Count > 0)
+            {
+                <svg class="visual-page__wires"
+                     width="@_doc.Canvas.Width" height="@_doc.Canvas.Height"
+                     viewBox="0 0 @_doc.Canvas.Width @_doc.Canvas.Height"
+                     preserveAspectRatio="none">
+                    @((MarkupString)BuildWireOverlaySvg())
+                </svg>
+            }
+        </div> @* /visual-page__canvas-stack *@
+
+        <aside class="visual-page__props">
+            @if (_selectedId is not null && Selected is { } sel)
+            {
+                <h6>@sel.Type</h6>
+                @if (sel.Type == "led")
+                {
+                    <label>@Traductor.T("VISUAL_PROP_COLOR")
+                        <select class="kmila-input"
+                                value="@LedColor(sel)"
+                                @onchange="@(e => OnLedColorChange(sel, e))">
+                            <option value="red">red</option>
+                            <option value="green">green</option>
+                            <option value="blue">blue</option>
+                            <option value="yellow">yellow</option>
+                            <option value="white">white</option>
+                        </select>
+                    </label>
+                }
+                else if (sel.Type == "button")
+                {
+                    <label>@Traductor.T("VISUAL_PROP_LABEL")
+                        <input class="kmila-input"
+                               value="@ButtonLabel(sel)"
+                               @onchange="@(e => OnButtonLabelChange(sel, e))" />
+                    </label>
+                    <label class="visual-page__props-checkbox">
+                        <input type="checkbox"
+                               checked="@ButtonBounce(sel)"
+                               @onchange="@(e => OnButtonBounceChange(sel, e))" />
+                        <span>@Traductor.T("VISUAL_PROP_BOUNCE")</span>
+                    </label>
+                    <small class="kmila-muted">@Traductor.T("VISUAL_PROP_BOUNCE_HINT")</small>
+                }
+                else if (sel.Type == "switch")
+                {
+                    <label>@Traductor.T("VISUAL_PROP_LABEL")
+                        <input class="kmila-input"
+                               value="@SwitchLabel(sel)"
+                               @onchange="@(e => OnSwitchLabelChange(sel, e))" />
+                    </label>
+                    <label>@Traductor.T("VISUAL_PROP_DEFAULT_STATE")
+                        <select class="kmila-input"
+                                value="@SwitchDefault(sel)"
+                                @onchange="@(e => OnSwitchDefaultChange(sel, e))">
+                            <option value="0">@Traductor.T("VISUAL_DEFAULT_STATE_OFF")</option>
+                            <option value="1">@Traductor.T("VISUAL_DEFAULT_STATE_ON")</option>
+                        </select>
+                    </label>
+                }
+                else if (sel.Type == "stepper")
+                {
+                    <label>@Traductor.T("VISUAL_PROP_STEPS_PER_REV")
+                        <input class="kmila-input" type="number" min="4" max="4096" step="1"
+                               value="@StepperStepsPerRev(sel)"
+                               @onchange="@(e => OnStepperStepsChange(sel, e))" />
+                    </label>
+                    <label>@Traductor.T("VISUAL_PROP_DIRECTION")
+                        <select class="kmila-input"
+                                value="@StepperDirection(sel)"
+                                @onchange="@(e => OnStepperDirectionChange(sel, e))">
+                            <option value="auto">@Traductor.T("VISUAL_DIRECTION_AUTO")</option>
+                            <option value="cw">@Traductor.T("VISUAL_DIRECTION_CW")</option>
+                            <option value="ccw">@Traductor.T("VISUAL_DIRECTION_CCW")</option>
+                        </select>
+                    </label>
+                }
+                else if (sel.Type == "seven-seg")
+                {
+                    <label>@Traductor.T("VISUAL_PROP_MODE")
+                        <select class="kmila-input"
+                                value="@SevenSegMode(sel)"
+                                @onchange="@(e => OnSevenSegModeChange(sel, e))">
+                            <option value="raw">@Traductor.T("VISUAL_SEVEN_SEG_MODE_RAW")</option>
+                            <option value="hex">@Traductor.T("VISUAL_SEVEN_SEG_MODE_HEX")</option>
+                            <option value="dec">@Traductor.T("VISUAL_SEVEN_SEG_MODE_DEC")</option>
+                        </select>
+                    </label>
+                    <label>@Traductor.T("VISUAL_PROP_COLOR")
+                        <select class="kmila-input"
+                                value="@LedColor(sel)"
+                                @onchange="@(e => OnLedColorChange(sel, e))">
+                            <option value="red">red</option>
+                            <option value="green">green</option>
+                            <option value="blue">blue</option>
+                            <option value="yellow">yellow</option>
+                            <option value="white">white</option>
+                        </select>
+                    </label>
+                }
+                else if (sel.Type == "led-array")
+                {
+                    <label>@Traductor.T("VISUAL_PROP_LENGTH")
+                        <input class="kmila-input" type="number" min="1" max="64"
+                               value="@LedArrayLength(sel)"
+                               @onchange="@(e => OnLedArrayLengthChange(sel, e))" />
+                    </label>
+                    <label>@Traductor.T("VISUAL_PROP_COLOR")
+                        <select class="kmila-input"
+                                value="@LedColor(sel)"
+                                @onchange="@(e => OnLedColorChange(sel, e))">
+                            <option value="red">red</option>
+                            <option value="green">green</option>
+                            <option value="blue">blue</option>
+                            <option value="yellow">yellow</option>
+                            <option value="white">white</option>
+                        </select>
+                    </label>
+                    <label>@Traductor.T("VISUAL_PROP_ORIENTATION")
+                        <select class="kmila-input"
+                                value="@LedArrayOrientation(sel)"
+                                @onchange="@(e => OnLedArrayOrientationChange(sel, e))">
+                            <option value="h">@Traductor.T("VISUAL_ORIENT_H")</option>
+                            <option value="v">@Traductor.T("VISUAL_ORIENT_V")</option>
+                        </select>
+                    </label>
+                }
+                <div class="visual-page__props-binding">
+                    <small>@Traductor.T("VISUAL_PIN_TO_PORT")</small>
+                    @foreach (var b in sel.Bindings)
+                    {
+                        <div><code>@b.Key</code> → @(string.IsNullOrEmpty(b.Value) ? Traductor.T("VISUAL_UNWIRED") : b.Value)</div>
+                    }
+                    @if (sel.Bindings.Count == 0)
+                    {
+                        <div class="kmila-muted">@Traductor.T("VISUAL_NO_BINDINGS")</div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="kmila-muted">@Traductor.T("VISUAL_PROPS_HINT")</div>
+            }
+        </aside>
+    </div>
+</section>
+
+<VisualWiringModal IsOpen="_wiringOpen"
+                   Title="@Traductor.T("VISUAL_WIRING_TITLE")"
+                   Doc="_doc"
+                   Entity="_entity"
+                   OnClose="CloseWiring"
+                   OnChanged="MarkDirty" />
+
+@code {
+    [Parameter] public string ProjectId { get; set; } = "";
+
+    // When true, the panel is mounted inline inside the Editor's view-tabs
+    // strip. The header (back-button + title) is suppressed so the toolbar
+    // sits flush against the editor's own breadcrumb + tab row.
+    [Parameter] public bool EmbeddedMode { get; set; }
+
+    private int _projectId = -1;
+    private Project? _project;
+    private List<ProjectFile> _files = new();
+    private ProjectFile? _designFile;
+    private ProjectFile? _kvizFile;
+    private Entity? _entity;
+    private KvizDoc _doc = new();
+    private VisualRunCoordinator? _coord;
+    private string? _selectedId;
+    private bool _wiringOpen;
+    private bool _dirty;
+    private int _frameVersion;
+    private string? _loadError;
+    private System.Threading.Timer? _repaintTimer;
+
+    private VisualSpeed _speedIndex = VisualSpeed.Normal;
+    private int? _customDelayMs;
+    private int _settingsRingBuffer;
+    private ulong _scrubTick;
+    private string _bpInput = string.Empty;
+    private ulong? _lastBreakHitTick;
+
+    // Phase 3 (2026-06-26): "Show wires" toolbar toggle overlays an SVG that
+    // draws straight lines from each placed widget's anchor to the port-name
+    // label hanging off the canvas edge. Default off — the canvas stays
+    // clean for first-open; users opt in when they want to read the
+    // pin-to-port routing at a glance.
+    private bool _showWires;
+
+    private string SpeedLabel => _customDelayMs.HasValue
+        ? $"{_customDelayMs.Value} ms"
+        : _speedIndex.DisplayLabel();
+
+    private const string KvizExt = ".kviz";
+
+    private KvizComponent? Selected =>
+        _selectedId is null ? null : _doc.Components.FirstOrDefault(c => c.Id == _selectedId);
+
+    private string EmptyHintText =>
+        _entity == null
+            ? Traductor.T("VISUAL_EMPTY_NO_ENTITY")
+            : Traductor.T("VISUAL_EMPTY_DEFAULT");
+
+    // The toolbar is rendered in two places (header bar standalone / inline
+    // strip embedded), so extract it as a RenderFragment to avoid drift.
+    private RenderFragment RenderToolbar() => __builder =>
+    {
+        <text>
+            @if (_coord?.IsRunning == true)
+            {
+                <button class="kmila-btn kmila-btn--danger" data-testid="visual-stop" @onclick="StopRun">⏹ @Traductor.T("VISUAL_STOP")</button>
+            }
+            else
+            {
+                <button class="kmila-btn kmila-btn--primary" data-testid="visual-run"
+                        disabled="@(_entity == null)"
+                        @onclick="StartRun">▶ @Traductor.T("VISUAL_RUN")</button>
+            }
+            <button class="kmila-btn" data-testid="visual-wire"          @onclick="OpenWiring"     disabled="@(_entity == null)">@Traductor.T("VISUAL_WIRE")</button>
+            @* Widget-add buttons moved out of the toolbar into a left-side
+               WidgetPalette per the 2026-06-28 UI audit. The palette gives
+               the canvas its own "tool zone" instead of flattening 11
+               buttons in a single row. The AddLed/Button/Switch/etc. methods
+               below still own the spawn logic — see OnPaletteSelected. *@
+            <button class="kmila-btn" data-testid="visual-toggle-wires"
+                    @onclick="ToggleWires"
+                    aria-pressed="@_showWires.ToString().ToLowerInvariant()"
+                    title="@Traductor.T(_showWires ? "VISUAL_HIDE_WIRES" : "VISUAL_SHOW_WIRES")">
+                @Traductor.T(_showWires ? "VISUAL_HIDE_WIRES" : "VISUAL_SHOW_WIRES")
+            </button>
+            <button class="kmila-btn" data-testid="visual-delete"        @onclick="RemoveSelected" disabled="@(_selectedId == null || _coord?.IsRunning == true)">@Traductor.T("VISUAL_DELETE")</button>
+            <button class="kmila-btn" data-testid="visual-save"          @onclick="SaveAsync"      disabled="@(!_dirty)">@(_dirty ? Traductor.T("VISUAL_SAVE_DIRTY") : Traductor.T("VISUAL_SAVED"))</button>
+        </text>
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var raw = await DbContext.GetSettingAsync(AppSettings.KEY_VISUAL_RING_BUFFER);
+            if (int.TryParse(raw, out var rb) && rb >= 256 && rb <= 16384)
+                _settingsRingBuffer = rb;
+        }
+        catch { }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!int.TryParse(ProjectId, out var pid)) return;
+        if (pid == _projectId) return;
+        _projectId = pid;
+        await LoadProjectAsync();
+    }
+
+    private void OnSpeedSliderInput(ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var idx)) idx = 1;
+        _speedIndex = VisualSpeedExtensions.FromSliderIndex(idx);
+        if (_coord != null) _coord.Speed = _speedIndex;
+    }
+
+    private void OnCustomDelayChange(ChangeEventArgs e)
+    {
+        var s = e.Value?.ToString();
+        if (string.IsNullOrWhiteSpace(s))
+        {
+            _customDelayMs = null;
+        }
+        else if (int.TryParse(s, out var d) && d >= 0 && d <= 2000)
+        {
+            _customDelayMs = d;
+        }
+        if (_coord != null) _coord.CustomTickDelayMs = _customDelayMs;
+    }
+
+    private void TogglePause()
+    {
+        if (_coord == null) return;
+        if (_coord.IsPaused)
+        {
+            _coord.Resume();
+            _lastBreakHitTick = null;
+        }
+        else
+        {
+            _coord.Pause();
+            _scrubTick = _coord.Frames.NewestTick;
+        }
+    }
+
+    private void OnScrubInput(ChangeEventArgs e)
+    {
+        if (_coord == null || !_coord.IsPaused) return;
+        if (!ulong.TryParse(e.Value?.ToString(), out var t)) return;
+        _scrubTick = t;
+        var frame = _coord.Frames.Nearest(t);
+        if (frame is { } f)
+        {
+            ApplyScrubFrame(f);
+            _frameVersion++;
+        }
+    }
+
+    private void ApplyScrubFrame(VisualFrame f)
+    {
+        if (_coord == null || _entity == null) return;
+        foreach (var p in _entity.Ports)
+        {
+            if (f.PortValues.TryGetValue(p.Name, out var v))
+            {
+                try { p.Value = v; } catch { }
+            }
+        }
+    }
+
+    private void OnBpInputChange(ChangeEventArgs e)
+    {
+        _bpInput = e.Value?.ToString() ?? string.Empty;
+    }
+
+    private void AddBreakpoint()
+    {
+        if (_coord == null) return;
+        if (!ulong.TryParse(_bpInput, out var t)) return;
+        _coord.TickBreakpoints.Add(t);
+        _bpInput = string.Empty;
+    }
+
+    private void RemoveBreakpoint(ulong t)
+    {
+        _coord?.TickBreakpoints.Remove(t);
+    }
+
+    private async Task LoadProjectAsync()
+    {
+        _loadError = null;
+        try
+        {
+            _project = await ProjectsRepo.GetByAsync(_projectId);
+            if (_project == null)
+            {
+                _loadError = Traductor.T("VISUAL_NOT_FOUND");
+                return;
+            }
+            var allFiles = await ProjectFilesRepo.GetProjectFilesAsync(_project);
+            _files = allFiles.Where(f => !IsKviz(f)).ToList();
+            _kvizFile = allFiles.FirstOrDefault(IsKviz);
+
+            _designFile = _files.FirstOrDefault(f =>
+                f.FileName.EndsWith(".vhd", StringComparison.OrdinalIgnoreCase) ||
+                f.FileName.EndsWith(".vhdl", StringComparison.OrdinalIgnoreCase));
+
+            if (_kvizFile != null)
+            {
+                var content = (await ProjectFilesRepo.ReadFileContentAsync(_kvizFile, _project)).Content;
+                _doc = KvizSerializer.Deserialize(content ?? "") ?? FreshDoc();
+            }
+            else
+            {
+                _doc = FreshDoc();
+            }
+
+            await ParseEntityAsync();
+            _dirty = false;
+        }
+        catch (Exception ex)
+        {
+            _loadError = string.Format(Traductor.T("VISUAL_LOAD_FAILED"), ex.Message);
+        }
+    }
+
+    private KvizDoc FreshDoc() => new()
+    {
+        Version = 1,
+        DesignFile = _designFile?.FileName ?? "",
+        Canvas = new KvizCanvas { Width = 1200, Height = 800, Background = "grid" },
+        Components = new(),
+        Settings = new KvizSettings { RingBufferTicks = 2000, DefaultSpeed = "Normal" },
+    };
+
+    private static bool IsKviz(ProjectFile f) =>
+        f.FileName.EndsWith(KvizExt, StringComparison.OrdinalIgnoreCase);
+
+    private async Task ParseEntityAsync()
+    {
+        if (_project == null || _designFile == null) return;
+        try
+        {
+            string filePath = System.IO.Path.Combine(_project.BasePath,
+                _designFile.DirectoryPath ?? string.Empty,
+                _designFile.FileName);
+
+            Interpreter.Services.EntityRegistry.Instance.Clear();
+            Interpreter.Services.PackageRegistry.Instance.Clear();
+            Interpreter.Services.FunctionRegistry.Instance.Clear();
+
+            foreach (var f in _files)
+            {
+                if (!f.FileName.EndsWith(".vhd", StringComparison.OrdinalIgnoreCase) &&
+                    !f.FileName.EndsWith(".vhdl", StringComparison.OrdinalIgnoreCase)) continue;
+                try
+                {
+                    string p = System.IO.Path.Combine(_project.BasePath, f.DirectoryPath ?? "", f.FileName);
+                    Interpreter.Services.EntityRegistry.Instance.ScanFile(p);
+                }
+                catch { }
+            }
+
+            var parser = new Debugger.Repositories.Parser(filePath);
+            parser.ParseFile();
+            _entity = parser.Entities.FirstOrDefault(e => e.Architecture != null);
+            if (_entity == null) _loadError = Traductor.T("VISUAL_NO_ENTITY_FOUND");
+        }
+        catch (Exception ex)
+        {
+            _loadError = string.Format(Traductor.T("VISUAL_PARSE_FAILED"), ex.Message);
+            _entity = null;
+        }
+    }
+
+    // Phase 3: wire-overlay toggle. Persisted in .kviz? Not yet — the
+    // toggle is per-session so the user can flip it for inspection without
+    // mutating the saved canvas. Could promote to KvizSettings later.
+    private void ToggleWires() => _showWires = !_showWires;
+
+    // Phase 3 wire-route geometry. Each wired widget pin contributes one
+    // straight line from the widget's anchor to a port-name chip pinned to
+    // the right edge of the canvas. Stacked vertically when multiple wires
+    // would share the same Y so they don't overlap.
+    private readonly record struct WireRoute(double X1, double Y1, double X2, double Y2, string Port);
+
+    // Build the SVG inner content as a string so we can render it via
+    // MarkupString — Razor reserves the lowercase <text> tag for its own
+    // escape-from-C# mechanism and refuses to emit an SVG <text> element
+    // directly. Outputs are HTML-escaped + culture-invariant.
+    private string BuildWireOverlaySvg()
+    {
+        var sb = new System.Text.StringBuilder(512);
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        foreach (var w in ComputeWireRoutes())
+        {
+            sb.Append("<line x1=\"").Append(w.X1.ToString(inv))
+              .Append("\" y1=\"").Append(w.Y1.ToString(inv))
+              .Append("\" x2=\"").Append(w.X2.ToString(inv))
+              .Append("\" y2=\"").Append(w.Y2.ToString(inv))
+              .Append("\" class=\"visual-page__wire-line\" />");
+            double chipW = Math.Max(48, w.Port.Length * 8 + 12);
+            sb.Append("<rect x=\"").Append((w.X2 - 4).ToString(inv))
+              .Append("\" y=\"").Append((w.Y2 - 10).ToString(inv))
+              .Append("\" width=\"").Append(chipW.ToString(inv))
+              .Append("\" height=\"20\" rx=\"4\" class=\"visual-page__wire-chip\" />");
+            sb.Append("<text x=\"").Append((w.X2 + 4).ToString(inv))
+              .Append("\" y=\"").Append((w.Y2 + 4).ToString(inv))
+              .Append("\" class=\"visual-page__wire-label\">")
+              .Append(System.Net.WebUtility.HtmlEncode(w.Port))
+              .Append("</text>");
+        }
+        return sb.ToString();
+    }
+
+    private IEnumerable<WireRoute> ComputeWireRoutes()
+    {
+        if (_doc.Components.Count == 0) yield break;
+        // Right-edge X for port labels — leave a margin so chips don't
+        // overflow the workspace card on a 1200-px canvas.
+        double edgeX = _doc.Canvas.Width - 110;
+        // Approximate per-widget anchor offsets. The widgets vary in size
+        // but a constant pad is good enough for an at-a-glance overlay;
+        // exact pin geometry would need each widget to report its anchor.
+        const double anchorPadX = 60;
+        const double anchorPadY = 50;
+
+        // Stack-aware Y: track used Y values so two widgets near the same
+        // height get their port chips on different rows.
+        var usedY = new List<double>();
+        foreach (var c in _doc.Components.OrderBy(c => c.Position.Y))
+        {
+            if (c.Bindings.Count == 0) continue;
+            double cx = c.Position.X + anchorPadX;
+            double cy = c.Position.Y + anchorPadY;
+            foreach (var (_, port) in c.Bindings)
+            {
+                if (string.IsNullOrEmpty(port)) continue;
+                double targetY = cy;
+                // Push down until at least 26 px away from any existing chip.
+                while (usedY.Any(y => Math.Abs(y - targetY) < 26))
+                {
+                    targetY += 26;
+                }
+                usedY.Add(targetY);
+                yield return new WireRoute(cx, cy, edgeX, targetY, port);
+            }
+        }
+    }
+
+    private async Task StartRun()
+    {
+        if (_entity == null) return;
+        await ParseEntityAsync();
+        if (_entity == null) return;
+        _coord?.Dispose();
+        var userDrivenPorts = _doc.Components
+            .Where(c => c.Type == "switch" || c.Type == "button")
+            .Where(c => c.Bindings.TryGetValue("out", out var p) && !string.IsNullOrEmpty(p))
+            .Select(c => c.Bindings["out"])
+            .ToList();
+        int ringTicks = Math.Max(_doc.Settings.RingBufferTicks, _settingsRingBuffer);
+        if (ringTicks <= 0) ringTicks = 2000;
+        _coord = new VisualRunCoordinator(_entity, ringTicks, userDrivenPorts);
+        _coord.Speed = _speedIndex;
+        _coord.CustomTickDelayMs = _customDelayMs;
+        _coord.OnFrame += _ => RequestRepaint();
+        _coord.OnError += msg => { _loadError = msg; InvokeAsync(StateHasChanged); };
+        _coord.OnStopped += () => InvokeAsync(StateHasChanged);
+        _coord.OnBreakpointHit += t =>
+        {
+            _lastBreakHitTick = t;
+            _scrubTick = t;
+            InvokeAsync(StateHasChanged);
+        };
+        await _coord.StartAsync();
+        SeedSwitchInputs();
+        StartRepaintTicker();
+        StateHasChanged();
+    }
+
+    private void SeedSwitchInputs()
+    {
+        if (_coord == null) return;
+        foreach (var c in _doc.Components.Where(c => c.Type == "switch"))
+        {
+            if (!c.Bindings.TryGetValue("out", out var port) || string.IsNullOrEmpty(port)) continue;
+            var on = IsSwitchOn(c);
+            _coord.Inputs.Set(port, on ? "1" : "0");
+        }
+    }
+
+    private async Task StopRun()
+    {
+        var coord = _coord;
+        if (coord == null) return;
+        coord.Stop();
+        StopRepaintTicker();
+        try
+        {
+            await Task.WhenAny(coord.WaitForStopAsync(), Task.Delay(2000));
+        }
+        catch { }
+        StateHasChanged();
+    }
+
+    private volatile int _pendingFrame;
+
+    private void RequestRepaint()
+    {
+        System.Threading.Interlocked.Increment(ref _pendingFrame);
+    }
+
+    private void StartRepaintTicker()
+    {
+        StopRepaintTicker();
+        _repaintTimer = new System.Threading.Timer(_ =>
+        {
+            if (System.Threading.Interlocked.Exchange(ref _pendingFrame, 0) == 0) return;
+            _ = InvokeAsync(() =>
+            {
+                _frameVersion++;
+                StateHasChanged();
+            });
+        }, null, 33, 33);
+    }
+
+    private void StopRepaintTicker()
+    {
+        _repaintTimer?.Dispose();
+        _repaintTimer = null;
+    }
+
+    private void OpenWiring() { _wiringOpen = true; }
+    private Task CloseWiring() { _wiringOpen = false; return Task.CompletedTask; }
+
+    /// <summary>
+    /// Dispatcher for the new <see cref="WidgetPalette"/>. Routes the chip's
+    /// widget-type identifier to the existing AddXxx spawn methods so the
+    /// palette can replace the toolbar's 6 inline add-buttons without
+    /// duplicating any positioning / config defaults.
+    /// </summary>
+    private void OnPaletteSelected(string widgetType) => SpawnByType(widgetType);
+
+    private void SpawnByType(string widgetType)
+    {
+        switch (widgetType)
+        {
+            case "led":       AddLed();      break;
+            case "button":    AddButton();   break;
+            case "switch":    AddSwitch();   break;
+            case "led-array": AddLedArray(); break;
+            case "stepper":   AddStepper();  break;
+            case "seven-seg": AddSevenSeg(); break;
+        }
+    }
+
+    /// <summary>
+    /// Stashes the widget type when an HTML5 drag from the palette starts so
+    /// the subsequent canvas drop knows what to spawn. Blazor's DataTransfer
+    /// doesn't expose SetData/GetData (only Files/Items/Types), hence the
+    /// component-local field instead of going through the standard
+    /// <c>event.dataTransfer.setData()</c> path.
+    /// </summary>
+    private string? _paletteDraggedType;
+
+    private void OnPaletteDragStart(string widgetType)
+    {
+        if (_coord?.IsRunning == true) return;   // mirror the chip's Disabled gate
+        _paletteDraggedType = widgetType;
+    }
+
+    private void OnPaletteDragEnd()
+    {
+        // Always clear, even when the drop fired — defensive against the
+        // dragend firing AFTER drop on some browsers; the field is null on
+        // both paths so subsequent drops on stale state aren't possible.
+        _paletteDraggedType = null;
+    }
+
+    private void OnCanvasDrop(Microsoft.AspNetCore.Components.Web.DragEventArgs e)
+    {
+        if (_paletteDraggedType is null) return;
+        var type = _paletteDraggedType;
+        _paletteDraggedType = null;
+
+        // Spawn via the same path the chip-click takes, then patch the new
+        // widget's position to the drop point. The AddXxx methods always
+        // append to _doc.Components, so the last entry is the one we just
+        // added.
+        SpawnByType(type);
+        var spawned = _doc.Components.LastOrDefault();
+        if (spawned != null)
+        {
+            spawned.Position.X = Math.Max(0, (int)e.OffsetX);
+            spawned.Position.Y = Math.Max(0, (int)e.OffsetY);
+            MarkDirty();
+        }
+    }
+
+    private void AddLed()
+    {
+        _doc.Components.Add(new KvizComponent
+        {
+            Id = NewId("led"),
+            Type = "led",
+            Position = new KvizPosition { X = 320, Y = 220 },
+            Config = new() { ["color"] = System.Text.Json.JsonSerializer.SerializeToElement("red") },
+            Bindings = new(),
+        });
+        _dirty = true;
+    }
+
+    private void AddButton()
+    {
+        _doc.Components.Add(new KvizComponent
+        {
+            Id = NewId("btn"),
+            Type = "button",
+            Position = new KvizPosition { X = 120, Y = 220 },
+            Config = new() { ["label"] = System.Text.Json.JsonSerializer.SerializeToElement("BTN") },
+            Bindings = new(),
+        });
+        _dirty = true;
+    }
+
+    private void AddSwitch()
+    {
+        var id = NewId("sw");
+        _doc.Components.Add(new KvizComponent
+        {
+            Id = id,
+            Type = "switch",
+            Position = new KvizPosition { X = 220, Y = 220 },
+            Config = new()
+            {
+                ["label"] = System.Text.Json.JsonSerializer.SerializeToElement("SW"),
+                ["defaultState"] = System.Text.Json.JsonSerializer.SerializeToElement("0"),
+            },
+            Bindings = new(),
+        });
+        _dirty = true;
+    }
+
+    private void AddStepper()
+    {
+        _doc.Components.Add(new KvizComponent
+        {
+            Id = NewId("step"),
+            Type = "stepper",
+            Position = new KvizPosition { X = 520, Y = 220 },
+            Config = new()
+            {
+                ["stepsPerRev"] = System.Text.Json.JsonSerializer.SerializeToElement(200),
+                ["direction"] = System.Text.Json.JsonSerializer.SerializeToElement("auto"),
+            },
+            Bindings = new(),
+        });
+        _dirty = true;
+    }
+
+    private void AddSevenSeg()
+    {
+        _doc.Components.Add(new KvizComponent
+        {
+            Id = NewId("7seg"),
+            Type = "seven-seg",
+            Position = new KvizPosition { X = 620, Y = 220 },
+            Config = new()
+            {
+                ["mode"]  = System.Text.Json.JsonSerializer.SerializeToElement("hex"),
+                ["color"] = System.Text.Json.JsonSerializer.SerializeToElement("red"),
+            },
+            Bindings = new(),
+        });
+        _dirty = true;
+    }
+
+    private static string SevenSegMode(KvizComponent c) => c.Config.GetString("mode", "raw");
+
+    private void OnSevenSegModeChange(KvizComponent c, ChangeEventArgs e)
+    {
+        var v = e.Value?.ToString();
+        if (v != "raw" && v != "hex" && v != "dec") v = "raw";
+        // Mode change invalidates the previous pin set — drop bindings that
+        // don't apply to the new mode so the user isn't left with orphaned
+        // wires. Raw uses a..g+dp; decoded uses value+dp.
+        var keep = v == "raw"
+            ? new HashSet<string> { "a", "b", "c", "d", "e", "f", "g", "dp" }
+            : new HashSet<string> { "value", "dp" };
+        var dropped = c.Bindings.Keys.Where(k => !keep.Contains(k)).ToList();
+        foreach (var k in dropped) c.Bindings.Remove(k);
+        SetCfg(c, "mode", v);
+    }
+
+    private static int StepperStepsPerRev(KvizComponent c) => c.Config.GetInt("stepsPerRev", 200);
+    private static string StepperDirection(KvizComponent c) => c.Config.GetString("direction", "auto");
+
+    private void OnStepperStepsChange(KvizComponent c, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var n) && n >= 4 && n <= 4096)
+        {
+            c.Config["stepsPerRev"] = System.Text.Json.JsonSerializer.SerializeToElement(n);
+            _dirty = true;
+        }
+    }
+
+    private void OnStepperDirectionChange(KvizComponent c, ChangeEventArgs e)
+    {
+        var v = e.Value?.ToString();
+        if (v != "cw" && v != "ccw" && v != "auto") v = "auto";
+        SetCfg(c, "direction", v);
+    }
+
+    private void AddLedArray()
+    {
+        _doc.Components.Add(new KvizComponent
+        {
+            Id = NewId("ledarr"),
+            Type = "led-array",
+            Position = new KvizPosition { X = 420, Y = 220 },
+            Config = new()
+            {
+                ["length"] = System.Text.Json.JsonSerializer.SerializeToElement(4),
+                ["color"] = System.Text.Json.JsonSerializer.SerializeToElement("red"),
+                ["orientation"] = System.Text.Json.JsonSerializer.SerializeToElement("h"),
+            },
+            Bindings = new(),
+        });
+        _dirty = true;
+    }
+
+    private readonly Dictionary<string, bool> _switchStates = new();
+
+    private bool IsSwitchOn(KvizComponent c)
+    {
+        if (_switchStates.TryGetValue(c.Id, out var v)) return v;
+        return c.Config.GetString("defaultState", "0") == "1";
+    }
+
+    private async Task OnSwitchToggle((KvizComponent comp, bool value) ev)
+    {
+        _switchStates[ev.comp.Id] = ev.value;
+        if (_coord != null && ev.comp.Bindings.TryGetValue("out", out var port) && !string.IsNullOrEmpty(port))
+        {
+            _coord.Inputs.Set(port, ev.value ? "1" : "0");
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private static string SwitchLabel(KvizComponent c) => c.Config.GetString("label", "SW");
+    private static string SwitchDefault(KvizComponent c) => c.Config.GetString("defaultState", "0");
+
+    private void OnSwitchLabelChange(KvizComponent c, ChangeEventArgs e)
+        => SetCfg(c, "label", e.Value?.ToString() ?? "SW");
+
+    private void OnSwitchDefaultChange(KvizComponent c, ChangeEventArgs e)
+    {
+        var v = (e.Value?.ToString() ?? "0") == "1" ? "1" : "0";
+        SetCfg(c, "defaultState", v);
+        _switchStates.Remove(c.Id);
+    }
+
+    private static int LedArrayLength(KvizComponent c) => c.Config.GetInt("length", 4);
+    private static string LedArrayOrientation(KvizComponent c) => c.Config.GetString("orientation", "h");
+
+    private void OnLedArrayLengthChange(KvizComponent c, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var n) && n >= 1 && n <= 64)
+        {
+            c.Config["length"] = System.Text.Json.JsonSerializer.SerializeToElement(n);
+            _dirty = true;
+        }
+    }
+
+    private void OnLedArrayOrientationChange(KvizComponent c, ChangeEventArgs e)
+        => SetCfg(c, "orientation", (e.Value?.ToString() ?? "h") == "v" ? "v" : "h");
+
+    private void RemoveSelected()
+    {
+        if (_selectedId == null) return;
+        _doc.Components.RemoveAll(c => c.Id == _selectedId);
+        _selectedId = null;
+        _dirty = true;
+    }
+
+    private void SetCfg(KvizComponent c, string key, string value)
+    {
+        c.Config.Put(key, value);
+        _dirty = true;
+    }
+
+    private static string LedColor(KvizComponent c) => c.Config.GetString("color", "red");
+    private static string ButtonLabel(KvizComponent c) => c.Config.GetString("label", "BTN");
+
+    private void OnLedColorChange(KvizComponent c, ChangeEventArgs e)
+        => SetCfg(c, "color", e.Value?.ToString() ?? "red");
+
+    private void OnButtonLabelChange(KvizComponent c, ChangeEventArgs e)
+        => SetCfg(c, "label", e.Value?.ToString() ?? "BTN");
+
+    private static bool ButtonBounce(KvizComponent c) => c.Config.GetBool("bounce", false);
+
+    private void OnButtonBounceChange(KvizComponent c, ChangeEventArgs e)
+    {
+        bool on = e.Value is bool b ? b : false;
+        c.Config.Put("bounce", on);
+        _dirty = true;
+    }
+
+    private void MarkDirty() { _dirty = true; }
+
+    private void OnSelectedIdChanged(string? id) { _selectedId = id; }
+
+    private async Task SaveAsync()
+    {
+        if (_project == null) return;
+        if (string.IsNullOrEmpty(_doc.DesignFile))
+            _doc.DesignFile = _designFile?.FileName ?? "";
+
+        string json = KvizSerializer.Serialize(_doc);
+        string desiredName = (_designFile?.FileName?.Split('.').FirstOrDefault() ?? "design") + KvizExt;
+
+        if (_kvizFile == null)
+        {
+            var newFile = new ProjectFile
+            {
+                FileName = desiredName,
+                DirectoryPath = string.Empty,
+                Content = json,
+                ProjectId = _project.Id,
+                Project = _project,
+            };
+            await ProjectFilesRepo.CreateAsync(newFile);
+            var refreshed = await ProjectFilesRepo.GetProjectFilesAsync(_project);
+            _kvizFile = refreshed.FirstOrDefault(f => IsKviz(f) && f.FileName == desiredName);
+        }
+        else
+        {
+            _kvizFile.Content = json;
+            _kvizFile.Project = _project;
+            await ProjectFilesRepo.UpdateAsync(_kvizFile);
+        }
+        _dirty = false;
+    }
+
+    private static string NewId(string prefix) =>
+        $"{prefix}-{Guid.NewGuid().ToString("N").Substring(0, 6)}";
+
+    private void GoBack() => Nav.NavigateTo($"/editor/{_projectId}");
+
+    public void Dispose()
+    {
+        StopRepaintTicker();
+        _coord?.Dispose();
+    }
+}

@@ -51,6 +51,9 @@ else
     <div class="runs-panel">
         @if (_selected.Count >= 2)
         {
+            @* slot/banner-cta — compare bar reads as a one-line action banner.
+               Both buttons stay Family-11 (single family per row); close becomes
+               icon-only ghost-primary at --sm. *@
             <div class="runs-panel__compare-bar" role="status">
                 <Icon Name="IconName.LayersHalf" />
                 <span>@string.Format(Traductor.T("RUNS_COMPARE_READY"), _selected.Count)</span>
@@ -59,8 +62,10 @@ else
                     <Icon Name="IconName.GraphUp" />
                     <span>@Traductor.T("RUNS_COMPARE_OPEN")</span>
                 </button>
-                <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
-                        @onclick="ClearSelection">
+                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                        @onclick="ClearSelection"
+                        title="@Traductor.T("COMMON_CANCEL")"
+                        aria-label="@Traductor.T("COMMON_CANCEL")">
                     <Icon Name="IconName.XLg" />
                 </button>
             </div>
@@ -108,23 +113,26 @@ else
                         </div>
                     </button>
 
+                    @* slot/list-row-actions — 4 icon-only actions; Family-14 (.kmila-btn-icon)
+                       fits the row rhythm better than Family-11 with its label padding.
+                       Pin / Rename / Export = neutral primary; Delete = danger on hover. *@
                     <div class="runs-panel__actions">
-                        <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                        <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
                                 @onclick="() => TogglePinAsync(snap)"
                                 title="@Traductor.T(snap.Pinned ? "RUNS_UNPIN" : "RUNS_PIN")">
                             <Icon Name="@(snap.Pinned ? IconName.PinAngleFill : IconName.PinAngle)" />
                         </button>
-                        <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                        <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
                                 @onclick="() => RenameAsync(snap)"
                                 title="@Traductor.T("RUNS_RENAME")">
                             <Icon Name="IconName.Pencil" />
                         </button>
-                        <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                        <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
                                 @onclick="() => ExportAsync(snap)"
                                 title="@Traductor.T("RUNS_EXPORT")">
                             <Icon Name="IconName.Download" />
                         </button>
-                        <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                        <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--danger kmila-btn-icon--sm"
                                 @onclick="() => DeleteAsync(snap)"
                                 title="@Traductor.T("COMMON_DELETE")">
                             <Icon Name="IconName.Trash" />
@@ -139,7 +147,7 @@ else
 @* Rename modal — driven by Blazor state instead of the native window.prompt
    so it follows the rest of the app's modal styling (Bootstrap-themed, ESC to
    close, focus management, etc). *@
-<Modal @ref="_renameModal" Title="@Traductor.T("RUNS_RENAME")">
+<Modal @ref="_renameModal" Title="@Traductor.T("RUNS_RENAME")" Size="ModalSize.Small">
     <BodyTemplate>
         <div class="form-floating">
             <input type="text"
@@ -153,12 +161,17 @@ else
         </div>
     </BodyTemplate>
     <FooterTemplate>
-        <Button Color="ButtonColor.Secondary" @onclick="() => _renameModal.HideAsync()">
+        @* Family-11 (.kmila-btn) — secondary "Cancel" uses ghost+primary tint,
+           save uses solid accent. Matches the rest of the modal CTAs (Confirm
+           dialogs, CreateFileModal, ConfigurationModal). *@
+        <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary"
+                @onclick="() => _renameModal.HideAsync()">
             @Traductor.T("COMMON_CANCEL")
-        </Button>
-        <Button Color="ButtonColor.Primary" @onclick="CommitRenameAsync">
+        </button>
+        <button type="button" class="kmila-btn kmila-btn--primary"
+                @onclick="CommitRenameAsync">
             @Traductor.T("COMMON_SAVE")
-        </Button>
+        </button>
     </FooterTemplate>
 </Modal>
 

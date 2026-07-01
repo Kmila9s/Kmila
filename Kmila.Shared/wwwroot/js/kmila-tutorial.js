@@ -203,8 +203,24 @@
         try { localStorage.setItem(storageKey, '1'); } catch (e) {}
     }
 
+    /* When the user skips a tour, mark EVERY known tour key as seen so we
+       don't fire the next route's tour 200 ms later (TourCatalog hangs a
+       distinct storageKey off /, /projects, /editor, /learn, …). One Skip
+       press = "I don't want the tour anywhere", which matches user intent
+       and prevents tour fatigue (UX-N-005). The known keys are emitted by
+       TourCatalog.cs and all share the `kmila.tutorialSeen` prefix. */
+    function markAllSeen() {
+        try {
+            ['kmila.tutorialSeen', 'kmila.tutorialSeen.home',
+             'kmila.tutorialSeen.projects', 'kmila.tutorialSeen.editor',
+             'kmila.tutorialSeen.learn', 'kmila.tutorialSeen.concepts',
+             'kmila.tutorialSeen.practice', 'kmila.tutorialSeen.settings']
+              .forEach(function (k) { localStorage.setItem(k, '1'); });
+        } catch (e) {}
+    }
+
     function finish()  { markSeen(); teardown(); }
-    function dismiss() { markSeen(); teardown(); }
+    function dismiss() { markAllSeen(); teardown(); }
 
     function teardown() {
         if (!root) return;

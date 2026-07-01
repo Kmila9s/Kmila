@@ -57,10 +57,11 @@
     /* ── Declarations: port + signal ───────────────────────────────── */
 
     def('kmila_vhdl_port', {
-        style: 'signal',
+        style: 'clock',
         prev: 'kmila_vhdl_port',
         next: 'kmila_vhdl_port',
         rows: [[
+            { kind: 'label', text: 'port' },
             { kind: 'text-field', name: 'NAME', default: 'clk' },
             { kind: 'label', text: ':' },
             { kind: 'dropdown', name: 'DIR', options: [
@@ -68,9 +69,11 @@
                 ['out',   'out'],
                 ['inout', 'inout']
             ]},
-            { kind: 'dropdown', name: 'TYPE', options: [
-                ['std_logic', 'std_logic']
-            ]}
+            // TYPE is a free text field (was a single-option dropdown) so
+            // students aren't railroaded into `std_logic` when they want
+            // `std_logic_vector(N downto 0)`, `unsigned(N downto 0)`,
+            // `integer`, or any other VHDL type. F-1 fix (2026-06-28).
+            { kind: 'text-field', name: 'TYPE', default: 'std_logic' }
         ]]
     });
 
@@ -82,9 +85,7 @@
             { kind: 'label', text: 'signal' },
             { kind: 'text-field', name: 'NAME', default: 'q_int' },
             { kind: 'label', text: ':' },
-            { kind: 'dropdown', name: 'TYPE', options: [
-                ['std_logic', 'std_logic']
-            ]}
+            { kind: 'text-field', name: 'TYPE', default: 'std_logic' }
         ]]
     });
 
@@ -143,6 +144,52 @@
         ]]
     });
 
+    // F-4 (2026-06-28) — case / when block family. Implements the
+    // VHDL selector statement so multi-way branches no longer collapse
+    // to one raw_seq tile. Three defs:
+    //   • kmila_vhdl_case        — the `case <subj> is … end case;` outer
+    //   • kmila_vhdl_case_when   — one alternative `when "00" => …`
+    //   • kmila_vhdl_case_others — terminal `when others => …`
+    def('kmila_vhdl_case', {
+        style: 'clock',
+        prev: 'kmila_vhdl_seq',
+        next: 'kmila_vhdl_seq',
+        rows: [[
+            { kind: 'label', text: 'case' },
+            { kind: 'value', name: 'SUBJECT', check: 'kmila_vhdl_expr' },
+            { kind: 'label', text: 'is' }
+        ]],
+        statements: [
+            { name: 'ALTS', check: 'kmila_vhdl_case_alt', label: 'alternatives' }
+        ]
+    });
+
+    def('kmila_vhdl_case_when', {
+        style: 'accent',
+        prev: 'kmila_vhdl_case_alt',
+        next: 'kmila_vhdl_case_alt',
+        rows: [[
+            { kind: 'label', text: 'when' },
+            { kind: 'text-field', name: 'CHOICE', default: '"00"' },
+            { kind: 'label', text: '=>' }
+        ]],
+        statements: [
+            { name: 'BODY', check: 'kmila_vhdl_seq', label: 'do' }
+        ]
+    });
+
+    def('kmila_vhdl_case_others', {
+        style: 'accent',
+        prev: 'kmila_vhdl_case_alt',
+        next: 'kmila_vhdl_case_alt',
+        rows: [[
+            { kind: 'label', text: 'when others =>' }
+        ]],
+        statements: [
+            { name: 'BODY', check: 'kmila_vhdl_seq', label: 'do' }
+        ]
+    });
+
     /* ── Expression atoms ─────────────────────────────────────────── */
 
     def('kmila_vhdl_id', {
@@ -188,6 +235,20 @@
         ]]
     });
 
+    // F-7 (2026-06-28): falling_edge atom — symmetric clone of rising_edge
+    // for async-reset / negative-edge designs that students hit in textbook
+    // exercises (older flip-flop diagrams default to falling-edge).
+    def('kmila_vhdl_falling_edge', {
+        style: 'gate',
+        output: 'kmila_vhdl_expr',
+        inline: true,
+        rows: [[
+            { kind: 'label', text: 'falling_edge(' },
+            { kind: 'value', name: 'SIG', check: 'kmila_vhdl_expr' },
+            { kind: 'label', text: ')' }
+        ]]
+    });
+
     def('kmila_vhdl_not', {
         style: 'gate',
         output: 'kmila_vhdl_expr',
@@ -195,6 +256,42 @@
         rows: [[
             { kind: 'label', text: 'not' },
             { kind: 'value', name: 'OPERAND', check: 'kmila_vhdl_expr' }
+        ]]
+    });
+
+    // F-2 (2026-06-28): generic binary boolean operator. Single block,
+    // OP selector dropdown picks the keyword. Removes ~90 % of raw_expr
+    // chips from typical combinational designs (`y <= a and b`,
+    // `cond <= sel = "10" or rst`, …).
+    def('kmila_vhdl_binop', {
+        style: 'gate',
+        output: 'kmila_vhdl_expr',
+        inline: true,
+        rows: [[
+            { kind: 'value', name: 'LHS', check: 'kmila_vhdl_expr' },
+            { kind: 'dropdown', name: 'OP', options: [
+                ['and',  'and'],
+                ['or',   'or'],
+                ['xor',  'xor'],
+                ['nand', 'nand'],
+                ['nor',  'nor'],
+                ['xnor', 'xnor']
+            ]},
+            { kind: 'value', name: 'RHS', check: 'kmila_vhdl_expr' }
+        ]]
+    });
+
+    // F-5 (2026-06-28): vector / bit-string literal atom. Same surface as
+    // literal_bit but accepts the multi-bit string form (`"00"`,
+    // `B"1010"`, `X"FF"`). Round-trips verbatim — emitter just spits back
+    // the TEXT field. Unlike raw_expr, the block has a recognisable label
+    // and pill chrome so students see "this is a literal, not random text".
+    def('kmila_vhdl_literal_vec', {
+        style: 'signal',
+        output: 'kmila_vhdl_expr',
+        inline: true,
+        rows: [[
+            { kind: 'text-field', name: 'TEXT', default: '"00"' }
         ]]
     });
 

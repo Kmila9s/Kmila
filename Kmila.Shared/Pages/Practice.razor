@@ -41,39 +41,46 @@
 
     @* Quick filters — chip rows scroll horizontally on small screens so the
        full set is reachable on mobile without an overflow menu. *@
+    @* slot/segmented-control — wraps each chip row in a pill background so the two
+       filters (Difficulty, Modality) each read as one segmented control. Mirrors the
+       Learn level filter for cross-page consistency (proposal 2026-06-28). *@
     <div class="catalog-filters" role="group" aria-label="@Traductor.T("CATALOG_FILTERS_LABEL")">
         <div class="catalog-filters__row">
             <span class="catalog-filters__label">@Traductor.T("PRACTICE_FILTER_DIFFICULTY")</span>
-            <button type="button"
-                    class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm filter-chip @(_difficulty == null ? "filter-chip--active is-active" : "")"
-                    @onclick="() => SetDifficulty(null)">
-                @Traductor.T("CATALOG_FILTER_ALL")
-            </button>
-            @foreach (var d in _allDifficulties)
-            {
+            <div class="kmila-slot-segmented">
                 <button type="button"
-                        class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm filter-chip filter-chip--@DifficultyClass(d) @(_difficulty == d ? "filter-chip--active is-active" : "")"
-                        @onclick="() => SetDifficulty(d)">
-                    @DifficultyLabel(d)
+                        class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm filter-chip @(_difficulty == null ? "filter-chip--active is-active" : "")"
+                        @onclick="() => SetDifficulty(null)">
+                    @Traductor.T("CATALOG_FILTER_ALL")
                 </button>
-            }
+                @foreach (var d in _allDifficulties)
+                {
+                    <button type="button"
+                            class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm filter-chip filter-chip--@DifficultyClass(d) @(_difficulty == d ? "filter-chip--active is-active" : "")"
+                            @onclick="() => SetDifficulty(d)">
+                        @DifficultyLabel(d)
+                    </button>
+                }
+            </div>
         </div>
         <div class="catalog-filters__row">
             <span class="catalog-filters__label">@Traductor.T("PRACTICE_FILTER_MODALITY")</span>
-            <button type="button"
-                    class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm filter-chip @(_modality == null ? "filter-chip--active is-active" : "")"
-                    @onclick="() => SetModality(null)">
-                @Traductor.T("CATALOG_FILTER_ALL")
-            </button>
-            @foreach (var m in _modalities)
-            {
+            <div class="kmila-slot-segmented">
                 <button type="button"
-                        class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm filter-chip @(_modality == m ? "filter-chip--active is-active" : "")"
-                        @onclick="() => SetModality(m)">
-                    <Icon Name="@ModalityIcon(m)" />
-                    <span>@ModalityLabel(m)</span>
+                        class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm filter-chip @(_modality == null ? "filter-chip--active is-active" : "")"
+                        @onclick="() => SetModality(null)">
+                    @Traductor.T("CATALOG_FILTER_ALL")
                 </button>
-            }
+                @foreach (var m in _modalities)
+                {
+                    <button type="button"
+                            class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm filter-chip @(_modality == m ? "filter-chip--active is-active" : "")"
+                            @onclick="() => SetModality(m)">
+                        <Icon Name="@ModalityIcon(m)" />
+                        <span>@ModalityLabel(m)</span>
+                    </button>
+                }
+            </div>
         </div>
     </div>
 

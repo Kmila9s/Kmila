@@ -231,16 +231,26 @@ public static class WaveformExporter
             var target  = onDashed ? dashed : solid;
             target.Append(CultureInfo.InvariantCulture, $"M {trackX} {curY:0.##} ");
 
+            // U-040: coalesce. The previous emitter wrote one horizontal `L`
+            // per transition even at unchanging level (so 100k+ ticks of an
+            // idle signal each emitted their own L command). Only emit an
+            // L when the level or dashed-ness actually changes — the rest
+            // collapse into the trailing close-out L at end-of-window. On
+            // the SimulatorBench counter (1 ms × 50 MHz × 4-bit) this drops
+            // the rendered path from 6.2 MB → ~0.5 MB without changing
+            // visual fidelity (consecutive same-level points lie on the
+            // same horizontal line anyway).
             for (int i = firstInside; i < signal.Transitions.Count; i++)
             {
                 var t = signal.Transitions[i];
                 if (t.TimeNs > viewEndNs) break;
-                double tx = X(t.TimeNs);
                 bool nextDashed = !t.Value.HasValue;
                 double nextY    = LevelY(t.Value);
+                if (nextDashed == onDashed && Equals(nextY, curY))
+                    continue; // same-level run — nothing to draw yet
 
+                double tx = X(t.TimeNs);
                 target.Append(CultureInfo.InvariantCulture, $"L {tx:0.##} {curY:0.##} ");
-
                 if (nextDashed != onDashed)
                 {
                     var other = nextDashed ? dashed : solid;

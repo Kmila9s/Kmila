@@ -9,6 +9,7 @@
 @inject Kmila.Shared.Services.SimulationSnapshotStore Snapshots
 @inject Kmila.Shared.Services.EditorSessionStore Sessions
 @inject Kmila.Shared.Services.ReplayState Replay
+@inject Microsoft.AspNetCore.Components.NavigationManager NavigationManager
 <PageTitle>@string.Format(Traductor.T("EDITOR_PAGE_TITLE"), _project?.Name ?? string.Empty)</PageTitle>
 @*
     The outer `<section class="editor-page">` wraps the route unconditionally
@@ -61,6 +62,20 @@
                         </span>
                     }
                 </button>
+                @* Phase 2 (2026-06-26): the Visual canvas joins Code / Blocks /
+                   Replay as a sibling tab. In MAUI native there's no address
+                   bar, so /visual/{id} was unreachable; this is now the
+                   primary entry point on both targets. The underlying
+                   <VisualPanel> is the same component the /visual route
+                   renders, just with EmbeddedMode=true so its header bar is
+                   suppressed (the editor's breadcrumb + tab row stand in). *@
+                <button type="button"
+                        class="kmila-btn-tab @(_editorCardTab == EditorCardTab.Visual ? "is-active" : "")"
+                        role="tab" aria-selected="@(_editorCardTab == EditorCardTab.Visual ? "true" : "false")"
+                        @onclick="() => SwitchEditorCardTabAsync(EditorCardTab.Visual)">
+                    <Icon Name="IconName.Cpu" />
+                    <span>@Traductor.T("EDITOR_VIEW_VISUAL")</span>
+                </button>
             </div>
 
             @* Code view — existing workbench header + pane(s). Hidden via
@@ -81,14 +96,22 @@
                         <span class="editor-unsaved" title="@Traductor.T("EDITOR_UNSAVED")" aria-label="@Traductor.T("EDITOR_UNSAVED")"></span>
                     }
                     <Icon Name="@GetFileIcon()" Class="editor-file-icon" />
-                    <span class="editor-file-name" title="@(_openedFile?.FileName ?? Traductor.T("EDITOR_NO_FILE"))">
+                    <span class="editor-file-name @(_openedFile is null ? "editor-file-name--empty" : "")"
+                          title="@(_openedFile?.FileName ?? Traductor.T("EDITOR_NO_FILE"))">
                         @(_openedFile?.FileName ?? Traductor.T("EDITOR_NO_FILE"))
                     </span>
-                    <span class="editor-lang-chip">@_currentLanguage</span>
+                    @if (_openedFile is not null)
+                    {
+                        <span class="editor-lang-chip">@_currentLanguage</span>
+                    }
                 </div>
 
                 <div class="editor-status">
-                    <span class="editor-position">
+                    @* `dir="ltr"` keeps the "Ln 1 · Col 1" pair reading L→R
+                       inside RTL languages — without it AR locale flips it to
+                       "1 سطر · 1 عمود" with the digits visually preceding the
+                       labels, which is confusing at a glance. *@
+                    <span class="editor-position" dir="ltr">
                         @Traductor.T("EDITOR_LINE_ABBR") @_cursorLine · @Traductor.T("EDITOR_COL_ABBR") @_cursorColumn
                     </span>
                     <button type="button"
@@ -195,6 +218,21 @@
                 <StepReplayPanel />
             </div>
 
+            @* Visual canvas view — Phase 2 4th sibling tab. Lazy-mounted on
+               first visit (`_visualVisited` latches true) so the entity
+               re-parse + .kviz load only fires when the user opens the
+               canvas. After first visit, stays mounted (`display:none`)
+               so the coordinator + canvas state survive tab switches. *@
+            @if (_visualVisited)
+            {
+                <div class="editor-workbench__view editor-workbench__view--visual"
+                     style="@(_editorCardTab == EditorCardTab.Visual ? "" : "display:none")">
+                    <Kmila.Shared.Components.VisualRun.VisualPanel
+                        ProjectId="@ProjectId"
+                        EmbeddedMode="true" />
+                </div>
+            }
+
         </div>
 
         @* ---------- Run bar ---------- *@
@@ -285,7 +323,7 @@
                         </div>
                     }
                     <WaveformViewer Data="_waveformData"
-                                    IsLive="@(!_liveMergeSuspended && Sim.State == SimState.Running)"
+                                    IsLive="@(!_liveMergeSuspended && Replay.IsLiveActive)"
                                     OnExportVcd="HandleVcdExport" />
                 }
                 else if (Sim.State == SimState.Complete)
@@ -334,7 +372,11 @@
                    Language="@_currentLanguage" />
 }
 </section>
+@* Two refs — one for short forms (create-file) at Regular, one for long
+   markdown previews at Large. Picking the right ref keeps each modal sized
+   to its actual content density (audit follow-up 2026-06-15). *@
 <Modal @ref="_multiUseModal" />
+<Modal @ref="_multiUseLargeModal" Size="ModalSize.Large" />
 <ConfirmDialog @ref="_closeTabDialog" />
 @code {
     /// <summary>
@@ -347,6 +389,7 @@
     private FilesCard _filesCard = new();
     private FlowDiagramViewer? _flowDiagram;
     private Modal _multiUseModal = new();
+    private Modal _multiUseLargeModal = new();
     /// <summary>
     /// BlazorBootstrap ConfirmDialog used by <see cref="CloseTabAsync"/> when
     /// the tab has unsaved changes. Replaces a native <c>window.confirm</c>
@@ -507,6 +550,12 @@
 
     protected override void OnInitialized()
     {
+        // Read AppSettings.KEY_DEFAULT_DOCK_TAB synchronously so the dock
+        // mounts on the user's preferred tab from the very first render —
+        // avoids a tab-flip flash after OnParametersSetAsync's async DB read.
+        // Best-effort: fire-and-forget the DB call (Hydrate runs on completion).
+        _ = HydrateDefaultDockTabAsync();
+
         Builder.OnSimulationCompleted     += OnSimulationDataReady;
         Builder.OnSimulationProgressUpdate += OnSimulationProgressUpdate;
         Builder.OnSimulationEnded         += OnSimulationEnded;
@@ -853,6 +902,21 @@
     /// Short-circuits when the ID is unchanged (which happens on every language
     /// switch etc., since Blazor re-invokes SetParameters on any cascade).
     /// </summary>
+    private async Task HydrateDefaultDockTabAsync()
+    {
+        try
+        {
+            var saved = await DbContext.GetSettingAsync(AppSettings.KEY_DEFAULT_DOCK_TAB);
+            if (!string.IsNullOrWhiteSpace(saved) &&
+                Enum.TryParse<EditorTab>(saved, ignoreCase: true, out var tab))
+            {
+                DockState.SetActive(tab);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch { /* DB unavailable — fall back to default */ }
+    }
+
     protected override async Task OnParametersSetAsync()
     {
         if (string.IsNullOrEmpty(ProjectId))
@@ -861,8 +925,53 @@
             return;
         }
         if (!int.TryParse(ProjectId, out var newId)) return;
-        if (newId == _projectId) return; // already on this project — no reload
-        await LoadProjectAsync(newId);
+        if (newId != _projectId)
+        {
+            await LoadProjectAsync(newId);
+        }
+
+        // Deep-link support: ?tab=flow|schematic|waveforms|... pre-selects
+        // the dock-tab. Runs AFTER LoadProjectAsync so the singleton state
+        // we set isn't overridden by build/run handlers triggered during
+        // project hydration. Useful for sharing focused views + driving
+        // automated harnesses without simulating taps against the
+        // `<button>` elements that this WebView's user-activation gating
+        // rejects.
+        try
+        {
+            EditorTab? requested = null;
+            var query = new Uri(NavigationManager.Uri).Query;
+            if (!string.IsNullOrEmpty(query))
+            {
+                foreach (var pair in query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var eq = pair.IndexOf('=');
+                    var key  = eq >= 0 ? pair[..eq]   : pair;
+                    var val  = eq >= 0 ? pair[(eq+1)..] : string.Empty;
+                    if (string.Equals(Uri.UnescapeDataString(key), "tab", StringComparison.OrdinalIgnoreCase) &&
+                        Enum.TryParse<EditorTab>(Uri.UnescapeDataString(val), ignoreCase: true, out var parsed))
+                    {
+                        requested = parsed;
+                        break;
+                    }
+                }
+            }
+
+            if (requested is { } tab)
+            {
+                DockState.SetActive(tab);
+            }
+            else
+            {
+                var savedDefault = await DbContext.GetSettingAsync(AppSettings.KEY_DEFAULT_DOCK_TAB);
+                if (!string.IsNullOrWhiteSpace(savedDefault) &&
+                    Enum.TryParse<EditorTab>(savedDefault, ignoreCase: true, out var saved))
+                {
+                    DockState.SetActive(saved);
+                }
+            }
+        }
+        catch { /* malformed query or DB read — ignore */ }
     }
 
     /// <summary>
@@ -970,6 +1079,19 @@
             else
             {
                 _filesCard?.SetDefaultFile(_pane.ActiveTab?.File ?? FindMainFile(_projectFiles));
+            }
+            // Safety net: TryRestoreSessionAsync can return true with zero
+            // restored tabs (every saved tab pointed at a since-deleted file),
+            // and OpenFileInTabAsync can silently no-op if Monaco isn't yet
+            // mounted. In both cases the editor lands on a confusing "No file
+            // open" state despite the project having files. Force-open the
+            // main file when nothing else opened — addresses the
+            // "blank-editor-when-files-exist" defect surfaced during pipeline
+            // testing.
+            if (_pane.ActiveTab == null)
+            {
+                var mainFile = FindMainFile(_projectFiles);
+                await OpenFileInTabAsync(mainFile);
             }
         }
         // Empty-project branch: pane already clear from CloseAllTabsAsync.
@@ -1290,7 +1412,7 @@
         if (Path.GetExtension(buildTarget.FileName) == ".md")
         {
             var parameters = new Dictionary<string, object> { { "File", buildTarget } };
-            await _multiUseModal.ShowAsync<MarkdownModal>(Traductor.T("EDITOR_MD_PREVIEW"), null, parameters);
+            await _multiUseLargeModal.ShowAsync<MarkdownModal>(Traductor.T("EDITOR_MD_PREVIEW"), null, parameters);
             return true;
         }
 
@@ -1799,7 +1921,22 @@
             FontSize = 16, // Mobile-friendly: 16px prevents iOS zoom on focus
             TabSize = 4,
             InsertSpaces = true,
+            // Monaco's default context menu surfaces desktop-only shortcuts
+            // (Ctrl+F12, F1, Peek, Command Palette) that don't apply on
+            // touch devices and confuse students. Turn it off — long-press
+            // on mobile now does nothing instead of opening a useless menu.
+            Contextmenu = false,
+            // `wordWrap = "on"` wraps at the viewport edge. C-4 (editor-mobile
+            // audit 2026-06-29) — the previous `wordWrapColumn = 100` produced
+            // a ~600 px hard wrap that still overflowed a 540 px phone
+            // viewport, so long lines like `use IEEE.STD_LOGIC_1164.ALL;`
+            // clipped at the right with no horizontal scroll affordance. With
+            // `wordWrap = "on"`, Monaco still respects `wordWrapBreakAfter`
+            // (whitespace + statement punctuation) to choose a clean break,
+            // so identifiers stay together unless an identifier alone exceeds
+            // the viewport — better than silently clipping.
             WordWrap = "on",
+            WordWrapBreakAfterCharacters = " \t})];>",
             ScrollBeyondLastLine = false,
             RenderWhitespace = "selection",
             // Phase B+ Deep AST (follow-up): glyph margin enabled so the
@@ -1962,7 +2099,15 @@ end architecture behavioral;",
     /// </summary>
     private EditorCardTab _editorCardTab = EditorCardTab.Code;
 
-    public enum EditorCardTab { Code, Blocks, Replay }
+    // Phase 2 (2026-06-26): latches true on the first switch to the Visual
+    // tab. The VisualPanel is heavy (parses entity from disk, allocates a
+    // 2000-frame ring buffer) so we mount it lazily — the user can sit on
+    // Code/Blocks/Replay for the whole session without paying the visual
+    // surface's startup cost. Once visited, it stays mounted so the
+    // coordinator + canvas state survive subsequent tab flips.
+    private bool _visualVisited;
+
+    public enum EditorCardTab { Code, Blocks, Replay, Visual }
 
     private BlockEditor? _vhdlBlockEditor;
     private readonly VhdlBlockEmitter _vhdlEmitter = new();
@@ -2011,6 +2156,9 @@ end architecture behavioral;",
         if (_editorCardTab == tab) return;
         var previous = _editorCardTab;
         _editorCardTab = tab;
+        // First switch to Visual mounts the VisualPanel lazily; afterwards
+        // the conditional render keeps it alive across tab flips.
+        if (tab == EditorCardTab.Visual) _visualVisited = true;
         StateHasChanged();
 
         // Leaving Blocks for Code emits the current workspace into the
@@ -2123,9 +2271,13 @@ end architecture behavioral;",
         // know nothing was lost but some pieces aren't in proper blocks yet.
         if (_vhdlBuilder.LastRawCount > 0)
         {
+            var rawCount = _vhdlBuilder.LastRawCount;
+            var bodyKey = rawCount == 1
+                ? "EDITOR_BLOCKS_RAW_BODY_ONE"
+                : "EDITOR_BLOCKS_RAW_BODY_OTHER";
             ToastService.Notify(Message(
                 Traductor.T("EDITOR_BLOCKS_RAW_TITLE"),
-                string.Format(Traductor.T("EDITOR_BLOCKS_RAW_BODY"), _vhdlBuilder.LastRawCount),
+                string.Format(Traductor.T(bodyKey), rawCount),
                 ToastType.Warning));
         }
     }
@@ -2232,8 +2384,65 @@ end architecture behavioral;",
                 Sim.SetState(SimState.Running);
                 Log.Info(Traductor.T("SIM_LOG_RESUMED"));
             }
+
+            // Pull the engine's latest transitions into _waveformData
+            // immediately on every pause/resume/step boundary. The
+            // periodic 200 ms timer in ProgramBuilder still drives the
+            // bulk of the live merge during free run, but it skips fires
+            // while the runner is paused — and even between fires there's
+            // a noticeable lag where the WaveformViewer's trailing window
+            // hasn't shifted to the just-produced step. MergeFrom is
+            // watermarked per-signal so this call is cheap when nothing
+            // new has arrived.
+            if (!_liveMergeSuspended)
+            {
+                var engine = Replay.LiveEngine;
+                if (engine != null)
+                {
+                    if (_waveformData == null)
+                    {
+                        _waveformData = WaveformData.CreateEmpty(Builder.LastTickResNs);
+                        _lastBuiltTime  = Sim.Time;
+                        _lastBuiltScale = Sim.Scale;
+                    }
+                    _waveformData.MergeFrom(engine.History);
+                }
+            }
         }
+
+        // Live-step highlight on the main Monaco. Paint the lines that
+        // just executed when the engine is paused (breakpoint hit or step)
+        // so a user flipping between Code / Schematic / Replay / Waveforms
+        // tabs always sees exactly which source line the engine is parked
+        // on. Clear when execution resumes or the engine detaches so the
+        // highlight doesn't linger over a stale line.
+        _ = UpdateLiveStepHighlightAsync();
+
         InvokeAsync(StateHasChanged);
+    }
+
+    private async Task UpdateLiveStepHighlightAsync()
+    {
+        try
+        {
+            if (Replay.IsLiveActive && Replay.IsLivePaused
+                && Replay.LiveActiveLines.Count > 0)
+            {
+                await JS.InvokeVoidAsync(
+                    "kmilaEditorHighlightExecLines",
+                    Replay.LiveActiveLines.ToArray());
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("kmilaEditorClearExecHighlights");
+            }
+        }
+        catch
+        {
+            // Monaco may not be mounted yet (Replay tab open without editor
+            // surface) or the JS bridge may be torn down on circuit close —
+            // either way the highlight just doesn't render this turn.
+        }
     }
 
     /// <summary>
@@ -2486,13 +2695,42 @@ end architecture behavioral;",
     }
 
     /// <summary>
-    /// Handles VCD export from the WaveformViewer.
+    /// Handles VCD export from the WaveformViewer. Routes through
+    /// <see cref="IFileExportService"/> so it lands on disk on MAUI
+    /// (Documents/Kmila/VCD/) and falls back to a browser download on Web.
     /// </summary>
     private async Task HandleVcdExport(string vcdContent)
     {
-        // For now, log to console - in the future, trigger file download via JS interop
-        Logger.LogInformation($"[Editor] VCD export: {vcdContent.Length} characters");
-        ToastService.Notify(Message(Traductor.T("EDITOR_VCD_EXPORT_TITLE"), string.Format(Traductor.T("EDITOR_VCD_EXPORT_BODY"), vcdContent.Length), ToastType.Info));
+        try
+        {
+            var stem = string.IsNullOrWhiteSpace(_project?.Name) ? "waveform" : _project!.Name;
+            var safeStem = new string(stem.Select(c => char.IsLetterOrDigit(c) || c == '_' || c == '-' ? c : '_').ToArray());
+            var fileName = $"{safeStem}.vcd";
+
+            // application/octet-stream prevents Android MediaStore from
+            // appending ".txt" to the saved filename — with text/plain the
+            // file lands as "demo.vcd.txt" instead of the "demo.vcd" the
+            // toast and the third-party VCD viewer both expect.
+            var result = await Export.SaveTextAsync(Kmila.Shared.Services.Export.ExportCategory.Vcd,
+                                                    fileName, "application/octet-stream", vcdContent);
+            if (result.Saved)
+            {
+                var body = result.Path != null
+                    ? $"Saved: {result.Path}"
+                    : string.Format(Traductor.T("EDITOR_VCD_EXPORT_BODY"), vcdContent.Length);
+                ToastService.Notify(Message(Traductor.T("EDITOR_VCD_EXPORT_TITLE"), body, ToastType.Success));
+            }
+            else
+            {
+                ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                    result.Error ?? "VCD export failed.", ToastType.Danger));
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[Editor] VCD export failed");
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
     }
 
     #endregion

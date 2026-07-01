@@ -267,6 +267,32 @@ public static class MauiProgram
                 provider.GetRequiredService<ILoggerFactory>().CreateLogger<Kmila.Shared.Services.Practice.PracticeCatalog>()));
         builder.Services.AddSingleton<Kmila.Shared.Services.Practice.PracticeEvaluator>();
 
+        // Project templates catalog — gallery shown in ProjectsView's
+        // "+ New project" modal. Reads manifest + per-template files from
+        // the bundled app package via FileSystem.OpenAppPackageFileAsync.
+        // Scoped so CreateProjectAsync can compose with the scoped Projects /
+        // ProjectFiles repositories.
+        builder.Services.AddScoped<ProjectTemplateService>(provider =>
+            new ProjectTemplateService(
+                async path =>
+                {
+                    try
+                    {
+                        return await FileSystem.OpenAppPackageFileAsync(path);
+                    }
+                    catch (FileNotFoundException)
+                    {
+                        throw new FileNotFoundException($"Template asset not found: {path}");
+                    }
+                },
+                provider.GetRequiredService<Projects>(),
+                provider.GetRequiredService<ProjectFiles>(),
+                provider.GetRequiredService<JSONFileReader>(),
+                provider.GetRequiredService<SelectedFPGA>(),
+                provider.GetRequiredService<SimulationParameters>(),
+                provider.GetRequiredService<UserAssetStore>(),
+                provider.GetRequiredService<ILoggerFactory>().CreateLogger<ProjectTemplateService>()));
+
         // Practice persistence — scoped so it shares the circuit's DbContext.
         // Stores every Submit click + the aggregate progress row.
         builder.Services.AddScoped<Kmila.Shared.Services.Practice.PracticeAttemptStore>();

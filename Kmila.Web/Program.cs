@@ -365,6 +365,52 @@ public class Program
         });
         builder.Services.AddSingleton<Kmila.Shared.Services.Practice.PracticeEvaluator>();
 
+        // Project templates catalog — gallery shown in ProjectsView's
+        // "+ New project" modal. Reuses the same try-a-handful-of-paths
+        // strategy as LessonCatalog so manifest + per-template files load
+        // in both dev and production web deployments. Scoped (not singleton)
+        // because CreateProjectAsync uses scoped repositories under the hood;
+        // the asset-stream delegate is captured at construction and used
+        // throughout the request lifetime.
+        builder.Services.AddScoped<ProjectTemplateService>(provider =>
+        {
+            var env = provider.GetRequiredService<IWebHostEnvironment>();
+            var logger = provider.GetRequiredService<ILoggerFactory>()
+                                 .CreateLogger<ProjectTemplateService>();
+            Func<string, Task<Stream>> open = async path =>
+            {
+                var pathsToTry = new List<string>
+                {
+                    Path.Combine(env.ContentRootPath, "..", "Kmila.Shared", "wwwroot", path),
+                    Path.Combine(Directory.GetCurrentDirectory(), "..", "Kmila.Shared", "wwwroot", path)
+                };
+                if (!string.IsNullOrEmpty(env.WebRootPath) && Directory.Exists(env.WebRootPath))
+                {
+                    pathsToTry.Add(Path.Combine(env.WebRootPath, "_content", "Kmila.Shared", path));
+                    pathsToTry.Add(Path.Combine(env.WebRootPath, path));
+                }
+                foreach (var candidate in pathsToTry)
+                {
+                    try
+                    {
+                        var normalized = Path.GetFullPath(candidate);
+                        if (File.Exists(normalized)) return File.OpenRead(normalized);
+                    }
+                    catch { /* try next */ }
+                }
+                throw new FileNotFoundException($"Template asset not found: {path}");
+            };
+            return new ProjectTemplateService(
+                open,
+                provider.GetRequiredService<Projects>(),
+                provider.GetRequiredService<ProjectFiles>(),
+                provider.GetRequiredService<JSONFileReader>(),
+                provider.GetRequiredService<SelectedFPGA>(),
+                provider.GetRequiredService<SimulationParameters>(),
+                provider.GetRequiredService<UserAssetStore>(),
+                logger);
+        });
+
         // Practice persistence — scoped so each circuit shares its
         // ApplicationDbContext. One row per Submit click, plus the
         // aggregate progress chip data.

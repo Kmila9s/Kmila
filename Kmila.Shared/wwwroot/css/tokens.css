@@ -133,6 +133,7 @@
     --shadow-2: 0 2px 4px -1px rgba(0, 0, 0, 0.35), 0 4px 12px -2px rgba(0, 0, 0, 0.35);
     --shadow-3: 0 4px 8px -2px rgba(0, 0, 0, 0.4), 0 12px 24px -4px rgba(0, 0, 0, 0.45);
     --shadow-focus: 0 0 0 3px rgba(96, 165, 250, 0.35);
+    --shadow-sticky: 2px 0 4px -2px rgba(0, 0, 0, 0.30);
 
     --signal-clock: #34d399;
     --signal-input: #60a5fa;
@@ -179,8 +180,9 @@
     --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
     /* Fluid type scale — scales smoothly between 360px and 1440px viewports */
-    --fs-xs:   clamp(0.72rem, 0.70rem + 0.1vw, 0.78rem);
-    --fs-sm:   clamp(0.82rem, 0.80rem + 0.1vw, 0.88rem);
+    --fs-2xs:  clamp(0.66rem, 0.64rem + 0.1vw, 0.72rem);
+    --fs-xs:   clamp(0.78rem, 0.76rem + 0.1vw, 0.84rem);
+    --fs-sm:   clamp(0.86rem, 0.84rem + 0.1vw, 0.92rem);
     --fs-base: clamp(0.94rem, 0.90rem + 0.15vw, 1.00rem);
     --fs-md:   clamp(1.05rem, 1.00rem + 0.2vw, 1.15rem);
     --fs-lg:   clamp(1.20rem, 1.10rem + 0.4vw, 1.40rem);
@@ -210,6 +212,14 @@
     --duration-base: 180ms;
     --duration-slow: 260ms;
 
+    /* ----- Aliases / compatibility ----- */
+    --accent: var(--kmila-accent);
+    --accent-hover: var(--kmila-accent-hover);
+    --accent-soft: var(--kmila-accent-soft);
+
+    /* Sticky shadow for waveform/table labels (soft cue, not a band) */
+    --shadow-sticky: 2px 0 4px -2px rgba(15, 23, 42, 0.10);
+
     /* ----- Z-index scale ----- */
     --z-base: 1;
     --z-sticky: 100;
@@ -227,6 +237,38 @@
 
     /* ----- Accessibility ----- */
     --tap-target: 44px;
+
+    /* ----- Visual Runtime widgets (--kviz-*) -----
+       Physical-hardware analogs (LED, button, switch, 7-segment, etc.) keep
+       a consistent "appliance" look across both light + dark app themes — a
+       real LED doesn't change color based on room lighting. Defined here at
+       :root (theme-independent) so widgets are stable in both modes.
+
+       Note: --kviz-7seg-color stays per-widget (each instance picks its own
+       segment color); these tokens are the housing / chassis defaults. */
+    --kviz-housing-dark:        #0b0f14;   /* deep navy chassis interior */
+    --kviz-housing-shadow:      #1f2937;   /* surface lit by ambient */
+    --kviz-housing-ring:        #111111;   /* hardline ring around housing */
+    --kviz-housing-border:      #1f2937;   /* outer border on dark housings */
+
+    --kviz-button-cap-top:      #f8fafc;   /* polymer cap, highlit */
+    --kviz-button-cap-bottom:   #cbd5e1;   /* polymer cap, shadow */
+    --kviz-button-cap-border:   #475569;   /* metal bezel */
+    --kviz-button-label:        #0f172a;   /* engraved label */
+    --kviz-button-bezel:        #475569;   /* extruded bezel (3-d shadow) */
+
+    --kviz-switch-track-off:    #cbd5e1;   /* track at rest */
+    --kviz-switch-track-off-border: #94a3b8;
+    --kviz-switch-track-on:     #22c55e;   /* track engaged (green LED-like) */
+    --kviz-switch-track-on-border: #166534;
+    --kviz-switch-knob-light:   #f8fafc;
+    --kviz-switch-knob-dark:    #e2e8f0;
+    --kviz-switch-knob-border:  #475569;
+
+    --kviz-stepper-rotor-light: #9ca3af;
+    --kviz-stepper-rotor-dark:  #4b5563;
+    --kviz-stepper-coil-light:  #fde68a;   /* warm copper highlight */
+    --kviz-stepper-coil-dark:   #f59e0b;   /* warm copper shadow */
 }
 
 

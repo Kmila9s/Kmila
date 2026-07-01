@@ -254,7 +254,7 @@
 @* GitHub login modal — kept OUTSIDE the <details> so the user-agent rule
    that hides non-<summary> children of a closed <details> doesn't reach
    the modal's host node and break it once the dropdown collapses. *@
-<Modal @ref="_loginModal" Title="@Traductor.T("TOPBAR_SIGN_IN_GITHUB")" />
+<Modal @ref="_loginModal" Title="@Traductor.T("TOPBAR_SIGN_IN_GITHUB")" Size="ModalSize.Small" />
 
 @code {
     // ---- FPGA state (lifted verbatim from the old TopBar FPGA picker) ----
@@ -315,8 +315,25 @@
             .OrderBy(m => m)
             .ToList();
 
-        // Theme preload — read whatever was persisted, fall back to auto
-        var stored = await DbContext.GetSettingAsync(AppSettings.KEY_THEME);
+        // Theme preload — the boot script in index.html / App.razor reads
+        // localStorage.kmila-theme on first paint to avoid a flash. If we only
+        // hydrate from SQLite here, the picker can disagree with the actual
+        // applied theme (e.g. after `pm clear` wipes app storage but Settings
+        // still holds the prior value). Prefer localStorage as the source of
+        // truth so the highlighted pill always matches what the user sees.
+        string? stored = null;
+        try
+        {
+            stored = await JS.InvokeAsync<string?>("localStorage.getItem", "kmila-theme");
+        }
+        catch
+        {
+            // JS interop can fail during prerender — fall through to SQLite.
+        }
+        if (string.IsNullOrEmpty(stored))
+        {
+            stored = await DbContext.GetSettingAsync(AppSettings.KEY_THEME);
+        }
         if (!string.IsNullOrEmpty(stored)) _theme = stored;
 
         // Restore the currently selected FPGA so the inline summary shows the
@@ -335,6 +352,32 @@
                     _selectedFPGA = path;
                     break;
                 }
+            }
+        }
+        else
+        {
+            // SelectedFPGA is an in-memory singleton with no persistence of
+            // its own — on a cold app start it begins empty. Restore from
+            // SQLite (AppSettings.KEY_FPGA_PATH) so the user doesn't have to
+            // re-pick a board every launch (a real Run-pipeline blocker).
+            try
+            {
+                var savedPath = await DbContext.GetSettingAsync(AppSettings.KEY_FPGA_PATH);
+                if (!string.IsNullOrWhiteSpace(savedPath) && _fpgas.Contains(savedPath))
+                {
+                    var restored = await JSONFileReader.ReadFPGAJsonFileAsync(savedPath);
+                    if (restored is not null)
+                    {
+                        _fpga = restored;
+                        _selectedFPGA = savedPath;
+                        SelectedFPGA.SetFPGA(restored, savedPath);
+                    }
+                }
+            }
+            catch
+            {
+                // Persistence is best-effort; a bad saved path just falls
+                // back to the empty "Select FPGA…" state.
             }
         }
     }
@@ -367,6 +410,10 @@
         _selectedFPGA = path;
         _fpga = await JSONFileReader.ReadFPGAJsonFileAsync(path);
         if (_fpga is not null) SelectedFPGA.SetFPGA(_fpga, path);
+        // Persist so the picked board survives a cold app restart — the
+        // SelectedFPGA singleton has no persistence layer of its own.
+        try { await DbContext.SetSettingAsync(AppSettings.KEY_FPGA_PATH, path); }
+        catch { /* best-effort; user can re-pick if SQLite write fails */ }
         _filter = "";
         StateHasChanged();
     }

@@ -32,29 +32,26 @@
                 <Icon Name="IconName.Save" Class="text-success" />
                 @Traductor.T("CONFIG_SAVE_SECTION")
             </h6>
-            <div class="row g-2">
-                <div class="col-12 col-md-6">
+            @* slot/input-trailing-action — name input + Save share the row.
+               Description sits on its own row below as an optional field. *@
+            <div class="d-grid gap-2">
+                <div class="kmila-slot-input-trailing">
                     <input type="text"
                            class="form-control form-control-sm"
                            placeholder="@Traductor.T("CONFIG_NAME_PLACEHOLDER")"
                            @bind="_newConfigName" />
-                </div>
-                <div class="col-12 col-md-6">
-                    <input type="text"
-                           class="form-control form-control-sm"
-                           placeholder="@Traductor.T("CONFIG_DESC_PLACEHOLDER")"
-                           @bind="_newConfigDescription" />
-                </div>
-                <div class="col-12">
-                    <Button Color="ButtonColor.Success"
-                            Size="ButtonSize.Small"
-                            Outline="true"
-                            Disabled="@(string.IsNullOrWhiteSpace(_newConfigName))"
+                    <button type="button"
+                            class="kmila-btn kmila-btn--success kmila-btn--sm"
+                            disabled="@(string.IsNullOrWhiteSpace(_newConfigName))"
                             @onclick="SaveConfigurationAsync">
-                        <Icon Name="IconName.Save" Class="me-1" />
-                        @Traductor.T("CONFIG_SAVE_BUTTON")
-                    </Button>
+                        <Icon Name="IconName.Save" />
+                        <span>@Traductor.T("CONFIG_SAVE_BUTTON")</span>
+                    </button>
                 </div>
+                <input type="text"
+                       class="form-control form-control-sm"
+                       placeholder="@Traductor.T("CONFIG_DESC_PLACEHOLDER")"
+                       @bind="_newConfigDescription" />
             </div>
         </div>
 
@@ -73,28 +70,31 @@
                     {
                         <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center p-2">
                             <span class="text-truncate">@configName</span>
-                            <div class="btn-group btn-group-sm">
-                                <Button Color="ButtonColor.Primary"
-                                        Size="ButtonSize.ExtraSmall"
-                                        Outline="true"
-                                        TooltipTitle="@Traductor.T("CONFIG_LOAD_TOOLTIP")"
+                            @* Family-14 (.kmila-btn-icon) — icon-only row actions
+                               share the same geometry as the rest of the app's
+                               icon buttons (filebar, dock, runbar). *@
+                            <div class="d-inline-flex gap-1">
+                                <button type="button"
+                                        class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--sm"
+                                        title="@Traductor.T("CONFIG_LOAD_TOOLTIP")"
+                                        aria-label="@Traductor.T("CONFIG_LOAD_TOOLTIP")"
                                         @onclick="() => LoadConfigurationAsync(configName)">
                                     <Icon Name="IconName.BoxArrowInDown" />
-                                </Button>
-                                <Button Color="ButtonColor.Info"
-                                        Size="ButtonSize.ExtraSmall"
-                                        Outline="true"
-                                        TooltipTitle="@Traductor.T("CONFIG_EXPORT_TOOLTIP")"
+                                </button>
+                                <button type="button"
+                                        class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--sm"
+                                        title="@Traductor.T("CONFIG_EXPORT_TOOLTIP")"
+                                        aria-label="@Traductor.T("CONFIG_EXPORT_TOOLTIP")"
                                         @onclick="() => ExportConfigurationAsync(configName)">
                                     <Icon Name="IconName.Download" />
-                                </Button>
-                                <Button Color="ButtonColor.Danger"
-                                        Size="ButtonSize.ExtraSmall"
-                                        Outline="true"
-                                        TooltipTitle="@Traductor.T("CONFIG_DELETE_TOOLTIP")"
+                                </button>
+                                <button type="button"
+                                        class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--danger kmila-btn-icon--sm"
+                                        title="@Traductor.T("CONFIG_DELETE_TOOLTIP")"
+                                        aria-label="@Traductor.T("CONFIG_DELETE_TOOLTIP")"
                                         @onclick="() => DeleteConfigurationAsync(configName)">
                                     <Icon Name="IconName.Trash" />
-                                </Button>
+                                </button>
                             </div>
                         </div>
                     }
@@ -125,17 +125,18 @@
             @if(_importedConfig != null)
             {
                 <Alert Color="AlertColor.Success" Class="mt-2 py-2">
-                    <div class="d-flex align-items-center justify-content-between">
+                    @* slot/banner-cta — grid keeps text + trailing button aligned regardless of text length. *@
+                    <div class="kmila-slot-banner">
                         <span>
                             <Icon Name="IconName.CheckCircle" Class="me-2" />
                             @Traductor.T("CONFIG_READY_TO_LOAD") <strong>@_importedConfig.Name</strong>
                         </span>
-                        <Button Color="ButtonColor.Success"
-                                Size="ButtonSize.ExtraSmall"
+                        <button type="button"
+                                class="kmila-btn kmila-btn--success kmila-btn--sm"
                                 @onclick="LoadImportedConfigAsync">
-                            <Icon Name="IconName.BoxArrowInDown" Class="me-1" />
-                            @Traductor.T("CONFIG_LOAD_NOW")
-                        </Button>
+                            <Icon Name="IconName.BoxArrowInDown" />
+                            <span>@Traductor.T("CONFIG_LOAD_NOW")</span>
+                        </button>
                     </div>
                 </Alert>
             }
@@ -151,17 +152,18 @@
 {
     <div class="mt-3">
         <Alert Color="AlertColor.Success">
-            <div class="d-flex align-items-center justify-content-between">
+            @* slot/banner-cta *@
+            <div class="kmila-slot-banner">
                 <span>
                     <Icon Name="IconName.CheckCircle" Class="me-2" />
                     @Traductor.T("CONFIG_EXPORTED") <strong>@_exportFileName</strong>
                 </span>
-                <Button Color="ButtonColor.Success"
-                        Size="ButtonSize.Small"
+                <button type="button"
+                        class="kmila-btn kmila-btn--success kmila-btn--sm"
                         @onclick="DownloadExportAsync">
-                    <Icon Name="IconName.Download" Class="me-1" />
-                    @Traductor.T("CONFIG_DOWNLOAD")
-                </Button>
+                    <Icon Name="IconName.Download" />
+                    <span>@Traductor.T("CONFIG_DOWNLOAD")</span>
+                </button>
             </div>
         </Alert>
     </div>

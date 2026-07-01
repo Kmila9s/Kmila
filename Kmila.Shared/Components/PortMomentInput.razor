@@ -111,14 +111,18 @@
                                    @onchange="@(e => OnTimeChangedAsync(idx, e))"
                                    aria-label="@Traductor.T("PORT_TIME")" />
 
+                            @* Blazor's `<select value="...">` only sets the DOM `value` attribute,
+                               which browsers ignore on <select>. Pre-selection has to flow
+                               through each <option selected> for the dropdown to actually
+                               reflect the loaded config (bug: per-moment scale always showed
+                               the first option after a config load). *@
                             <select class="form-select form-select-sm port-moment__scale"
-                                    value="@m.Scale.ToString()"
                                     disabled="@IsRunning"
                                     @onchange="@(e => OnScaleChangedAsync(idx, e))"
                                     aria-label="@Traductor.T("PORT_SCALE")">
                                 @foreach (var scale in _availableScales)
                                 {
-                                    <option value="@scale.ToString()">@scale</option>
+                                    <option value="@scale.ToString()" selected="@(scale == m.Scale)">@scale</option>
                                 }
                             </select>
 

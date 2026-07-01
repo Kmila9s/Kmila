@@ -59,6 +59,32 @@ public sealed class HeadlessSimulator
             }
         }
 
+        // Pre-elaboration: if the entry-point's architecture instantiates
+        // any sub-components, inline them into a flat single-entity source.
+        // Kmila's simulator parses component instantiations but doesn't yet
+        // execute child architectures at run time, so without this step a
+        // modular design would silently produce zero outputs. The user's
+        // source files on disk are untouched; the elaborator writes a
+        // sibling _elaborated_<entity>.vhd that the parser consumes.
+        if (!string.IsNullOrEmpty(request.EntryPoint))
+        {
+            try
+            {
+                var flat = Interpreter.Services.SourceElaborator.ElaborateOrNull(project.Path, request.EntryPoint!);
+                if (flat != null)
+                {
+                    var elaboratedPath = Path.Combine(project.Path, $"_elaborated_{request.EntryPoint}.vhd");
+                    File.WriteAllText(elaboratedPath, flat);
+                    vhdlPath = elaboratedPath;
+                    log.Add($"[elab] inlined components for {request.EntryPoint}, flat source at {Path.GetFileName(elaboratedPath)}");
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Add($"[elab] elaboration failed, falling back to original source: {ex.Message}");
+            }
+        }
+
         var parser = new Debugger.Repositories.Parser(vhdlPath);
         parser.ParseFile();
         if (parser.Entities.Count == 0)
@@ -91,6 +117,11 @@ public sealed class HeadlessSimulator
         // `after N ns` clauses convert to the correct future-tick offset.
         // Bench bug #8.
         runner.OnEngineReady += eng => eng.TickResolutionNs = tickResNs;
+        // Surface runtime errors (caught silently by RunAsync's outer
+        // try/catch) into the API response — otherwise the user just sees
+        // an empty VCD with a successful HTTP 200 and no clue what went
+        // wrong inside the engine.
+        runner.OnError += msg => log.Add($"[engine] {msg}");
         await runner.RunAsync(config);
 
         var history = runner.Engine?.History

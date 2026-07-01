@@ -36,16 +36,22 @@
             </div>
         </div>
 
-        <Button
-            Outline=true
-            TooltipTitle="@Traductor.T("CREATE_FILE_TOOLTIP")"
-            Color="ButtonColor.Success"
-            Type="ButtonType.Submit"
-            Disabled="_creatingFile"
-            Loading="_creatingFile"
-        >
-            @Traductor.T("CREATE_FILE_BUTTON")
-        </Button>
+        @* slot/modal-footer-actions — submit moved out of the form body into a
+           right-aligned action row at the foot of the card, matching the rest of
+           the modals (RunsPanel, ConfigurationModal banners). Family-11 .kmila-btn,
+           size lowered from --lg to --md so it fits the standard footer rhythm. *@
+        <div class="col-12 kmila-slot-modal-footer">
+            <button type="submit"
+                    class="kmila-btn kmila-btn--success"
+                    disabled="@_creatingFile"
+                    title="@Traductor.T("CREATE_FILE_TOOLTIP")">
+                @if (_creatingFile)
+                {
+                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                }
+                <span>@Traductor.T("CREATE_FILE_BUTTON")</span>
+            </button>
+        </div>
     </EditForm>
 }else{
     <p>@Traductor.T("COMMON_PROJECT_NOT_FOUND")</p>
@@ -61,7 +67,7 @@
     /// Gets or sets the event callback for when a project file is created.
     /// </summary>
     [Parameter]
-    public EventCallback OnProjectFileCreated { get; set; }
+    public EventCallback<Kmila.Shared.Models.ProjectFile> OnProjectFileCreated { get; set; }
     /// <summary>
     /// Optional sub-directory inside the project where the new file should be created.
     /// Empty string (default) means the project root. Forward-slash separated.
@@ -75,7 +81,10 @@
     public string EditorContent { get; set; } = string.Empty;
     private ProjectFile _projectFile = new();
     private EditContext _context = default!;
-    private string _extention = "txt";
+    // Default to VHDL: this is a VHDL learning tool, students create .vhdl
+    // files 95% of the time. Saves a tap and pre-selects the matching
+    // <option> in the dropdown.
+    private string _extention = "vhdl";
     private bool _creatingFile = false;
 
     protected override void OnInitialized()
@@ -117,7 +126,7 @@
                     result ? $"{Traductor.T("CREATE_FILE_SUCCESS_MSG")} {_projectFile.FileName}" : $"{Traductor.T("CREATE_FILE_ERROR_MSG").Replace("{0}", ProjectFiles.LastError)}",
                     result ? ToastType.Success : ToastType.Danger
                 ));
-                if(result) await OnProjectFileCreated.InvokeAsync();
+                if(result) await OnProjectFileCreated.InvokeAsync(_projectFile);
                 _projectFile = new();
             }else{
                 ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), Traductor.T("CREATE_FILE_VALIDATION_ERROR"), ToastType.Danger));

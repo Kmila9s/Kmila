@@ -11,7 +11,7 @@
     @* Header: eyebrow, title, count, search, primary CTA *@
     <header class="projects-header">
         <div class="projects-header__titles">
-            <span class="home-section__eyebrow">@Traductor.T("NAV_PROJECT_OPTIONS")</span>
+            <span class="home-section__eyebrow">@Traductor.T("NAV_SECTION_PROJECT")</span>
             <h1 class="projects-header__title">
                 @Traductor.T("NAV_PROJECTS")
                 @if (!_loading && _projects.Count > 0)
@@ -21,36 +21,49 @@
             </h1>
         </div>
 
-        <div class="projects-header__tools">
-            <label class="projects-search">
-                <Icon Name="IconName.Search" />
-                <input type="search"
-                       class="form-control"
-                       placeholder="@Traductor.T("PROJECTS_SEARCH_PLACEHOLDER")"
-                       aria-label="@Traductor.T("PROJECTS_SEARCH_PLACEHOLDER")"
-                       @bind="_filter"
-                       @bind:event="oninput" />
-                @if (!string.IsNullOrEmpty(_filter))
-                {
-                    <button type="button" class="projects-search__clear"
-                            @onclick="() => _filter = string.Empty"
-                            aria-label="@Traductor.T("COMMON_CLEAR")">
-                        <Icon Name="IconName.X" />
-                    </button>
-                }
-            </label>
+        @* slot/page-header-tools v2 — search shelf grows; primary CTA + secondaries
+           form an actions cluster on the right with proper breathing room. *@
+        <div class="projects-header__tools kmila-slot-header-tools">
+            <div class="kmila-slot-header-tools__filter">
+                <label class="projects-search">
+                    <Icon Name="IconName.Search" />
+                    <input type="search"
+                           class="form-control"
+                           placeholder="@Traductor.T("PROJECTS_SEARCH_PLACEHOLDER")"
+                           aria-label="@Traductor.T("PROJECTS_SEARCH_PLACEHOLDER")"
+                           @bind="_filter"
+                           @bind:event="oninput" />
+                    @if (!string.IsNullOrEmpty(_filter))
+                    {
+                        <button type="button" class="projects-search__clear"
+                                @onclick="() => _filter = string.Empty"
+                                aria-label="@Traductor.T("COMMON_CLEAR")">
+                            <Icon Name="IconName.X" />
+                        </button>
+                    }
+                </label>
+            </div>
 
-            <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary projects-sample"
-                    @onclick="CreateSampleAsync"
-                    title="@Traductor.T("PROJECTS_SAMPLE_HINT")">
-                <Icon Name="IconName.LightningChargeFill" />
-                <span>@Traductor.T("PROJECTS_CREATE_SAMPLE")</span>
-            </button>
+            <div class="kmila-slot-header-tools__actions">
+                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary projects-sample"
+                        @onclick="CreateSampleAsync"
+                        title="@Traductor.T("PROJECTS_SAMPLE_HINT")">
+                    <Icon Name="IconName.LightningChargeFill" />
+                    <span>@Traductor.T("PROJECTS_CREATE_SAMPLE")</span>
+                </button>
 
-            <button type="button" class="kmila-btn kmila-btn--accent projects-cta" @onclick="CreateProjectAsync">
-                <Icon Name="IconName.PlusLg" />
-                <span>@Traductor.T("PROJECTS_CREATE_NEW")</span>
-            </button>
+                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--accent projects-examples"
+                        @onclick="OpenExamplesGallery"
+                        title="@Traductor.T("EXAMPLES_GALLERY_HINT")">
+                    <Icon Name="IconName.Grid" />
+                    <span>@Traductor.T("EXAMPLES_GALLERY_BUTTON")</span>
+                </button>
+
+                <button type="button" class="kmila-btn kmila-btn--accent projects-cta" @onclick="CreateProjectAsync">
+                    <Icon Name="IconName.PlusLg" />
+                    <span>@Traductor.T("PROJECTS_CREATE_NEW")</span>
+                </button>
+            </div>
         </div>
     </header>
 
@@ -80,7 +93,9 @@
                     <Icon Name="IconName.PlusLg" />
                     <span>@Traductor.T("PROJECTS_CREATE_NEW")</span>
                 </button>
-                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary btn-lg" @onclick="CreateSampleAsync">
+                @* slot/empty-state-actions — stray Bootstrap btn-lg removed so both
+                   CTAs size at .kmila-btn--lg identically (proposal 2026-06-28). *@
+                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--lg" @onclick="CreateSampleAsync">
                     <Icon Name="IconName.LightningChargeFill" />
                     <span>@Traductor.T("PROJECTS_CREATE_SAMPLE")</span>
                 </button>
@@ -141,7 +156,7 @@
                             }
                         </div>
                         <div class="project-card__meta">
-                            <span class="project-card__date" title="@project.CreationTime.ToString("F")">
+                            <span class="project-card__date" title="@(project.CreationTime == DateTime.MinValue ? string.Empty : project.CreationTime.ToString("F"))">
                                 <Icon Name="IconName.Clock" />
                                 @FormatDate(project.CreationTime)
                             </span>
@@ -207,6 +222,42 @@
 
 <Modal Size="ModalSize.Large" IsScrollable=true @ref="_newProjectModal" />
 <ConfirmDialog @ref="_removeProjectDialog" />
+
+@* Example-gallery modal — opens from the "Examples" toolbar button.
+   Lists every catalog entry as a card; one click creates that project
+   with its pre-wired .kviz and jumps into the editor. Backdrop-tap and
+   the corner X both close. *@
+@if (_examplesModalOpen)
+{
+    <div class="modal-backdrop kviz-wiring-backdrop kviz-wiring-backdrop--open"
+         @onclick="CloseExamplesGallery">
+        <div class="modal examples-gallery-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h5>@Traductor.T("EXAMPLES_GALLERY_TITLE")</h5>
+                <button class="kmila-btn-icon" @onclick="CloseExamplesGallery"
+                        aria-label="@Traductor.T("COMMON_CLOSE")">×</button>
+            </div>
+            <div class="modal-body examples-gallery-modal__body">
+                <p class="kmila-muted">@Traductor.T("EXAMPLES_GALLERY_INTRO")</p>
+                <div class="examples-gallery-grid">
+                    @foreach (var ex in _examples)
+                    {
+                        var localEx = ex;
+                        <button type="button"
+                                class="examples-gallery-card"
+                                @onclick="() => PickExampleAsync(localEx)">
+                            <Icon Name="@GetExampleIcon(localEx.Id)" Class="examples-gallery-card__icon" />
+                            <div class="examples-gallery-card__body">
+                                <h6 class="examples-gallery-card__title">@Traductor.T(localEx.NameKey)</h6>
+                                <p class="examples-gallery-card__desc">@Traductor.T(localEx.DescKey)</p>
+                            </div>
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
 
 @code {
     [Parameter] public string? Option { get; set; }
@@ -313,6 +364,10 @@
     /// </summary>
     private string FormatDate(DateTime dt)
     {
+        // Guard the sentinel that bubbles up when a project's directory is missing
+        // on disk (ProjectFiles returns DateTime.MinValue). Without this the card
+        // renders "0001-01-01" raw, which reads as a broken date.
+        if (dt == DateTime.MinValue) return "—";
         var now = DateTime.Now;
         var span = now - dt;
         if (span.TotalDays < 1 && dt.Date == now.Date) return Traductor.T("DATE_TODAY");
@@ -326,91 +381,426 @@
     /// (not a translated resource) since VHDL itself is English-keyworded and
     /// students benefit from seeing canonical source code in the language they
     /// encounter everywhere else.
+    ///
+    /// The 2026-06-26 rewrite ("Demo board") is designed to exercise every
+    /// student-facing surface in one project:
+    ///   • Bounded simulation + waveforms — clk drives a 4-bit counter, the
+    ///     ripple shows up clearly in the standard Waveforms tab.
+    ///   • Step replay — breakpoints land cleanly on the counter increment
+    ///     line and the stepper-decoder concurrent assignments.
+    ///   • Blocks editor — every construct here (process(clk,reset), if/elsif
+    ///     rising_edge, signal&lt;=expr concurrent, std_logic_vector cast)
+    ///     round-trips through the Scratch-VHDL block catalog without
+    ///     falling back to raw chips.
+    ///   • Visual canvas — every widget at once: Button (reset, nudge),
+    ///     Switch (run, dir), LED (heartbeat, btn_echo), LED Array
+    ///     (4-bit count), Stepper (4 phases). The companion .kviz sidecar
+    ///     (<see cref="SAMPLE_MAIN_KVIZ"/>) ships pre-wired so the user
+    ///     just opens the Visual tab and hits Run.
     /// </summary>
     private const string SAMPLE_MAIN_VHD =
-@"-- Kmila sample project: a 7-stage ripple counter (""Visible Wave"").
--- Click ▶ Run and watch the Waveforms tab fill in live.
+@"-- Kmila Demo Board: every visual widget at once.
 --
--- What you should see:
---   • bit0 toggles every clock cycle (densest trace)
---   • each higher bit toggles half as often as the one below it
---   • bit6 only toggles ~12 times across the whole run — easy to read
---   • from 5 µs to 10 µs `enable` goes low and every output freezes,
---     then resumes — clear proof the waveform is rendering live
---   • heart mirrors bit3 so you have a slower rhythm to track
+-- Open the editor and try each surface:
+--   • Code tab        — read + edit this file
+--   • Blocks tab      — same design as draggable blocks
+--   • Step replay     — set a breakpoint on the cnt_q increment line
+--                       below and step through clk cycles
+--   • Visual tab      — pre-wired canvas: Switch RUN, Button NUDGE,
+--                       Stepper rotor, LED Array (count), LED HB
+--                       (heartbeat). Hit ▶ Run and play.
 
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
 
-entity sim_lab is
+entity demo_board is
   port (
-    clk    : in  STD_LOGIC;
-    reset  : in  STD_LOGIC;
-    enable : in  STD_LOGIC;
-    bit0   : out STD_LOGIC;
-    bit1   : out STD_LOGIC;
-    bit2   : out STD_LOGIC;
-    bit3   : out STD_LOGIC;
-    bit4   : out STD_LOGIC;
-    bit5   : out STD_LOGIC;
-    bit6   : out STD_LOGIC;
-    heart  : out STD_LOGIC
-  );
-end entity sim_lab;
+    -- Inputs (driven by visual widgets on the Visual tab)
+    clk       : in  STD_LOGIC;
+    reset     : in  STD_LOGIC;
+    run       : in  STD_LOGIC;
+    dir       : in  STD_LOGIC;
+    nudge     : in  STD_LOGIC;
 
-architecture behavioral of sim_lab is
-  signal q0, q1, q2, q3, q4, q5, q6 : STD_LOGIC := '0';
-  signal h_reg : STD_LOGIC := '0';
+    -- Outputs (read by visual widgets on the Visual tab)
+    heartbeat : out STD_LOGIC;
+    count     : out STD_LOGIC_VECTOR(3 downto 0);
+    btn_echo  : out STD_LOGIC;
+
+    -- Stepper Gray-coded phase outputs (4 pins, drive the Stepper widget)
+    phase_a   : out STD_LOGIC;
+    phase_b   : out STD_LOGIC;
+    phase_an  : out STD_LOGIC;
+    phase_bn  : out STD_LOGIC
+  );
+end entity demo_board;
+
+architecture behavioral of demo_board is
+  -- Internal state: 4-bit display counter + 3-bit stepper index + heartbeat.
+  signal cnt_q  : unsigned(3 downto 0) := (others => '0');
+  signal step_q : unsigned(2 downto 0) := (others => '0');
+  signal hb_q   : STD_LOGIC := '0';
 begin
+  -- Sync block: asynchronous reset, then advance on every clk rising edge
+  -- whenever the RUN switch is on. DIR picks the stepper direction.
   process(clk, reset)
   begin
     if reset = '1' then
-      q0 <= '0'; q1 <= '0'; q2 <= '0'; q3 <= '0';
-      q4 <= '0'; q5 <= '0'; q6 <= '0';
-      h_reg <= '0';
+      cnt_q  <= (others => '0');
+      step_q <= (others => '0');
+      hb_q   <= '0';
     elsif rising_edge(clk) then
-      if enable = '1' then
-        q0 <= not q0;
-        if q0 = '1' then
-          q1 <= not q1;
-          if q1 = '1' then
-            q2 <= not q2;
-            if q2 = '1' then
-              q3 <= not q3;
-              if q3 = '1' then
-                q4 <= not q4;
-                if q4 = '1' then
-                  q5 <= not q5;
-                  if q5 = '1' then
-                    q6 <= not q6;
-                  end if;
-                end if;
-              end if;
-            end if;
-          end if;
+      if run = '1' then
+        cnt_q <= cnt_q + 1;
+        hb_q  <= not hb_q;
+        if dir = '1' then
+          step_q <= step_q + 1;
+        else
+          step_q <= step_q - 1;
         end if;
-        h_reg <= q3;
       end if;
     end if;
   end process;
 
-  bit0  <= q0;
-  bit1  <= q1;
-  bit2  <= q2;
-  bit3  <= q3;
-  bit4  <= q4;
-  bit5  <= q5;
-  bit6  <= q6;
-  heart <= h_reg;
+  -- Output wiring.
+  heartbeat <= hb_q;
+  count     <= std_logic_vector(cnt_q);
+  btn_echo  <= nudge;
+
+  -- 4-bit Gray-code stepper decoder. The 8 patterns match the Stepper
+  -- widget's internal table exactly so the rotor advances one full step
+  -- per clk rising edge (when RUN is on).
+  --   idx  pattern (A B An Bn)
+  --   0    1 0 0 0
+  --   1    1 1 0 0
+  --   2    0 1 0 0
+  --   3    0 1 1 0
+  --   4    0 0 1 0
+  --   5    0 0 1 1
+  --   6    0 0 0 1
+  --   7    1 0 0 1
+  phase_a  <= '1' when step_q = ""000"" or step_q = ""001"" or step_q = ""111"" else '0';
+  phase_b  <= '1' when step_q = ""001"" or step_q = ""010"" or step_q = ""011"" else '0';
+  phase_an <= '1' when step_q = ""011"" or step_q = ""100"" or step_q = ""101"" else '0';
+  phase_bn <= '1' when step_q = ""101"" or step_q = ""110"" or step_q = ""111"" else '0';
 end architecture behavioral;
 ";
+
+    /// <summary>
+    /// Pre-built `.kviz` companion for the Demo Board sample. Wires every
+    /// widget to a port so the user can open the Visual tab and hit Run
+    /// without going through the Wiring modal first. Coordinates are CSS
+    /// pixels; widgets fit comfortably inside the 1200×650 canvas on the
+    /// tablet emulator's 1280×800 desktop layout.
+    /// </summary>
+    private const string SAMPLE_MAIN_KVIZ =
+@"{
+  ""version"": 1,
+  ""designFile"": ""main.vhd"",
+  ""canvas"": { ""width"": 1200, ""height"": 650, ""background"": ""grid"" },
+  ""components"": [
+    { ""id"": ""btn-reset"", ""type"": ""button"", ""position"": { ""x"": 60,  ""y"": 60 }, ""config"": { ""label"": ""RESET"" }, ""bindings"": { ""out"": ""reset"" } },
+    { ""id"": ""sw-run"",    ""type"": ""switch"", ""position"": { ""x"": 220, ""y"": 60 }, ""config"": { ""label"": ""RUN"",  ""defaultState"": ""1"" }, ""bindings"": { ""out"": ""run"" } },
+    { ""id"": ""sw-dir"",    ""type"": ""switch"", ""position"": { ""x"": 380, ""y"": 60 }, ""config"": { ""label"": ""DIR"",  ""defaultState"": ""1"" }, ""bindings"": { ""out"": ""dir"" } },
+    { ""id"": ""btn-nudge"", ""type"": ""button"", ""position"": { ""x"": 540, ""y"": 60 }, ""config"": { ""label"": ""NUDGE"" }, ""bindings"": { ""out"": ""nudge"" } },
+
+    { ""id"": ""led-hb"",    ""type"": ""led"",       ""position"": { ""x"": 60,  ""y"": 260 }, ""config"": { ""color"": ""red"" },                                          ""bindings"": { ""anode"":  ""heartbeat"" } },
+    { ""id"": ""arr-count"", ""type"": ""led-array"", ""position"": { ""x"": 180, ""y"": 260 }, ""config"": { ""length"": 4, ""color"": ""yellow"", ""orientation"": ""h"" }, ""bindings"": { ""anodes"": ""count"" } },
+    { ""id"": ""7seg-count"",""type"": ""seven-seg"", ""position"": { ""x"": 420, ""y"": 240 }, ""config"": { ""mode"": ""hex"", ""color"": ""red"" },                         ""bindings"": { ""value"":  ""count"" } },
+    { ""id"": ""led-btn"",   ""type"": ""led"",       ""position"": { ""x"": 540, ""y"": 260 }, ""config"": { ""color"": ""green"" },                                        ""bindings"": { ""anode"":  ""btn_echo"" } },
+
+    { ""id"": ""step-1"", ""type"": ""stepper"", ""position"": { ""x"": 720, ""y"": 240 }, ""config"": { ""stepsPerRev"": 200, ""direction"": ""auto"" },
+      ""bindings"": { ""phaseA"": ""phase_a"", ""phaseB"": ""phase_b"", ""phaseAn"": ""phase_an"", ""phaseBn"": ""phase_bn"" } }
+  ],
+  ""settings"": { ""ringBufferTicks"": 2000, ""defaultSpeed"": ""Normal"" }
+}
+";
+
+    /// <summary>
+    /// Counter Clock example — 2-digit decimal counter wrapping 00→99 with
+    /// an overflow pulse. Shows two 7-seg widgets in decoded-decimal mode +
+    /// an overflow LED. Demonstrates BCD-style decoding + finite-state
+    /// rollover.
+    /// </summary>
+    private const string COUNTER_CLOCK_VHD =
+@"-- Kmila example: 2-digit decimal counter (00 → 99 → 00 + overflow pulse).
+-- Showcases: two 7-segment displays in decoded-decimal mode + an
+-- overflow LED on rollover. Try setting a breakpoint on the rollover
+-- branch to watch the FSM transition step by step.
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
+
+entity counter_clock is
+  port (
+    clk      : in  STD_LOGIC;
+    reset    : in  STD_LOGIC;
+    tick     : in  STD_LOGIC;
+    units    : out STD_LOGIC_VECTOR(3 downto 0);
+    tens     : out STD_LOGIC_VECTOR(3 downto 0);
+    overflow : out STD_LOGIC
+  );
+end entity counter_clock;
+
+architecture behavioral of counter_clock is
+  signal u_q  : unsigned(3 downto 0) := (others => '0');
+  signal t_q  : unsigned(3 downto 0) := (others => '0');
+  signal ov_q : STD_LOGIC := '0';
+begin
+  process(clk, reset)
+  begin
+    if reset = '1' then
+      u_q  <= (others => '0');
+      t_q  <= (others => '0');
+      ov_q <= '0';
+    elsif rising_edge(clk) then
+      ov_q <= '0';
+      if tick = '1' then
+        if u_q = 9 then
+          u_q <= (others => '0');
+          if t_q = 9 then
+            t_q  <= (others => '0');
+            ov_q <= '1';
+          else
+            t_q <= t_q + 1;
+          end if;
+        else
+          u_q <= u_q + 1;
+        end if;
+      end if;
+    end if;
+  end process;
+
+  units    <= std_logic_vector(u_q);
+  tens     <= std_logic_vector(t_q);
+  overflow <= ov_q;
+end architecture behavioral;
+";
+
+    private const string COUNTER_CLOCK_KVIZ =
+@"{
+  ""version"": 1,
+  ""designFile"": ""main.vhd"",
+  ""canvas"": { ""width"": 1000, ""height"": 500, ""background"": ""grid"" },
+  ""components"": [
+    { ""id"": ""btn-reset"", ""type"": ""button"", ""position"": { ""x"": 60,  ""y"": 60 }, ""config"": { ""label"": ""RESET"" },                                ""bindings"": { ""out"": ""reset"" } },
+    { ""id"": ""sw-tick"",   ""type"": ""switch"", ""position"": { ""x"": 220, ""y"": 60 }, ""config"": { ""label"": ""TICK"", ""defaultState"": ""1"" },         ""bindings"": { ""out"": ""tick"" } },
+    { ""id"": ""7seg-tens"", ""type"": ""seven-seg"", ""position"": { ""x"": 80,  ""y"": 240 }, ""config"": { ""mode"": ""dec"", ""color"": ""green"" }, ""bindings"": { ""value"": ""tens"" } },
+    { ""id"": ""7seg-unit"", ""type"": ""seven-seg"", ""position"": { ""x"": 200, ""y"": 240 }, ""config"": { ""mode"": ""dec"", ""color"": ""green"" }, ""bindings"": { ""value"": ""units"" } },
+    { ""id"": ""led-ov"",    ""type"": ""led"",       ""position"": { ""x"": 380, ""y"": 260 }, ""config"": { ""color"": ""red"" },                       ""bindings"": { ""anode"": ""overflow"" } }
+  ],
+  ""settings"": { ""ringBufferTicks"": 2000, ""defaultSpeed"": ""Normal"" }
+}
+";
+
+    /// <summary>
+    /// Traffic Light FSM example — three-state Moore machine that cycles
+    /// RED → GREEN → YELLOW → RED on every Nth clock tick. Visualizes the
+    /// state on 3 colored LEDs + a 2-bit LED array readout of the state
+    /// register.
+    /// </summary>
+    private const string TRAFFIC_LIGHT_VHD =
+@"-- Kmila example: 3-state Moore traffic-light FSM.
+-- Showcases: enum state + clocked transition + concurrent output
+-- decoding. State machine wakeup every 10 clock cycles when ENABLE is
+-- on. Set a breakpoint inside the `case st is` block to watch state
+-- transitions in step-replay mode.
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
+
+entity traffic_light is
+  port (
+    clk       : in  STD_LOGIC;
+    reset     : in  STD_LOGIC;
+    enable    : in  STD_LOGIC;
+    red       : out STD_LOGIC;
+    yellow    : out STD_LOGIC;
+    green     : out STD_LOGIC;
+    state_out : out STD_LOGIC_VECTOR(1 downto 0)
+  );
+end entity traffic_light;
+
+architecture behavioral of traffic_light is
+  type state_t is (S_RED, S_GREEN, S_YELLOW);
+  signal st  : state_t := S_RED;
+  signal ctr : unsigned(3 downto 0) := (others => '0');
+begin
+  process(clk, reset)
+  begin
+    if reset = '1' then
+      st  <= S_RED;
+      ctr <= (others => '0');
+    elsif rising_edge(clk) then
+      if enable = '1' then
+        if ctr = 9 then
+          ctr <= (others => '0');
+          case st is
+            when S_RED    => st <= S_GREEN;
+            when S_GREEN  => st <= S_YELLOW;
+            when S_YELLOW => st <= S_RED;
+          end case;
+        else
+          ctr <= ctr + 1;
+        end if;
+      end if;
+    end if;
+  end process;
+
+  red       <= '1' when st = S_RED    else '0';
+  yellow    <= '1' when st = S_YELLOW else '0';
+  green     <= '1' when st = S_GREEN  else '0';
+  state_out <= ""00"" when st = S_RED else
+               ""01"" when st = S_GREEN else ""10"";
+end architecture behavioral;
+";
+
+    private const string TRAFFIC_LIGHT_KVIZ =
+@"{
+  ""version"": 1,
+  ""designFile"": ""main.vhd"",
+  ""canvas"": { ""width"": 1000, ""height"": 500, ""background"": ""grid"" },
+  ""components"": [
+    { ""id"": ""btn-reset"",  ""type"": ""button"", ""position"": { ""x"": 60,  ""y"": 60 }, ""config"": { ""label"": ""RESET"" },                                  ""bindings"": { ""out"": ""reset"" } },
+    { ""id"": ""sw-enable"",  ""type"": ""switch"", ""position"": { ""x"": 220, ""y"": 60 }, ""config"": { ""label"": ""GO"",    ""defaultState"": ""1"" },          ""bindings"": { ""out"": ""enable"" } },
+    { ""id"": ""led-red"",    ""type"": ""led"", ""position"": { ""x"": 100, ""y"": 240 }, ""config"": { ""color"": ""red"" },    ""bindings"": { ""anode"": ""red"" } },
+    { ""id"": ""led-yellow"", ""type"": ""led"", ""position"": { ""x"": 220, ""y"": 240 }, ""config"": { ""color"": ""yellow"" }, ""bindings"": { ""anode"": ""yellow"" } },
+    { ""id"": ""led-green"",  ""type"": ""led"", ""position"": { ""x"": 340, ""y"": 240 }, ""config"": { ""color"": ""green"" },  ""bindings"": { ""anode"": ""green"" } },
+    { ""id"": ""arr-state"",  ""type"": ""led-array"", ""position"": { ""x"": 500, ""y"": 240 }, ""config"": { ""length"": 2, ""color"": ""blue"", ""orientation"": ""h"" }, ""bindings"": { ""anodes"": ""state_out"" } }
+  ],
+  ""settings"": { ""ringBufferTicks"": 2000, ""defaultSpeed"": ""Normal"" }
+}
+";
+
+    /// <summary>
+    /// Shift Register example — 8-bit serial-in shift register. Showcases
+    /// the Phase 3++ bit-slice UI: 8 individual single-bit LED widgets,
+    /// each wired to one bit of the 8-bit `reg_out` port via `reg_out[N]`
+    /// slice bindings. Same canonical hardware-learning-board layout: SI
+    /// drives the new bit, every clock shifts the register left.
+    /// </summary>
+    private const string SHIFT_REGISTER_VHD =
+@"-- Kmila example: 8-bit shift register driving 8 individual LEDs.
+-- Showcases the bit-slice wiring UI — each LED widget is wired to a
+-- single bit of `reg_out` via the `reg_out[N]` binding syntax in the
+-- companion .kviz. SI (serial-in) switch controls what gets shifted
+-- in; SHIFT switch enables the clock-edge advance. Watch the bit
+-- pattern walk left across the LED row.
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+
+entity shift_register is
+  port (
+    clk      : in  STD_LOGIC;
+    reset    : in  STD_LOGIC;
+    shift_en : in  STD_LOGIC;
+    si       : in  STD_LOGIC;
+    reg_out  : out STD_LOGIC_VECTOR(7 downto 0)
+  );
+end entity shift_register;
+
+architecture behavioral of shift_register is
+  signal reg : STD_LOGIC_VECTOR(7 downto 0) := (others => '0');
+begin
+  process(clk, reset)
+  begin
+    if reset = '1' then
+      reg <= (others => '0');
+    elsif rising_edge(clk) then
+      if shift_en = '1' then
+        -- Shift left, SI enters at the LSB.
+        reg <= reg(6 downto 0) & si;
+      end if;
+    end if;
+  end process;
+
+  reg_out <= reg;
+end architecture behavioral;
+";
+
+    private const string SHIFT_REGISTER_KVIZ =
+@"{
+  ""version"": 1,
+  ""designFile"": ""main.vhd"",
+  ""canvas"": { ""width"": 1100, ""height"": 500, ""background"": ""grid"" },
+  ""components"": [
+    { ""id"": ""btn-reset"", ""type"": ""button"", ""position"": { ""x"": 60,  ""y"": 60 }, ""config"": { ""label"": ""RESET"" }, ""bindings"": { ""out"": ""reset"" } },
+    { ""id"": ""sw-shift"",  ""type"": ""switch"", ""position"": { ""x"": 220, ""y"": 60 }, ""config"": { ""label"": ""SHIFT"", ""defaultState"": ""1"" }, ""bindings"": { ""out"": ""shift_en"" } },
+    { ""id"": ""sw-si"",     ""type"": ""switch"", ""position"": { ""x"": 380, ""y"": 60 }, ""config"": { ""label"": ""SI"",    ""defaultState"": ""1"" }, ""bindings"": { ""out"": ""si"" } },
+
+    { ""id"": ""led-7"", ""type"": ""led"", ""position"": { ""x"": 80,  ""y"": 260 }, ""config"": { ""color"": ""red"" },    ""bindings"": { ""anode"": ""reg_out[7]"" } },
+    { ""id"": ""led-6"", ""type"": ""led"", ""position"": { ""x"": 180, ""y"": 260 }, ""config"": { ""color"": ""red"" },    ""bindings"": { ""anode"": ""reg_out[6]"" } },
+    { ""id"": ""led-5"", ""type"": ""led"", ""position"": { ""x"": 280, ""y"": 260 }, ""config"": { ""color"": ""yellow"" }, ""bindings"": { ""anode"": ""reg_out[5]"" } },
+    { ""id"": ""led-4"", ""type"": ""led"", ""position"": { ""x"": 380, ""y"": 260 }, ""config"": { ""color"": ""yellow"" }, ""bindings"": { ""anode"": ""reg_out[4]"" } },
+    { ""id"": ""led-3"", ""type"": ""led"", ""position"": { ""x"": 480, ""y"": 260 }, ""config"": { ""color"": ""green"" },  ""bindings"": { ""anode"": ""reg_out[3]"" } },
+    { ""id"": ""led-2"", ""type"": ""led"", ""position"": { ""x"": 580, ""y"": 260 }, ""config"": { ""color"": ""green"" },  ""bindings"": { ""anode"": ""reg_out[2]"" } },
+    { ""id"": ""led-1"", ""type"": ""led"", ""position"": { ""x"": 680, ""y"": 260 }, ""config"": { ""color"": ""blue"" },   ""bindings"": { ""anode"": ""reg_out[1]"" } },
+    { ""id"": ""led-0"", ""type"": ""led"", ""position"": { ""x"": 780, ""y"": 260 }, ""config"": { ""color"": ""blue"" },   ""bindings"": { ""anode"": ""reg_out[0]"" } }
+  ],
+  ""settings"": { ""ringBufferTicks"": 2000, ""defaultSpeed"": ""Normal"" }
+}
+";
+
+    /// <summary>
+    /// Catalog of pre-built example projects. The default sample ("demo")
+    /// is what the "Try a sample" button creates with one click; the rest
+    /// surface through the example-gallery modal. Stable IDs so future
+    /// share-links can point at a specific example without a name drift.
+    /// </summary>
+    private sealed record ExampleDef(
+        string Id,
+        string NameKey,
+        string DescKey,
+        string Vhd,
+        string Kviz);
+
+    private static readonly List<ExampleDef> _examples = new()
+    {
+        new ExampleDef("demo",     "EXAMPLE_DEMO_NAME",    "EXAMPLE_DEMO_DESC",    SAMPLE_MAIN_VHD,     SAMPLE_MAIN_KVIZ),
+        new ExampleDef("counter",  "EXAMPLE_COUNTER_NAME", "EXAMPLE_COUNTER_DESC", COUNTER_CLOCK_VHD,   COUNTER_CLOCK_KVIZ),
+        new ExampleDef("traffic",  "EXAMPLE_TRAFFIC_NAME", "EXAMPLE_TRAFFIC_DESC", TRAFFIC_LIGHT_VHD,   TRAFFIC_LIGHT_KVIZ),
+        new ExampleDef("shift",    "EXAMPLE_SHIFT_NAME",   "EXAMPLE_SHIFT_DESC",   SHIFT_REGISTER_VHD,  SHIFT_REGISTER_KVIZ),
+    };
+
+    private bool _examplesModalOpen;
+
+    /// <summary>Opens the example-gallery modal so the user can pick.</summary>
+    private void OpenExamplesGallery() => _examplesModalOpen = true;
+    private void CloseExamplesGallery() => _examplesModalOpen = false;
+
+    /// <summary>Maps a catalog example id to a Bootstrap-Icon glyph.</summary>
+    private static IconName GetExampleIcon(string id) => id switch
+    {
+        "demo"    => IconName.CpuFill,
+        "counter" => IconName.Stopwatch,
+        "traffic" => IconName.Signpost2Fill,
+        "shift"   => IconName.ArrowRightSquareFill,
+        _         => IconName.FileEarmarkCode,
+    };
 
     /// <summary>
     /// Creates a ready-to-run sample project and navigates straight to its editor.
     /// Name collisions are resolved by appending "(2)", "(3)", … so repeated clicks
     /// create distinct copies rather than failing silently.
+    ///
+    /// Backwards compat: the existing "Try a sample" button hits this method
+    /// and gets the Demo Board (catalog id="demo"). The example-gallery modal
+    /// invokes <see cref="CreateExampleAsync"/> directly with the user's pick.
     /// </summary>
     private async Task CreateSampleAsync()
+    {
+        await CreateExampleAsync(_examples[0]); // "demo"
+    }
+
+    private async Task PickExampleAsync(ExampleDef def)
+    {
+        _examplesModalOpen = false;
+        StateHasChanged();
+        await CreateExampleAsync(def);
+    }
+
+    private async Task CreateExampleAsync(ExampleDef def)
     {
         try
         {
@@ -424,7 +814,7 @@ end architecture behavioral;
                 "KmilaData");
 #endif
 
-            var baseName = Traductor.T("PROJECTS_SAMPLE_NAME");
+            var baseName = Traductor.T(def.NameKey);
             var name = await FindAvailableNameAsync(baseName);
             var folder = name.Replace(" ", "").Replace("·", "").Replace("/", "_").Replace("-", "_");
             var projectPath = Path.Combine(basePath, "Projects", folder);
@@ -432,7 +822,7 @@ end architecture behavioral;
             var project = new Project
             {
                 Name = name,
-                Description = Traductor.T("PROJECTS_SAMPLE_DESCRIPTION"),
+                Description = Traductor.T(def.DescKey),
                 BasePath = projectPath
             };
 
@@ -450,17 +840,30 @@ end architecture behavioral;
             {
                 Project = project,
                 FileName = "main.vhd",
-                Content = SAMPLE_MAIN_VHD
+                Content = def.Vhd
             };
             await ProjectFiles.CreateAsync(file);
 
-            // Save a companion simulation configuration and ask the Editor to
-            // auto-apply it as soon as the project finishes loading. We don't
-            // bind configs to projects in the DB (they're global), but the
-            // one-shot pending slot on SimulationParameters lets us hand off
-            // without stale-stimulus-across-projects side effects.
-            await SaveSampleConfigurationAsync();
-            Sim.PendingConfigurationName = Traductor.T("PROJECTS_SAMPLE_CONFIG_NAME");
+            // Phase 3 (2026-06-26): every catalog example ships a pre-wired
+            // .kviz sidecar so the Visual tab is immediately functional.
+            var kvizFile = new ProjectFile
+            {
+                Project = project,
+                FileName = "main.kviz",
+                Content = def.Kviz
+            };
+            await ProjectFiles.CreateAsync(kvizFile);
+
+            // Only the Demo Board has a curated bounded-sim configuration
+            // (port moments matching its 5-input shape). For Counter Clock
+            // and Traffic Light the user can drive the canvas directly from
+            // the Visual tab; bounded sim still works against any per-design
+            // configuration the user adds later.
+            if (def.Id == "demo")
+            {
+                await SaveSampleConfigurationAsync();
+                Sim.PendingConfigurationName = Traductor.T("PROJECTS_SAMPLE_CONFIG_NAME");
+            }
 
             ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"),
                 Traductor.T("PROJECTS_SAMPLE_CREATED"), ToastType.Success));
@@ -481,18 +884,21 @@ end architecture behavioral;
     /// what <see cref="ConfigurationService.SaveConfigurationAsync"/> does
     /// under the hood anyway.
     ///
-    /// Shape (matches the Visible Wave sample design):
-    ///   • Time          : 30 US (1500 cycles at 50 MHz — long enough for
-    ///                     the live-update timer to fire several times so
-    ///                     the waveform is seen growing on-screen)
+    /// Shape (matches the Demo Board sample design — 5 inputs):
+    ///   • Time          : 30 US (long enough for the counter to wrap and
+    ///                     the stepper to rotate several full revolutions)
     ///   • FPGA          : whatever the user currently has selected (may be null)
     ///   • Port moments  :
     ///       – clk    → clock signal marker
     ///       – reset  → '1' @ 0 ns, '0' @ 50 ns (one clean reset pulse)
-    ///       – enable → '0' @ 0 ns, '1' @ 100 ns (start counting once
-    ///                  reset releases), '0' @ 5000 ns, '1' @ 10000 ns
-    ///                  (a 5 µs pause window mid-run so the user can
+    ///       – run    → '0' @ 0 ns, '1' @ 100 ns (start counting once
+    ///                  reset releases), '0' @ 12000 ns, '1' @ 18000 ns
+    ///                  (a 6 µs pause window mid-run so the user can
     ///                  watch every output freeze and then resume)
+    ///       – dir    → '1' @ 0 ns (clockwise stepper direction)
+    ///       – nudge  → '0' @ 0 ns, '1' @ 22000 ns, '0' @ 23000 ns
+    ///                  (a single 1 µs nudge pulse late in the run to show
+    ///                  the btn_echo LED following the input)
     /// </summary>
     private async Task SaveSampleConfigurationAsync()
     {
@@ -519,13 +925,31 @@ end architecture behavioral;
                 },
                 new PortMomentConfiguration
                 {
-                    PortName = "enable",
+                    PortName = "run",
                     Values = new List<PortMomentValue>
                     {
                         new PortMomentValue { Time = 0,     TimeScale = "NS", Value = "0" },
                         new PortMomentValue { Time = 100,   TimeScale = "NS", Value = "1" },
-                        new PortMomentValue { Time = 5000,  TimeScale = "NS", Value = "0" },
-                        new PortMomentValue { Time = 10000, TimeScale = "NS", Value = "1" }
+                        new PortMomentValue { Time = 12000, TimeScale = "NS", Value = "0" },
+                        new PortMomentValue { Time = 18000, TimeScale = "NS", Value = "1" }
+                    }
+                },
+                new PortMomentConfiguration
+                {
+                    PortName = "dir",
+                    Values = new List<PortMomentValue>
+                    {
+                        new PortMomentValue { Time = 0, TimeScale = "NS", Value = "1" }
+                    }
+                },
+                new PortMomentConfiguration
+                {
+                    PortName = "nudge",
+                    Values = new List<PortMomentValue>
+                    {
+                        new PortMomentValue { Time = 0,     TimeScale = "NS", Value = "0" },
+                        new PortMomentValue { Time = 22000, TimeScale = "NS", Value = "1" },
+                        new PortMomentValue { Time = 23000, TimeScale = "NS", Value = "0" }
                     }
                 }
             };
@@ -603,17 +1027,28 @@ end architecture behavioral;
 
     private async Task CreateProjectAsync()
     {
+        // v1 templates flow: the gallery modal owns project-creation now.
+        // The legacy ProjectDetailsModal still exists for the "Edit project"
+        // path, but the primary create-flow goes through TemplateGalleryModal
+        // so users land on a multi-file scaffold instead of a single empty
+        // main.vhd. The gallery's first card ("Empty scaffold") is the
+        // closest analog to the old behaviour.
         var parameters = new Dictionary<string, object>
         {
-            { "OnProjectCreated", EventCallback.Factory.Create<bool>(this, OnProjectCreatedAsync) }
+            { "OnProjectCreated", EventCallback.Factory.Create<Project>(this, OnTemplateProjectCreatedAsync) }
         };
-        await _newProjectModal.ShowAsync<ProjectDetailsModal>(Traductor.T("PROJECTS_NEW"), parameters: parameters);
+        await _newProjectModal.ShowAsync<TemplateGalleryModal>(Traductor.T("TEMPLATE_GALLERY_TITLE"), parameters: parameters);
     }
 
-    private async Task OnProjectCreatedAsync(bool status)
+    /// <summary>
+    /// Invoked by TemplateGalleryModal after a successful create. Refreshes
+    /// the projects grid, hides the modal, and navigates to the new project's
+    /// editor so the user sees the freshly-scaffolded files immediately.
+    /// </summary>
+    private async Task OnTemplateProjectCreatedAsync(Project project)
     {
         _projects = await Projects.GetListAsync() ?? new();
         await _newProjectModal.HideAsync();
-        await InvokeAsync(StateHasChanged);
+        NavigationManager.NavigateTo($"/editor/{project.Id}");
     }
 }

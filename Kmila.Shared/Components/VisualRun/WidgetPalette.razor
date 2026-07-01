@@ -1,0 +1,93 @@
+@namespace Kmila.Shared.Components.VisualRun
+@using Microsoft.AspNetCore.Components
+
+@*
+    WidgetPalette — vertical left-side strip of 6 draggable widget chips.
+
+    Replaces the 6 inline "+ LED / + Botón / + Interruptor / …" buttons that
+    used to live in the VisualPanel toolbar. Per UI audit (2026-06-28): the
+    toolbar buttons were a flat list that didn't follow the "tool zone vs
+    canvas zone" pattern users expect from real EDA / circuit editors.
+
+    Each chip emits OnSelected(widgetType) on click. VisualPanel's parent
+    dispatches to its existing AddLed / AddButton / AddSwitch / AddLedArray /
+    AddStepper / AddSevenSeg methods so the widget-spawn logic stays put.
+
+    Phase 6c (deferred): augment with HTML5 drag-and-drop so widgets can be
+    dragged from a chip and dropped at the cursor position on the canvas.
+    Click-to-spawn ships first because it works identically on touch + mouse
+    + keyboard (Android WebView's HTML5-DnD support is patchy on older OS
+    versions).
+
+    Disabled prop matches the toolbar's old behavior: while a simulation is
+    running, adding new widgets is forbidden (would invalidate the running
+    trace).
+*@
+
+<aside class="visual-page__palette"
+       role="toolbar"
+       aria-label="@Traductor.T("VISUAL_PALETTE_LABEL")">
+    <h6 class="visual-page__palette-title">@Traductor.T("VISUAL_PALETTE_TITLE")</h6>
+    @foreach (var w in _widgets)
+    {
+        <button type="button"
+                class="visual-page__palette-chip"
+                disabled="@Disabled"
+                draggable="true"
+                data-testid="@($"visual-palette-{w.Type}")"
+                @onclick="() => OnSelected.InvokeAsync(w.Type)"
+                @ondragstart="@(e => OnDragStart.InvokeAsync(w.Type))"
+                @ondragend="@(e => OnDragEnd.InvokeAsync())"
+                title="@Traductor.T(w.LabelKey)"
+                aria-label="@Traductor.T(w.LabelKey)">
+            <span class="visual-page__palette-chip-icon" aria-hidden="true">
+                <Icon Name="@w.Icon" />
+            </span>
+            <span class="visual-page__palette-chip-label">@Traductor.T(w.LabelKey)</span>
+        </button>
+    }
+</aside>
+
+@code {
+    /// <summary>
+    /// Fires with the widget type identifier ("led", "button", "switch",
+    /// "led-array", "stepper", "seven-seg") when the user picks a chip.
+    /// </summary>
+    [Parameter] public EventCallback<string> OnSelected { get; set; }
+
+    /// <summary>
+    /// Fires with the widget type when a drag starts (HTML5 DnD). VisualPanel
+    /// stashes the type so a subsequent drop on the canvas knows what to spawn.
+    /// </summary>
+    [Parameter] public EventCallback<string> OnDragStart { get; set; }
+
+    /// <summary>
+    /// Fires when a drag ends (with or without a successful drop). Used to
+    /// clear the stashed drag-type so a stale value can't be re-applied later.
+    /// </summary>
+    [Parameter] public EventCallback OnDragEnd { get; set; }
+
+    /// <summary>
+    /// True while a simulation is running — chips render disabled so the user
+    /// can't mutate the live design.
+    /// </summary>
+    [Parameter] public bool Disabled { get; set; }
+
+    private record WidgetDef(string Type, string LabelKey, IconName Icon);
+
+    /// <summary>
+    /// Static catalog of widgets the palette offers. Matches the AddXxx
+    /// handlers in VisualPanel.razor. Order is the historical toolbar order
+    /// (LED → Button → Switch → LED-array → Stepper → 7-segment) so existing
+    /// user muscle memory still works.
+    /// </summary>
+    private static readonly WidgetDef[] _widgets = new[]
+    {
+        new WidgetDef("led",       "VISUAL_PALETTE_LED",       IconName.Lightbulb),
+        new WidgetDef("button",    "VISUAL_PALETTE_BUTTON",    IconName.CircleFill),
+        new WidgetDef("switch",    "VISUAL_PALETTE_SWITCH",    IconName.ToggleOn),
+        new WidgetDef("led-array", "VISUAL_PALETTE_LED_ARRAY", IconName.Grid),
+        new WidgetDef("stepper",   "VISUAL_PALETTE_STEPPER",   IconName.ArrowRepeat),
+        new WidgetDef("seven-seg", "VISUAL_PALETTE_SEVEN_SEG", IconName.Display),
+    };
+}

@@ -17,12 +17,18 @@
                     <Icon Name="IconName.Rocket" />
                     <span>@Traductor.T("HOME_GO_TO_PROJECTS")</span>
                 </a>
-                <a href="/learn" class="kmila-btn kmila-btn--accent kmila-btn--lg home-hero__primary">
+                @* slot/page-hero-actions — only one --featured --accent CTA per hero;
+                   secondary actions ghost so the primary "Go to Projects" anchors. *@
+                <a href="/learn" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--lg home-hero__primary">
                     <Icon Name="IconName.MortarboardFill" />
                     <span>@Traductor.T("NAV_LEARN")</span>
                     @if (_learnTotal > 0)
                     {
-                        <span class="home-hero__progress-chip" aria-label="@string.Format(Traductor.T("LEARN_YOUR_PROGRESS_FMT"), _learnDone, _learnTotal)">
+                        @* `dir="ltr"` keeps the numeric pair in reading order inside
+                           RTL languages (Arabic). Without it the digits + slash get
+                           bidi-reordered to "31 / 0". *@
+                        <span class="home-hero__progress-chip" dir="ltr"
+                              aria-label="@string.Format(Traductor.T("LEARN_YOUR_PROGRESS_FMT"), _learnDone, _learnTotal)">
                             @_learnDone / @_learnTotal
                         </span>
                     }

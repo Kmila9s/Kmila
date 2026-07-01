@@ -1,0 +1,80 @@
+@namespace Kmila.Shared.Components.VisualRun
+@using Kmila.Shared.Services.VisualRun
+
+<div class="kviz-widget kviz-button @(IsPressed ? "kviz-button--pressed" : "") @(EditMode ? "kviz-button--edit" : "") @(Selected ? "kviz-widget--selected" : "")"
+     style="left:@(Comp.Position.X)px; top:@(Comp.Position.Y)px;"
+     data-component-id="@Comp.Id"
+     @onpointerdown="HandlePointerDown"
+     @onpointerup="HandlePointerUp"
+     @onpointerleave="HandlePointerUp"
+     @oncontextmenu:preventDefault>
+    <div class="kviz-button-cap">
+        <div class="kviz-button-label">@Label</div>
+    </div>
+    <div class="kviz-button-port">@PortLabel</div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public KvizComponent Comp { get; set; } = default!;
+    [Parameter] public VisualRunCoordinator? Coordinator { get; set; }
+    [Parameter] public bool EditMode { get; set; }
+    [Parameter] public bool Selected { get; set; }
+    [Parameter] public EventCallback<Microsoft.AspNetCore.Components.Web.PointerEventArgs> OnPointerDownExternal { get; set; }
+
+    [CascadingParameter(Name = "FrameVersion")] public int FrameVersion { get; set; }
+
+    private bool IsPressed;
+
+    private string Label => Comp.Config.GetString("label", "BTN");
+
+    private string PortLabel =>
+        Comp.Bindings.TryGetValue("out", out var p) && !string.IsNullOrEmpty(p) ? p : "(unwired)";
+
+    private async Task HandlePointerDown(Microsoft.AspNetCore.Components.Web.PointerEventArgs e)
+    {
+        if (EditMode)
+        {
+            // Bubble up to the canvas's drag-start logic. No press visual
+            // in edit mode.
+            if (OnPointerDownExternal.HasDelegate)
+                await OnPointerDownExternal.InvokeAsync(e);
+            return;
+        }
+        IsPressed = true;
+        Drive("1");
+    }
+
+    private void HandlePointerUp()
+    {
+        if (EditMode) return;
+        if (!IsPressed) return;
+        IsPressed = false;
+        Drive("0");
+    }
+
+    // Phase 3++ button bounce. When the user opts in via the properties
+    // pane, every press + release generates a 6-step alternating chatter
+    // pattern via Coordinator.EnqueueBounce — the port reads as wobbling
+    // between '0' and '1' for 6 ticks before settling on the steady
+    // intent. Real mechanical buttons bounce 5–20 ms; ours wobbles for
+    // ~96 ms at Normal speed (16 ms/tick × 6) — exaggerated for
+    // pedagogical clarity, and tied to sim time so it scales when the
+    // user slows the visual coordinator down to see what's happening.
+    private bool Bounce => Comp.Config.GetBool("bounce", false);
+
+    private void Drive(string value)
+    {
+        if (Coordinator == null) return;
+        if (!Comp.Bindings.TryGetValue("out", out var port) || string.IsNullOrEmpty(port)) return;
+        if (Bounce)
+        {
+            // 6-step chatter that starts by going to the *new* level then
+            // wobbles. After the queue drains, the steady intent from
+            // InputStateMap (`value`) reasserts.
+            string a = value;
+            string b = value == "1" ? "0" : "1";
+            Coordinator.EnqueueBounce(port, new[] { a, b, a, b, a, b });
+        }
+        Coordinator.Inputs.Set(port, value);
+    }
+}

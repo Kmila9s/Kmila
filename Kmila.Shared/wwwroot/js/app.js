@@ -1022,6 +1022,15 @@ window.downloadFile = function (fileName, content) {
     const handles = new Map();
     let nextId = 1;
 
+    // Approximate chip width used for the right-edge flip decision. The chip
+    // sizes itself to its text ("12.345 µs" / "10.000 ms"), so reading
+    // chip.offsetWidth gives a tighter answer — but that read costs a forced
+    // reflow inside the per-frame update path, which was the dominant
+    // contributor to waveform-scroll jank pre-2026-06-18. A fixed 80px keeps
+    // the flip threshold conservative (chip stays a few px farther from the
+    // edge than strictly necessary) without paying for the layout read.
+    const CHIP_FLIP_THRESHOLD_PX = 80;
+
     function formatTime(ns) {
         const a = Math.abs(ns);
         if (a >= 1e9) return (ns / 1e9).toFixed(3) + ' s';
@@ -1036,6 +1045,14 @@ window.downloadFile = function (fileName, content) {
         if (!body) return -1;
         if (body.__kmilaHoverId) detach(body.__kmilaHoverId);
 
+        // Coarse-pointer (touch-primary) devices have no hover state — the
+        // overlay is invisible to them and the per-event geometry math was
+        // the dominant source of waveform-scroll jank on Android (perf
+        // audit 2026-06-18: 19% janky frames, p90 = 61ms). Skip attaching
+        // entirely so the body's only listener is the browser's own scroll.
+        const mq = window.matchMedia && window.matchMedia('(pointer: coarse)');
+        if (mq && mq.matches) return -1;
+
         const line = document.createElement('div');
         line.className = 'waveform-hover__line';
         line.style.display = 'none';
@@ -1045,56 +1062,76 @@ window.downloadFile = function (fileName, content) {
         chip.style.display = 'none';
         body.appendChild(chip);
 
-        let lastBodyX = -1;
+        // Cache the grid element. It's re-created when Razor re-renders the
+        // viewer (zoom, data swap), so check `.isConnected` before reusing.
+        let cachedGrid = null;
+        function getGrid() {
+            if (cachedGrid && cachedGrid.isConnected) return cachedGrid;
+            cachedGrid = body.querySelector('.waveform-grid');
+            return cachedGrid;
+        }
+
+        // Latest pointer position in client coords. We resolve to body-local
+        // X inside update(), which already reads the body rect — keeping a
+        // raw clientX here means onMove can stay zero-allocation and one
+        // assignment.
+        let lastClientX = -1;
+        let rafPending = false;
 
         function update() {
-            if (lastBodyX < 0) {
+            rafPending = false;
+            // --- read phase: collect every layout-affecting metric first ---
+            const grid = lastClientX < 0 ? null : getGrid();
+            if (lastClientX < 0 || !grid) {
                 line.style.display = 'none';
                 chip.style.display = 'none';
                 return;
             }
-            const rect = body.getBoundingClientRect();
-            const labelW = parseFloat(body.dataset.labelWidth || '160');
-            // Don't show the indicator over the sticky label column or
-            // outside the body — both reads would map to an invalid time.
-            if (lastBodyX < labelW || lastBodyX > rect.width) {
-                line.style.display = 'none';
-                chip.style.display = 'none';
-                return;
-            }
+            const rect    = body.getBoundingClientRect();
+            const bodyX   = lastClientX - rect.left;
+            const labelW  = parseFloat(body.dataset.labelWidth || '160');
             const startNs = parseFloat(body.dataset.viewStartNs || '0');
             const endNs   = parseFloat(body.dataset.viewEndNs   || '0');
-            if (!(endNs > startNs)) return;
-            const grid = body.querySelector('.waveform-grid');
-            if (!grid) return;
-            const trackW = grid.offsetWidth - labelW;
-            if (trackW <= 0) return;
+            const gridW   = grid.offsetWidth;
+            const gridH   = grid.offsetHeight;
+            const scrollL = body.scrollLeft;
+            const scrollT = body.scrollTop;
 
-            const trackX = lastBodyX - labelW + body.scrollLeft;
-            const t = startNs + (trackX / trackW) * (endNs - startNs);
+            // Out-of-bounds → hide and skip the rest.
+            if (bodyX < labelW || bodyX > rect.width ||
+                !(endNs > startNs) || gridW - labelW <= 0) {
+                line.style.display = 'none';
+                chip.style.display = 'none';
+                return;
+            }
 
-            const contentX = body.scrollLeft + lastBodyX;
-            line.style.left = contentX + 'px';
-            line.style.height = grid.offsetHeight + 'px';
+            // --- compute phase: pure math, no DOM touches ---
+            const trackW   = gridW - labelW;
+            const trackX   = bodyX - labelW + scrollL;
+            const t        = startNs + (trackX / trackW) * (endNs - startNs);
+            const contentX = scrollL + bodyX;
+            const flip     = (rect.width - bodyX) < CHIP_FLIP_THRESHOLD_PX;
+            const chipLeft = contentX + (flip ? -CHIP_FLIP_THRESHOLD_PX : 8);
+
+            // --- write phase: all DOM mutations grouped at the end ---
+            line.style.left    = contentX + 'px';
+            line.style.height  = gridH + 'px';
             line.style.display = 'block';
-
-            chip.textContent = formatTime(t);
-            // Flip the chip to the left of the cursor near the right edge so
-            // it never clips out of the visible body.
-            const chipW = chip.offsetWidth || 60;
-            const flip  = (rect.width - lastBodyX) < (chipW + 16);
-            chip.style.left = (contentX + (flip ? -chipW - 8 : 8)) + 'px';
-            chip.style.top  = (body.scrollTop + 4) + 'px';
+            chip.textContent   = formatTime(t);
+            chip.style.left    = chipLeft + 'px';
+            chip.style.top     = (scrollT + 4) + 'px';
             chip.style.display = 'block';
         }
 
-        function onMove(e) {
-            const rect = body.getBoundingClientRect();
-            lastBodyX = e.clientX - rect.left;
-            update();
+        function schedule() {
+            if (rafPending) return;
+            rafPending = true;
+            requestAnimationFrame(update);
         }
-        function onLeave() { lastBodyX = -1; update(); }
-        function onScroll() { if (lastBodyX >= 0) update(); }
+
+        function onMove(e)   { lastClientX = e.clientX; schedule(); }
+        function onLeave()   { lastClientX = -1;       schedule(); }
+        function onScroll()  { if (lastClientX >= 0)   schedule(); }
 
         body.addEventListener('mousemove', onMove);
         body.addEventListener('mouseleave', onLeave);
@@ -1574,6 +1611,52 @@ window.kmilaDisposeMonacoBreakpoints = function () {
     if (decos.length > 0) {
         editor.deltaDecorations(decos, []);
         _kmilaBpDecos.set(editor, []);
+    }
+};
+
+/* ── Live-step "current line" highlight on the main editor's Monaco ──────
+ * Mirrors kmilaExecHighlightLines (which targets the Concepts-lesson
+ * exec-player Monaco) but for the editor's main `.editor-monaco`. The
+ * Editor calls this on every OnLiveStepChanged / OnLiveChanged tick
+ * while a sim is paused — the user can flip between Editor / Schematic /
+ * Replay tabs and the highlighted source line tells them exactly where
+ * the engine is currently parked. Cleared when the engine resumes or
+ * the sim ends. */
+const _kmilaEditorExecDecos = new WeakMap();
+
+window.kmilaEditorHighlightExecLines = function (lineNumbers) {
+    const editor = _kmilaFindEditorMonaco();
+    if (!editor) return;
+    const model = editor.getModel();
+    if (!model) return;
+
+    const maxLine = model.getLineCount();
+    const safe = (Array.isArray(lineNumbers) ? lineNumbers : [])
+        .filter(n => Number.isInteger(n) && n >= 1 && n <= maxLine);
+
+    const newDecos = safe.map(ln => ({
+        range: new monaco.Range(ln, 1, ln, 1),
+        options: { isWholeLine: true, className: 'kmila-editor-exec-line' }
+    }));
+
+    const prev = _kmilaEditorExecDecos.get(editor) || [];
+    const next = editor.deltaDecorations(prev, newDecos);
+    _kmilaEditorExecDecos.set(editor, next);
+
+    // Scroll the first highlighted line into view so a user who'd scrolled
+    // elsewhere in the file snaps back to where the engine is parked.
+    if (safe.length > 0) {
+        try { editor.revealLineInCenterIfOutsideViewport(safe[0]); } catch { }
+    }
+};
+
+window.kmilaEditorClearExecHighlights = function () {
+    const editor = _kmilaFindEditorMonaco();
+    if (!editor) return;
+    const prev = _kmilaEditorExecDecos.get(editor) || [];
+    if (prev.length > 0) {
+        editor.deltaDecorations(prev, []);
+        _kmilaEditorExecDecos.set(editor, []);
     }
 };
 

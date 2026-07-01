@@ -141,9 +141,14 @@ public class ProjectFiles : IRepository<ProjectFile>
         {
             fileContent = await File.ReadAllTextAsync(GetDiskPath(project.BasePath, projectFile), _cts.Token);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            fileContent = $"Something fail while openning the file: {projectFile.FileName}, the next file content is a backup made by the app, consider save it. Error: {ex.Message}\n" + projectFile.Content;
+            // Disk read failed (file missing / permissions / etc). Fall back to
+            // the DB-stored backup content cleanly — don't inject the error
+            // message into the editor body. A caller-side banner / toast is the
+            // right surface for that. Saving from the editor will re-create the
+            // disk file from this content.
+            fileContent = projectFile.Content ?? string.Empty;
         }
         return new()
         {

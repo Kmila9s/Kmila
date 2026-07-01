@@ -38,9 +38,10 @@
     @* Scrollable nav body *@
     <nav class="kmila-sidebar__nav" role="navigation">
 
-        <div class="kmila-sidebar__section" aria-label="@Traductor.T("NAV_PROJECT_OPTIONS")">
+        @* Project group: only contains project-scoped routes (browse + create). *@
+        <div class="kmila-sidebar__section" aria-label="@Traductor.T("NAV_SECTION_PROJECT")">
             <span class="kmila-sidebar__section-label">
-                <span>@Traductor.T("NAV_PROJECT_OPTIONS")</span>
+                <span>@Traductor.T("NAV_SECTION_PROJECT")</span>
             </span>
 
             <a href="/projects"
@@ -60,6 +61,14 @@
                 <Icon Name="IconName.PlusCircleFill" Class="kmila-nav-item__icon" />
                 <span class="kmila-nav-item__label">@Traductor.T("NAV_CREATE_PROJECT")</span>
             </a>
+        </div>
+
+        @* Learning group: top-level pedagogy surfaces. Split from the Project
+           section because Learn/Practice/Concepts are not project-scoped. *@
+        <div class="kmila-sidebar__section" aria-label="@Traductor.T("NAV_SECTION_LEARNING")">
+            <span class="kmila-sidebar__section-label">
+                <span>@Traductor.T("NAV_SECTION_LEARNING")</span>
+            </span>
 
             <a href="/learn"
                class="kmila-nav-item @ActiveClass("/learn", exact: false)"
@@ -70,7 +79,11 @@
                 <span class="kmila-nav-item__label">@Traductor.T("NAV_LEARN")</span>
                 @if (_learnTotal > 0)
                 {
-                    <span class="kmila-nav-item__badge" title="@string.Format(Traductor.T("LEARN_YOUR_PROGRESS_FMT"), _learnDone, _learnTotal)">
+                    @* `dir="ltr"` keeps the "done / total" pair in numeric reading order
+                       inside RTL contexts (Arabic) — without it, Latin digits and the
+                       slash get bidi-reordered to "31 / 0". *@
+                    <span class="kmila-nav-item__badge" dir="ltr"
+                          title="@string.Format(Traductor.T("LEARN_YOUR_PROGRESS_FMT"), _learnDone, _learnTotal)">
                         @_learnDone / @_learnTotal
                     </span>
                 }
@@ -85,7 +98,8 @@
                 <span class="kmila-nav-item__label">@Traductor.T("NAV_PRACTICE")</span>
                 @if (_practiceTotal > 0)
                 {
-                    <span class="kmila-nav-item__badge" title="@string.Format(Traductor.T("PRACTICE_NAV_BADGE_FMT"), _practiceSolved, _practiceTotal)">
+                    <span class="kmila-nav-item__badge" dir="ltr"
+                          title="@string.Format(Traductor.T("PRACTICE_NAV_BADGE_FMT"), _practiceSolved, _practiceTotal)">
                         @_practiceSolved / @_practiceTotal
                     </span>
                 }
@@ -100,7 +114,8 @@
                 <span class="kmila-nav-item__label">@Traductor.T("NAV_CONCEPTS")</span>
                 @if (_conceptTotal > 0)
                 {
-                    <span class="kmila-nav-item__badge" title="@string.Format(Traductor.T("CONCEPTS_NAV_BADGE_FMT"), _conceptDone, _conceptTotal)">
+                    <span class="kmila-nav-item__badge" dir="ltr"
+                          title="@string.Format(Traductor.T("CONCEPTS_NAV_BADGE_FMT"), _conceptDone, _conceptTotal)">
                         @_conceptDone / @_conceptTotal
                     </span>
                 }
@@ -241,6 +256,12 @@
 {
     <div class="kmila-sidebar__backdrop" @onclick="SidebarState.CloseMobile" aria-hidden="true"></div>
 }
+
+@* Destructive-action confirmation. The sidebar's trash icon is small + close to
+   the project label, so an accidental tap was destroying work without any
+   undo. Mirrors the ConfirmDialog flow on the Projects card grid so the UX
+   is consistent across delete surfaces. *@
+<ConfirmDialog @ref="_removeProjectDialog" />
 
 @code {
     /// <summary>Full project list from the DB.</summary>
@@ -459,16 +480,34 @@
         _visibleProjects = ordered.Take(RecentProjectsTracker.SidebarLimit).ToList();
     }
 
+    private ConfirmDialog _removeProjectDialog = new();
+
     /// <summary>
-    /// Sidebar row delete. No confirmation dialog here — sidebar real estate
-    /// is tight and a double-click on a trash icon is an intentional action.
-    /// The Projects page still has the full confirm flow for destructive
-    /// deletes from the card grid.
+    /// Sidebar row delete. Originally skipped confirmation because the trash
+    /// icon required an intentional tap — but in practice mis-taps were
+    /// destroying student work with no undo path. Now mirrors the Projects
+    /// page confirm flow so users get a "Yes / Go back" gate.
     /// </summary>
     private async Task RemoveProjectAsync(Project project)
     {
         try
         {
+            var options = new ConfirmDialogOptions
+            {
+                YesButtonColor = ButtonColor.Danger,
+                NoButtonColor = ButtonColor.Secondary,
+                AutoFocusYesButton = false,
+                YesButtonText = Traductor.T("PROJECTS_REMOVE"),
+                NoButtonText = Traductor.T("COMMON_GO_BACK")
+            };
+            var confirmed = await _removeProjectDialog.ShowAsync(
+                title: $"{Traductor.T("PROJECTS_REMOVING")}: {project.Name}",
+                message1: string.Format(Traductor.T("PROJECTS_REMOVE_MSG1"), project.BasePath),
+                message2: Traductor.T("PROJECTS_REMOVE_MSG2"),
+                confirmDialogOptions: options
+            );
+            if (!confirmed) return;
+
             var ok = await Projects.RemoveAsync(project);
             if (ok)
             {

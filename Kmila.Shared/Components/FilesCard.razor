@@ -152,7 +152,8 @@
                         style="padding-left: @(row.Depth * 16)px"
                         draggable="true"
                         @ondragstart="() => OnFileDragStartAsync(file.Id)"
-                        @ondragend="OnFileDragEndAsync">
+                        @ondragend="OnFileDragEndAsync"
+                        @onclick="() => OpenFileAsync(file)">
                         <span class="file-row__indicator" aria-hidden="true"></span>
 
                         <span class="file-row__icon" aria-hidden="true">
@@ -682,8 +683,12 @@
             YesButtonText = Traductor.T("FILES_DELETE"),
             NoButtonText = Traductor.T("COMMON_GO_BACK")
         };
+        // Interpolate the file name so kebab-on-wrong-row mistakes are
+        // catchable (UX-N-019). FILES_REMOVE_TITLE contains a {0} slot that
+        // string.Format fills in here; legacy versions without the slot
+        // render unchanged (no exception, just no filename insertion).
         var confirmed = await _removeFileDialog.ShowAsync(
-            Traductor.T("FILES_REMOVE_TITLE"),
+            string.Format(Traductor.T("FILES_REMOVE_TITLE"), file.FileName),
             Traductor.T("FILES_REMOVE_MSG1"),
             Traductor.T("FILES_REMOVE_MSG2"),
             options);
@@ -973,7 +978,7 @@
         {
             { "Project", Project },
             { "TargetDirectory", _pendingNewFileDir },
-            { "OnProjectFileCreated", EventCallback.Factory.Create(this, OnFileCreatedAsync) }
+            { "OnProjectFileCreated", EventCallback.Factory.Create<Kmila.Shared.Models.ProjectFile>(this, OnFileCreatedAsync) }
         };
         var title = string.IsNullOrEmpty(_pendingNewFileDir)
             ? Traductor.T("FILES_NEW_FILE")
@@ -981,10 +986,24 @@
         await _createFileModal.ShowAsync<CreateFileModal>(title, parameters: parameters);
     }
 
-    private async Task OnFileCreatedAsync()
+    private async Task OnFileCreatedAsync(Kmila.Shared.Models.ProjectFile? created)
     {
         await _createFileModal.HideAsync();
         await ReloadAllAsync();
+        // Auto-open the file the student just created. Without this, the
+        // editor remains on its "No file open" placeholder and the user has
+        // no obvious way to reach the file they just made (the Files dock
+        // tab is at position 7 of 8, off-screen on phones). Find the file
+        // back in the reloaded list (Id is set after CreateAsync) and route
+        // it through the same path as a manual click.
+        if (created != null)
+        {
+            var match = _projectFiles.FirstOrDefault(f => f.Id == created.Id)
+                       ?? _projectFiles.FirstOrDefault(f =>
+                              string.Equals(f.FileName, created.FileName, StringComparison.Ordinal)
+                              && string.Equals(f.DirectoryPath ?? "", created.DirectoryPath ?? "", StringComparison.Ordinal));
+            if (match != null) await OpenFileAsync(match);
+        }
         StateHasChanged();
     }
 

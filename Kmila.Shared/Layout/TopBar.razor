@@ -13,6 +13,7 @@
 *@
 @implements IDisposable
 @inject SidebarState SidebarState
+@inject NavigationManager Nav
 
 <header class="kmila-topbar" role="banner">
     <div class="kmila-topbar__inner">
@@ -30,10 +31,16 @@
 
         <div class="kmila-topbar__end" data-tour="topbar-end">
             @* Project-state pill — saved/loaded simulation configurations.
-               Stays separate because it changes per project, not per user. *@
-            <span data-tour="topbar-configurations">
-                <ConfigurationsPill />
-            </span>
+               Only meaningful inside the editor; on Home / Projects / Learn /
+               Settings the pill reads as "No config" which is noise (you're
+               not in a project yet). Scope it to the routes where it has
+               actionable meaning. *@
+            @if (IsOnProjectRoute())
+            {
+                <span data-tour="topbar-configurations">
+                    <ConfigurationsPill />
+                </span>
+            }
 
             @* Everything user-scoped (account · FPGA · language · theme ·
                settings · sign-out) lives here. The avatar acts as a single
@@ -51,14 +58,26 @@
     {
         Traductor.StaticOnLangChanged += OnLanguageChanged;
         SidebarState.OnChange += OnSidebarStateChanged;
+        Nav.LocationChanged += OnLocationChanged;
     }
 
     private void OnSidebarStateChanged() => InvokeAsync(StateHasChanged);
     private void OnLanguageChanged() => InvokeAsync(StateHasChanged);
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+        => InvokeAsync(StateHasChanged);
+
+    private bool IsOnProjectRoute()
+    {
+        var path = new Uri(Nav.Uri).AbsolutePath;
+        return path.StartsWith("/editor/", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/practice/", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/concepts/", StringComparison.OrdinalIgnoreCase);
+    }
 
     public void Dispose()
     {
         Traductor.StaticOnLangChanged -= OnLanguageChanged;
         SidebarState.OnChange -= OnSidebarStateChanged;
+        Nav.LocationChanged -= OnLocationChanged;
     }
 }

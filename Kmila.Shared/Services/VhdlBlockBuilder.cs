@@ -246,7 +246,11 @@ public class VhdlBlockBuilder
                 var portB = MkBlock("kmila_vhdl_port");
                 AddField(portB, "NAME", m.Groups["name"].Value);
                 AddField(portB, "DIR",  m.Groups["dir"].Value.ToLowerInvariant());
-                AddField(portB, "TYPE", "std_logic"); // Phase 0 vertical slice
+                // F-1 fix (2026-06-28): use the regex-captured type, not a
+                // hard-coded `std_logic`. PortLineRe already accepts the
+                // optional `(N downto 0)` suffix, so vector bus widths and
+                // unsigned/signed/integer types now round-trip intact.
+                AddField(portB, "TYPE", NormaliseType(m.Groups["type"].Value));
                 head = ChainAppend(head, portB);
             }
             else
@@ -277,8 +281,27 @@ public class VhdlBlockBuilder
     // has no init field — the `:= …` value is dropped (graceful loss,
     // not a parse failure).
     private static readonly Regex SignalDeclRe = new(
-        @"\bsignal\s+(?<names>\w+(?:\s*,\s*\w+)*)\s*:\s*(?<type>\w+)\s*(?::=\s*[^;]+?)?\s*;",
+        // F-1 fix (2026-06-28): widen <type> to accept `std_logic_vector(N
+        // downto 0)`, `unsigned(7 downto 0)`, etc. — same suffix shape as
+        // PortLineRe. Without this, signals silently downgraded to scalar
+        // `std_logic` and the round-trip emitted a structurally wrong
+        // architecture.
+        @"\bsignal\s+(?<names>\w+(?:\s*,\s*\w+)*)\s*:\s*(?<type>\w+(?:\s*\(\s*[^)]+\s*\))?)\s*(?::=\s*[^;]+?)?\s*;",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    // Normalize a captured VHDL type by collapsing internal whitespace and
+    // lowercasing the base keyword. Keeps `std_logic_vector(7 downto 0)`
+    // recognisable while tolerating sloppy input like `STD_LOGIC_VECTOR( 7
+    // DOWNTO 0 )`.
+    private static string NormaliseType(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return "std_logic";
+        var t = System.Text.RegularExpressions.Regex.Replace(raw.Trim(), @"\s+", " ");
+        // Lowercase the leading identifier only; keep numeric ranges verbatim
+        var paren = t.IndexOf('(');
+        if (paren < 0) return t.ToLowerInvariant();
+        return t.Substring(0, paren).ToLowerInvariant() + t.Substring(paren);
+    }
 
     private Dictionary<string, object?> BuildArchitecture(
         string name, string entity, string decls, string body,
@@ -296,13 +319,14 @@ public class VhdlBlockBuilder
         foreach (Match m in SignalDeclRe.Matches(decls))
         {
             var names = m.Groups["names"].Value;
+            var capturedType = NormaliseType(m.Groups["type"].Value);
             foreach (var raw in names.Split(','))
             {
                 var nm = raw.Trim();
                 if (nm.Length == 0) continue;
                 var d = MkBlock("kmila_vhdl_signal_decl");
                 AddField(d, "NAME", nm);
-                AddField(d, "TYPE", "std_logic");
+                AddField(d, "TYPE", capturedType);
                 declsHead = ChainAppend(declsHead, d);
             }
         }
@@ -388,6 +412,20 @@ public class VhdlBlockBuilder
                 continue;
             }
 
+            // F-3 (2026-06-28) — concurrent-body recovery for known
+            // unrecognized constructs: labeled statements (instantiations,
+            // named processes, named generates) and bare `for/if …
+            // generate` blocks. Consume each as ONE raw_concurrent tile
+            // instead of poisoning the rest of the architecture body.
+            var consumedUnknown = TryConsumeUnknownConcurrent(scan, original, i, out var rawTile);
+            if (consumedUnknown > 0 && rawTile != null)
+            {
+                FlushRaw();
+                head = ChainAppend(head, rawTile);
+                i += consumedUnknown;
+                continue;
+            }
+
             rawAcc.Append(original[i]);
             i++;
         }
@@ -468,12 +506,314 @@ public class VhdlBlockBuilder
                 continue;
             }
 
+            // F-4 (2026-06-28): case / when. Parses `case <subj> is when …
+            // => … [when others => …] end case;` into a structured
+            // kmila_vhdl_case block. Falls through to the F-3 raw-recovery
+            // path on malformed sources.
+            if (string.Equals(kw, "case", StringComparison.OrdinalIgnoreCase))
+            {
+                int consumedCase = TryParseCase(scan, original, i, out var caseBlock);
+                if (consumedCase > 0 && caseBlock != null)
+                {
+                    FlushRaw();
+                    head = ChainAppend(head, caseBlock);
+                    i += consumedCase;
+                    continue;
+                }
+            }
+
+            // F-3 (2026-06-28): graceful recovery for known unrecognized
+            // sequential constructs (case / for / while / loop / wait).
+            // Previously these poisoned the rest of the process body —
+            // ParseSequentialBody just kept accumulating into rawAcc until
+            // i == scan.Length, so a `case … end case;` followed by `q
+            // <= d;` produced ONE giant raw_seq instead of raw + assign.
+            // Now we consume each unrecognized construct as a single
+            // raw_seq tile and resume normal scanning afterwards.
+            var consumedUnknown = TryConsumeUnknownSequential(scan, original, i, out var rawTile);
+            if (consumedUnknown > 0 && rawTile != null)
+            {
+                FlushRaw();
+                head = ChainAppend(head, rawTile);
+                i += consumedUnknown;
+                continue;
+            }
+
             rawAcc.Append(original[i]);
             i++;
         }
 
         FlushRaw();
         return head;
+    }
+
+    // F-4 (2026-06-28) — case / when parser. Consumes `case <subj> is …
+    // end case;` and builds a kmila_vhdl_case block with an ALTS chain
+    // of kmila_vhdl_case_when / kmila_vhdl_case_others alternatives.
+    // Returns chars consumed; 0 means malformed → caller falls back to
+    // the F-3 raw-recovery path.
+    private int TryParseCase(
+        string scan, string original, int start,
+        out Dictionary<string, object?>? block)
+    {
+        block = null;
+        int p = NextNonWhitespace(scan, start);
+        if (!ConsumeKw(scan, ref p, "case")) return 0;
+        // Subject expression: up to the next `is` at depth 0.
+        int isPos = FindKeywordAtDepth(scan, p, "is", 0);
+        if (isPos < 0) return 0;
+        string subjectText = scan.Substring(p, isPos - p).Trim();
+        if (subjectText.Length == 0) return 0;
+        int q = isPos + 2;
+        // Find matching `end case`.
+        int endIdx = FindEndKeyword(scan, q, "case");
+        if (endIdx < 0) return 0;
+        int semi = FindCharAtDepth(scan, endIdx, ';', 0);
+        if (semi < 0) return 0;
+
+        var caseBlock = MkBlock("kmila_vhdl_case");
+        AddInput(caseBlock, "SUBJECT", BuildExpression(subjectText));
+
+        // Locate all top-level `when …` positions inside (q, endIdx-3).
+        // endIdx points after `end case` keyword; the alternatives live
+        // between `is` (q) and the start of `end case` (endIdx - 4 minus
+        // whitespace). Walk through paren-aware.
+        Dictionary<string, object?>? altsHead = null;
+        var whenPositions = new List<int>();
+        int depth = 0;
+        for (int k = q; k < endIdx - 4; k++)
+        {
+            var c = scan[k];
+            if (c == '(') { depth++; continue; }
+            if (c == ')') { depth--; continue; }
+            if (depth != 0) continue;
+            // boundary before k
+            if (k > 0)
+            {
+                var prev = scan[k - 1];
+                if (char.IsLetterOrDigit(prev) || prev == '_') continue;
+            }
+            if (k + 4 <= scan.Length &&
+                string.Compare(scan, k, "when", 0, 4, StringComparison.OrdinalIgnoreCase) == 0 &&
+                (k + 4 == scan.Length ||
+                 !char.IsLetterOrDigit(scan[k + 4]) && scan[k + 4] != '_'))
+            {
+                whenPositions.Add(k);
+            }
+        }
+        // Append a sentinel for "end of alternatives" so each when's body
+        // span is just [thisWhen, nextWhen).
+        whenPositions.Add(endIdx - 4); // start of "end case"
+
+        for (int w = 0; w < whenPositions.Count - 1; w++)
+        {
+            int wStart = whenPositions[w];
+            int wEnd   = whenPositions[w + 1];
+            int afterWhen = wStart + 4; // past "when"
+            // Choice text: up to `=>` at depth 0.
+            int arrow = FindArrowAtDepth(scan, afterWhen, wEnd);
+            if (arrow < 0) continue;
+            string choice = scan.Substring(afterWhen, arrow - afterWhen).Trim();
+            int bodyStart = arrow + 2;
+            string bodyScan = scan.Substring(bodyStart, wEnd - bodyStart);
+            string bodyOrig = original.Substring(bodyStart, wEnd - bodyStart);
+            bool isOthers = string.Equals(choice, "others", StringComparison.OrdinalIgnoreCase);
+            var alt = MkBlock(isOthers ? "kmila_vhdl_case_others" : "kmila_vhdl_case_when");
+            if (!isOthers) AddField(alt, "CHOICE", choice);
+            var altBody = ParseSequentialBody(bodyScan, bodyOrig);
+            if (altBody != null) AddInput(alt, "BODY", altBody);
+            altsHead = ChainAppend(altsHead, alt);
+        }
+
+        if (altsHead != null) AddInput(caseBlock, "ALTS", altsHead);
+        block = caseBlock;
+        return semi - start + 1;
+    }
+
+    // Helper for F-4 — find `=>` at depth 0 inside [from, to).
+    private static int FindArrowAtDepth(string s, int from, int to)
+    {
+        int depth = 0;
+        for (int k = from; k < to - 1; k++)
+        {
+            var c = s[k];
+            if (c == '(') { depth++; continue; }
+            if (c == ')') { depth--; continue; }
+            if (depth != 0) continue;
+            if (c == '=' && s[k + 1] == '>') return k;
+        }
+        return -1;
+    }
+
+    // F-3 (2026-06-28) — known unrecognized sequential constructs. Detect
+    // the construct head at scan[start], depth-track to its matching `end
+    // <kw>;` terminator, emit the verbatim text as ONE raw_seq block.
+    // Returns total characters consumed (0 if not a known head). Keeps
+    // ParseSequentialBody recovering instead of poisoning the rest of the
+    // body when the catalog doesn't cover a statement.
+    private int TryConsumeUnknownSequential(
+        string scan, string original, int start,
+        out Dictionary<string, object?>? rawTile)
+    {
+        rawTile = null;
+        int p = NextNonWhitespace(scan, start);
+        var kw = PeekIdent(scan, p);
+        if (kw == null) return 0;
+        string endKw;
+        bool requiresLoop = false;
+        switch (kw.ToLowerInvariant())
+        {
+            case "case":  endKw = "case"; break;
+            case "loop":  endKw = "loop"; break;
+            case "for":
+            case "while": endKw = "loop"; requiresLoop = true; break;
+            case "wait":
+            case "exit":
+            case "next":
+            case "return":
+            case "null":
+            case "report":
+            case "assert":
+                // Single-statement constructs — just consume up to next `;`
+                // at depth 0.
+                int semi = FindCharAtDepth(scan, p, ';', 0);
+                if (semi < 0) return 0;
+                rawTile = BuildRaw("kmila_vhdl_raw_seq",
+                    original.Substring(p, semi - p + 1).Trim());
+                return semi - start + 1;
+            default: return 0;
+        }
+        // Depth-track scan for `end <endKw>` at depth 0, then mandatory `;`.
+        int q = p + kw.Length;
+        // for/while open into a `loop` body — first find that loop keyword
+        // to register the depth opener consistently; we just bump depth via
+        // FindEndKeyword's nested-loop handling.
+        int endPos = FindEndKeyword(scan, q, endKw);
+        if (endPos < 0) return 0;
+        // Skip past `end endKw` and optional trailing label, up to `;`.
+        int afterEnd = endPos;
+        int semiAfter = FindCharAtDepth(scan, afterEnd, ';', 0);
+        if (semiAfter < 0) return 0;
+        rawTile = BuildRaw("kmila_vhdl_raw_seq",
+            original.Substring(p, semiAfter - p + 1).Trim());
+        return semiAfter - start + 1;
+    }
+
+    // F-3 (2026-06-28) — concurrent-body counterpart of
+    // TryConsumeUnknownSequential. Recognizes labeled statements
+    // (`<ident>: <stmt>` — instantiations, named generates, named
+    // processes) and bare `for/if … generate` blocks. Emits a single
+    // raw_concurrent tile per construct.
+    private int TryConsumeUnknownConcurrent(
+        string scan, string original, int start,
+        out Dictionary<string, object?>? rawTile)
+    {
+        rawTile = null;
+        int p = NextNonWhitespace(scan, start);
+        if (p >= scan.Length) return 0;
+
+        // Labeled statement: `<ident>: …`
+        var label = PeekIdent(scan, p);
+        if (label != null)
+        {
+            int afterLabel = p + label.Length;
+            // Skip whitespace, expect ':'
+            int q = afterLabel;
+            while (q < scan.Length && char.IsWhiteSpace(scan[q])) q++;
+            if (q < scan.Length && scan[q] == ':' && (q + 1 >= scan.Length || scan[q + 1] != '='))
+            {
+                int afterColon = q + 1;
+                while (afterColon < scan.Length && char.IsWhiteSpace(scan[afterColon])) afterColon++;
+                var inner = PeekIdent(scan, afterColon);
+                string? endKw = null;
+                if (inner != null)
+                {
+                    var il = inner.ToLowerInvariant();
+                    if (il == "process") endKw = "process";
+                    else if (il == "for" || il == "if" || il == "while") endKw = "generate";
+                    else if (il == "block") endKw = "block";
+                }
+                if (endKw != null)
+                {
+                    int endIdx = FindEndKeyword(scan, afterColon + inner!.Length, endKw);
+                    if (endIdx < 0) return 0;
+                    int semi = FindCharAtDepth(scan, endIdx, ';', 0);
+                    if (semi < 0) return 0;
+                    rawTile = BuildRaw("kmila_vhdl_raw_concurrent",
+                        original.Substring(p, semi - p + 1).Trim());
+                    return semi - start + 1;
+                }
+                // Default: treat as instantiation — consume to next ';'.
+                int instSemi = FindCharAtDepth(scan, afterColon, ';', 0);
+                if (instSemi < 0) return 0;
+                rawTile = BuildRaw("kmila_vhdl_raw_concurrent",
+                    original.Substring(p, instSemi - p + 1).Trim());
+                return instSemi - start + 1;
+            }
+
+            // Non-labeled `for/if … generate` block.
+            var kl = label.ToLowerInvariant();
+            if (kl == "for" || kl == "if" || kl == "while")
+            {
+                int endIdx = FindEndKeyword(scan, p + label.Length, "generate");
+                if (endIdx < 0) return 0;
+                int semi = FindCharAtDepth(scan, endIdx, ';', 0);
+                if (semi < 0) return 0;
+                rawTile = BuildRaw("kmila_vhdl_raw_concurrent",
+                    original.Substring(p, semi - p + 1).Trim());
+                return semi - start + 1;
+            }
+        }
+        return 0;
+    }
+
+    // Helper for F-3 — find the literal sequence `end <kw>` at depth 0
+    // anywhere in [from, scan.Length). Returns the index immediately after
+    // `end <kw>`, or -1.
+    private static int FindEndKeyword(string scan, int from, string endKw)
+    {
+        int depth = 0;
+        for (int k = from; k < scan.Length; k++)
+        {
+            var c = scan[k];
+            if (c == '(') { depth++; continue; }
+            if (c == ')') { depth--; continue; }
+            if (depth != 0) continue;
+            if (k > 0)
+            {
+                var prev = scan[k - 1];
+                if (char.IsLetterOrDigit(prev) || prev == '_') continue;
+            }
+            if (k + 3 < scan.Length &&
+                string.Compare(scan, k, "end", 0, 3, StringComparison.OrdinalIgnoreCase) == 0 &&
+                !char.IsLetterOrDigit(scan[k + 3]) && scan[k + 3] != '_')
+            {
+                int q = k + 3;
+                while (q < scan.Length && char.IsWhiteSpace(scan[q])) q++;
+                if (q + endKw.Length <= scan.Length &&
+                    string.Compare(scan, q, endKw, 0, endKw.Length, StringComparison.OrdinalIgnoreCase) == 0 &&
+                    (q + endKw.Length == scan.Length ||
+                     !char.IsLetterOrDigit(scan[q + endKw.Length]) && scan[q + endKw.Length] != '_'))
+                {
+                    return q + endKw.Length;
+                }
+            }
+        }
+        return -1;
+    }
+
+    // Helper for F-3 — find a single char at the given paren depth.
+    private static int FindCharAtDepth(string s, int from, char target, int wantedDepth)
+    {
+        int depth = 0;
+        for (int k = from; k < s.Length; k++)
+        {
+            var c = s[k];
+            if (c == '(') { depth++; continue; }
+            if (c == ')') { depth--; continue; }
+            if (depth == wantedDepth && c == target) return k;
+        }
+        return -1;
     }
 
     /// <summary>
@@ -644,9 +984,22 @@ public class VhdlBlockBuilder
     private static readonly Regex RisingEdgeRe = new(
         @"^\s*rising_edge\s*\(\s*(?<sig>[^)]+)\s*\)\s*$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    // F-7 fix (2026-06-28): falling_edge is a one-regex clone — students
+    // doing async-reset designs hit this constantly and the raw_expr
+    // fallback was opaque pedagogically.
+    private static readonly Regex FallingEdgeRe = new(
+        @"^\s*falling_edge\s*\(\s*(?<sig>[^)]+)\s*\)\s*$",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex NotPrefixRe = new(
         @"^\s*not\b\s*(?<rest>.+)$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    // F-5 fix (2026-06-28): vector / string literals — bit-string forms
+    // (B"…", O"…", X"…") and bare quoted strings ("00", "1010"). Without
+    // this, every selector / mux comparison `sel = "00"` degraded to
+    // raw_expr on the RHS, hiding a very common student-facing pattern.
+    private static readonly Regex VectorLiteralRe = new(
+        @"^\s*(?<lit>(?:[bBoOxX])?""[^""]*"")\s*$",
+        RegexOptions.Compiled);
 
     private Dictionary<string, object?> BuildExpression(string text)
     {
@@ -666,6 +1019,37 @@ public class VhdlBlockBuilder
         {
             var b = MkBlock("kmila_vhdl_rising_edge");
             AddInput(b, "SIG", BuildExpression(re.Groups["sig"].Value));
+            return b;
+        }
+        var fe = FallingEdgeRe.Match(s);
+        if (fe.Success)
+        {
+            var b = MkBlock("kmila_vhdl_falling_edge");
+            AddInput(b, "SIG", BuildExpression(fe.Groups["sig"].Value));
+            return b;
+        }
+        var vec = VectorLiteralRe.Match(s);
+        if (vec.Success)
+        {
+            var b = MkBlock("kmila_vhdl_literal_vec");
+            AddField(b, "TEXT", vec.Groups["lit"].Value);
+            return b;
+        }
+
+        // F-2 fix (2026-06-28): binary logical operators (and/or/xor + the
+        // negated forms). Lower precedence than equality / not, so we scan
+        // for them after the eq/not branches below would short-circuit on
+        // a simpler shape. The scanner is paren-aware via
+        // FindTopLevelBinaryOp so `(a or b) and c` parses correctly.
+        var binPos = FindTopLevelBinaryOp(s);
+        if (binPos.idx >= 0)
+        {
+            var lhs = s.Substring(0, binPos.idx);
+            var rhs = s.Substring(binPos.idx + binPos.op.Length);
+            var b = MkBlock("kmila_vhdl_binop");
+            AddField(b, "OP", binPos.op.ToLowerInvariant());
+            AddInput(b, "LHS", BuildExpression(lhs));
+            AddInput(b, "RHS", BuildExpression(rhs));
             return b;
         }
 
@@ -724,6 +1108,66 @@ public class VhdlBlockBuilder
             }
         }
         return -1;
+    }
+
+    // F-2 fix (2026-06-28): paren-aware scan for the LAST occurrence of a
+    // top-level binary boolean operator. "Last" because we want LEFT
+    // associativity: `a and b and c` → ((a and b) and c). The candidates
+    // are scanned in precedence order — `or` < `xor` < `and` (lower
+    // precedence wins, then we split at the rightmost occurrence). Pure
+    // string scan, no tokenizer — good enough for the Phase-1 surface
+    // (academic-VHDL combinational gates). Returns (-1, "") if no match.
+    private static readonly string[] BinaryOpKeywords =
+        { "or", "nor", "xor", "xnor", "and", "nand" };
+
+    private static (int idx, string op) FindTopLevelBinaryOp(string s)
+    {
+        int depth = 0;
+        // Walk left-to-right tracking parens + quoted literals; remember
+        // the rightmost match per precedence tier. After the scan, return
+        // the lowest-precedence (= leftmost in priority list) match found.
+        var hits = new int[BinaryOpKeywords.Length];
+        for (int i = 0; i < hits.Length; i++) hits[i] = -1;
+
+        for (int k = 0; k < s.Length; k++)
+        {
+            var c = s[k];
+            if (c == '(') { depth++; continue; }
+            if (c == ')') { depth--; continue; }
+            if (c == '"')
+            {
+                // skip bit-string literal
+                int q = s.IndexOf('"', k + 1);
+                if (q < 0) return (-1, "");
+                k = q;
+                continue;
+            }
+            if (depth != 0) continue;
+            // Word boundary at k? Previous char must be non-letter/digit.
+            if (k > 0)
+            {
+                var prev = s[k - 1];
+                if (char.IsLetterOrDigit(prev) || prev == '_') continue;
+            }
+            for (int op = 0; op < BinaryOpKeywords.Length; op++)
+            {
+                var kw = BinaryOpKeywords[op];
+                if (k + kw.Length > s.Length) continue;
+                if (string.Compare(s, k, kw, 0, kw.Length, StringComparison.OrdinalIgnoreCase) != 0) continue;
+                var after = k + kw.Length;
+                if (after < s.Length)
+                {
+                    var nxt = s[after];
+                    if (char.IsLetterOrDigit(nxt) || nxt == '_') continue;
+                }
+                hits[op] = k; // rightmost wins
+            }
+        }
+        for (int op = 0; op < BinaryOpKeywords.Length; op++)
+        {
+            if (hits[op] >= 0) return (hits[op], BinaryOpKeywords[op]);
+        }
+        return (-1, "");
     }
 
     /* ── Block-tree helpers ──────────────────────────────────────── */

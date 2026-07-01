@@ -45,6 +45,22 @@ public class AppSettings
     public const string KEY_THEME = "KMILA_THEME";
 
     /// <summary>
+    /// Key for storing the last-picked FPGA's JSON path so it can be restored
+    /// across app restarts. SelectedFPGA is a runtime singleton with no
+    /// persistence of its own; without this key every cold-start would force
+    /// the user to re-pick a board before being able to Build / Run.
+    /// </summary>
+    public const string KEY_FPGA_PATH = "KMILA_FPGA_PATH";
+
+    /// <summary>
+    /// Key for the default Editor dock-tab to surface when a project opens.
+    /// Useful for share-link "open this project on the schematic view" flows
+    /// and for automation harnesses that can't drive the dock-tab buttons via
+    /// scripted touch events. Falls back to EditorTab.Entities when unset.
+    /// </summary>
+    public const string KEY_DEFAULT_DOCK_TAB = "KMILA_DEFAULT_DOCK_TAB";
+
+    /// <summary>
     /// Key for the user-chosen text-size step (xs/sm/md/lg/xl). Drives the
     /// --user-text-scale CSS variable on &lt;html&gt; so all rem-based type
     /// tokens scale uniformly. Persisted in SQLite for native parity; the
@@ -79,6 +95,15 @@ public class AppSettings
     /// false on read.
     /// </summary>
     public const string KEY_LIVE_REPLAY_DURING_RUN = "KMILA_LIVE_REPLAY_DURING_RUN";
+
+    /// <summary>
+    /// Visual-mode ring buffer size in ticks. The infinite-run coordinator
+    /// keeps the last N frames so the user can scrub backward; older entries
+    /// evict. Stored as an int string ("2000"); parse failures fall back to
+    /// the per-doc default in the .kviz settings block, then to 2000. Range
+    /// clamp 256..16384.
+    /// </summary>
+    public const string KEY_VISUAL_RING_BUFFER = "KMILA_VISUAL_RING_BUFFER";
 
     #endregion
 }

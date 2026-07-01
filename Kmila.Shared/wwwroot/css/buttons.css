@@ -126,6 +126,14 @@
 }
 .kmila-btn--featured:hover::before,
 .kmila-btn--featured:focus-visible::before { animation-duration: 1.5s; }
+/* Hero CTAs (e.g. "Open your first project") wear --featured. The rotating
+   border alone wasn't reading as clearly higher-weight than secondary
+   buttons in the same row on the audit screenshots — bump weight + size
+   to set a stronger primary/secondary hierarchy (audit 2026-06-14 A-04). */
+.kmila-btn--featured {
+    font-weight: var(--fw-semibold);
+    letter-spacing: 0.01em;
+}
 
 .kmila-btn.is-loading { cursor: progress; }
 .kmila-btn.is-loading::before {
@@ -393,4 +401,151 @@
     flex-wrap: wrap;
     gap: var(--space-1);
     align-items: center;
+}
+
+
+/* ---------------------------------------------------------------------------
+   Placement slots — proposal 2026-06-28 (button-placement overhaul)
+   ---------------------------------------------------------------------------
+   These containers define WHERE button families sit relative to inputs / text
+   / banners. The button families themselves are unchanged; only the layout
+   grammar is new. See `/tmp/kmila_ui/button-grouping-proposal.html`.
+   --------------------------------------------------------------------------- */
+
+/* slot/input-trailing-action — input absorbs width, button shares the row
+   at matching height. Never drops below. */
+.kmila-slot-input-trailing {
+    display: flex;
+    align-items: stretch;
+    gap: var(--space-1);
+}
+.kmila-slot-input-trailing > input,
+.kmila-slot-input-trailing > select,
+.kmila-slot-input-trailing > .form-control,
+.kmila-slot-input-trailing > .form-select { flex: 1 1 auto; min-width: 0; }
+.kmila-slot-input-trailing > .kmila-btn,
+.kmila-slot-input-trailing > .kmila-btn-icon { flex-shrink: 0; white-space: nowrap; }
+
+/* slot/banner-cta — text + trailing action; text wraps, button never wraps below. */
+.kmila-slot-banner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-3);
+}
+.kmila-slot-banner > .kmila-btn,
+.kmila-slot-banner > .kmila-btn-icon { white-space: nowrap; flex-shrink: 0; }
+
+/* slot/modal-footer-actions — right-aligned action row at the foot of a card body.
+   On phone, stacks reversed so the primary action sits on top for thumb reach. */
+.kmila-slot-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border-subtle);
+}
+@media (max-width: 520px) {
+    .kmila-slot-modal-footer {
+        flex-direction: column-reverse;
+        align-items: stretch;
+    }
+    .kmila-slot-modal-footer > * { width: 100%; justify-content: center; }
+}
+
+/* slot/page-header-tools v2 — filter shelf (search + optional select integrated
+   into one tall bordered container) + actions cluster, separated. Below 768 px
+   the shelf takes a full row and the actions wrap right-aligned. */
+.kmila-slot-header-tools {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: var(--space-3);
+}
+.kmila-slot-header-tools__filter {
+    flex: 1 1 280px;
+    min-width: 0;
+    min-height: 44px;
+    display: flex;
+    align-items: stretch;
+    background: var(--surface-1);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+.kmila-slot-header-tools__filter > * {
+    /* Integrate everything inside the shelf — no inner borders, no inner backgrounds. */
+    border-color: transparent !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+.kmila-slot-header-tools__filter > input,
+.kmila-slot-header-tools__filter > label,
+.kmila-slot-header-tools__filter > .form-control {
+    flex: 1;
+    min-width: 0;
+}
+.kmila-slot-header-tools__filter > .form-select,
+.kmila-slot-header-tools__filter > select {
+    flex: 0 0 auto;
+    width: auto;
+    padding-right: var(--space-4);
+}
+.kmila-slot-header-tools__filter-divider {
+    align-self: stretch;
+    width: 1px;
+    background: var(--border-subtle);
+    margin: var(--space-1) 0;
+    flex-shrink: 0;
+}
+.kmila-slot-header-tools__actions {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    flex-shrink: 0;
+}
+@media (max-width: 768px) {
+    .kmila-slot-header-tools__filter { flex: 1 1 100%; }
+    .kmila-slot-header-tools__actions {
+        width: 100%;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+    /* Phase F fix (phone, 2026-06-28): without flex-wrap, three action buttons
+       collide and their labels clip mid-word ("Probar un ejem...", "Crear nuevo
+       pro..."). Wrap lets each button take its natural width and flow onto a
+       second row if needed. */
+    .kmila-slot-header-tools__actions .kmila-btn {
+        flex-shrink: 0;
+    }
+}
+
+/* slot/segmented-control — pill background unifies a row of .kmila-btn-tab buttons
+   so they read as a single segmented control rather than free-floating chips.
+   The 1 px border is doing the real work in light mode where --surface-3 (slate-100)
+   is too close to --surface-1 (slate-50) for the bg alone to define the group. */
+.kmila-slot-segmented {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 4px;
+    background: var(--surface-3);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+}
+
+/* Inline-toolbar / page-header-tools divider — a slim vertical rule that
+   separates one button cluster from another inside a single toolbar row.
+   Also doubles for the WaveformViewer toolbar (zoom/breakpoint vs exports). */
+.waveform-viewer__divider,
+.kmila-slot-toolbar-divider {
+    display: inline-block;
+    width: 1px;
+    align-self: stretch;
+    margin: var(--space-1) var(--space-1);
+    background: var(--border-subtle);
+    flex-shrink: 0;
 }

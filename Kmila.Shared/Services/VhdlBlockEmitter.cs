@@ -100,11 +100,15 @@ public class VhdlBlockEmitter
             { "kind": "block", "type": "kmila_vhdl_process" },
             { "kind": "block", "type": "kmila_vhdl_if" },
             { "kind": "block", "type": "kmila_vhdl_assign_seq" },
+            { "kind": "block", "type": "kmila_vhdl_case" },
             { "kind": "sep" },
             { "kind": "block", "type": "kmila_vhdl_id" },
             { "kind": "block", "type": "kmila_vhdl_literal_bit" },
+            { "kind": "block", "type": "kmila_vhdl_literal_vec" },
             { "kind": "block", "type": "kmila_vhdl_eq" },
+            { "kind": "block", "type": "kmila_vhdl_binop" },
             { "kind": "block", "type": "kmila_vhdl_rising_edge" },
+            { "kind": "block", "type": "kmila_vhdl_falling_edge" },
             { "kind": "block", "type": "kmila_vhdl_not" }
           ]
         }
@@ -304,6 +308,10 @@ public class VhdlBlockEmitter
             case "kmila_vhdl_if":
                 EmitIfChain(sb, node, indent);
                 break;
+            // F-4 (2026-06-28) — case / when emission.
+            case "kmila_vhdl_case":
+                EmitCase(sb, node, indent);
+                break;
             case "kmila_vhdl_raw_seq":
                 EmitRaw(sb, node, indent);
                 break;
@@ -312,6 +320,41 @@ public class VhdlBlockEmitter
                 Line(sb, type ?? "?");
                 break;
         }
+    }
+
+    // F-4 (2026-06-28) — emit `case <subj> is when … => … end case;`. Each
+    // ALT in the ALTS chain is either a kmila_vhdl_case_when (with CHOICE
+    // text field + BODY) or kmila_vhdl_case_others (BODY only, no CHOICE).
+    private void EmitCase(StringBuilder sb, JsonElement node, int indent)
+    {
+        Track(node);
+        var pad  = new string(' ', indent * 4);
+        var pad2 = new string(' ', (indent + 1) * 4);
+        var subj = GetValueInput(node, "SUBJECT");
+        sb.Append(pad).Append("case ").Append(EmitExpr(subj));
+        Line(sb, " is");
+        foreach (var alt in GetStatementChain(node, "ALTS"))
+        {
+            Track(alt);
+            var altType = GetType(alt);
+            if (altType == "kmila_vhdl_case_when")
+            {
+                var choice = GetField(alt, "CHOICE") ?? "?";
+                sb.Append(pad2).Append("when ").Append(choice).Append(" =>");
+                Line(sb);
+                foreach (var s in GetStatementChain(alt, "BODY"))
+                    EmitSequential(sb, s, indent + 2);
+            }
+            else if (altType == "kmila_vhdl_case_others")
+            {
+                sb.Append(pad2);
+                Line(sb, "when others =>");
+                foreach (var s in GetStatementChain(alt, "BODY"))
+                    EmitSequential(sb, s, indent + 2);
+            }
+        }
+        sb.Append(pad);
+        Line(sb, "end case;");
     }
 
     private void EmitRaw(StringBuilder sb, JsonElement node, int indent)
@@ -407,11 +450,30 @@ public class VhdlBlockEmitter
                     var s = GetValueInput(n, "SIG");
                     return "rising_edge(" + EmitExpr(s) + ")";
                 }
+            // F-7 (2026-06-28)
+            case "kmila_vhdl_falling_edge":
+                {
+                    var s = GetValueInput(n, "SIG");
+                    return "falling_edge(" + EmitExpr(s) + ")";
+                }
             case "kmila_vhdl_not":
                 {
                     var s = GetValueInput(n, "OPERAND");
                     return "not " + EmitExpr(s);
                 }
+            // F-2 (2026-06-28) — binary boolean op. The OP field holds the
+            // VHDL keyword (and/or/xor/nand/nor/xnor) verbatim.
+            case "kmila_vhdl_binop":
+                {
+                    var l  = GetValueInput(n, "LHS");
+                    var r  = GetValueInput(n, "RHS");
+                    var op = (GetField(n, "OP") ?? "and").ToLowerInvariant();
+                    return EmitExpr(l) + " " + op + " " + EmitExpr(r);
+                }
+            // F-5 (2026-06-28) — vector / bit-string literal. TEXT carries
+            // the literal including its surrounding quotes (`"00"`, `X"FF"`).
+            case "kmila_vhdl_literal_vec":
+                return GetField(n, "TEXT") ?? "\"\"";
             case "kmila_vhdl_raw_expr":
                 return GetField(n, "TEXT") ?? string.Empty;
             default:

@@ -47,7 +47,8 @@
                 @{ var count = CountFor(tab.Id); var ready = ReadyFor(tab.Id); }
                 @if (count > 0)
                 {
-                    <span class="kmila-dock__count">@count</span>
+                    <span class="kmila-dock__count"
+                          title="@string.Format(Traductor.T("EDITOR_DOCK_COUNT_TOOLTIP"), count, Traductor.T(tab.LabelKey))">@count</span>
                 }
                 else if (ready)
                 {
@@ -237,6 +238,25 @@
             // localStorage may be blocked (private mode, sandboxed iframe) —
             // fall back to the in-memory default silently.
         }
+
+        // SQLite default overrides localStorage. Outside the localStorage
+        // try-catch so a JS-blocked WebView (which throws on getItem) still
+        // applies the user's persisted preference. Fires SetActive (not
+        // Hydrate) so the accent indicator and dock body re-render to the
+        // pref tab. Used by automation harnesses to drive the editor onto
+        // a specific view via SQLite-seed without simulating dock-tab taps.
+        try
+        {
+            var savedDefault = await DbContext.GetSettingAsync(AppSettings.KEY_DEFAULT_DOCK_TAB);
+            if (!string.IsNullOrWhiteSpace(savedDefault) &&
+                Enum.TryParse<EditorTab>(savedDefault, ignoreCase: true, out var pref))
+            {
+                DockState.SetActive(pref);
+                await PersistAsync();
+                StateHasChanged();
+            }
+        }
+        catch { /* DB unavailable — fall back to in-memory default */ }
     }
 
     private async Task PersistAsync()

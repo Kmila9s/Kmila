@@ -47,14 +47,17 @@
                         @Traductor.T("MARKDOWN_LOADED")
                     </Badge>
                 }
-                <Button Color="ButtonColor.Light"
-                        Size="ButtonSize.Small"
-                        Outline="true"
+                @* Family-14 (.kmila-btn-icon). BB's Light/Outline button rendered
+                   foreign chrome inside a kmila modal; the icon-only refresh now
+                   shares the rest of the toolbar's geometry + interaction states. *@
+                <button type="button"
+                        class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--sm"
                         @onclick="RefreshContentAsync"
-                        Disabled="_isLoading"
-                        TooltipTitle="@Traductor.T("MARKDOWN_REFRESH_TOOLTIP")">
+                        disabled="@_isLoading"
+                        title="@Traductor.T("MARKDOWN_REFRESH_TOOLTIP")"
+                        aria-label="@Traductor.T("MARKDOWN_REFRESH_TOOLTIP")">
                     <Icon Name="IconName.ArrowClockwise" />
-                </Button>
+                </button>
             </div>
         </div>
     </CardHeader>
@@ -63,7 +66,7 @@
         {
             <!-- Loading State -->
             <div class="d-flex flex-column justify-content-center align-items-center py-5">
-                <Spinner Type="SpinnerType.Border" Color="SpinnerColor.Primary" Class="mb-3" />
+                <div class="spinner-border text-primary mb-3" role="status" aria-hidden="true"></div>
                 <span class="text-muted">@Traductor.T("MARKDOWN_LOADING")</span>
             </div>
         }
@@ -71,23 +74,24 @@
         {
             <!-- Error State -->
             <div class="p-3">
+                @* slot/banner-cta — retry trails the error text instead of being a separate centered row. *@
                 <Alert Color="AlertColor.Danger" Dismissible="false">
-                    <div class="d-flex align-items-center">
-                        <Icon Name="IconName.ExclamationTriangleFill" Class="me-2 fs-5" />
-                        <div>
-                            <strong>@Traductor.T("MARKDOWN_ERROR_LOADING")</strong>
-                            <p class="mb-0 mt-1 small">@_errorMessage</p>
+                    <div class="kmila-slot-banner">
+                        <div class="d-flex align-items-start">
+                            <Icon Name="IconName.ExclamationTriangleFill" Class="me-2 fs-5" />
+                            <div>
+                                <strong>@Traductor.T("MARKDOWN_ERROR_LOADING")</strong>
+                                <p class="mb-0 mt-1 small">@_errorMessage</p>
+                            </div>
                         </div>
+                        <button type="button"
+                                class="kmila-btn kmila-btn--primary kmila-btn--sm"
+                                @onclick="RefreshContentAsync">
+                            <Icon Name="IconName.ArrowClockwise" />
+                            <span>@Traductor.T("MARKDOWN_RETRY")</span>
+                        </button>
                     </div>
                 </Alert>
-                <div class="text-center mt-3">
-                    <Button Color="ButtonColor.Primary"
-                            Size="ButtonSize.Small"
-                            @onclick="RefreshContentAsync">
-                        <Icon Name="IconName.ArrowClockwise" Class="me-1" />
-                        @Traductor.T("MARKDOWN_RETRY")
-                    </Button>
-                </div>
             </div>
         }
         else if(string.IsNullOrWhiteSpace(_markdown))

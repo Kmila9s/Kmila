@@ -24,11 +24,41 @@
 <div class="run-bar @(Sim.State == SimState.Running ? "run-bar--running" : "")">
     <div class="run-bar__row">
 
+      @* Phone-only trigger that consolidates FPGA + duration + clock into one
+         popover so the run-bar stays a single row at ≤520 px container width.
+         The three controls used to fight Run/Stop/burger for the same row;
+         users couldn't tell which input was which (audit 2026-06-16).
+         The trigger summarises the current FPGA model + effective clock so a
+         glance is enough to know what will run. *@
+      <button type="button"
+              class="run-bar__config-trigger @(NoFpga ? "run-bar__config-trigger--missing" : "") @(_configOpen ? "is-open" : "")"
+              aria-haspopup="dialog"
+              aria-expanded="@_configOpen"
+              @onclick="ToggleConfig"
+              title="@Traductor.T("RUNBAR_CONFIG_OPEN")"
+              aria-label="@Traductor.T("RUNBAR_CONFIG_OPEN")">
+          <Icon Name="@(NoFpga ? IconName.ExclamationTriangleFill : IconName.CpuFill)" />
+          @if (!NoFpga)
+          {
+              <span class="run-bar__config-trigger-model">@SelectedFPGA.FPGA.Model</span>
+              <span class="run-bar__config-trigger-sep">·</span>
+              <span class="run-bar__config-trigger-clock">@EffectiveClockMhz MHz</span>
+          }
+          else
+          {
+              <span class="run-bar__config-trigger-model">@Traductor.T("RUNBAR_SELECT_FPGA_FIRST")</span>
+          }
+          <Icon Name="IconName.ChevronDown" Class="run-bar__config-trigger-chevron" />
+      </button>
+
       @* Config cluster — what to simulate. Grouped so the responsive ladder
          (container queries in pages.css) can keep these editable while the
          action buttons to the right shed labels / fold into the burger as
-         the bar narrows. *@
-      <div class="run-bar__config">
+         the bar narrows. On phones the cluster turns into a popover anchored
+         to .run-bar__config-trigger above; on desktop it stays inline. *@
+      <div class="run-bar__config @(_configOpen ? "is-open" : "")"
+           role="@(_configOpen ? "dialog" : null)"
+           aria-label="@(_configOpen ? Traductor.T("RUNBAR_CONFIG_OPEN") : null)">
 
         @* FPGA reference chip. When nothing is selected we flag it in the
            danger tone so students know this is the blocker for Build/Run.
@@ -108,6 +138,15 @@
         </div>
       </div>@* end .run-bar__config *@
 
+      @* Backdrop closes the popover when the user taps outside on phones.
+         Hidden via CSS on desktop where the cluster is inline. *@
+      @if (_configOpen)
+      {
+          <div class="run-bar__config-backdrop"
+               @onclick="CloseConfig"
+               aria-hidden="true"></div>
+      }
+
       @* Action cluster — Build / Run / Stop / file actions / overflow. The
          ladder drops the secondary labels first, then folds Build + Save +
          New File into the burger; Run + Stop always stay inline. *@
@@ -137,12 +176,15 @@
                 disabled="@RunDisabled"
                 title="@(NoFpga ? Traductor.T("RUNBAR_FPGA_REQUIRED") : Traductor.T("SIM_RUN"))"
                 @onclick="OnRunClickAsync">
+            @if (ShowAutoBuildingChip)
+            {
+                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                <span>@Traductor.T("SIM_BUILDING")</span>
+            }
+            else
+            {
             @switch (Sim.State)
             {
-                case SimState.Building when _autoBuilding:
-                    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
-                    <span>@Traductor.T("SIM_BUILDING")</span>
-                    break;
                 case SimState.Running:
                     <Icon Name="IconName.PauseFill" />
                     <span>@Traductor.T("SIM_PAUSE")</span>
@@ -159,6 +201,7 @@
                     <Icon Name="IconName.PlayFill" />
                     <span>@Traductor.T("SIM_RUN")</span>
                     break;
+            }
             }
         </button>
 
@@ -271,6 +314,17 @@
     private bool _autoBuilding;
 
     /// <summary>
+    /// Hard floor for how long the "Compiling…" chip stays visible after a Run
+    /// click. Cached / sub-100 ms builds otherwise transition Building → Running
+    /// inside a single render and the chip never paints, leaving the user with
+    /// no visual proof a compile happened (audit 2026-06-14 D-05 / E-02).
+    /// </summary>
+    private DateTime _buildingChipHoldUntil = DateTime.MinValue;
+    private bool ShowAutoBuildingChip =>
+        (Sim.State == SimState.Building && _autoBuilding) ||
+        (_autoBuilding && DateTime.UtcNow < _buildingChipHoldUntil);
+
+    /// <summary>
     /// True until the user has picked an FPGA target in the TopBar. Build and
     /// Run are both gated on this — no FPGA means no resource validation, and
     /// we want students to learn that picking a device is step zero of any
@@ -298,6 +352,14 @@
     private bool _overflowOpen;
     private void ToggleOverflow() => _overflowOpen = !_overflowOpen;
     private void CloseOverflow() => _overflowOpen = false;
+
+    // Phone-only config popover (FPGA + duration + clock). Inline on desktop;
+    // popover anchored to .run-bar__config-trigger on phones. State lives in
+    // C# rather than CSS :focus-within because the inner inputs lose focus on
+    // each commit (number scrub, scale select) and would close the panel.
+    private bool _configOpen;
+    private void ToggleConfig() => _configOpen = !_configOpen;
+    private void CloseConfig() => _configOpen = false;
 
     private async Task OnBuildFromMenuAsync()
     {
@@ -381,6 +443,17 @@
                 // whether to auto-build first; we just flag our intent so the
                 // right button shows the spinner during Building.
                 _autoBuilding = Sim.State != SimState.BuiltOk;
+                if (_autoBuilding)
+                {
+                    // Hold the "Compiling…" chip for ~400 ms even if the build
+                    // is a cache-hit and completes inside a single render.
+                    // Without this the user clicks Run, the chip never paints,
+                    // and the bar appears to jump straight to "Running" with
+                    // no visual proof a compile happened (audit D-05 / E-02).
+                    _buildingChipHoldUntil = DateTime.UtcNow.AddMilliseconds(400);
+                    _ = Task.Delay(420).ContinueWith(_ =>
+                        InvokeAsync(StateHasChanged));
+                }
                 await OnRunClicked.InvokeAsync();
                 break;
         }

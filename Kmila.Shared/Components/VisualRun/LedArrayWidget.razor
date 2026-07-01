@@ -1,0 +1,71 @@
+@namespace Kmila.Shared.Components.VisualRun
+@using Kmila.Shared.Services.VisualRun
+
+@*
+    Multi-bit LED strip. Reads its bound port from the coordinator each
+    repaint and lights one segment per bit. Convention: position 0 is
+    the MSB (matches std_logic_vector(N-1 downto 0) string representation),
+    rightmost segment is the LSB. Width-mismatch follows handoff §3
+    decision 4 — natural truncation:
+      • array shorter than port → shows the first `length` bits of the
+        port string, which IS the MSB-aligned slice.
+      • array longer than port  → trailing segments stay off (no overflow).
+*@
+
+<div class="kviz-widget kviz-led-array kviz-led-array--@Orientation @(Selected ? "kviz-widget--selected" : "")"
+     style="--kviz-led-color:@ColorVar; left:@(Comp.Position.X)px; top:@(Comp.Position.Y)px;"
+     data-component-id="@Comp.Id"
+     @onpointerdown="HandlePointerDown">
+    <div class="kviz-led-array__strip">
+        @for (int i = 0; i < Length; i++)
+        {
+            <div class="kviz-led-array__cell @(IsBitOn(i) ? "kviz-led-array__cell--on" : "")"></div>
+        }
+    </div>
+    <div class="kviz-led-array__port">@PortLabel</div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public KvizComponent Comp { get; set; } = default!;
+    [Parameter] public VisualRunCoordinator? Coordinator { get; set; }
+    [Parameter] public bool EditMode { get; set; }
+    [Parameter] public bool Selected { get; set; }
+    [Parameter] public EventCallback<Microsoft.AspNetCore.Components.Web.PointerEventArgs> OnPointerDownExternal { get; set; }
+
+    [CascadingParameter(Name = "FrameVersion")] public int FrameVersion { get; set; }
+
+    private int Length => Math.Clamp(Comp.Config.GetInt("length", 4), 1, 64);
+    private string Orientation => Comp.Config.GetString("orientation", "h");
+
+    private string ColorVar => Comp.Config.GetString("color", "red") switch
+    {
+        "green" => "#22c55e",
+        "blue" => "#3b82f6",
+        "yellow" => "#facc15",
+        "white" => "#f8fafc",
+        _ => "#ef4444",
+    };
+
+    private string PortLabel =>
+        Comp.Bindings.TryGetValue("anodes", out var p) && !string.IsNullOrEmpty(p) ? p : "(unwired)";
+
+    private async Task HandlePointerDown(Microsoft.AspNetCore.Components.Web.PointerEventArgs e)
+    {
+        if (OnPointerDownExternal.HasDelegate)
+            await OnPointerDownExternal.InvokeAsync(e);
+    }
+
+    private bool IsBitOn(int positionFromLeft)
+    {
+        if (Coordinator == null) return false;
+        if (!Comp.Bindings.TryGetValue("anodes", out var port) || string.IsNullOrEmpty(port))
+            return false;
+        // Slice-aware read — accepts "bus" (whole), "bus[7:0]" (range), or
+        // "bus[3]" (single bit, which makes a 1-cell array). The returned
+        // substring is already MSB-on-left so positionFromLeft maps 1:1.
+        string value = Coordinator.LatestSlicedValue(port);
+        if (string.IsNullOrEmpty(value)) return false;
+        if (positionFromLeft >= value.Length) return false;
+        return value[positionFromLeft] == '1';
+    }
+}

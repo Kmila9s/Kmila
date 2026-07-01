@@ -94,7 +94,7 @@
         @* --- Editor --- *@
         <article class="settings-card">
             <header class="settings-card__head">
-                <span class="settings-card__icon settings-card__icon--info">
+                <span class="settings-card__icon settings-card__icon--accent">
                     <Icon Name="IconName.CodeSquare" />
                 </span>
                 <div class="settings-card__head-text">
@@ -110,7 +110,7 @@
         @* --- Simulation --- *@
         <article class="settings-card">
             <header class="settings-card__head">
-                <span class="settings-card__icon settings-card__icon--success">
+                <span class="settings-card__icon settings-card__icon--accent">
                     <Icon Name="IconName.CpuFill" />
                 </span>
                 <div class="settings-card__head-text">
@@ -162,13 +162,28 @@
                         <span>@Traductor.T("SETTINGS_LIVE_REPLAY_WARN")</span>
                     </p>
                 }
+
+                <div class="settings-row">
+                    <div class="settings-row__label">
+                        <strong>@Traductor.T("SETTINGS_VISUAL_RING_TITLE")</strong>
+                        <small>@Traductor.T("SETTINGS_VISUAL_RING_HINT")</small>
+                    </div>
+                    <div class="settings-row__control">
+                        <input type="number"
+                               class="form-control form-control-sm"
+                               style="max-width: 8em;"
+                               min="256" max="16384" step="256"
+                               value="@_visualRingBuffer"
+                               @onchange="OnVisualRingBufferChanged" />
+                    </div>
+                </div>
             </div>
         </article>
 
         @* --- Library compilation --- *@
         <article class="settings-card">
             <header class="settings-card__head">
-                <span class="settings-card__icon settings-card__icon--info">
+                <span class="settings-card__icon settings-card__icon--accent">
                     <Icon Name="IconName.Layers" />
                 </span>
                 <div class="settings-card__head-text">
@@ -199,7 +214,7 @@
                 })</p>
 
                 <div class="settings-card__actions">
-                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary"
+                    <button type="button" class="kmila-btn kmila-btn--danger"
                             @onclick="ClearLibraryCache">
                         <Icon Name="IconName.Trash" />
                         <span>@Traductor.T("SETTINGS_LIB_CACHE_CLEAR")</span>
@@ -211,7 +226,7 @@
         @* --- User FPGAs --- *@
         <article class="settings-card">
             <header class="settings-card__head">
-                <span class="settings-card__icon settings-card__icon--success">
+                <span class="settings-card__icon settings-card__icon--accent">
                     <Icon Name="IconName.CpuFill" />
                 </span>
                 <div class="settings-card__head-text">
@@ -220,8 +235,10 @@
                 </div>
             </header>
             <div class="settings-card__body">
+                @* slot/section-actions — Import is the headline (accent); Download
+                   ghosts back to secondary so the two filled solids don't compete. *@
                 <div class="settings-card__actions">
-                    <button type="button" class="kmila-btn kmila-btn--primary"
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary"
                             @onclick="DownloadFpgaTemplate">
                         <Icon Name="IconName.Download" />
                         <span>@Traductor.T("SETTINGS_DOWNLOAD_TEMPLATE")</span>
@@ -248,7 +265,9 @@
                                     <Icon Name="IconName.FileEarmarkCode" />
                                     <span class="settings-list__name">@name</span>
                                 </div>
-                                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                                @* slot/list-row-actions — Family-14 icon button fits the row height
+                                   cleanly; --danger reveals destructive intent on hover only. *@
+                                <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--danger kmila-btn-icon--sm"
                                         @onclick="() => DeleteFpga(name)"
                                         aria-label="@Traductor.T("COMMON_DELETE")"
                                         title="@Traductor.T("COMMON_DELETE")">
@@ -264,7 +283,7 @@
         @* --- User languages --- *@
         <article class="settings-card">
             <header class="settings-card__head">
-                <span class="settings-card__icon settings-card__icon--info">
+                <span class="settings-card__icon settings-card__icon--accent">
                     <Icon Name="IconName.Translate" />
                 </span>
                 <div class="settings-card__head-text">
@@ -273,8 +292,9 @@
                 </div>
             </header>
             <div class="settings-card__body">
+                @* slot/section-actions — Import headline (accent); Download ghosts. *@
                 <div class="settings-card__actions">
-                    <button type="button" class="kmila-btn kmila-btn--primary"
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary"
                             @onclick="DownloadLanguageTemplate">
                         <Icon Name="IconName.Download" />
                         <span>@Traductor.T("SETTINGS_DOWNLOAD_TEMPLATE")</span>
@@ -303,7 +323,8 @@
                                     <span class="settings-list__name">@display</span>
                                     <span class="settings-list__code">@name</span>
                                 </div>
-                                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                                @* slot/list-row-actions — Family-14 icon, danger on hover. *@
+                                <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--danger kmila-btn-icon--sm"
                                         @onclick="() => DeleteLang(name)"
                                         aria-label="@Traductor.T("COMMON_DELETE")"
                                         title="@Traductor.T("COMMON_DELETE")">
@@ -363,14 +384,16 @@
                                         </span>
                                     }
                                 </div>
-                                <div class="d-flex gap-1">
-                                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                                @* slot/per-row-icon-pair — Family-14 icons (Eye neutral + Trash danger).
+                                   Family-11 was over-padded for a list-row pair; Family-14 fits the row rhythm. *@
+                                <div class="d-flex gap-1 align-items-center">
+                                    <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
                                             @onclick="() => ViewLibrary(path)"
                                             aria-label="@Traductor.T("SETTINGS_LIB_VIEW")"
                                             title="@Traductor.T("SETTINGS_LIB_VIEW")">
                                         <Icon Name="IconName.Eye" />
                                     </button>
-                                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                                    <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--danger kmila-btn-icon--sm"
                                             @onclick="() => DeleteLibrary(name)"
                                             aria-label="@Traductor.T("COMMON_DELETE")"
                                             title="@Traductor.T("COMMON_DELETE")">
@@ -401,6 +424,8 @@
                 </div>
             </header>
             <div class="settings-card__body">
+                @* slot/section-actions — select + Export form one coupled pair (pick a
+                   project, then export it); Import is the independent headline action. *@
                 <div class="settings-card__actions">
                     <select class="form-select settings-card__select" @bind="_exportProjectId">
                         <option value="0">@Traductor.T("SETTINGS_BUNDLE_PICK")</option>
@@ -409,7 +434,7 @@
                             <option value="@p.Id">@p.Name</option>
                         }
                     </select>
-                    <button type="button" class="kmila-btn kmila-btn--primary"
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary"
                             disabled="@(_exportProjectId <= 0)"
                             @onclick="ExportBundleAsync">
                         <Icon Name="IconName.Download" />
@@ -456,7 +481,7 @@
         @* --- Diagnostics --- *@
         <article class="settings-card">
             <header class="settings-card__head">
-                <span class="settings-card__icon settings-card__icon--warning">
+                <span class="settings-card__icon settings-card__icon--accent">
                     <Icon Name="IconName.TerminalFill" />
                 </span>
                 <div class="settings-card__head-text">
@@ -475,7 +500,7 @@
         @* --- Privacy --- *@
         <article class="settings-card">
             <header class="settings-card__head">
-                <span class="settings-card__icon settings-card__icon--success">
+                <span class="settings-card__icon settings-card__icon--accent">
                     <Icon Name="IconName.ShieldLock" />
                 </span>
                 <div class="settings-card__head-text">
@@ -697,9 +722,11 @@
                 </div>
             </header>
             <div class="settings-card__body">
+                @* slot/section-actions — Open Issue is the headline (accent);
+                   Copy diagnostics is the diagnostic secondary (ghost-primary). *@
                 <div class="settings-card__actions">
                     <button type="button"
-                            class="kmila-btn kmila-btn--primary"
+                            class="kmila-btn kmila-btn--ghost kmila-btn--primary"
                             @onclick="CopyDiagnosticsAsync">
                         <Icon Name="IconName.Clipboard2CheckFill" />
                         <span>@Traductor.T("SETTINGS_FEEDBACK_COPY")</span>
@@ -718,7 +745,7 @@
 </section>
 
 <ConfirmDialog @ref="_confirmDialog" />
-<Modal @ref="_accountLoginModal" Title="@Traductor.T("TOPBAR_SIGN_IN_GITHUB")" />
+<Modal @ref="_accountLoginModal" Title="@Traductor.T("TOPBAR_SIGN_IN_GITHUB")" Size="ModalSize.Small" />
 
 @* Library source viewer — opened from the "View" button on each
    imported library row. Plain <pre> rendering keeps the VHDL source
@@ -760,6 +787,14 @@
     /// on long sims).
     /// </summary>
     private bool _liveReplayDuringRun;
+
+    /// <summary>
+    /// Phase 2 visual-mode ring-buffer size. Defaults to 2000 if the setting
+    /// is unset or unparseable. The Visual page reads
+    /// <see cref="AppSettings.KEY_VISUAL_RING_BUFFER"/> at Run-start and uses
+    /// it to size the coordinator's FrameRing.
+    /// </summary>
+    private int _visualRingBuffer = 2000;
 
     /// <summary>Projects available to export — loaded alongside user assets.</summary>
     private List<Kmila.Shared.Models.Project> _projects = new();
@@ -806,6 +841,11 @@
         // the user toggled it from another route in the same session.
         _liveReplayDuringRun = Replay.LiveReplayDuringRun;
 
+        // Phase 2 visual-mode ring buffer. Unset / unparseable → default 2000.
+        var ringRaw = await DbContext.GetSettingAsync(AppSettings.KEY_VISUAL_RING_BUFFER);
+        if (int.TryParse(ringRaw, out var rb) && rb >= 256 && rb <= 16384)
+            _visualRingBuffer = rb;
+
         // Account state — restore the cached account from the saved
         // token (no-op if logged out), then subscribe to the auth
         // service so sign-in / sign-out from elsewhere (TopBar pill)
@@ -846,6 +886,22 @@
         await DbContext.SetSettingAsync(
             AppSettings.KEY_LIVE_REPLAY_DURING_RUN,
             _liveReplayDuringRun ? "true" : "false");
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Phase 2: persist the visual-mode ring buffer size. Clamps to
+    /// 256..16384 — anything outside is silently snapped, never throws so
+    /// a typo can't block the page. Next Run on the Visual canvas picks it
+    /// up; in-flight runs keep their existing ring.
+    /// </summary>
+    private async Task OnVisualRingBufferChanged(ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var n)) n = 2000;
+        if (n < 256) n = 256;
+        if (n > 16384) n = 16384;
+        _visualRingBuffer = n;
+        await DbContext.SetSettingAsync(AppSettings.KEY_VISUAL_RING_BUFFER, n.ToString());
         StateHasChanged();
     }
 

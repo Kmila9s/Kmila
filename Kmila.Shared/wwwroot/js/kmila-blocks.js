@@ -387,7 +387,12 @@
 
             this.trashEl = document.createElement('div');
             this.trashEl.className = 'kmila-block-trash';
-            this.trashEl.setAttribute('aria-hidden', 'true');
+            // Phase G (2026-06-28) — surface the canvas trash zone to
+            // assistive tech as a discoverable drop region instead of
+            // hiding it entirely. The toolbar carries the explicit
+            // delete-all button; this one only activates while dragging.
+            this.trashEl.setAttribute('role', 'region');
+            this.trashEl.setAttribute('aria-label', 'Drag here to delete');
             this.trashEl.innerHTML =
                 '<svg viewBox="0 0 16 16" width="20" height="20" fill="currentColor"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3h11V2h-11v1z"/></svg>';
             this.canvasEl.appendChild(this.trashEl);
@@ -979,5 +984,35 @@
         for (const block of ws.blocks.values()) {
             if (block.el) block.el.classList.remove(cssClass);
         }
+    };
+
+    /* ── Phase G (2026-06-28) — toolbar bindings ────────────────────────
+     * Floating toolbar inside the BlockEditor.razor card calls these from
+     * its button @onclick handlers. Keep names short — they're invoked as
+     * `JS.InvokeVoidAsync` arguments from C#. */
+    window.kmilaBlocksUndo = function (divId) {
+        const ws = workspaces.get(divId);
+        if (ws) ws._undoOnce();
+    };
+    window.kmilaBlocksRedo = function (divId) {
+        const ws = workspaces.get(divId);
+        if (ws) ws._redoOnce();
+    };
+    // Fit-to-screen: scroll the canvas back to its origin so blocks that
+    // drifted off-viewport during authoring become reachable again.
+    window.kmilaBlocksFit = function (divId) {
+        const ws = workspaces.get(divId);
+        if (ws && ws.canvasEl)
+            ws.canvasEl.scrollTo({ left: 0, top: 0, behavior: 'smooth' });
+    };
+    // Query whether undo / redo stacks are non-empty — toolbar buttons
+    // grey themselves out via this when there's nothing to step.
+    window.kmilaBlocksUndoState = function (divId) {
+        const ws = workspaces.get(divId);
+        if (!ws) return { undo: false, redo: false };
+        return {
+            undo: (ws._undo && ws._undo.length > 0),
+            redo: (ws._redo && ws._redo.length > 0)
+        };
     };
 })();

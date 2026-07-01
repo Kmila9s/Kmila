@@ -189,6 +189,20 @@ public static class StimulusBuilder
         // transitions derived from a GHDL VCD), don't ALSO auto-inject a
         // clock — that would race with the externally-driven schedule and
         // produce double-edge artifacts. Bench Phase F bug #13 fix.
+        //
+        // Exception: a stimulus with value "CLOCK" is a marker that the
+        // caller WANTS the auto-clock — it isn't a real value the runner
+        // can apply. Drop those entries before deciding, then proceed with
+        // auto-injection as if no clock stim were provided. The "CLOCK"
+        // marker comes from sample-config builders and a handful of legacy
+        // tests; with this guard, both stop suppressing the auto-clock.
+        if (autoClkPort != null)
+        {
+            stimuli.RemoveAll(s =>
+                (ReferenceEquals(s.Signal, autoClkPort) ||
+                 string.Equals(s.Signal?.Name, autoClkPort.Name, StringComparison.OrdinalIgnoreCase))
+                && string.Equals(s.Value, "CLOCK", StringComparison.OrdinalIgnoreCase));
+        }
         bool clkStimProvided = autoClkPort != null &&
             stimuli.Any(s => ReferenceEquals(s.Signal, autoClkPort) ||
                              string.Equals(s.Signal?.Name, autoClkPort.Name, StringComparison.OrdinalIgnoreCase));
