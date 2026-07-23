@@ -57,17 +57,20 @@ else
             <div class="runs-panel__compare-bar" role="status">
                 <Icon Name="IconName.LayersHalf" />
                 <span>@string.Format(Traductor.T("RUNS_COMPARE_READY"), _selected.Count)</span>
-                <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--sm"
-                        @onclick="StartCompare">
-                    <Icon Name="IconName.GraphUp" />
-                    <span>@Traductor.T("RUNS_COMPARE_OPEN")</span>
-                </button>
-                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
-                        @onclick="ClearSelection"
-                        title="@Traductor.T("COMMON_CANCEL")"
-                        aria-label="@Traductor.T("COMMON_CANCEL")">
-                    <Icon Name="IconName.XLg" />
-                </button>
+                <KmilaTooltip TextKey="RUNS_COMPARE_OPEN_TIP">
+                    <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--sm"
+                            @onclick="StartCompare">
+                        <Icon Name="IconName.GraphUp" />
+                        <span>@Traductor.T("RUNS_COMPARE_OPEN")</span>
+                    </button>
+                </KmilaTooltip>
+                <KmilaTooltip TextKey="COMMON_CANCEL">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                            @onclick="ClearSelection"
+                            aria-label="@Traductor.T("COMMON_CANCEL")">
+                        <Icon Name="IconName.XLg" />
+                    </button>
+                </KmilaTooltip>
             </div>
         }
 
@@ -117,26 +120,34 @@ else
                        fits the row rhythm better than Family-11 with its label padding.
                        Pin / Rename / Export = neutral primary; Delete = danger on hover. *@
                     <div class="runs-panel__actions">
-                        <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
-                                @onclick="() => TogglePinAsync(snap)"
-                                title="@Traductor.T(snap.Pinned ? "RUNS_UNPIN" : "RUNS_PIN")">
-                            <Icon Name="@(snap.Pinned ? IconName.PinAngleFill : IconName.PinAngle)" />
-                        </button>
-                        <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
-                                @onclick="() => RenameAsync(snap)"
-                                title="@Traductor.T("RUNS_RENAME")">
-                            <Icon Name="IconName.Pencil" />
-                        </button>
-                        <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
-                                @onclick="() => ExportAsync(snap)"
-                                title="@Traductor.T("RUNS_EXPORT")">
-                            <Icon Name="IconName.Download" />
-                        </button>
-                        <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--danger kmila-btn-icon--sm"
-                                @onclick="() => DeleteAsync(snap)"
-                                title="@Traductor.T("COMMON_DELETE")">
-                            <Icon Name="IconName.Trash" />
-                        </button>
+                        <KmilaTooltip TextKey="@(snap.Pinned ? "RUNS_UNPIN" : "RUNS_PIN")">
+                            <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
+                                    @onclick="() => TogglePinAsync(snap)"
+                                    aria-label="@Traductor.T(snap.Pinned ? "RUNS_UNPIN" : "RUNS_PIN")">
+                                <Icon Name="@(snap.Pinned ? IconName.PinAngleFill : IconName.PinAngle)" />
+                            </button>
+                        </KmilaTooltip>
+                        <KmilaTooltip TextKey="RUNS_RENAME">
+                            <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
+                                    @onclick="() => RenameAsync(snap)"
+                                    aria-label="@Traductor.T("RUNS_RENAME")">
+                                <Icon Name="IconName.Pencil" />
+                            </button>
+                        </KmilaTooltip>
+                        <KmilaTooltip TextKey="RUNS_EXPORT">
+                            <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
+                                    @onclick="() => ExportAsync(snap)"
+                                    aria-label="@Traductor.T("RUNS_EXPORT")">
+                                <Icon Name="IconName.Download" />
+                            </button>
+                        </KmilaTooltip>
+                        <KmilaTooltip TextKey="COMMON_DELETE">
+                            <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--danger kmila-btn-icon--sm"
+                                    @onclick="() => DeleteAsync(snap)"
+                                    aria-label="@Traductor.T("COMMON_DELETE")">
+                                <Icon Name="IconName.Trash" />
+                            </button>
+                        </KmilaTooltip>
                     </div>
                 </li>
             </Virtualize>

@@ -17,6 +17,11 @@ public class ProjectFiles : IRepository<ProjectFile>
     private readonly ApplicationDbContext _applicationDbContext;
     // Cancellation token source for cooperative cancellation of file I/O operations
     private readonly CancellationTokenSource _cts = new();
+    // Handle to the one-time DB init the constructor kicks off. Public async
+    // methods `await` this before touching the DB so a slow init can't lose a
+    // race with the first call. Same pattern as Projects.cs — session 10
+    // fixed F-A-05, session 12 closed this latent copy in ProjectFiles.
+    private readonly Task _initTask;
     /// <summary>
     /// Gets the last error message that occurred.
     /// </summary>
@@ -28,7 +33,7 @@ public class ProjectFiles : IRepository<ProjectFile>
     {
         _applicationDbContext = applicationDbContext;
         _logger = logger;
-        _ = _applicationDbContext.InitDBAsync();
+        _initTask = _applicationDbContext.InitDBAsync();
     }
 
     /// <summary>
@@ -77,6 +82,7 @@ public class ProjectFiles : IRepository<ProjectFile>
     /// </summary>
     public async Task<bool> CreateAsync(ProjectFile file)
     {
+        await _initTask;
         LastError = string.Empty;
         try
         {
@@ -168,6 +174,7 @@ public class ProjectFiles : IRepository<ProjectFile>
     /// </summary>
     public async Task<bool> UpdateAsync(ProjectFile item)
     {
+        await _initTask;
         LastError = string.Empty;
         try
         {
@@ -202,6 +209,7 @@ public class ProjectFiles : IRepository<ProjectFile>
     /// </summary>
     public async Task<bool> RemoveAsync(ProjectFile item)
     {
+        await _initTask;
         LastError = string.Empty;
         try
         {
@@ -243,6 +251,7 @@ public class ProjectFiles : IRepository<ProjectFile>
     /// </summary>
     public async Task<bool> RenameAsync(ProjectFile item, string newFileName)
     {
+        await _initTask;
         LastError = string.Empty;
         try
         {
@@ -313,6 +322,7 @@ public class ProjectFiles : IRepository<ProjectFile>
     /// </summary>
     public async Task<bool> MoveAsync(ProjectFile item, string newDirectoryPath)
     {
+        await _initTask;
         LastError = string.Empty;
         try
         {
@@ -416,6 +426,7 @@ public class ProjectFiles : IRepository<ProjectFile>
     /// </summary>
     public async Task<bool> RemoveDirectoryAsync(Project project, string directoryPath)
     {
+        await _initTask;
         LastError = string.Empty;
         try
         {
@@ -465,6 +476,7 @@ public class ProjectFiles : IRepository<ProjectFile>
     /// </summary>
     public async Task<bool> RenameDirectoryAsync(Project project, string oldPath, string newPath)
     {
+        await _initTask;
         LastError = string.Empty;
         try
         {
@@ -558,6 +570,7 @@ public class ProjectFiles : IRepository<ProjectFile>
     /// </summary>
     public async Task<List<string>> GetDirectoriesAsync(Project project)
     {
+        await _initTask;
         var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         try
         {
@@ -595,6 +608,7 @@ public class ProjectFiles : IRepository<ProjectFile>
     /// </summary>
     public async Task<List<ProjectFile>> GetProjectFilesAsync(Project project)
     {
+        await _initTask;
         LastError = string.Empty;
         try
         {
@@ -623,6 +637,7 @@ public class ProjectFiles : IRepository<ProjectFile>
     /// </summary>
     public async Task<List<ProjectFile>> GetListAsync()
     {
+        await _initTask;
         LastError = string.Empty;
         try
         {

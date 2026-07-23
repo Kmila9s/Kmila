@@ -34,20 +34,37 @@
                always sees the choice). *@
             <div class="editor-workbench__view-tabs" role="tablist"
                  aria-label="@Traductor.T("EDITOR_VIEW_SWITCH")">
+                <KmilaTooltip TextKey="EDITOR_VIEW_CODE_TIP" Placement="Bottom">
                 <button type="button"
                         class="kmila-btn-tab @(_editorCardTab == EditorCardTab.Code ? "is-active" : "")"
                         role="tab" aria-selected="@(_editorCardTab == EditorCardTab.Code ? "true" : "false")"
                         @onclick="() => SwitchEditorCardTabAsync(EditorCardTab.Code)">
                     <Icon Name="IconName.Code" />
                     <span>@Traductor.T("EDITOR_VIEW_CODE")</span>
+                    @if (_editorSyncMode == EditorSyncMode.Manual && _crossEditorSyncDirty
+                         && _editorCardTab != EditorCardTab.Code)
+                    {
+                        <span class="editor-workbench__view-tab-badge editor-workbench__view-tab-badge--stale"
+                              title="@Traductor.T("EDITOR_SYNC_PENDING_HINT")">●</span>
+                    }
                 </button>
+                </KmilaTooltip>
+                <KmilaTooltip TextKey="EDITOR_VIEW_BLOCKS_TIP" Placement="Bottom">
                 <button type="button"
                         class="kmila-btn-tab @(_editorCardTab == EditorCardTab.Blocks ? "is-active" : "")"
                         role="tab" aria-selected="@(_editorCardTab == EditorCardTab.Blocks ? "true" : "false")"
                         @onclick="() => SwitchEditorCardTabAsync(EditorCardTab.Blocks)">
                     <Icon Name="IconName.PuzzleFill" />
                     <span>@Traductor.T("EDITOR_VIEW_BLOCKS")</span>
+                    @if (_editorSyncMode == EditorSyncMode.Manual && _crossEditorSyncDirty
+                         && _editorCardTab != EditorCardTab.Blocks)
+                    {
+                        <span class="editor-workbench__view-tab-badge editor-workbench__view-tab-badge--stale"
+                              title="@Traductor.T("EDITOR_SYNC_PENDING_HINT")">●</span>
+                    }
                 </button>
+                </KmilaTooltip>
+                <KmilaTooltip TextKey="EDITOR_VIEW_REPLAY_TIP" Placement="Bottom">
                 <button type="button"
                         class="kmila-btn-tab @(_editorCardTab == EditorCardTab.Replay ? "is-active" : "")"
                         role="tab" aria-selected="@(_editorCardTab == EditorCardTab.Replay ? "true" : "false")"
@@ -62,6 +79,7 @@
                         </span>
                     }
                 </button>
+                </KmilaTooltip>
                 @* Phase 2 (2026-06-26): the Visual canvas joins Code / Blocks /
                    Replay as a sibling tab. In MAUI native there's no address
                    bar, so /visual/{id} was unreachable; this is now the
@@ -69,6 +87,7 @@
                    <VisualPanel> is the same component the /visual route
                    renders, just with EmbeddedMode=true so its header bar is
                    suppressed (the editor's breadcrumb + tab row stand in). *@
+                <KmilaTooltip TextKey="EDITOR_VIEW_VISUAL_TIP" Placement="Bottom">
                 <button type="button"
                         class="kmila-btn-tab @(_editorCardTab == EditorCardTab.Visual ? "is-active" : "")"
                         role="tab" aria-selected="@(_editorCardTab == EditorCardTab.Visual ? "true" : "false")"
@@ -76,6 +95,7 @@
                     <Icon Name="IconName.Cpu" />
                     <span>@Traductor.T("EDITOR_VIEW_VISUAL")</span>
                 </button>
+                </KmilaTooltip>
             </div>
 
             @* Code view — existing workbench header + pane(s). Hidden via
@@ -114,14 +134,15 @@
                     <span class="editor-position" dir="ltr">
                         @Traductor.T("EDITOR_LINE_ABBR") @_cursorLine · @Traductor.T("EDITOR_COL_ABBR") @_cursorColumn
                     </span>
-                    <button type="button"
-                            class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm editor-split-toggle"
-                            @onclick="ToggleSplitAsync"
-                            title="@Traductor.T(IsSplit ? "EDITOR_SPLIT_OFF" : "EDITOR_SPLIT_ON")"
-                            aria-label="@Traductor.T(IsSplit ? "EDITOR_SPLIT_OFF" : "EDITOR_SPLIT_ON")"
-                            aria-pressed="@IsSplit">
-                        <Icon Name="@(IsSplit ? IconName.Square : IconName.LayoutSplit)" />
-                    </button>
+                    <KmilaTooltip TextKey="@(IsSplit ? "EDITOR_SPLIT_OFF" : "EDITOR_SPLIT_ON")">
+                        <button type="button"
+                                class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm editor-split-toggle"
+                                @onclick="ToggleSplitAsync"
+                                aria-label="@Traductor.T(IsSplit ? "EDITOR_SPLIT_OFF" : "EDITOR_SPLIT_ON")"
+                                aria-pressed="@IsSplit">
+                            <Icon Name="@(IsSplit ? IconName.Square : IconName.LayoutSplit)" />
+                        </button>
+                    </KmilaTooltip>
                     <span class="editor-shortcut" aria-hidden="true">
                         <kbd>Ctrl</kbd><kbd>S</kbd>
                     </span>
@@ -208,7 +229,8 @@
             <div class="editor-workbench__view editor-workbench__view--blocks"
                  style="@(_editorCardTab == EditorCardTab.Blocks ? "" : "display:none")">
                 <BlockEditor @ref="_vhdlBlockEditor"
-                             Toolbox="@VhdlBlockEmitter.ToolboxJson" />
+                             Toolbox="@VhdlBlockEmitter.ToolboxJson"
+                             OnChange="OnBlockWorkspaceChanged" />
             </div>
 
             @* Step Replay view — sibling tab of Code. Always mounted so its
@@ -243,7 +265,8 @@
                 OnStopClicked="OnStopSimulation"
                 OnSaveClickedCallback="OnSaveFile"
                 OnNewFileClickedCallback="ShowCreateFileModalAsync"
-                OnFpgaChipClickedCallback="OpenFpgaPickerAsync" />
+                OnFpgaChipClickedCallback="OpenFpgaPickerAsync"
+                ManualSyncMode="@(_editorSyncMode == EditorSyncMode.Manual)" />
 
         @* ---------- Editor Dock: Entities · Ports · Waveforms · Runs · Files · Output ---------- *@
         <EditorDock EntitiesCount="@(Builder.Parser?.Entities.Count() ?? 0)"
@@ -259,6 +282,18 @@
                     {
                         <EntityView Entity="entity" />
                     }
+                }
+                else
+                {
+                    @* Audit F-C-03 (2026-07-11): Entities tab used to be blank
+                       before the first Build. The parent always supplies
+                       EntitiesContent (non-null), so EditorDock's RenderEmpty
+                       fallback never fires — emit the same "compile first"
+                       hint inline instead. *@
+                    <div class="kmila-dock__empty">
+                        <div class="kmila-dock__empty-icon"><Icon Name="IconName.Diagram3" /></div>
+                        <p>@Traductor.T("EDITOR_EMPTY_ENTITIES")</p>
+                    </div>
                 }
             </EntitiesContent>
 
@@ -314,12 +349,14 @@
                         <div class="waveform-saved-banner" role="status">
                             <Icon Name="IconName.InfoCircle" />
                             <span>@Traductor.T("EDITOR_VIEWING_SAVED_LIVE")</span>
-                            <button type="button"
-                                    class="kmila-btn kmila-btn--accent kmila-btn--sm"
-                                    @onclick="ReturnToLiveRun">
-                                <Icon Name="IconName.Broadcast" />
-                                <span>@Traductor.T("EDITOR_RETURN_TO_LIVE")</span>
-                            </button>
+                            <KmilaTooltip TextKey="EDITOR_RETURN_TO_LIVE_TIP">
+                                <button type="button"
+                                        class="kmila-btn kmila-btn--accent kmila-btn--sm"
+                                        @onclick="ReturnToLiveRun">
+                                    <Icon Name="IconName.Broadcast" />
+                                    <span>@Traductor.T("EDITOR_RETURN_TO_LIVE")</span>
+                                </button>
+                            </KmilaTooltip>
                         </div>
                     }
                     <WaveformViewer Data="_waveformData"
@@ -568,7 +605,18 @@
         Replay.OnLiveChanged              += OnReplayLiveChangedForTabBadge;
         Sim.OnChange                      += OnSimParamsChanged;
         Snapshots.OnChange                += OnSnapshotsChanged;
+        // Every Kmila component that renders Traductor.T(...) is expected to
+        // self-subscribe to StaticOnLangChanged (documented on Traductor.cs
+        // lines 18–26). Editor.razor renders ~20 inline Traductor.T calls of
+        // its own — the four view-tab labels, unsaved-hint, empty states,
+        // Ln/Col abbreviations, split toggle, MD preview/source, waveform
+        // empty state, <PageTitle>, etc. Without this subscription those
+        // strings would freeze at the language active at first render.
+        // (2026-07-19 four-issue batch, fix F.)
+        Traductor.StaticOnLangChanged     += OnLanguageChanged;
     }
+
+    private void OnLanguageChanged() => InvokeAsync(StateHasChanged);
 
     /// <summary>
     /// Phase B (2026-05-19): handoff from <c>ProgramBuilder</c> when the
@@ -983,6 +1031,19 @@
     {
         _projectId = newProjectId;
         _project = await Projects.GetByAsync(_projectId);
+
+        // Editor sync mode (2026-07-06): re-read the user's preference on
+        // each project open so Settings changes propagate into any subsequent
+        // Editor session. Auto (default) preserves the pre-2026-07-06
+        // tab-switch-sync; Manual defers to explicit Save.
+        try
+        {
+            var syncRaw = await DbContext.GetSettingAsync(AppSettings.KEY_EDITOR_SYNC_MODE);
+            _editorSyncMode = EditorSyncModeExtensions.ParseToken(syncRaw);
+        }
+        catch { _editorSyncMode = EditorSyncMode.Auto; }
+        _crossEditorSyncDirty = false;
+
         var allFiles = await ProjectFiles.GetProjectFilesAsync(_project);
         // Partition: user-visible .vhd / .md / etc. go into _projectFiles
         // (the existing pipeline); .bvhdl sidecars stash separately so
@@ -1319,7 +1380,7 @@
             { "OnProjectFileCreated", EventCallback.Factory.Create(this, OnFileCreatedAsync)}
 
         };
-        await _multiUseModal.ShowAsync<CreateFileModal>("Creating new file", parameters: parameters);
+        await _multiUseModal.ShowAsync<CreateFileModal>(Traductor.T("EDITOR_CREATE_FILE_MODAL_TITLE"), parameters: parameters);
     }
     /// <summary>
     /// Internal build routine. Returns whether the build succeeded so callers
@@ -1619,6 +1680,50 @@
         }
     }
 
+    /// <summary>
+    /// 2026-07-20 Phase 23a — publish silent-loss diagnostics from the
+    /// most recent <c>_vhdlEmitter.Emit</c> call as Monaco line markers
+    /// under a distinct owner (<c>"kmila-vhdl-emit"</c>), separate from
+    /// the parser-driven owner (<c>"kmila-vhdl"</c>) used by
+    /// <see cref="PublishDiagnosticsAsync"/>. Each entry projects to a
+    /// whole-line marker at <see cref="Kmila.Shared.Services.EmitterDiagnostic.Line"/>;
+    /// hover in Monaco shows the diagnostic message. Always fires (even
+    /// with an empty list) so stale emit-markers from a prior emit clear
+    /// on the next clean sync.
+    /// </summary>
+    private async Task PublishEmitterDiagnosticsAsync()
+    {
+        try
+        {
+            var diags = _vhdlEmitter.LastDiagnostics
+                ?? new List<Kmila.Shared.Services.EmitterDiagnostic>();
+            var markers = diags.Select(d => new
+            {
+                severity        = d.Severity,
+                startLineNumber = d.Line,
+                startColumn     = 1,
+                endLineNumber   = d.Line,
+                endColumn       = 1,
+                message         = d.Message,
+                code            = "emit",
+                source          = "Kmila VHDL (blocks)"
+            }).ToArray();
+
+            // Wrap in (object) — same JSInterop splat guard as
+            // PublishDiagnosticsAsync. Second arg is the owner string;
+            // must match the "kmila-vhdl-emit" namespace so
+            // PublishDiagnosticsAsync's "kmila-vhdl" set stays intact.
+            await JS.InvokeVoidAsync(
+                "kmilaSetMonacoMarkers",
+                (object)markers,
+                "kmila-vhdl-emit");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "[Editor] Failed to push emit-diagnostic markers");
+        }
+    }
+
     /// <summary>Explicit Build button click — just runs the build and stops.</summary>
     private async Task OnBuildRequested()
     {
@@ -1825,6 +1930,22 @@
                 ToastService.Notify(Message(Traductor.T("EDITOR_FILE_NOT_SELECTED_TITLE"), Traductor.T("EDITOR_FILE_NOT_SELECTED_BODY"), ToastType.Warning));
                 await ShowCreateFileModalAsync();
             }else{
+                // Editor sync mode (2026-07-06): in Manual mode, Save
+                // commits the CURRENTLY ACTIVE view to the other one BEFORE
+                // persisting to disk. Blocks-active means emit workspace →
+                // Monaco; Code-active means parse Monaco → workspace. This
+                // is a no-op in Auto mode because the tab-switch handler
+                // already synced. Direction rule (per user 2026-07-06):
+                // whichever tab is active is the source of truth for this
+                // Save. Last-save-wins across the two views.
+                if (_editorSyncMode == EditorSyncMode.Manual && _crossEditorSyncDirty)
+                {
+                    if (_editorCardTab == EditorCardTab.Blocks)
+                        await SyncBlocksToCodeAsync();
+                    else if (_editorCardTab == EditorCardTab.Code)
+                        await SyncCodeToBlocksAsync();
+                    _crossEditorSyncDirty = false;
+                }
                 _openedFile.Content = await _pane.Monaco.GetValue();
                 _openedFile.Project = _project;
                 var result = await ProjectFiles.UpdateAsync(_openedFile);
@@ -2107,6 +2228,20 @@ end architecture behavioral;",
     // coordinator + canvas state survive subsequent tab flips.
     private bool _visualVisited;
 
+    // Editor sync mode (2026-07-06). Auto (default) = pre-2026-07-06 behavior
+    // (Code ↔ Blocks sync on every tab switch). Manual = sync only fires on
+    // explicit Save. Loaded from AppSettings during LoadProjectAsync so a
+    // Settings toggle picks up on the next project open. Run/Build always
+    // sync regardless — see OnBuildRequested / OnRunRequested.
+    private EditorSyncMode _editorSyncMode = EditorSyncMode.Auto;
+
+    // Cross-editor dirty flag (2026-07-06). Set when the user edits either
+    // the Monaco buffer or the Blocks canvas while in Manual sync mode.
+    // Cleared on any successful cross-sync (Save, Run/Build, or a tab-
+    // switch while in Auto mode). Drives the stale-preview pip on the
+    // inactive tab.
+    private bool _crossEditorSyncDirty;
+
     public enum EditorCardTab { Code, Blocks, Replay, Visual }
 
     private BlockEditor? _vhdlBlockEditor;
@@ -2161,20 +2296,31 @@ end architecture behavioral;",
         if (tab == EditorCardTab.Visual) _visualVisited = true;
         StateHasChanged();
 
-        // Leaving Blocks for Code emits the current workspace into the
-        // active Monaco buffer so the student sees their authored design
-        // as VHDL the moment they switch (#16 Step 2).
-        if (previous == EditorCardTab.Blocks && tab == EditorCardTab.Code)
+        // Cross-editor sync on tab switch — gated by the user's Editor sync
+        // mode setting (2026-07-06). Auto (default) preserves the pre-fix
+        // behavior: every Code↔Blocks flip propagates. Manual defers to an
+        // explicit Save so the destination view stays a read-only preview
+        // of the last synced state.
+        if (_editorSyncMode == EditorSyncMode.Auto)
         {
-            await SyncBlocksToCodeAsync();
-        }
-        // Entering Blocks from Code parses the active VHDL buffer into a
-        // workspace so the student sees their hand-written source as
-        // blocks (#16 Step 3). Unsupported constructs surface as raw
-        // blocks; the round-trip Emitter then spits them back unchanged.
-        else if (previous == EditorCardTab.Code && tab == EditorCardTab.Blocks)
-        {
-            await SyncCodeToBlocksAsync();
+            // Leaving Blocks for Code emits the current workspace into the
+            // active Monaco buffer so the student sees their authored
+            // design as VHDL the moment they switch (#16 Step 2).
+            if (previous == EditorCardTab.Blocks && tab == EditorCardTab.Code)
+            {
+                await SyncBlocksToCodeAsync();
+                _crossEditorSyncDirty = false;
+            }
+            // Entering Blocks from Code parses the active VHDL buffer into
+            // a workspace so the student sees their hand-written source as
+            // blocks (#16 Step 3). Unsupported constructs surface as raw
+            // blocks; the round-trip Emitter then spits them back
+            // unchanged.
+            else if (previous == EditorCardTab.Code && tab == EditorCardTab.Blocks)
+            {
+                await SyncCodeToBlocksAsync();
+                _crossEditorSyncDirty = false;
+            }
         }
 
         if (tab == EditorCardTab.Code)
@@ -2203,6 +2349,12 @@ end architecture behavioral;",
         var ws = await _vhdlBlockEditor.SerializeAsync();
         if (string.IsNullOrWhiteSpace(ws)) return;
         var vhdl = _vhdlEmitter.Emit(ws);
+        SurfaceEmitterDiagnostics();
+        // 2026-07-20 Phase 23a — always publish emit-diagnostics as
+        // Monaco markers, even when the diagnostic list is empty (the
+        // publisher fires an empty marker array in that case, which
+        // clears any stale emit-markers from a prior sync).
+        await PublishEmitterDiagnosticsAsync();
         if (string.IsNullOrEmpty(vhdl)) return;
         if (_pane?.Monaco == null) return;
         try
@@ -2266,9 +2418,12 @@ end architecture behavioral;",
             await _vhdlBlockEditor.LoadAsync(workspaceJson);
         }
 
-        // Surface a heads-up when constructs the catalog doesn't recognize
-        // were preserved as raw VHDL fallback blocks. Lets the student
-        // know nothing was lost but some pieces aren't in proper blocks yet.
+        // Surface a soft heads-up when constructs the catalog doesn't fully
+        // recognize were preserved as raw VHDL fallback blocks. Softened
+        // 2026-07-19 (post 1:1 audit) — the copy no longer implies data
+        // loss; it just tells the student the raw fragments will round-trip
+        // unchanged. When the whole workspace resolves to first-class
+        // blocks (the common case now), no toast fires.
         if (_vhdlBuilder.LastRawCount > 0)
         {
             var rawCount = _vhdlBuilder.LastRawCount;
@@ -2280,6 +2435,26 @@ end architecture behavioral;",
                 string.Format(Traductor.T(bodyKey), rawCount),
                 ToastType.Warning));
         }
+    }
+
+    /// <summary>
+    /// After every Blocks→Code sync, forward the emitter's silent-loss
+    /// diagnostics (missing OP on binop, missing TYPE on port, missing
+    /// VAL on aggregate) to a distinct Error-severity toast. Fires only
+    /// when the workspace contains hand-authored blocks that would have
+    /// silently emitted the wrong VHDL under the old default-value path.
+    /// </summary>
+    private void SurfaceEmitterDiagnostics()
+    {
+        if (_vhdlEmitter.LastDiagnostics.Count == 0) return;
+        var count = _vhdlEmitter.LastDiagnostics.Count;
+        var bodyKey = count == 1
+            ? "EDITOR_BLOCKS_SILENT_LOSS_BODY_ONE"
+            : "EDITOR_BLOCKS_SILENT_LOSS_BODY_OTHER";
+        ToastService.Notify(Message(
+            Traductor.T("EDITOR_BLOCKS_SILENT_LOSS_TITLE"),
+            string.Format(Traductor.T(bodyKey), count),
+            ToastType.Danger));
     }
 
     /// <summary>
@@ -2524,6 +2699,14 @@ end architecture behavioral;",
         var currentContent = await _pane.Monaco.GetValue();
         _hasUnsavedChanges = currentContent != _originalContent;
 
+        // Editor sync mode (2026-07-06): in Manual mode, a Monaco edit
+        // marks the block canvas as out-of-date so the stale-preview pip
+        // surfaces on the Blocks tab. Only meaningful when Blocks-editable
+        // files (.vhd/.vhdl) are open; other file types don't have a
+        // Blocks preview so the flag is a harmless no-op there.
+        if (_editorSyncMode == EditorSyncMode.Manual && !IsMarkdownFile)
+            _crossEditorSyncDirty = true;
+
         // Wipe any stale parser markers — the content has moved, the squiggle
         // coordinates can't be trusted until the next Build.
         try { await JS.InvokeVoidAsync("kmilaSetMonacoMarkers", (object)Array.Empty<object>()); }
@@ -2555,6 +2738,22 @@ end architecture behavioral;",
         // refreshed regardless of file type; the preview itself updates on the
         // debounced path above.
         await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Fires when the kmila-blocks canvas mutates (drag, drop, field edit,
+    /// undo, redo). In Manual sync mode this marks the Code tab as
+    /// out-of-date so the stale-preview pip surfaces there until the user
+    /// clicks Save. No-op in Auto mode — the next tab-switch would sync
+    /// anyway.
+    /// </summary>
+    private void OnBlockWorkspaceChanged()
+    {
+        if (_editorSyncMode == EditorSyncMode.Manual)
+        {
+            _crossEditorSyncDirty = true;
+            StateHasChanged();
+        }
     }
 
     /// <summary>
@@ -2716,14 +2915,14 @@ end architecture behavioral;",
             if (result.Saved)
             {
                 var body = result.Path != null
-                    ? $"Saved: {result.Path}"
+                    ? Traductor.T("COMMON_SAVED_TO_FMT", result.Path)
                     : string.Format(Traductor.T("EDITOR_VCD_EXPORT_BODY"), vcdContent.Length);
                 ToastService.Notify(Message(Traductor.T("EDITOR_VCD_EXPORT_TITLE"), body, ToastType.Success));
             }
             else
             {
                 ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
-                    result.Error ?? "VCD export failed.", ToastType.Danger));
+                    result.Error ?? Traductor.T("EDITOR_VCD_EXPORT_FAILED"), ToastType.Danger));
             }
         }
         catch (Exception ex)
@@ -3239,6 +3438,7 @@ end architecture behavioral;",
         _bpDotNetRef = null;
         Sim.OnChange                      -= OnSimParamsChanged;
         Snapshots.OnChange                -= OnSnapshotsChanged;
+        Traductor.StaticOnLangChanged     -= OnLanguageChanged;
 
         // Drop the heavy waveform payload eagerly. _waveformData carries every
         // signal transition for the run (often multi-MB on long sims) and the

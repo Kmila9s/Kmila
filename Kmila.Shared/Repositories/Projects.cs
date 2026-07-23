@@ -15,6 +15,11 @@ public class Projects : IRepository<Project>
     private readonly ApplicationDbContext _applicationDbContext;
     // Cancellation token source for cooperative cancellation of async operations
     private readonly CancellationTokenSource _cts = new();
+    // Handle to the one-time DB init the constructor kicks off. Public async
+    // methods `await` this before touching the DB so a slow init (Android
+    // package-copy + PRAGMA setup) can't lose a race with the very first
+    // GetListAsync from OnInitializedAsync — F-A-05.
+    private readonly Task _initTask;
     /// <summary>
     /// Gets the last error message that occurred.
     /// </summary>
@@ -35,7 +40,7 @@ public class Projects : IRepository<Project>
     {
         _logger = logger;
         _applicationDbContext = applicationDbContext;
-        _ = _applicationDbContext.InitDBAsync();
+        _initTask = _applicationDbContext.InitDBAsync();
     }
     /// <summary>
     /// Creates a new project asynchronously.
@@ -44,6 +49,7 @@ public class Projects : IRepository<Project>
     /// <returns>A task that represents the asynchronous operation. The task result contains a boolean value indicating whether the operation was successful.</returns>
     public async Task<bool> CreateAsync(Project project)
     {
+        await _initTask;
         LastError = string.Empty;
         try
         {
@@ -75,6 +81,7 @@ public class Projects : IRepository<Project>
     /// <returns>A task that represents the asynchronous operation. The task result contains a boolean value indicating whether the operation was successful.</returns>
     public async Task<bool> UpdateAsync(Project project)
     {
+        await _initTask;
         LastError = string.Empty;
         try
         {
@@ -122,6 +129,7 @@ public class Projects : IRepository<Project>
     /// <returns>A task that represents the asynchronous operation. The task result contains a boolean value indicating whether the operation was successful.</returns>
     public async Task<bool> RemoveAsync(Project project)
     {
+        await _initTask;
         LastError = string.Empty;
         try
         {
@@ -165,6 +173,7 @@ public class Projects : IRepository<Project>
     /// <returns>A task that represents the asynchronous operation. The task result contains a list of projects.</returns>
     public async Task<List<Project>> GetListAsync()
     {
+        await _initTask;
         LastError = string.Empty;
         try
         {
@@ -185,6 +194,7 @@ public class Projects : IRepository<Project>
     /// <returns>A task that represents the asynchronous operation. The task result contains the project.</returns>
     public async Task<Project> GetByAsync(object id)
     {
+        await _initTask;
         LastError = string.Empty;
         try
         {
@@ -222,33 +232,62 @@ public class Projects : IRepository<Project>
     /// </summary>
     private async Task RehomeIfStaleAsync(Project project)
     {
-        if (project == null || string.IsNullOrEmpty(project.BasePath)) return;
-        if (Directory.Exists(project.BasePath)) return;
-
-        var folder = Path.GetFileName(project.BasePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        if (string.IsNullOrEmpty(folder)) return;
-
-        string root;
-#if WINDOWS || MACCATALYST || ANDROID || IOS
-        root = Microsoft.Maui.Storage.FileSystem.AppDataDirectory;
-#else
-        root = Path.Combine(
-            System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData),
-            "KmilaData");
-#endif
-        var candidate = Path.Combine(root, "Projects", folder);
-        if (!Directory.Exists(candidate)) return;
-
-        var stale = project.BasePath;
-        project.BasePath = candidate;
+        // Belt-and-braces: this method is called for every row on every list
+        // load. Any filesystem hiccup used to bubble up and empty the whole
+        // list — worse, on Android WebView it could leave the /projects
+        // skeleton spinning forever (audit F-A-05, 2026-07-09). Now we swallow
+        // everything and just log.
         try
         {
+            if (project == null || string.IsNullOrEmpty(project.BasePath)) return;
+            if (Directory.Exists(project.BasePath)) return;
+
+            var folder = Path.GetFileName(project.BasePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            if (string.IsNullOrEmpty(folder)) return;
+
+            string root;
+#if WINDOWS || MACCATALYST || ANDROID || IOS
+            root = Microsoft.Maui.Storage.FileSystem.AppDataDirectory;
+#else
+            root = Path.Combine(
+                System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData),
+                "KmilaData");
+#endif
+            var projectsRoot = Path.Combine(root, "Projects");
+            var candidate = Path.Combine(projectsRoot, folder);
+
+            // Fallback 1: case-insensitive lookup — reinstall on Android can
+            // change casing when SAF-backed paths are involved.
+            if (!Directory.Exists(candidate) && Directory.Exists(projectsRoot))
+            {
+                var hit = Directory.EnumerateDirectories(projectsRoot)
+                    .FirstOrDefault(d => string.Equals(Path.GetFileName(d), folder, StringComparison.OrdinalIgnoreCase));
+                if (!string.IsNullOrEmpty(hit)) candidate = hit;
+            }
+
+            // Fallback 2: match by project.Name against subdirs — covers the
+            // rare case where the persisted folder name drifts from the row.
+            if (!Directory.Exists(candidate) && Directory.Exists(projectsRoot) && !string.IsNullOrEmpty(project.Name))
+            {
+                var hit = Directory.EnumerateDirectories(projectsRoot)
+                    .FirstOrDefault(d => Path.GetFileName(d).Contains(project.Name!, StringComparison.OrdinalIgnoreCase));
+                if (!string.IsNullOrEmpty(hit)) candidate = hit;
+            }
+
+            if (!Directory.Exists(candidate))
+            {
+                _logger.LogWarning($"[Projects] '{project.Name}' (Id={project.Id}) has stale BasePath '{project.BasePath}' and no fallback under '{projectsRoot}' matched.");
+                return;
+            }
+
+            var stale = project.BasePath;
+            project.BasePath = candidate;
             await _applicationDbContext.UpdateAsync(project);
             _logger.LogInformation($"[Projects] Rehomed '{project.Name}': '{stale}' -> '{candidate}'");
         }
         catch (Exception ex)
         {
-            _logger.LogWarning($"[Projects] Failed to persist rehomed BasePath for '{project.Name}': {ex.Message}");
+            _logger.LogWarning($"[Projects] RehomeIfStaleAsync failed for '{project?.Name}': {ex.Message}");
         }
     }
     /// <summary>

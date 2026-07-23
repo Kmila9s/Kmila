@@ -50,14 +50,15 @@
                 @* Family-14 (.kmila-btn-icon). BB's Light/Outline button rendered
                    foreign chrome inside a kmila modal; the icon-only refresh now
                    shares the rest of the toolbar's geometry + interaction states. *@
-                <button type="button"
-                        class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--sm"
-                        @onclick="RefreshContentAsync"
-                        disabled="@_isLoading"
-                        title="@Traductor.T("MARKDOWN_REFRESH_TOOLTIP")"
-                        aria-label="@Traductor.T("MARKDOWN_REFRESH_TOOLTIP")">
-                    <Icon Name="IconName.ArrowClockwise" />
-                </button>
+                <KmilaTooltip TextKey="MARKDOWN_REFRESH_TOOLTIP">
+                    <button type="button"
+                            class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--sm"
+                            @onclick="RefreshContentAsync"
+                            disabled="@_isLoading"
+                            aria-label="@Traductor.T("MARKDOWN_REFRESH_TOOLTIP")">
+                        <Icon Name="IconName.ArrowClockwise" />
+                    </button>
+                </KmilaTooltip>
             </div>
         </div>
     </CardHeader>
@@ -84,12 +85,14 @@
                                 <p class="mb-0 mt-1 small">@_errorMessage</p>
                             </div>
                         </div>
-                        <button type="button"
-                                class="kmila-btn kmila-btn--primary kmila-btn--sm"
-                                @onclick="RefreshContentAsync">
-                            <Icon Name="IconName.ArrowClockwise" />
-                            <span>@Traductor.T("MARKDOWN_RETRY")</span>
-                        </button>
+                        <KmilaTooltip TextKey="MARKDOWN_RETRY_TIP">
+                            <button type="button"
+                                    class="kmila-btn kmila-btn--primary kmila-btn--sm"
+                                    @onclick="RefreshContentAsync">
+                                <Icon Name="IconName.ArrowClockwise" />
+                                <span>@Traductor.T("MARKDOWN_RETRY")</span>
+                            </button>
+                        </KmilaTooltip>
                     </div>
                 </Alert>
             </div>
@@ -181,7 +184,7 @@
         {
             _isLoading = false;
             _hasError = true;
-            _errorMessage = "No file specified";
+            _errorMessage = Traductor.T("MARKDOWN_NO_FILE");
             return;
         }
 

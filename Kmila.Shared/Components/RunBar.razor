@@ -30,12 +30,12 @@
          users couldn't tell which input was which (audit 2026-06-16).
          The trigger summarises the current FPGA model + effective clock so a
          glance is enough to know what will run. *@
+      <KmilaTooltip TextKey="RUNBAR_CONFIG_OPEN" Placement="Bottom">
       <button type="button"
               class="run-bar__config-trigger @(NoFpga ? "run-bar__config-trigger--missing" : "") @(_configOpen ? "is-open" : "")"
               aria-haspopup="dialog"
               aria-expanded="@_configOpen"
               @onclick="ToggleConfig"
-              title="@Traductor.T("RUNBAR_CONFIG_OPEN")"
               aria-label="@Traductor.T("RUNBAR_CONFIG_OPEN")">
           <Icon Name="@(NoFpga ? IconName.ExclamationTriangleFill : IconName.CpuFill)" />
           @if (!NoFpga)
@@ -46,10 +46,13 @@
           }
           else
           {
-              <span class="run-bar__config-trigger-model">@Traductor.T("RUNBAR_SELECT_FPGA_FIRST")</span>
+              @* F-C-04: outer trigger reads "Configure" so it doesn't collide with the
+                 inner FPGA chip's "Elige FPGA" label when the popover opens on phone. *@
+              <span class="run-bar__config-trigger-model">@Traductor.T("RUNBAR_CONFIG_TRIGGER_EMPTY")</span>
           }
           <Icon Name="IconName.ChevronDown" Class="run-bar__config-trigger-chevron" />
       </button>
+      </KmilaTooltip>
 
       @* Config cluster — what to simulate. Grouped so the responsive ladder
          (container queries in pages.css) can keep these editable while the
@@ -65,10 +68,10 @@
            Clicking the chip opens the FPGA picker (Settings → FPGA section
            gets opened in a modal) — quicker than navigating away from the
            Editor to switch board. *@
+        <KmilaTooltip TextKey="@(NoFpga ? "RUNBAR_FPGA_REQUIRED" : "RUNBAR_FPGA_CHANGE")">
         <button type="button"
                 class="run-bar__fpga @(NoFpga ? "run-bar__fpga--missing" : "")"
                 @onclick="() => OnFpgaChipClickedCallback.InvokeAsync()"
-                title="@(NoFpga ? Traductor.T("RUNBAR_FPGA_REQUIRED") : Traductor.T("RUNBAR_FPGA_CHANGE"))"
                 aria-label="@Traductor.T("RUNBAR_FPGA_CHANGE")">
             <Icon Name="@(NoFpga ? IconName.ExclamationTriangleFill : IconName.CpuFill)" />
             @if (!NoFpga)
@@ -81,6 +84,7 @@
             }
             <Icon Name="IconName.ChevronDown" Class="run-bar__fpga-chevron" />
         </button>
+        </KmilaTooltip>
 
         @* Time input + scale select — simulation duration *@
         <div class="run-bar__time" role="group" aria-label="@Traductor.T("SIM_DURATION")">
@@ -128,12 +132,13 @@
             <span class="run-bar__clock-unit">MHz</span>
             @if (Sim.ClockIsCustom)
             {
-                <button type="button" class="run-bar__clock-reset"
-                        @onclick="ResetClock"
-                        title="@Traductor.T("RUNBAR_CLOCK_RESET")"
-                        aria-label="@Traductor.T("RUNBAR_CLOCK_RESET")">
-                    <Icon Name="IconName.ArrowCounterclockwise" />
-                </button>
+                <KmilaTooltip TextKey="RUNBAR_CLOCK_RESET">
+                    <button type="button" class="run-bar__clock-reset"
+                            @onclick="ResetClock"
+                            aria-label="@Traductor.T("RUNBAR_CLOCK_RESET")">
+                        <Icon Name="IconName.ArrowCounterclockwise" />
+                    </button>
+                </KmilaTooltip>
             }
         </div>
       </div>@* end .run-bar__config *@
@@ -152,11 +157,28 @@
          New File into the burger; Run + Stop always stay inline. *@
       <div class="run-bar__actions">
 
+        @* No-FPGA hint chip — makes the "disabled because…" reason visible right
+           next to Build/Run so students on touch (where title tooltips don't
+           surface) still get the cue. Clicking opens the FPGA picker. Only
+           renders while NoFpga. Audit F-E-12 (2026-07-09). *@
+        @if (NoFpga)
+        {
+            <KmilaTooltip TextKey="RUNBAR_FPGA_REQUIRED">
+                <button type="button"
+                        class="run-bar__no-fpga-hint"
+                        @onclick="() => OnFpgaChipClickedCallback.InvokeAsync()"
+                        aria-label="@Traductor.T("RUNBAR_FPGA_REQUIRED")">
+                    <Icon Name="IconName.ExclamationTriangleFill" />
+                    <span class="run-bar__no-fpga-hint-label">@Traductor.T("RUNBAR_FPGA_REQUIRED")</span>
+                </button>
+            </KmilaTooltip>
+        }
+
         @* Build button (secondary). Shows spinner when explicitly building. *@
+        <KmilaTooltip TextKey="@(NoFpga ? "RUNBAR_FPGA_REQUIRED" : "SIM_BUILD")">
         <button type="button"
                 class="kmila-btn kmila-btn--primary run-bar__build"
                 disabled="@BuildDisabled"
-                title="@(NoFpga ? Traductor.T("RUNBAR_FPGA_REQUIRED") : Traductor.T("SIM_BUILD"))"
                 @onclick="OnBuildClickAsync">
             @if (IsExplicitBuilding)
             {
@@ -169,12 +191,13 @@
                 <span class="run-bar__btn-label">@Traductor.T("SIM_BUILD")</span>
             }
         </button>
+        </KmilaTooltip>
 
         @* Run button (primary, state-machine). *@
+        <KmilaTooltip TextKey="@(NoFpga ? "RUNBAR_FPGA_REQUIRED" : "SIM_RUN")">
         <button type="button"
                 class="kmila-btn kmila-btn--accent run-bar__run"
                 disabled="@RunDisabled"
-                title="@(NoFpga ? Traductor.T("RUNBAR_FPGA_REQUIRED") : Traductor.T("SIM_RUN"))"
                 @onclick="OnRunClickAsync">
             @if (ShowAutoBuildingChip)
             {
@@ -204,17 +227,19 @@
             }
             }
         </button>
+        </KmilaTooltip>
 
         @* Stop button — visible only during Running/Paused *@
         @if (Sim.State == SimState.Running || Sim.State == SimState.Paused)
         {
-            <button type="button"
-                    class="kmila-btn kmila-btn--ghost kmila-btn--primary run-bar__stop"
-                    @onclick="OnStopClickAsync"
-                    aria-label="@Traductor.T("SIM_STOP")"
-                    title="@Traductor.T("SIM_STOP")">
-                <Icon Name="IconName.StopFill" />
-            </button>
+            <KmilaTooltip TextKey="SIM_STOP">
+                <button type="button"
+                        class="kmila-btn kmila-btn--ghost kmila-btn--primary run-bar__stop"
+                        @onclick="OnStopClickAsync"
+                        aria-label="@Traductor.T("SIM_STOP")">
+                    <Icon Name="IconName.StopFill" />
+                </button>
+            </KmilaTooltip>
         }
 
         @* Visible file actions — Save and New file. Styled as outline ghost
@@ -223,37 +248,40 @@
            of the bar. Hidden on mobile (≤768px); see the overflow burger
            below, which surfaces Build / Save / New File in a dropdown so
            the bar doesn't wrap onto three rows on phones. *@
-        <button type="button"
-                class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm run-bar__file-btn run-bar__file-btn--save"
-                @onclick="() => OnSaveClickedCallback.InvokeAsync()"
-                title="@Traductor.T("EDITOR_SAVE_FILE")"
-                aria-label="@Traductor.T("EDITOR_SAVE_FILE")">
-            <Icon Name="IconName.Floppy2" />
-            <span class="run-bar__file-btn-label">@Traductor.T("EDITOR_SAVE_FILE")</span>
-        </button>
-        <button type="button"
-                class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm run-bar__file-btn run-bar__file-btn--new"
-                @onclick="() => OnNewFileClickedCallback.InvokeAsync()"
-                title="@Traductor.T("EDITOR_NEW_FILE")"
-                aria-label="@Traductor.T("EDITOR_NEW_FILE")">
-            <Icon Name="IconName.FilePlus" />
-            <span class="run-bar__file-btn-label">@Traductor.T("EDITOR_NEW_FILE")</span>
-        </button>
+        <KmilaTooltip TextKey="@(ManualSyncMode ? "EDITOR_SAVE_AND_SYNC" : "EDITOR_SAVE_FILE")">
+            <button type="button"
+                    class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm run-bar__file-btn run-bar__file-btn--save"
+                    @onclick="() => OnSaveClickedCallback.InvokeAsync()"
+                    aria-label="@Traductor.T(ManualSyncMode ? "EDITOR_SAVE_AND_SYNC" : "EDITOR_SAVE_FILE")">
+                <Icon Name="IconName.Floppy2" />
+                <span class="run-bar__file-btn-label">@Traductor.T("EDITOR_SAVE_FILE")</span>
+            </button>
+        </KmilaTooltip>
+        <KmilaTooltip TextKey="EDITOR_NEW_FILE">
+            <button type="button"
+                    class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm run-bar__file-btn run-bar__file-btn--new"
+                    @onclick="() => OnNewFileClickedCallback.InvokeAsync()"
+                    aria-label="@Traductor.T("EDITOR_NEW_FILE")">
+                <Icon Name="IconName.FilePlus" />
+                <span class="run-bar__file-btn-label">@Traductor.T("EDITOR_NEW_FILE")</span>
+            </button>
+        </KmilaTooltip>
 
         @* Mobile-only burger overflow — surfaces Build + Save + New File so
            the bar doesn't wrap on small screens. CSS keeps Run (primary CTA)
            and Stop inline so the user never has to dig through a menu to
            react to a running simulation. *@
         <div class="run-bar__overflow @(_overflowOpen ? "is-open" : "")">
-            <button type="button"
-                    class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm run-bar__overflow-btn"
-                    @onclick="ToggleOverflow"
-                    aria-haspopup="menu"
-                    aria-expanded="@_overflowOpen"
-                    aria-label="@Traductor.T("EDITOR_MORE_ACTIONS")"
-                    title="@Traductor.T("EDITOR_MORE_ACTIONS")">
-                <Icon Name="IconName.List" />
-            </button>
+            <KmilaTooltip TextKey="EDITOR_MORE_ACTIONS">
+                <button type="button"
+                        class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm run-bar__overflow-btn"
+                        @onclick="ToggleOverflow"
+                        aria-haspopup="menu"
+                        aria-expanded="@_overflowOpen"
+                        aria-label="@Traductor.T("EDITOR_MORE_ACTIONS")">
+                    <Icon Name="IconName.List" />
+                </button>
+            </KmilaTooltip>
             @if (_overflowOpen)
             {
                 <div class="run-bar__overflow-backdrop" @onclick="CloseOverflow" aria-hidden="true"></div>
@@ -300,6 +328,13 @@
     [Parameter] public EventCallback OnStopClicked { get; set; }
     [Parameter] public EventCallback OnSaveClickedCallback { get; set; }
     [Parameter] public EventCallback OnNewFileClickedCallback { get; set; }
+    /// <summary>
+    /// True when the user has opted into Manual editor sync mode
+    /// (2026-07-06). Only affects the Save button's tooltip / aria-label —
+    /// swapping "Save file" for "Save and sync to the other view" so the
+    /// student understands the button's expanded effect in Manual mode.
+    /// </summary>
+    [Parameter] public bool ManualSyncMode { get; set; }
     /// <summary>
     /// Fires when the user clicks the FPGA chip so the parent can open the
     /// FPGA picker without forcing a trip to Settings.

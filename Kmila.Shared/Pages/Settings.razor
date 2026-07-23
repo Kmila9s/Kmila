@@ -18,6 +18,7 @@
 @inject GitHubAuth GitHubAuth
 @inject LibraryCompiler.Services.LibraryCompiler LibCompiler
 @inject Kmila.Shared.Services.ReplayState Replay
+@inject SelectedFPGA SelectedFPGA
 @implements IDisposable
 
 <PageTitle>@Traductor.T("NAV_SETTINGS")</PageTitle>
@@ -80,12 +81,14 @@
                         <small>@Traductor.T("SETTINGS_TUTORIAL_HINT")</small>
                     </div>
                     <div class="settings-row__control">
-                        <button type="button"
-                                class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
-                                @onclick="ResetTutorialsAsync">
-                            <Icon Name="IconName.ArrowCounterclockwise" />
-                            <span>@Traductor.T("SETTINGS_TUTORIAL_REPLAY")</span>
-                        </button>
+                        <KmilaTooltip TextKey="SETTINGS_TUTORIAL_REPLAY_TIP">
+                            <button type="button"
+                                    class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                                    @onclick="ResetTutorialsAsync">
+                                <Icon Name="IconName.ArrowCounterclockwise" />
+                                <span>@Traductor.T("SETTINGS_TUTORIAL_REPLAY")</span>
+                            </button>
+                        </KmilaTooltip>
                     </div>
                 </div>
             </div>
@@ -103,7 +106,20 @@
                 </div>
             </header>
             <div class="settings-card__body">
-                <p class="settings-card__placeholder">@Traductor.T("SETTINGS_COMING_SOON")</p>
+                <div class="settings-row">
+                    <div class="settings-row__label">
+                        <strong>@Traductor.T("SETTINGS_EDITOR_SYNC_MODE_TITLE")</strong>
+                        <small>@Traductor.T("SETTINGS_EDITOR_SYNC_MODE_HINT")</small>
+                    </div>
+                    <div class="settings-row__control">
+                        <select class="form-select form-select-sm"
+                                value="@_editorSyncMode.ToToken()"
+                                @onchange="OnEditorSyncModeChanged">
+                            <option value="auto">@Traductor.T("SETTINGS_EDITOR_SYNC_MODE_AUTO")</option>
+                            <option value="manual">@Traductor.T("SETTINGS_EDITOR_SYNC_MODE_MANUAL")</option>
+                        </select>
+                    </div>
+                </div>
             </div>
         </article>
 
@@ -119,6 +135,37 @@
                 </div>
             </header>
             <div class="settings-card__body">
+                @* F-C-05 (2026-07-12): give the FPGA picker a Settings-level entry
+                   point. Previously the only trigger was inside the profile menu on
+                   the Editor page (3-hop nav). The Change button reuses the shared
+                   `kmilaOpenFpgaPicker` JS glue so the picker itself stays a single
+                   source of truth in ProfileMenu.razor. *@
+                <div class="settings-row" data-testid="settings-sim-fpga-row">
+                    <div class="settings-row__label">
+                        <strong>@Traductor.T("SETTINGS_SIM_FPGA_TITLE")</strong>
+                        <small>@Traductor.T("SETTINGS_SIM_FPGA_HINT")</small>
+                    </div>
+                    <div class="settings-row__control settings-row__control--fpga">
+                        <span class="settings-row__fpga-model">
+                            @if (SelectedFPGA?.FPGA == null || string.IsNullOrEmpty(SelectedFPGA.FPGA.Model))
+                            {
+                                <em class="text-body-secondary">@Traductor.T("SETTINGS_SIM_FPGA_NONE")</em>
+                            }
+                            else
+                            {
+                                @SelectedFPGA.FPGA.Model
+                            }
+                        </span>
+                        <button type="button"
+                                class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                                data-testid="settings-sim-fpga-change"
+                                @onclick="ChangeFpgaAsync">
+                            <Icon Name="IconName.CpuFill" />
+                            <span>@Traductor.T("SETTINGS_SIM_FPGA_CHANGE")</span>
+                        </button>
+                    </div>
+                </div>
+
                 <div class="settings-row">
                     <div class="settings-row__label">
                         <strong>@Traductor.T("SETTINGS_TICK_RES_TITLE")</strong>
@@ -214,11 +261,13 @@
                 })</p>
 
                 <div class="settings-card__actions">
-                    <button type="button" class="kmila-btn kmila-btn--danger"
-                            @onclick="ClearLibraryCache">
-                        <Icon Name="IconName.Trash" />
-                        <span>@Traductor.T("SETTINGS_LIB_CACHE_CLEAR")</span>
-                    </button>
+                    <KmilaTooltip TextKey="SETTINGS_LIB_CACHE_CLEAR_TIP">
+                        <button type="button" class="kmila-btn kmila-btn--danger"
+                                @onclick="ClearLibraryCache">
+                            <Icon Name="IconName.Trash" />
+                            <span>@Traductor.T("SETTINGS_LIB_CACHE_CLEAR")</span>
+                        </button>
+                    </KmilaTooltip>
                 </div>
             </div>
         </article>
@@ -267,12 +316,13 @@
                                 </div>
                                 @* slot/list-row-actions — Family-14 icon button fits the row height
                                    cleanly; --danger reveals destructive intent on hover only. *@
-                                <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--danger kmila-btn-icon--sm"
-                                        @onclick="() => DeleteFpga(name)"
-                                        aria-label="@Traductor.T("COMMON_DELETE")"
-                                        title="@Traductor.T("COMMON_DELETE")">
-                                    <Icon Name="IconName.Trash" />
-                                </button>
+                                <KmilaTooltip TextKey="COMMON_DELETE">
+                                    <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--danger kmila-btn-icon--sm"
+                                            @onclick="() => DeleteFpga(name)"
+                                            aria-label="@Traductor.T("COMMON_DELETE")">
+                                        <Icon Name="IconName.Trash" />
+                                    </button>
+                                </KmilaTooltip>
                             </li>
                         }
                     </ul>
@@ -324,12 +374,13 @@
                                     <span class="settings-list__code">@name</span>
                                 </div>
                                 @* slot/list-row-actions — Family-14 icon, danger on hover. *@
-                                <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--danger kmila-btn-icon--sm"
-                                        @onclick="() => DeleteLang(name)"
-                                        aria-label="@Traductor.T("COMMON_DELETE")"
-                                        title="@Traductor.T("COMMON_DELETE")">
-                                    <Icon Name="IconName.Trash" />
-                                </button>
+                                <KmilaTooltip TextKey="COMMON_DELETE">
+                                    <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--danger kmila-btn-icon--sm"
+                                            @onclick="() => DeleteLang(name)"
+                                            aria-label="@Traductor.T("COMMON_DELETE")">
+                                        <Icon Name="IconName.Trash" />
+                                    </button>
+                                </KmilaTooltip>
                             </li>
                         }
                     </ul>
@@ -387,18 +438,20 @@
                                 @* slot/per-row-icon-pair — Family-14 icons (Eye neutral + Trash danger).
                                    Family-11 was over-padded for a list-row pair; Family-14 fits the row rhythm. *@
                                 <div class="d-flex gap-1 align-items-center">
-                                    <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
-                                            @onclick="() => ViewLibrary(path)"
-                                            aria-label="@Traductor.T("SETTINGS_LIB_VIEW")"
-                                            title="@Traductor.T("SETTINGS_LIB_VIEW")">
-                                        <Icon Name="IconName.Eye" />
-                                    </button>
-                                    <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--danger kmila-btn-icon--sm"
-                                            @onclick="() => DeleteLibrary(name)"
-                                            aria-label="@Traductor.T("COMMON_DELETE")"
-                                            title="@Traductor.T("COMMON_DELETE")">
-                                        <Icon Name="IconName.Trash" />
-                                    </button>
+                                    <KmilaTooltip TextKey="SETTINGS_LIB_VIEW">
+                                        <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
+                                                @onclick="() => ViewLibrary(path)"
+                                                aria-label="@Traductor.T("SETTINGS_LIB_VIEW")">
+                                            <Icon Name="IconName.Eye" />
+                                        </button>
+                                    </KmilaTooltip>
+                                    <KmilaTooltip TextKey="COMMON_DELETE">
+                                        <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--danger kmila-btn-icon--sm"
+                                                @onclick="() => DeleteLibrary(name)"
+                                                aria-label="@Traductor.T("COMMON_DELETE")">
+                                            <Icon Name="IconName.Trash" />
+                                        </button>
+                                    </KmilaTooltip>
                                 </div>
                             </li>
                         }
@@ -435,12 +488,14 @@
                         }
                     </select>
                     <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary"
+                            data-testid="settings-bundle-export"
                             disabled="@(_exportProjectId <= 0)"
                             @onclick="ExportBundleAsync">
                         <Icon Name="IconName.Download" />
                         <span>@Traductor.T("SETTINGS_BUNDLE_EXPORT")</span>
                     </button>
-                    <label class="kmila-btn kmila-btn--accent settings-import-btn">
+                    <label class="kmila-btn kmila-btn--accent settings-import-btn"
+                           data-testid="settings-bundle-import">
                         <Icon Name="IconName.FileEarmarkPlus" />
                         <span>@Traductor.T("SETTINGS_BUNDLE_IMPORT")</span>
                         <InputFile OnChange="OnBundleImportAsync" accept=".kmila,.json" class="d-none" />
@@ -467,12 +522,14 @@
                         <small>@string.Format(Traductor.T("SETTINGS_LEARN_COMPLETED_N"), _learnCompleted)</small>
                     </div>
                     <div class="settings-row__control">
-                        <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--danger kmila-btn--sm"
-                                @onclick="ResetLearnProgressAsync"
-                                disabled="@(_learnCompleted == 0)">
-                            <Icon Name="IconName.ArrowCounterclockwise" />
-                            <span>@Traductor.T("SETTINGS_LEARN_RESET")</span>
-                        </button>
+                        <KmilaTooltip TextKey="SETTINGS_LEARN_RESET_TIP">
+                            <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--danger kmila-btn--sm"
+                                    @onclick="ResetLearnProgressAsync"
+                                    disabled="@(_learnCompleted == 0)">
+                                <Icon Name="IconName.ArrowCounterclockwise" />
+                                <span>@Traductor.T("SETTINGS_LEARN_RESET")</span>
+                            </button>
+                        </KmilaTooltip>
                     </div>
                 </div>
             </div>
@@ -556,12 +613,13 @@
                                 <span class="settings-list__name">@(GitHubAuth.Account.Name ?? GitHubAuth.Account.Login)</span>
                                 <span class="settings-list__code">@GitHubAuth.Account.Login</span>
                             </div>
-                            <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
-                                    @onclick="SignOutAsync"
-                                    aria-label="@Traductor.T("TOPBAR_SIGN_OUT")"
-                                    title="@Traductor.T("TOPBAR_SIGN_OUT")">
-                                <Icon Name="IconName.BoxArrowRight" />
-                            </button>
+                            <KmilaTooltip TextKey="TOPBAR_SIGN_OUT">
+                                <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
+                                        @onclick="SignOutAsync"
+                                        aria-label="@Traductor.T("TOPBAR_SIGN_OUT")">
+                                    <Icon Name="IconName.BoxArrowRight" />
+                                </button>
+                            </KmilaTooltip>
                         </li>
                     </ul>
 
@@ -581,13 +639,15 @@
                     </div>
 
                     <div class="settings-card__actions">
-                        <button type="button"
-                                class="kmila-btn kmila-btn--accent"
-                                @onclick="SubmitManualReportAsync"
-                                disabled="@_submitting">
-                            <Icon Name="IconName.Send" />
-                            <span>@Traductor.T("SETTINGS_ACCOUNT_SEND_REPORT")</span>
-                        </button>
+                        <KmilaTooltip TextKey="SETTINGS_ACCOUNT_SEND_REPORT_TIP">
+                            <button type="button"
+                                    class="kmila-btn kmila-btn--accent"
+                                    @onclick="SubmitManualReportAsync"
+                                    disabled="@_submitting">
+                                <Icon Name="IconName.Send" />
+                                <span>@Traductor.T("SETTINGS_ACCOUNT_SEND_REPORT")</span>
+                            </button>
+                        </KmilaTooltip>
                     </div>
                     @if (!string.IsNullOrEmpty(_lastReportUrl))
                     {
@@ -630,7 +690,7 @@
                             <div class="settings-row__control">
                                 <input id="kmila-client-id" type="text"
                                        class="form-control"
-                                       placeholder="Iv1.xxxxxxxxxxxxxxxx"
+                                       placeholder="@Traductor.T("SETTINGS_GH_TOKEN_PLACEHOLDER")"
                                        @bind="_clientIdInput" />
                             </div>
                         </div>
@@ -725,12 +785,14 @@
                 @* slot/section-actions — Open Issue is the headline (accent);
                    Copy diagnostics is the diagnostic secondary (ghost-primary). *@
                 <div class="settings-card__actions">
-                    <button type="button"
-                            class="kmila-btn kmila-btn--ghost kmila-btn--primary"
-                            @onclick="CopyDiagnosticsAsync">
-                        <Icon Name="IconName.Clipboard2CheckFill" />
-                        <span>@Traductor.T("SETTINGS_FEEDBACK_COPY")</span>
-                    </button>
+                    <KmilaTooltip TextKey="SETTINGS_FEEDBACK_COPY_TIP">
+                        <button type="button"
+                                class="kmila-btn kmila-btn--ghost kmila-btn--primary"
+                                @onclick="CopyDiagnosticsAsync">
+                            <Icon Name="IconName.Clipboard2CheckFill" />
+                            <span>@Traductor.T("SETTINGS_FEEDBACK_COPY")</span>
+                        </button>
+                    </KmilaTooltip>
                     <button type="button"
                             class="kmila-btn kmila-btn--accent"
                             @onclick="OpenIssueUrlAsync">
@@ -796,6 +858,13 @@
     /// </summary>
     private int _visualRingBuffer = 2000;
 
+    /// <summary>
+    /// Cross-editor (Code↔Blocks) sync mode. Auto keeps the two views synced
+    /// on every tab switch (pre-2026-07-06 behavior). Manual defers sync
+    /// until an explicit Save. Loaded from AppSettings on init.
+    /// </summary>
+    private EditorSyncMode _editorSyncMode = EditorSyncMode.Auto;
+
     /// <summary>Projects available to export — loaded alongside user assets.</summary>
     private List<Kmila.Shared.Models.Project> _projects = new();
     private int _exportProjectId;
@@ -818,6 +887,7 @@
         Traductor.StaticOnLangChanged += OnLang;
         UserAssets.OnChange += OnLang;
         LearnProgress.OnChange += OnLang;
+        SelectedFPGA.OnFPGAChange += OnLang;
         RefreshLists();
         _learnCompleted = await LearnProgress.TotalCompletedAsync();
         _projects = (await ProjectsRepo.GetListAsync()) ?? new();
@@ -846,6 +916,12 @@
         if (int.TryParse(ringRaw, out var rb) && rb >= 256 && rb <= 16384)
             _visualRingBuffer = rb;
 
+        // Editor cross-editor sync mode (2026-07-06). Unset / unknown → Auto
+        // so the pre-2026-07-06 tab-switch-sync behavior is preserved for
+        // every existing user.
+        var syncRaw = await DbContext.GetSettingAsync(AppSettings.KEY_EDITOR_SYNC_MODE);
+        _editorSyncMode = EditorSyncModeExtensions.ParseToken(syncRaw);
+
         // Account state — restore the cached account from the saved
         // token (no-op if logged out), then subscribe to the auth
         // service so sign-in / sign-out from elsewhere (TopBar pill)
@@ -865,6 +941,19 @@
     {
         _tickMode = TickResolutionModeExtensions.ParseToken(e.Value?.ToString());
         await DbContext.SetSettingAsync(AppSettings.KEY_TICK_RESOLUTION_MODE, _tickMode.ToToken());
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Persists the new editor sync mode immediately. Editor.razor re-reads
+    /// this setting on next `LoadProjectAsync`; if a project is already open
+    /// in another circuit, the user will pick up the change on their next
+    /// tab-switch or file re-open.
+    /// </summary>
+    private async Task OnEditorSyncModeChanged(ChangeEventArgs e)
+    {
+        _editorSyncMode = EditorSyncModeExtensions.ParseToken(e.Value?.ToString());
+        await DbContext.SetSettingAsync(AppSettings.KEY_EDITOR_SYNC_MODE, _editorSyncMode.ToToken());
         StateHasChanged();
     }
 
@@ -1334,11 +1423,25 @@
         }
     }
 
+    /// <summary>
+    /// Opens the shared FPGA picker (hosted inside ProfileMenu on the TopBar)
+    /// via the same JS glue the RunBar chip uses. Gives the picker a second,
+    /// discoverable entry point off the Settings page instead of forcing users
+    /// through the profile-menu 3-hop nav on Editor pages — audit F-C-05.
+    /// Silent fallback when the TopBar isn't rendered (e.g. minimal layouts).
+    /// </summary>
+    private async Task ChangeFpgaAsync()
+    {
+        try { await JS.InvokeVoidAsync("kmilaOpenFpgaPicker"); }
+        catch { /* TopBar not present — the profile menu owns the picker */ }
+    }
+
     public void Dispose()
     {
         Traductor.StaticOnLangChanged -= OnLang;
         UserAssets.OnChange -= OnLang;
         LearnProgress.OnChange -= OnLang;
+        SelectedFPGA.OnFPGAChange -= OnLang;
         GitHubAuth.OnChange -= OnLang;
     }
 }

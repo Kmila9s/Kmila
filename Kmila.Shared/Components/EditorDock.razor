@@ -1,10 +1,11 @@
 @*
     EditorDock — the bottom dock on the Editor page.
 
-    Renders a horizontal tab strip over five slots (Entities · Ports ·
-    Waveforms · Files · Output). Active tab and collapsed state live in the
-    scoped <see cref="EditorDockState"/> service so other components (e.g. a
-    future Run button) can focus a tab programmatically.
+    Renders a horizontal tab strip over eight slots (Entities · Schematic ·
+    Flow · Ports · Waveforms · Runs · Files · Output). Active tab and
+    collapsed state live in the scoped <see cref="EditorDockState"/> service
+    so other components (e.g. a future Run button) can focus a tab
+    programmatically.
 
     Persistence (Chunk 2): the user's last-selected tab and collapsed flag
     are mirrored to localStorage and restored on first render. Opening a
@@ -61,15 +62,16 @@
     @* Collapse toggle lives outside .kmila-dock__tabs so it stays reachable
        even when 8 tabs overflow the strip horizontally on phones. CSS pins
        it absolutely to the top-right of .kmila-dock. *@
-    <button type="button"
-            class="kmila-dock__collapse"
-            @onclick="ToggleCollapsedAsync"
-            aria-expanded="@(!DockState.IsCollapsed)"
-            aria-controls="dock-panel"
-            aria-label="@Traductor.T(DockState.IsCollapsed ? "DOCK_EXPAND" : "DOCK_COLLAPSE")"
-            title="@Traductor.T(DockState.IsCollapsed ? "DOCK_EXPAND" : "DOCK_COLLAPSE")">
-        <Icon Name="@(DockState.IsCollapsed ? IconName.ChevronUp : IconName.ChevronDown)" />
-    </button>
+    <KmilaTooltip TextKey="@(DockState.IsCollapsed ? "DOCK_EXPAND" : "DOCK_COLLAPSE")">
+        <button type="button"
+                class="kmila-dock__collapse"
+                @onclick="ToggleCollapsedAsync"
+                aria-expanded="@(!DockState.IsCollapsed)"
+                aria-controls="dock-panel"
+                aria-label="@Traductor.T(DockState.IsCollapsed ? "DOCK_EXPAND" : "DOCK_COLLAPSE")">
+            <Icon Name="@(DockState.IsCollapsed ? IconName.ChevronUp : IconName.ChevronDown)" />
+        </button>
+    </KmilaTooltip>
 
     <div class="kmila-dock__panel kmila-dock__panel--@DockState.Active.ToString().ToLowerInvariant()"
          id="dock-panel"
@@ -101,13 +103,6 @@
             case EditorTab.Runs:
                 @if (RunsContent != null) { @RunsContent }
                 else { @RenderEmpty(IconName.ClockHistory, "EDITOR_EMPTY_RUNS") }
-                break;
-            case EditorTab.Replay:
-                // Replay was promoted to a sibling tab of the editor card.
-                // Falling through with an empty render — if localStorage
-                // hydrates this value, the user clicks any visible tab and
-                // the layout resolves itself.
-                @RenderEmpty(IconName.PlayCircle, "EDITOR_REPLAY_MOVED")
                 break;
             case EditorTab.Files:
                 @if (FilesContent != null) { @FilesContent }
@@ -152,11 +147,6 @@
         new TabDef(EditorTab.Ports,     IconName.Plugin,           "EDITOR_TAB_PORTS"),
         new TabDef(EditorTab.Waveforms, IconName.GraphUp,          "EDITOR_WAVEFORMS"),
         new TabDef(EditorTab.Runs,      IconName.ClockHistory,     "EDITOR_TAB_RUNS"),
-        // EditorTab.Replay deliberately omitted (2026-05-19, follow-up 3):
-        // Step Replay was promoted to a sibling tab of the Monaco editor in
-        // the editor card itself. Enum value stays for back-compat with any
-        // hydrated localStorage values; the case branch below falls through
-        // to the entities default.
         new TabDef(EditorTab.Files,     IconName.Folder2Open,      "EDITOR_FILES"),
         new TabDef(EditorTab.Output,    IconName.TerminalFill,     "EDITOR_TAB_OUTPUT")
     };
@@ -199,6 +189,8 @@
     public async Task OnGrabberUp()
     {
         await PersistAsync();
+        try { await JS.InvokeVoidAsync("kmilaBroadcastEditorResize"); }
+        catch { /* JS missing — no-op */ }
     }
 
     protected override void OnInitialized()
@@ -274,6 +266,11 @@
     {
         DockState.ToggleCollapsed();
         await PersistAsync();
+        // Monaco's ResizeObserver misses the layout flip when the shell's
+        // padding-bottom recomputes via `--dock-h`; poke every editor
+        // + fire a synthetic resize for any component that listens.
+        try { await JS.InvokeVoidAsync("kmilaBroadcastEditorResize"); }
+        catch { /* JS missing — no-op */ }
     }
 
     // On phones the dock defaults to a peek state with the panel hidden, so

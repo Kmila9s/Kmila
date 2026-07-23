@@ -632,7 +632,7 @@ window.downloadFile = function (fileName, content) {
         if (rect.width <= 0 || rect.height <= 0) return;
         const cw = state.naturalW * state.scale;
         const ch = state.naturalH * state.scale;
-        const MIN_VIS = 80;
+        const MIN_VIS = Number.isFinite(state.minVisible) ? state.minVisible : 80;
         // Account for any layout offset of target relative to root (padding
         // on .schematic-viewer__body etc.) so the clamp uses the same origin
         // the transform is composed against.
@@ -698,6 +698,12 @@ window.downloadFile = function (fileName, content) {
             tx: 0, ty: 0, scale: 1,
             minScale: opts.minScale || 0.2,
             maxScale: opts.maxScale || 6,
+            // Minimum content-pixels of the target that must stay inside the
+            // root on each axis when panning. Default 80 keeps schematics /
+            // waveforms discoverable on desktop; callers (e.g. the Visual
+            // canvas on mobile) pass a smaller value so widgets near the
+            // outer edge stay reachable without an off-screen "lock".
+            minVisible: Number.isFinite(opts.minVisible) ? Math.max(0, opts.minVisible) : 80,
             // Pinch state
             pinchStartDist: 0,
             pinchStartScale: 1,
@@ -717,11 +723,27 @@ window.downloadFile = function (fileName, content) {
             needsFit: !!opts.fitOnAttach
         };
 
+        // Extra selectors the caller wants us to leave alone — e.g. Visual
+        // passes `['.kviz-widget']` so a pointerdown on a widget flows
+        // through to the widget's own drag handler instead of starting a
+        // canvas pan. Composed with the built-in interactive-element skip.
+        const skipTargets = Array.isArray(opts.skipTargetSelectors)
+            ? opts.skipTargetSelectors.filter(s => typeof s === 'string' && s.length)
+            : [];
+        function shouldSkip(el) {
+            if (!el || !el.closest) return false;
+            if (el.closest('button, input, select, textarea, a')) return true;
+            for (let i = 0; i < skipTargets.length; i++) {
+                if (el.closest(skipTargets[i])) return true;
+            }
+            return false;
+        }
+
         function onPointerDown(e) {
             // Don't start gestures from interactive child elements (buttons,
-            // inputs in the toolbar). The root's own pointer handler still
-            // wins because we only attach to the body, not the toolbar.
-            if (e.target.closest('button, input, select, textarea, a')) return;
+            // inputs in the toolbar) OR from any caller-declared skip target
+            // (e.g. .kviz-widget for Visual mode's widget drag).
+            if (shouldSkip(e.target)) return;
             // Suppress browser-side selection/drag for non-interactive
             // targets so the user can't accidentally drag-select clipped
             // SVG <text> labels while panning.
@@ -827,20 +849,36 @@ window.downloadFile = function (fileName, content) {
         }
 
         function onWheel(e) {
-            // Only zoom when ctrl/cmd held (matches Figma/Miro convention).
-            // Otherwise let the browser scroll the body normally.
-            if (!(e.ctrlKey || e.metaKey)) return;
+            // Ctrl/Cmd + wheel = zoom (Figma/Miro convention). This runs even
+            // when panOnWheel is set — modifier still means "zoom, not pan".
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                const factor = Math.exp(-e.deltaY * 0.0015);
+                const newScale = clamp(state.scale * factor, state.minScale, state.maxScale);
+                const rect = root.getBoundingClientRect();
+                const cx = e.clientX - rect.left;
+                const cy = e.clientY - rect.top;
+                const worldX = (cx - state.tx) / state.scale;
+                const worldY = (cy - state.ty) / state.scale;
+                state.scale = newScale;
+                state.tx = cx - worldX * state.scale;
+                state.ty = cy - worldY * state.scale;
+                applyTransform(state);
+                return;
+            }
+            // Plain wheel — only handle when caller opted in (Visual mode).
+            // Schematic keeps the default of "browser scroll" so its natural
+            // overflow behaviour is preserved.
+            if (!opts.panOnWheel) return;
             e.preventDefault();
-            const factor = Math.exp(-e.deltaY * 0.0015);
-            const newScale = clamp(state.scale * factor, state.minScale, state.maxScale);
-            const rect = root.getBoundingClientRect();
-            const cx = e.clientX - rect.left;
-            const cy = e.clientY - rect.top;
-            const worldX = (cx - state.tx) / state.scale;
-            const worldY = (cy - state.ty) / state.scale;
-            state.scale = newScale;
-            state.tx = cx - worldX * state.scale;
-            state.ty = cy - worldY * state.scale;
+            // Vertical wheel = vertical pan by default; Shift+wheel = horiz
+            // (matches mac + Chrome desktop conventions).
+            if (e.shiftKey) {
+                state.tx -= e.deltaY;
+            } else {
+                state.tx -= e.deltaX;
+                state.ty -= e.deltaY;
+            }
             applyTransform(state);
         }
 
@@ -854,13 +892,13 @@ window.downloadFile = function (fileName, content) {
         let gestureStartScale = 1;
         let gestureCenter = { x: 0, y: 0 };
         function onGestureStart(e) {
-            if (e.target.closest('button, input, select, textarea, a')) return;
+            if (shouldSkip(e.target)) return;
             e.preventDefault();
             gestureStartScale = state.scale;
             gestureCenter = { x: e.clientX, y: e.clientY };
         }
         function onGestureChange(e) {
-            if (e.target.closest('button, input, select, textarea, a')) return;
+            if (shouldSkip(e.target)) return;
             e.preventDefault();
             const newScale = clamp(gestureStartScale * (e.scale || 1), state.minScale, state.maxScale);
             const rect = root.getBoundingClientRect();
@@ -874,12 +912,12 @@ window.downloadFile = function (fileName, content) {
             applyTransform(state);
         }
         function onGestureEnd(e) {
-            if (e.target.closest('button, input, select, textarea, a')) return;
+            if (shouldSkip(e.target)) return;
             e.preventDefault();
         }
 
         function onDblClick(e) {
-            if (e.target.closest('button, input, select, textarea, a')) return;
+            if (shouldSkip(e.target)) return;
             // Quick reset on desktop — fit-to-view when that was the attach
             // strategy, otherwise plain identity. Either way the user gets a
             // known-good frame back if pan/zoom got away from them.
@@ -992,10 +1030,88 @@ window.downloadFile = function (fileName, content) {
         }
     }
 
+    // Force a re-measure of the target's natural (pre-transform) box. Callers
+    // use this when the content's layout can grow beyond the last-measured
+    // bounds without the target itself resizing — e.g. widgets dragged past
+    // the current canvas extent. The ResizeObserver installed at attach time
+    // covers the common case where the target's own client rect changes, but
+    // absolutely-positioned children overflowing a fixed-size wrap don't
+    // change clientWidth/Height, so callers can nudge us here after a layout
+    // mutation. Cheap: one clientRect read + one transform re-apply.
+    function invalidateBounds(id) {
+        const h = handles.get(id);
+        if (!h) return;
+        measureNatural(h.state);
+        applyTransform(h.state);
+    }
+
+    // §6 Item 4 (2026-07-05) — public zoom-to-fit helper for the Visual
+    // Runtime's "Fit" toolbar button. Existing internal fitToView() is
+    // only called at attach time when fitOnAttach is set; expose it for
+    // the locator UI so users can recover a lost-in-space canvas.
+    function fit(id) {
+        const h = handles.get(id);
+        if (!h) return;
+        measureNatural(h.state);
+        fitToView(h.state);
+    }
+
+    // §6 Item 4 (2026-07-05) — pan + zoom so the given target-space rect
+    // lands centered inside the root viewport. Used by the locator's
+    // per-widget "Focus" affordance to snap-back to a widget that scrolled
+    // out of view. Coordinates are in the target's untransformed space
+    // (same as widget Position.X/Y from the KvizDoc).
+    function focusRect(id, x, y, w, h, opts) {
+        const state = (handles.get(id) || {}).state;
+        if (!state) return;
+        opts = opts || {};
+        const padding = opts.padding || 40;
+        measureNatural(state);
+        const rect = state.root.getBoundingClientRect();
+        if (rect.width <= 20 || rect.height <= 20) return;
+        // Fit-scale the requested rect (+ padding) into the root.
+        const rw = Math.max(1, w + padding * 2);
+        const rh = Math.max(1, h + padding * 2);
+        const sx = rect.width  / rw;
+        const sy = rect.height / rh;
+        const targetScale = clamp(Math.min(sx, sy), state.minScale, state.maxScale);
+        state.scale = targetScale;
+        const ox = state.target.offsetLeft || 0;
+        const oy = state.target.offsetTop  || 0;
+        // Center of the rect maps to center of the root.
+        const cx = x + w / 2;
+        const cy = y + h / 2;
+        state.tx = rect.width  / 2 - cx * state.scale - ox;
+        state.ty = rect.height / 2 - cy * state.scale - oy;
+        applyTransform(state);
+    }
+
     window.kmilaAttachPanZoom = attach;
     window.kmilaDetachPanZoom = detach;
     window.kmilaPanZoomZoom  = zoom;
     window.kmilaPanZoomReset = reset;
+    window.kmilaPanZoomInvalidateBounds = invalidateBounds;
+    window.kmilaPanZoomFit    = fit;
+    window.kmilaPanZoomFocus  = focusRect;
+
+    // Utility for Blazor drag handlers that live outside the pan-zoom lib
+    // (e.g. VisualCanvas widget-drag). Reads the current scale off the
+    // target element's CSS transform matrix so widget pointer deltas can
+    // be divided by it — otherwise a drag at 2x zoom moves twice as fast
+    // as the finger. Returns 1 if the element is missing or untransformed.
+    window.kmilaGetTransformScale = function (selector) {
+        try {
+            const el = typeof selector === 'string' ? document.querySelector(selector) : selector;
+            if (!el) return 1;
+            const t = getComputedStyle(el).transform;
+            if (!t || t === 'none') return 1;
+            const m = t.match(/matrix(3d)?\(([^)]+)\)/);
+            if (!m) return 1;
+            const parts = m[2].split(',').map(x => parseFloat(x));
+            const sx = m[1] === '3d' ? parts[0] : parts[0];
+            return (Number.isFinite(sx) && sx > 0) ? sx : 1;
+        } catch (_) { return 1; }
+    };
 })();
 
 
@@ -1315,6 +1431,63 @@ window.kmilaSetDockSnap = function (point) {
         dock.classList.add('kmila-dock--snap-' + point);
         try { localStorage.setItem('kmila-dock-snap', point); } catch (_) {}
     }
+    if (typeof window.kmilaBroadcastEditorResize === 'function') {
+        window.kmilaBroadcastEditorResize();
+    }
+};
+
+/* Fire when the dock changes size (collapse toggle, snap change, drag
+ * release). Chromium 124 on Android WebView doesn't always re-layout
+ * nested flex descendants when a parent's padding-bottom recomputes via
+ * a `body:has()` CSS-variable flip, so Monaco's ResizeObserver misses
+ * the invalidation. Explicit `editor.layout()` + a synthetic window
+ * resize covers Monaco and any component that listens to resize. */
+window.kmilaBroadcastEditorResize = function () {
+    try { window.dispatchEvent(new Event('resize')); } catch (_) {}
+    if (typeof monaco !== 'undefined' && monaco.editor) {
+        try {
+            monaco.editor.getEditors().forEach(function (e) {
+                if (e && typeof e.layout === 'function') e.layout();
+            });
+        } catch (_) {}
+    }
+};
+
+/* Visual runtime: scroll the canvas-stack so a widget's just-opened floating
+ * props card is visible. Called from VisualPanel after a widget is newly
+ * selected — the card is rendered in canvas coords (1200×800), but the phone
+ * viewport shows only a slice, so the card can land off-viewport when the
+ * widget itself sits near an edge. This finds the widget by data-component-id,
+ * then computes the union rect of the widget + its props card and scrolls the
+ * canvas-stack container just enough so the union fits inside the viewport.
+ * A tiny padding (12 CSS-px) keeps the edges from clipping. */
+window.kmilaVisualEnsurePropsVisible = function (componentId) {
+    try {
+        const widget = document.querySelector('[data-component-id="' + componentId + '"]');
+        if (!widget) return;
+        const container = widget.closest('.visual-page__canvas-stack');
+        if (!container) return;
+        const props = container.querySelector('.visual-page__props');
+        const widgetRect = widget.getBoundingClientRect();
+        const propsRect = props ? props.getBoundingClientRect() : widgetRect;
+        const cRect = container.getBoundingClientRect();
+
+        const uLeft   = Math.min(widgetRect.left,   propsRect.left);
+        const uRight  = Math.max(widgetRect.right,  propsRect.right);
+        const uTop    = Math.min(widgetRect.top,    propsRect.top);
+        const uBottom = Math.max(widgetRect.bottom, propsRect.bottom);
+        const pad = 12;
+
+        let dx = 0, dy = 0;
+        if (uLeft < cRect.left + pad)   dx = uLeft   - (cRect.left  + pad);
+        else if (uRight > cRect.right - pad)  dx = uRight  - (cRect.right - pad);
+        if (uTop < cRect.top + pad)     dy = uTop    - (cRect.top   + pad);
+        else if (uBottom > cRect.bottom - pad) dy = uBottom - (cRect.bottom - pad);
+
+        if (dx !== 0 || dy !== 0) {
+            container.scrollBy({ left: dx, top: dy, behavior: 'smooth' });
+        }
+    } catch (_) {}
 };
 
 /* Called from EditorDock after a tab tap on mobile so the bottom-sheet
@@ -1694,3 +1867,59 @@ window.kmilaNotifySimEnd = async function (title, body) {
         // already provides the foreground signal.
     }
 };
+
+// -------------------------------------------------------------------------
+// Visual mode — click-outside dismissal for the floating widget props card.
+// The Blazor OnCanvasPointerDown handler only catches taps that land
+// directly on the .kviz-canvas element; users click plenty of other
+// "outside" places (canvas-stack padding, palette background, toolbar
+// gap, wire overlay above 1200×800 canvas). This capture-phase listener
+// closes the props aside on any pointerdown that isn't inside the aside
+// or on a widget. Widget taps stay untouched — the widget's own Blazor
+// pointerdown still runs and switches selection normally.
+// -------------------------------------------------------------------------
+document.addEventListener('pointerdown', function (e) {
+    const aside = document.querySelector('.visual-page__props');
+    if (!aside) return;
+    if (!e.target || !e.target.closest) return;
+    if (aside.contains(e.target)) return;
+    if (e.target.closest('.kviz-widget')) return;
+    const closeBtn = aside.querySelector('.visual-page__props-close');
+    if (closeBtn) closeBtn.click();
+}, true);
+
+// -------------------------------------------------------------------------
+// Visual mode — undo/redo/delete keyboard shortcuts (desktop only).
+// Delegates to the corresponding toolbar buttons by data-testid, same
+// no-JSInterop pattern as the click-outside listener above. Route-
+// scoped so it only fires on /visual/* and /editor/* pages (mobile
+// keyboards rarely dispatch these anyway, so no attempt is made to
+// hide the handler on phones).
+// -------------------------------------------------------------------------
+document.addEventListener('keydown', function (e) {
+    const path = window.location.pathname;
+    if (!path.includes('/visual/') && !path.includes('/editor/')) return;
+    // Don't fire while the user is typing in a text field or Monaco.
+    const t = document.activeElement;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA'
+              || (t.closest && t.closest('.monaco-editor')))) return;
+    const ctrl = e.ctrlKey || e.metaKey;
+    if (ctrl && (e.key === 'z' || e.key === 'Z')) {
+        const sel = e.shiftKey ? '[data-testid="visual-redo"]' : '[data-testid="visual-undo"]';
+        const btn = document.querySelector(sel);
+        if (btn && !btn.disabled) { e.preventDefault(); btn.click(); }
+        return;
+    }
+    // Ctrl+Y as an alternate redo (Windows/Linux convention).
+    if (ctrl && (e.key === 'y' || e.key === 'Y')) {
+        const btn = document.querySelector('[data-testid="visual-redo"]');
+        if (btn && !btn.disabled) { e.preventDefault(); btn.click(); }
+        return;
+    }
+    // Delete / Backspace nukes the selected widget(s). Only on /visual/*
+    // so we don't fight Monaco's own delete inside the editor route.
+    if ((e.key === 'Delete' || e.key === 'Backspace') && path.includes('/visual/')) {
+        const btn = document.querySelector('[data-testid="visual-delete"]');
+        if (btn && !btn.disabled) { e.preventDefault(); btn.click(); }
+    }
+});

@@ -23,18 +23,20 @@ else
     <div class="output-panel">
         <div class="output-panel__toolbar">
             <span class="output-panel__count">@Log.Entries.Count</span>
-            <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
-                    @onclick="ExportLogAsync"
-                    title="@Traductor.T("OUTPUT_EXPORT")">
-                <Icon Name="IconName.Download" />
-                <span>@Traductor.T("OUTPUT_EXPORT")</span>
-            </button>
-            <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
-                    @onclick="Log.Clear"
-                    title="@Traductor.T("OUTPUT_CLEAR")">
-                <Icon Name="IconName.Trash" />
-                <span>@Traductor.T("OUTPUT_CLEAR")</span>
-            </button>
+            <KmilaTooltip TextKey="OUTPUT_EXPORT">
+                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                        @onclick="ExportLogAsync">
+                    <Icon Name="IconName.Download" />
+                    <span>@Traductor.T("OUTPUT_EXPORT")</span>
+                </button>
+            </KmilaTooltip>
+            <KmilaTooltip TextKey="OUTPUT_CLEAR">
+                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                        @onclick="Log.Clear">
+                    <Icon Name="IconName.Trash" />
+                    <span>@Traductor.T("OUTPUT_CLEAR")</span>
+                </button>
+            </KmilaTooltip>
         </div>
 
         <ol class="output-panel__list" role="log" aria-live="polite" aria-relevant="additions">
@@ -92,13 +94,13 @@ else
             $"kmila-build-{stamp}.log", "text/plain", sb.ToString());
         if (result.Saved)
         {
-            var msg = result.Path != null ? $"Saved: {result.Path}" : "Log downloaded.";
+            var msg = result.Path != null ? $"Saved: {result.Path}" : Traductor.T("OUTPUT_LOG_DOWNLOADED");
             ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), msg, ToastType.Success));
         }
         else
         {
             ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
-                result.Error ?? "Export failed.", ToastType.Danger));
+                result.Error ?? Traductor.T("COMMON_EXPORT_FAILED"), ToastType.Danger));
         }
     }
 

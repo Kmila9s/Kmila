@@ -40,13 +40,15 @@
                            class="form-control form-control-sm"
                            placeholder="@Traductor.T("CONFIG_NAME_PLACEHOLDER")"
                            @bind="_newConfigName" />
-                    <button type="button"
-                            class="kmila-btn kmila-btn--success kmila-btn--sm"
-                            disabled="@(string.IsNullOrWhiteSpace(_newConfigName))"
-                            @onclick="SaveConfigurationAsync">
-                        <Icon Name="IconName.Save" />
-                        <span>@Traductor.T("CONFIG_SAVE_BUTTON")</span>
-                    </button>
+                    <KmilaTooltip TextKey="CONFIG_SAVE_TIP">
+                        <button type="button"
+                                class="kmila-btn kmila-btn--success kmila-btn--sm"
+                                disabled="@(string.IsNullOrWhiteSpace(_newConfigName))"
+                                @onclick="SaveConfigurationAsync">
+                            <Icon Name="IconName.Save" />
+                            <span>@Traductor.T("CONFIG_SAVE_BUTTON")</span>
+                        </button>
+                    </KmilaTooltip>
                 </div>
                 <input type="text"
                        class="form-control form-control-sm"
@@ -74,27 +76,30 @@
                                share the same geometry as the rest of the app's
                                icon buttons (filebar, dock, runbar). *@
                             <div class="d-inline-flex gap-1">
-                                <button type="button"
-                                        class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--sm"
-                                        title="@Traductor.T("CONFIG_LOAD_TOOLTIP")"
-                                        aria-label="@Traductor.T("CONFIG_LOAD_TOOLTIP")"
-                                        @onclick="() => LoadConfigurationAsync(configName)">
-                                    <Icon Name="IconName.BoxArrowInDown" />
-                                </button>
-                                <button type="button"
-                                        class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--sm"
-                                        title="@Traductor.T("CONFIG_EXPORT_TOOLTIP")"
-                                        aria-label="@Traductor.T("CONFIG_EXPORT_TOOLTIP")"
-                                        @onclick="() => ExportConfigurationAsync(configName)">
-                                    <Icon Name="IconName.Download" />
-                                </button>
-                                <button type="button"
-                                        class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--danger kmila-btn-icon--sm"
-                                        title="@Traductor.T("CONFIG_DELETE_TOOLTIP")"
-                                        aria-label="@Traductor.T("CONFIG_DELETE_TOOLTIP")"
-                                        @onclick="() => DeleteConfigurationAsync(configName)">
-                                    <Icon Name="IconName.Trash" />
-                                </button>
+                                <KmilaTooltip TextKey="CONFIG_LOAD_TOOLTIP">
+                                    <button type="button"
+                                            class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--sm"
+                                            aria-label="@Traductor.T("CONFIG_LOAD_TOOLTIP")"
+                                            @onclick="() => LoadConfigurationAsync(configName)">
+                                        <Icon Name="IconName.BoxArrowInDown" />
+                                    </button>
+                                </KmilaTooltip>
+                                <KmilaTooltip TextKey="CONFIG_EXPORT_TOOLTIP">
+                                    <button type="button"
+                                            class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--sm"
+                                            aria-label="@Traductor.T("CONFIG_EXPORT_TOOLTIP")"
+                                            @onclick="() => ExportConfigurationAsync(configName)">
+                                        <Icon Name="IconName.Download" />
+                                    </button>
+                                </KmilaTooltip>
+                                <KmilaTooltip TextKey="CONFIG_DELETE_TOOLTIP">
+                                    <button type="button"
+                                            class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--danger kmila-btn-icon--sm"
+                                            aria-label="@Traductor.T("CONFIG_DELETE_TOOLTIP")"
+                                            @onclick="() => DeleteConfigurationAsync(configName)">
+                                        <Icon Name="IconName.Trash" />
+                                    </button>
+                                </KmilaTooltip>
                             </div>
                         </div>
                     }
@@ -131,12 +136,14 @@
                             <Icon Name="IconName.CheckCircle" Class="me-2" />
                             @Traductor.T("CONFIG_READY_TO_LOAD") <strong>@_importedConfig.Name</strong>
                         </span>
-                        <button type="button"
-                                class="kmila-btn kmila-btn--success kmila-btn--sm"
-                                @onclick="LoadImportedConfigAsync">
-                            <Icon Name="IconName.BoxArrowInDown" />
-                            <span>@Traductor.T("CONFIG_LOAD_NOW")</span>
-                        </button>
+                        <KmilaTooltip TextKey="CONFIG_LOAD_IMPORTED_TIP">
+                            <button type="button"
+                                    class="kmila-btn kmila-btn--success kmila-btn--sm"
+                                    @onclick="LoadImportedConfigAsync">
+                                <Icon Name="IconName.BoxArrowInDown" />
+                                <span>@Traductor.T("CONFIG_LOAD_NOW")</span>
+                            </button>
+                        </KmilaTooltip>
                     </div>
                 </Alert>
             }
@@ -158,12 +165,14 @@
                     <Icon Name="IconName.CheckCircle" Class="me-2" />
                     @Traductor.T("CONFIG_EXPORTED") <strong>@_exportFileName</strong>
                 </span>
-                <button type="button"
-                        class="kmila-btn kmila-btn--success kmila-btn--sm"
-                        @onclick="DownloadExportAsync">
-                    <Icon Name="IconName.Download" />
-                    <span>@Traductor.T("CONFIG_DOWNLOAD")</span>
-                </button>
+                <KmilaTooltip TextKey="CONFIG_DOWNLOAD_TIP">
+                    <button type="button"
+                            class="kmila-btn kmila-btn--success kmila-btn--sm"
+                            @onclick="DownloadExportAsync">
+                        <Icon Name="IconName.Download" />
+                        <span>@Traductor.T("CONFIG_DOWNLOAD")</span>
+                    </button>
+                </KmilaTooltip>
             </div>
         </Alert>
     </div>

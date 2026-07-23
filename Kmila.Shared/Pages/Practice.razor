@@ -29,11 +29,13 @@
                        @oninput="OnSearchChanged" />
                 @if (!string.IsNullOrEmpty(_search))
                 {
-                    <button type="button" class="learn-hero__search-clear"
-                            @onclick="() => { _search = string.Empty; StateHasChanged(); }"
-                            aria-label="@Traductor.T("COMMON_CLEAR")">
-                        <Icon Name="IconName.XLg" />
-                    </button>
+                    <KmilaTooltip TextKey="PRACTICE_CLEAR_SEARCH_TIP">
+                        <button type="button" class="learn-hero__search-clear"
+                                @onclick="() => { _search = string.Empty; StateHasChanged(); }"
+                                aria-label="@Traductor.T("COMMON_CLEAR")">
+                            <Icon Name="IconName.XLg" />
+                        </button>
+                    </KmilaTooltip>
                 }
             </label>
         </div>
@@ -128,7 +130,8 @@
 
                         <a class="learn-card @(gated ? "learn-card--gated" : "")"
                            href="@href"
-                           title="@gateTip">
+                           title="@gateTip"
+                           data-testid="@($"practice-card-{ex.Id}")">
                             <div class="learn-card__icon learn-card__icon--@DifficultyVariant(ex.Difficulty)">
                                 <Icon Name="@ModalityIcon(ex.Modality)" />
                             </div>

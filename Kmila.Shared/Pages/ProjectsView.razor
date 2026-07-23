@@ -45,24 +45,28 @@
             </div>
 
             <div class="kmila-slot-header-tools__actions">
-                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary projects-sample"
-                        @onclick="CreateSampleAsync"
-                        title="@Traductor.T("PROJECTS_SAMPLE_HINT")">
-                    <Icon Name="IconName.LightningChargeFill" />
-                    <span>@Traductor.T("PROJECTS_CREATE_SAMPLE")</span>
-                </button>
+                <KmilaTooltip TextKey="PROJECTS_SAMPLE_HINT">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary projects-sample"
+                            @onclick="CreateSampleAsync">
+                        <Icon Name="IconName.LightningChargeFill" />
+                        <span>@Traductor.T("PROJECTS_CREATE_SAMPLE")</span>
+                    </button>
+                </KmilaTooltip>
 
-                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--accent projects-examples"
-                        @onclick="OpenExamplesGallery"
-                        title="@Traductor.T("EXAMPLES_GALLERY_HINT")">
-                    <Icon Name="IconName.Grid" />
-                    <span>@Traductor.T("EXAMPLES_GALLERY_BUTTON")</span>
-                </button>
+                <KmilaTooltip TextKey="EXAMPLES_GALLERY_HINT">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--accent projects-examples"
+                            @onclick="OpenExamplesGallery">
+                        <Icon Name="IconName.Grid" />
+                        <span>@Traductor.T("EXAMPLES_GALLERY_BUTTON")</span>
+                    </button>
+                </KmilaTooltip>
 
-                <button type="button" class="kmila-btn kmila-btn--accent projects-cta" @onclick="CreateProjectAsync">
-                    <Icon Name="IconName.PlusLg" />
-                    <span>@Traductor.T("PROJECTS_CREATE_NEW")</span>
-                </button>
+                <KmilaTooltip TextKey="PROJECTS_CREATE_NEW_TIP" Placement="Bottom">
+                    <button type="button" class="kmila-btn kmila-btn--accent projects-cta" @onclick="CreateProjectAsync">
+                        <Icon Name="IconName.PlusLg" />
+                        <span>@Traductor.T("PROJECTS_CREATE_NEW")</span>
+                    </button>
+                </KmilaTooltip>
             </div>
         </div>
     </header>
@@ -89,16 +93,20 @@
             <h2>@Traductor.T("PROJECTS_EMPTY_TITLE")</h2>
             <p>@Traductor.T("PROJECTS_EMPTY_BODY")</p>
             <div class="projects-empty__actions">
-                <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--lg" @onclick="CreateProjectAsync">
-                    <Icon Name="IconName.PlusLg" />
-                    <span>@Traductor.T("PROJECTS_CREATE_NEW")</span>
-                </button>
+                <KmilaTooltip TextKey="PROJECTS_CREATE_NEW_TIP">
+                    <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--lg" @onclick="CreateProjectAsync">
+                        <Icon Name="IconName.PlusLg" />
+                        <span>@Traductor.T("PROJECTS_CREATE_NEW")</span>
+                    </button>
+                </KmilaTooltip>
                 @* slot/empty-state-actions — stray Bootstrap btn-lg removed so both
                    CTAs size at .kmila-btn--lg identically (proposal 2026-06-28). *@
-                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--lg" @onclick="CreateSampleAsync">
-                    <Icon Name="IconName.LightningChargeFill" />
-                    <span>@Traductor.T("PROJECTS_CREATE_SAMPLE")</span>
-                </button>
+                <KmilaTooltip TextKey="PROJECTS_CREATE_SAMPLE_TIP">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--lg" @onclick="CreateSampleAsync">
+                        <Icon Name="IconName.LightningChargeFill" />
+                        <span>@Traductor.T("PROJECTS_CREATE_SAMPLE")</span>
+                    </button>
+                </KmilaTooltip>
             </div>
         </div>
     }
@@ -108,10 +116,12 @@
             <div class="projects-empty__icon"><Icon Name="IconName.Search" /></div>
             <h2>@Traductor.T("PROJECTS_NO_MATCH_TITLE")</h2>
             <p>@string.Format(Traductor.T("PROJECTS_NO_MATCH_BODY"), _filter)</p>
-            <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--accent" @onclick="() => _filter = string.Empty">
-                <Icon Name="IconName.ArrowCounterclockwise" />
-                <span>@Traductor.T("COMMON_CLEAR")</span>
-            </button>
+            <KmilaTooltip TextKey="PROJECTS_CLEAR_FILTER_TIP">
+                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--accent" @onclick="() => _filter = string.Empty">
+                    <Icon Name="IconName.ArrowCounterclockwise" />
+                    <span>@Traductor.T("COMMON_CLEAR")</span>
+                </button>
+            </KmilaTooltip>
         </div>
     }
     else
@@ -168,34 +178,40 @@
                         {
                             @if (isPaused)
                             {
-                                <button type="button"
-                                        class="project-card__action project-card__action--accent"
-                                        title="@Traductor.T("SIM_RESUME")"
-                                        @onclick="OnResumeSimulation"
-                                        @onclick:preventDefault
-                                        @onclick:stopPropagation>
-                                    <Icon Name="IconName.PlayFill" />
-                                </button>
+                                <KmilaTooltip TextKey="SIM_RESUME">
+                                    <button type="button"
+                                            class="project-card__action project-card__action--accent"
+                                            aria-label="@Traductor.T("SIM_RESUME")"
+                                            @onclick="OnResumeSimulation"
+                                            @onclick:preventDefault
+                                            @onclick:stopPropagation>
+                                        <Icon Name="IconName.PlayFill" />
+                                    </button>
+                                </KmilaTooltip>
                             }
                             else
                             {
+                                <KmilaTooltip TextKey="SIM_PAUSE">
+                                    <button type="button"
+                                            class="project-card__action"
+                                            aria-label="@Traductor.T("SIM_PAUSE")"
+                                            @onclick="OnPauseSimulation"
+                                            @onclick:preventDefault
+                                            @onclick:stopPropagation>
+                                        <Icon Name="IconName.PauseFill" />
+                                    </button>
+                                </KmilaTooltip>
+                            }
+                            <KmilaTooltip TextKey="SIM_STOP">
                                 <button type="button"
-                                        class="project-card__action"
-                                        title="@Traductor.T("SIM_PAUSE")"
-                                        @onclick="OnPauseSimulation"
+                                        class="project-card__action project-card__action--danger"
+                                        aria-label="@Traductor.T("SIM_STOP")"
+                                        @onclick="OnStopSimulation"
                                         @onclick:preventDefault
                                         @onclick:stopPropagation>
-                                    <Icon Name="IconName.PauseFill" />
+                                    <Icon Name="IconName.StopFill" />
                                 </button>
-                            }
-                            <button type="button"
-                                    class="project-card__action project-card__action--danger"
-                                    title="@Traductor.T("SIM_STOP")"
-                                    @onclick="OnStopSimulation"
-                                    @onclick:preventDefault
-                                    @onclick:stopPropagation>
-                                <Icon Name="IconName.StopFill" />
-                            </button>
+                            </KmilaTooltip>
                         }
                         else
                         {
@@ -204,14 +220,16 @@
                                title="@Traductor.T("PROJECTS_OPEN")">
                                 <Icon Name="IconName.BoxArrowUpRight" />
                             </a>
-                            <button type="button"
-                                    class="project-card__action project-card__action--danger"
-                                    title="@Traductor.T("PROJECTS_REMOVE")"
-                                    @onclick="() => RemoveProjectAsync(project)"
-                                    @onclick:preventDefault
-                                    @onclick:stopPropagation>
-                                <Icon Name="IconName.Trash" />
-                            </button>
+                            <KmilaTooltip TextKey="PROJECTS_REMOVE">
+                                <button type="button"
+                                        class="project-card__action project-card__action--danger"
+                                        aria-label="@Traductor.T("PROJECTS_REMOVE")"
+                                        @onclick="() => RemoveProjectAsync(project)"
+                                        @onclick:preventDefault
+                                        @onclick:stopPropagation>
+                                    <Icon Name="IconName.Trash" />
+                                </button>
+                            </KmilaTooltip>
                         }
                     </div>
                 </article>
@@ -245,6 +263,7 @@
                         var localEx = ex;
                         <button type="button"
                                 class="examples-gallery-card"
+                                data-example-id="@localEx.Id"
                                 @onclick="() => PickExampleAsync(localEx)">
                             <Icon Name="@GetExampleIcon(localEx.Id)" Class="examples-gallery-card__icon" />
                             <div class="examples-gallery-card__body">
@@ -302,13 +321,21 @@
         {
             _projects = await Projects.GetListAsync() ?? new();
         }
-        catch
+        catch (Exception ex)
         {
             _projects = new();
+            // Defensive: on Android WebView, an exception here used to leave
+            // the skeleton spinning forever (audit F-A-05, 2026-07-09). Log
+            // so it surfaces in /logs instead of dying silently.
+            System.Diagnostics.Debug.WriteLine($"[ProjectsView] GetListAsync failed: {ex.Message}");
         }
         finally
         {
             _loading = false;
+            // Force a re-render — some MAUI/WebView builds don't tick the
+            // render loop on the implicit await-continuation, and the
+            // skeleton stayed visible until the user interacted.
+            StateHasChanged();
         }
     }
 
@@ -743,24 +770,381 @@ end architecture behavioral;
 ";
 
     /// <summary>
+    /// DIP adder (FW-2 flagship) — two DIP-switch banks feed a 4-bit adder,
+    /// the 5-bit sum drops onto an LED array + carry LED. Shows the
+    /// multi-switch widget in vector mode driving std_logic_vector inputs
+    /// without any bit-slice binding — the port width is the DIP count.
+    /// </summary>
+    private const string DIP_ADDER_VHD =
+@"library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
+
+entity dip_adder is
+    port(
+        a   : in  std_logic_vector(3 downto 0);
+        b   : in  std_logic_vector(3 downto 0);
+        sum : out std_logic_vector(4 downto 0)
+    );
+end dip_adder;
+
+architecture rtl of dip_adder is
+begin
+    sum <= std_logic_vector(resize(unsigned(a), 5) + resize(unsigned(b), 5));
+end rtl;
+";
+
+    private const string DIP_ADDER_KVIZ =
+@"{
+  ""version"": 1,
+  ""designFile"": ""main.vhd"",
+  ""canvas"": { ""width"": 1200, ""height"": 650, ""background"": ""grid"" },
+  ""components"": [
+    { ""id"": ""dip-a"",   ""type"": ""multi-switch"", ""position"": { ""x"": 60,  ""y"": 80  }, ""config"": { ""mode"": ""vector"", ""count"": 4, ""bounce"": false }, ""bindings"": { ""value"": ""a"" } },
+    { ""id"": ""dip-b"",   ""type"": ""multi-switch"", ""position"": { ""x"": 60,  ""y"": 220 }, ""config"": { ""mode"": ""vector"", ""count"": 4, ""bounce"": false }, ""bindings"": { ""value"": ""b"" } },
+    { ""id"": ""sum-arr"", ""type"": ""led-array"",    ""position"": { ""x"": 320, ""y"": 140 }, ""config"": { ""length"": 5, ""color"": ""yellow"", ""orientation"": ""h"" }, ""bindings"": { ""anodes"": ""sum"" } }
+  ],
+  ""settings"": { ""ringBufferTicks"": 2000, ""defaultSpeed"": ""Normal"" }
+}
+";
+
+    /// <summary>
+    /// Plus-sign scroller (FW-1 flagship) — a 9-bit register cycles a plus-
+    /// pattern across a 3×3 mono LED matrix in a single-port assisted binding.
+    /// Demonstrates that a std_logic_vector(8 downto 0) drives the whole grid
+    /// row-major (LSB = (0,0)) without any per-cell wiring.
+    /// </summary>
+    private const string MATRIX_PLUS_VHD =
+@"library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+
+entity plus_sign_scroller is
+    port(
+        clk     : in  std_logic;
+        reset   : in  std_logic;
+        step_en : in  std_logic;
+        pattern : out std_logic_vector(8 downto 0)
+    );
+end plus_sign_scroller;
+
+architecture rtl of plus_sign_scroller is
+    -- Six frames of a plus-sign scrolling one column at a time. Each
+    -- 9-bit word is row-major, LSB = (0,0). ""010 111 010"" is a
+    -- centered '+' with all four arms lit.
+    type frame_t is array(0 to 5) of std_logic_vector(8 downto 0);
+    constant frames : frame_t := (
+        ""000000000"",
+        ""001010001"",
+        ""010101010"",
+        ""111111111"",
+        ""010111010"",   -- centered plus
+        ""010010010""
+    );
+    signal idx : integer range 0 to 5 := 0;
+begin
+    process(clk, reset)
+    begin
+        if reset = '1' then
+            idx <= 0;
+        elsif rising_edge(clk) then
+            if step_en = '1' then
+                if idx = 5 then idx <= 0; else idx <= idx + 1; end if;
+            end if;
+        end if;
+    end process;
+
+    pattern <= frames(idx);
+end rtl;
+";
+
+    private const string MATRIX_PLUS_KVIZ =
+@"{
+  ""version"": 1,
+  ""designFile"": ""main.vhd"",
+  ""canvas"": { ""width"": 900, ""height"": 500, ""background"": ""grid"" },
+  ""components"": [
+    { ""id"": ""btn-reset"", ""type"": ""button"", ""position"": { ""x"": 60,  ""y"": 60 }, ""config"": { ""label"": ""RESET"" }, ""bindings"": { ""out"": ""reset"" } },
+    { ""id"": ""sw-step"",   ""type"": ""switch"", ""position"": { ""x"": 220, ""y"": 60 }, ""config"": { ""label"": ""STEP"", ""defaultState"": ""1"" }, ""bindings"": { ""out"": ""step_en"" } },
+
+    { ""id"": ""mtx-1"", ""type"": ""matrix-3x3"", ""position"": { ""x"": 420, ""y"": 200 }, ""config"": { ""mode"": ""value"", ""color"": ""red"", ""brightness"": 100 }, ""bindings"": { ""value"": ""pattern"" } }
+  ],
+  ""settings"": { ""ringBufferTicks"": 2000, ""defaultSpeed"": ""Normal"" }
+}
+";
+
+    /// <summary>
+    /// RGB rainbow (FW-1b flagship) — three independent 9-bit Galois LFSRs
+    /// drive the R/G/B planes of the 3×3 RGB matrix in `planes` mode. Each
+    /// LFSR uses a distinct tap seed so the three planes cycle through
+    /// different patterns, giving a rich colour mix without any dedicated
+    /// colour-generator arithmetic.
+    /// </summary>
+    private const string RGB_RAINBOW_VHD =
+@"library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+
+entity rgb_rainbow is
+    port(
+        clk     : in  std_logic;
+        reset   : in  std_logic;
+        step_en : in  std_logic;
+        red     : out std_logic_vector(8 downto 0);
+        green   : out std_logic_vector(8 downto 0);
+        blue    : out std_logic_vector(8 downto 0)
+    );
+end rgb_rainbow;
+
+architecture rtl of rgb_rainbow is
+    -- Three 9-bit Galois-style LFSRs, one per colour plane. Each uses
+    -- a different tap bit (4/3/5) so the planes don't lock-step, giving
+    -- a rich colour cycle across the matrix without any dedicated
+    -- colour-generator arithmetic. The shift is written inline (not as
+    -- a VHDL function) because the current interpreter's user-defined
+    -- functions aren't reactive across process re-fires (2026-07-05
+    -- gap — see project_visual_runtime_mode memory).
+    signal r_reg : std_logic_vector(8 downto 0) := ""101101010"";
+    signal g_reg : std_logic_vector(8 downto 0) := ""011010110"";
+    signal b_reg : std_logic_vector(8 downto 0) := ""110100101"";
+begin
+    process(clk, reset)
+    begin
+        if reset = '1' then
+            r_reg <= ""101101010"";
+            g_reg <= ""011010110"";
+            b_reg <= ""110100101"";
+        elsif rising_edge(clk) then
+            if step_en = '1' then
+                r_reg <= (r_reg(0) xor r_reg(4)) & r_reg(8 downto 1);
+                g_reg <= (g_reg(0) xor g_reg(3)) & g_reg(8 downto 1);
+                b_reg <= (b_reg(0) xor b_reg(5)) & b_reg(8 downto 1);
+            end if;
+        end if;
+    end process;
+
+    red   <= r_reg;
+    green <= g_reg;
+    blue  <= b_reg;
+end rtl;
+";
+
+    private const string RGB_RAINBOW_KVIZ =
+@"{
+  ""version"": 1,
+  ""designFile"": ""main.vhd"",
+  ""canvas"": { ""width"": 900, ""height"": 500, ""background"": ""grid"" },
+  ""components"": [
+    { ""id"": ""btn-reset"", ""type"": ""button"", ""position"": { ""x"": 60,  ""y"": 60 }, ""config"": { ""label"": ""RESET"" }, ""bindings"": { ""out"": ""reset"" } },
+    { ""id"": ""sw-step"",   ""type"": ""switch"", ""position"": { ""x"": 220, ""y"": 60 }, ""config"": { ""label"": ""STEP"", ""defaultState"": ""1"" }, ""bindings"": { ""out"": ""step_en"" } },
+
+    { ""id"": ""rgb-1"", ""type"": ""matrix-3x3-rgb"", ""position"": { ""x"": 420, ""y"": 200 }, ""config"": { ""mode"": ""planes"", ""brightness"": 100 }, ""bindings"": { ""red"": ""red"", ""green"": ""green"", ""blue"": ""blue"" } }
+  ],
+  ""settings"": { ""ringBufferTicks"": 2000, ""defaultSpeed"": ""Normal"" }
+}
+";
+
+    /// <summary>
+    /// Buzzer scale (FW-5 flagship) — 3-bit note selector picks a note from
+    /// the C-major octave (C4..C5). A separate ENABLE switch gates the
+    /// tone. Uses `when-else` for the note table to keep the sample
+    /// portable across the interpreter's supported concurrent-assignment
+    /// syntax subset (see `[[project_visual_runtime_mode]]` — with-select
+    /// alt-lists have historical gaps).
+    /// </summary>
+    private const string BUZZER_SCALE_VHD =
+@"library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
+
+entity scale_generator is
+    port(
+        note_sel : in  std_logic_vector(2 downto 0);
+        enable   : in  std_logic;
+        freq_hz  : out std_logic_vector(15 downto 0);
+        gate     : out std_logic
+    );
+end scale_generator;
+
+architecture rtl of scale_generator is
+    signal note_freq : integer range 0 to 65535;
+begin
+    note_freq <= 262 when note_sel = ""000"" else   -- C4
+                 294 when note_sel = ""001"" else   -- D4
+                 330 when note_sel = ""010"" else   -- E4
+                 349 when note_sel = ""011"" else   -- F4
+                 392 when note_sel = ""100"" else   -- G4
+                 440 when note_sel = ""101"" else   -- A4
+                 494 when note_sel = ""110"" else   -- B4
+                 523;                               -- C5
+
+    freq_hz <= std_logic_vector(to_unsigned(note_freq, 16));
+    gate    <= enable;
+end rtl;
+";
+
+    private const string BUZZER_SCALE_KVIZ =
+@"{
+  ""version"": 1,
+  ""designFile"": ""main.vhd"",
+  ""canvas"": { ""width"": 900, ""height"": 500, ""background"": ""grid"" },
+  ""components"": [
+    { ""id"": ""sw-en"", ""type"": ""switch"", ""position"": { ""x"": 60, ""y"": 60 }, ""config"": { ""label"": ""ENABLE"", ""defaultState"": ""1"" }, ""bindings"": { ""out"": ""enable"" } },
+    { ""id"": ""dip-note"", ""type"": ""multi-switch"", ""position"": { ""x"": 240, ""y"": 60 }, ""config"": { ""mode"": ""vector"", ""count"": 3, ""bounce"": false }, ""bindings"": { ""value"": ""note_sel"" } },
+
+    { ""id"": ""buz-1"", ""type"": ""buzzer-piezo"", ""position"": { ""x"": 480, ""y"": 200 }, ""config"": { ""mode"": ""freq"" }, ""bindings"": { ""freq_hz"": ""freq_hz"", ""enable"": ""gate"" } }
+  ],
+  ""settings"": { ""ringBufferTicks"": 2000, ""defaultSpeed"": ""Normal"" }
+}
+";
+
+    /// <summary>
+    /// Keypad → 7-segment latch (FW-4 flagship). Assisted 4×4 keypad
+    /// drives a hex 7-segment display. The design latches the current
+    /// key value while `pressed` is high; releasing all keys freezes
+    /// the last digit on the display.
+    /// </summary>
+    private const string KEYPAD_DISPLAY_VHD =
+@"library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+
+entity keypad_display is
+    port(
+        clk     : in  std_logic;
+        reset   : in  std_logic;
+        key     : in  std_logic_vector(3 downto 0);
+        pressed : in  std_logic;
+        display : out std_logic_vector(3 downto 0)
+    );
+end keypad_display;
+
+architecture rtl of keypad_display is
+    signal reg : std_logic_vector(3 downto 0) := ""0000"";
+begin
+    process(clk, reset)
+    begin
+        if reset = '1' then
+            reg <= ""0000"";
+        elsif rising_edge(clk) then
+            if pressed = '1' then
+                reg <= key;
+            end if;
+        end if;
+    end process;
+
+    display <= reg;
+end rtl;
+";
+
+    private const string KEYPAD_DISPLAY_KVIZ =
+@"{
+  ""version"": 1,
+  ""designFile"": ""main.vhd"",
+  ""canvas"": { ""width"": 1000, ""height"": 550, ""background"": ""grid"" },
+  ""components"": [
+    { ""id"": ""btn-reset"", ""type"": ""button"",       ""position"": { ""x"": 60,  ""y"": 60  }, ""config"": { ""label"": ""RESET"" }, ""bindings"": { ""out"": ""reset"" } },
+    { ""id"": ""kpd-1"",     ""type"": ""keypad-matrix"", ""position"": { ""x"": 60,  ""y"": 180 }, ""config"": { ""mode"": ""decoded"", ""rows"": 4, ""cols"": 4 }, ""bindings"": { ""key"": ""key"", ""pressed"": ""pressed"" } },
+    { ""id"": ""7seg-1"",    ""type"": ""seven-seg"",    ""position"": { ""x"": 340, ""y"": 200 }, ""config"": { ""mode"": ""hex"", ""color"": ""red"" }, ""bindings"": { ""value"": ""display"" } }
+  ],
+  ""settings"": { ""ringBufferTicks"": 2000, ""defaultSpeed"": ""Normal"" }
+}
+";
+
+    /// <summary>
+    /// LCD rotating banner (FW-3 flagship). A 128-bit shift register holds
+    /// the ASCII string "HELLO KMILA     " (16 chars, 8 bits each). Each
+    /// STEP rising edge rotates the register left by one character so the
+    /// banner scrolls across the top line of a 16×2 assisted LCD.
+    /// </summary>
+    private const string LCD_HELLO_VHD =
+@"library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+
+entity hello_scroll is
+    port(
+        clk     : in  std_logic;
+        reset   : in  std_logic;
+        step_en : in  std_logic;
+        line0   : out std_logic_vector(127 downto 0)
+    );
+end hello_scroll;
+
+architecture rtl of hello_scroll is
+    -- ""HELLO KMILA     "" — 16 chars × 8 bits, MSB-first (bit 127 = H).
+    -- Encoded as one 128-bit literal so the interpreter doesn't have to
+    -- unroll a long concat chain at parse time.
+    signal reg : std_logic_vector(127 downto 0) :=
+        ""01001000010001010100110001001100010011110010000001001011010011010100100101001100010000010010000000100000001000000010000000100000"";
+begin
+    process(clk, reset)
+    begin
+        if reset = '1' then
+            reg <= ""01001000010001010100110001001100010011110010000001001011010011010100100101001100010000010010000000100000001000000010000000100000"";
+        elsif rising_edge(clk) then
+            if step_en = '1' then
+                -- Rotate left by 8 bits — move the leftmost character to
+                -- the tail so the banner appears to scroll left.
+                reg <= reg(119 downto 0) & reg(127 downto 120);
+            end if;
+        end if;
+    end process;
+
+    line0 <= reg;
+end rtl;
+";
+
+    private const string LCD_HELLO_KVIZ =
+@"{
+  ""version"": 1,
+  ""designFile"": ""main.vhd"",
+  ""canvas"": { ""width"": 900, ""height"": 500, ""background"": ""grid"" },
+  ""components"": [
+    { ""id"": ""btn-reset"", ""type"": ""button"", ""position"": { ""x"": 60,  ""y"": 60 }, ""config"": { ""label"": ""RESET"" }, ""bindings"": { ""out"": ""reset"" } },
+    { ""id"": ""sw-step"",   ""type"": ""switch"", ""position"": { ""x"": 220, ""y"": 60 }, ""config"": { ""label"": ""STEP"", ""defaultState"": ""1"" }, ""bindings"": { ""out"": ""step_en"" } },
+    { ""id"": ""lcd-1"",     ""type"": ""lcd-hd44780"", ""position"": { ""x"": 60,  ""y"": 200 }, ""config"": { ""mode"": ""text"", ""rows"": 2, ""cols"": 16 }, ""bindings"": { ""line0"": ""line0"" } }
+  ],
+  ""settings"": { ""ringBufferTicks"": 2000, ""defaultSpeed"": ""Normal"" }
+}
+";
+
+    /// <summary>
     /// Catalog of pre-built example projects. The default sample ("demo")
     /// is what the "Try a sample" button creates with one click; the rest
     /// surface through the example-gallery modal. Stable IDs so future
     /// share-links can point at a specific example without a name drift.
     /// </summary>
+    // Ring 5 (2026-07-14): `MainFileName` lets multi-file examples land
+    // their top-level entity on a non-`main.vhd` name (e.g. `calc_top.vhd`).
+    // `ExtraFiles` is a lazy loader for additional VHDL files created after
+    // the main file — used by the capstone example whose 15-file corpus
+    // ships as embedded resources rather than inline consts.
     private sealed record ExampleDef(
         string Id,
         string NameKey,
         string DescKey,
         string Vhd,
-        string Kviz);
+        string Kviz,
+        string MainFileName = "main.vhd",
+        Func<IEnumerable<(string FileName, string Content)>>? ExtraFiles = null);
 
     private static readonly List<ExampleDef> _examples = new()
     {
-        new ExampleDef("demo",     "EXAMPLE_DEMO_NAME",    "EXAMPLE_DEMO_DESC",    SAMPLE_MAIN_VHD,     SAMPLE_MAIN_KVIZ),
-        new ExampleDef("counter",  "EXAMPLE_COUNTER_NAME", "EXAMPLE_COUNTER_DESC", COUNTER_CLOCK_VHD,   COUNTER_CLOCK_KVIZ),
-        new ExampleDef("traffic",  "EXAMPLE_TRAFFIC_NAME", "EXAMPLE_TRAFFIC_DESC", TRAFFIC_LIGHT_VHD,   TRAFFIC_LIGHT_KVIZ),
-        new ExampleDef("shift",    "EXAMPLE_SHIFT_NAME",   "EXAMPLE_SHIFT_DESC",   SHIFT_REGISTER_VHD,  SHIFT_REGISTER_KVIZ),
+        new ExampleDef("demo",       "EXAMPLE_DEMO_NAME",       "EXAMPLE_DEMO_DESC",       SAMPLE_MAIN_VHD,     SAMPLE_MAIN_KVIZ),
+        new ExampleDef("counter",    "EXAMPLE_COUNTER_NAME",    "EXAMPLE_COUNTER_DESC",    COUNTER_CLOCK_VHD,   COUNTER_CLOCK_KVIZ),
+        new ExampleDef("traffic",    "EXAMPLE_TRAFFIC_NAME",    "EXAMPLE_TRAFFIC_DESC",    TRAFFIC_LIGHT_VHD,   TRAFFIC_LIGHT_KVIZ),
+        new ExampleDef("shift",      "EXAMPLE_SHIFT_NAME",      "EXAMPLE_SHIFT_DESC",      SHIFT_REGISTER_VHD,  SHIFT_REGISTER_KVIZ),
+        new ExampleDef("dip-adder",  "EXAMPLE_DIP_ADDER_NAME",  "EXAMPLE_DIP_ADDER_DESC",  DIP_ADDER_VHD,       DIP_ADDER_KVIZ),
+        new ExampleDef("matrix-plus","EXAMPLE_MATRIX_NAME",     "EXAMPLE_MATRIX_DESC",     MATRIX_PLUS_VHD,     MATRIX_PLUS_KVIZ),
+        new ExampleDef("rgb-rainbow","EXAMPLE_RGB_NAME",        "EXAMPLE_RGB_DESC",        RGB_RAINBOW_VHD,     RGB_RAINBOW_KVIZ),
+        new ExampleDef("buzzer-scale","EXAMPLE_BUZZER_NAME",    "EXAMPLE_BUZZER_DESC",     BUZZER_SCALE_VHD,    BUZZER_SCALE_KVIZ),
+        new ExampleDef("keypad-display","EXAMPLE_KEYPAD_NAME",  "EXAMPLE_KEYPAD_DESC",     KEYPAD_DISPLAY_VHD,  KEYPAD_DISPLAY_KVIZ),
+        new ExampleDef("lcd-hello",   "EXAMPLE_LCD_NAME",       "EXAMPLE_LCD_DESC",        LCD_HELLO_VHD,       LCD_HELLO_KVIZ),
+        new ExampleDef(
+            "capstone-calc",
+            "EXAMPLE_CAPSTONE_NAME",
+            "EXAMPLE_CAPSTONE_DESC",
+            "", // main file content injected via ExtraFiles loader below (calc_top.vhd is first entry)
+            CAPSTONE_CALC_KVIZ,
+            MainFileName: CAPSTONE_CALC_MAIN,
+            ExtraFiles: LoadCapstoneCalcFiles),
     };
 
     private bool _examplesModalOpen;
@@ -772,11 +1156,18 @@ end architecture behavioral;
     /// <summary>Maps a catalog example id to a Bootstrap-Icon glyph.</summary>
     private static IconName GetExampleIcon(string id) => id switch
     {
-        "demo"    => IconName.CpuFill,
-        "counter" => IconName.Stopwatch,
-        "traffic" => IconName.Signpost2Fill,
-        "shift"   => IconName.ArrowRightSquareFill,
-        _         => IconName.FileEarmarkCode,
+        "demo"      => IconName.CpuFill,
+        "counter"   => IconName.Stopwatch,
+        "traffic"   => IconName.Signpost2Fill,
+        "shift"     => IconName.ArrowRightSquareFill,
+        "dip-adder" => IconName.Sliders,
+        "matrix-plus" => IconName.Grid3X3Gap,
+        "rgb-rainbow" => IconName.Grid3X3GapFill,
+        "buzzer-scale" => IconName.VolumeUpFill,
+        "keypad-display" => IconName.Grid,
+        "lcd-hello" => IconName.Display,
+        "capstone-calc" => IconName.Calculator,
+        _           => IconName.FileEarmarkCode,
     };
 
     /// <summary>
@@ -836,20 +1227,43 @@ end architecture behavioral;
 
             // Write the starter VHDL file via the ProjectFiles repository so
             // the disk + DB stay in lockstep with the rest of the app.
-            var file = new ProjectFile
+            // Ring 5: single-file examples use def.Vhd → def.MainFileName;
+            // multi-file examples (capstone) leave def.Vhd empty and inject
+            // every file through ExtraFiles.
+            if (!string.IsNullOrEmpty(def.Vhd))
             {
-                Project = project,
-                FileName = "main.vhd",
-                Content = def.Vhd
-            };
-            await ProjectFiles.CreateAsync(file);
+                var file = new ProjectFile
+                {
+                    Project = project,
+                    FileName = def.MainFileName,
+                    Content = def.Vhd
+                };
+                await ProjectFiles.CreateAsync(file);
+            }
+
+            if (def.ExtraFiles != null)
+            {
+                foreach (var (fileName, content) in def.ExtraFiles.Invoke())
+                {
+                    var extra = new ProjectFile
+                    {
+                        Project = project,
+                        FileName = fileName,
+                        Content = content
+                    };
+                    await ProjectFiles.CreateAsync(extra);
+                }
+            }
 
             // Phase 3 (2026-06-26): every catalog example ships a pre-wired
             // .kviz sidecar so the Visual tab is immediately functional.
+            // Sidecar file name mirrors the top-level design's stem so the
+            // VisualPanel's KvizExt convention (`<stem>.kviz`) resolves it.
+            var kvizName = System.IO.Path.GetFileNameWithoutExtension(def.MainFileName) + ".kviz";
             var kvizFile = new ProjectFile
             {
                 Project = project,
-                FileName = "main.kviz",
+                FileName = kvizName,
                 Content = def.Kviz
             };
             await ProjectFiles.CreateAsync(kvizFile);

@@ -156,31 +156,34 @@
                                 <span class="kmila-nav-item__actions">
                                     @if (isPaused)
                                     {
-                                        <button type="button" class="kmila-nav-item__action"
-                                                @onclick="OnResumeSimulation"
-                                                @onclick:stopPropagation="true"
-                                                aria-label="@Traductor.T("SIM_RESUME")"
-                                                title="@Traductor.T("SIM_RESUME")">
-                                            <Icon Name="IconName.PlayFill" />
-                                        </button>
+                                        <KmilaTooltip TextKey="SIM_RESUME">
+                                            <button type="button" class="kmila-nav-item__action"
+                                                    @onclick="OnResumeSimulation"
+                                                    @onclick:stopPropagation="true"
+                                                    aria-label="@Traductor.T("SIM_RESUME")">
+                                                <Icon Name="IconName.PlayFill" />
+                                            </button>
+                                        </KmilaTooltip>
                                     }
                                     else
                                     {
-                                        <button type="button" class="kmila-nav-item__action"
-                                                @onclick="OnPauseSimulation"
-                                                @onclick:stopPropagation="true"
-                                                aria-label="@Traductor.T("SIM_PAUSE")"
-                                                title="@Traductor.T("SIM_PAUSE")">
-                                            <Icon Name="IconName.PauseFill" />
-                                        </button>
+                                        <KmilaTooltip TextKey="SIM_PAUSE">
+                                            <button type="button" class="kmila-nav-item__action"
+                                                    @onclick="OnPauseSimulation"
+                                                    @onclick:stopPropagation="true"
+                                                    aria-label="@Traductor.T("SIM_PAUSE")">
+                                                <Icon Name="IconName.PauseFill" />
+                                            </button>
+                                        </KmilaTooltip>
                                     }
-                                    <button type="button" class="kmila-nav-item__action kmila-nav-item__action--danger"
-                                            @onclick="OnStopSimulation"
-                                            @onclick:stopPropagation="true"
-                                            aria-label="@Traductor.T("SIM_STOP")"
-                                            title="@Traductor.T("SIM_STOP")">
-                                        <Icon Name="IconName.StopFill" />
-                                    </button>
+                                    <KmilaTooltip TextKey="SIM_STOP">
+                                        <button type="button" class="kmila-nav-item__action kmila-nav-item__action--danger"
+                                                @onclick="OnStopSimulation"
+                                                @onclick:stopPropagation="true"
+                                                aria-label="@Traductor.T("SIM_STOP")">
+                                            <Icon Name="IconName.StopFill" />
+                                        </button>
+                                    </KmilaTooltip>
                                 </span>
                                 <div class="kmila-nav-item__progress" role="progressbar" aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100">
                                     <div class="kmila-nav-item__progress-fill" style="width: @pct%;"></div>
@@ -189,13 +192,14 @@
                             else
                             {
                                 <span class="kmila-nav-item__actions">
-                                    <button type="button" class="kmila-nav-item__action"
-                                            @onclick="() => RemoveProjectAsync(project)"
-                                            @onclick:stopPropagation="true"
-                                            aria-label="@string.Format(Traductor.T("NAV_REMOVE_PROJECT"), project.Name)"
-                                            title="@string.Format(Traductor.T("NAV_REMOVE_PROJECT"), project.Name)">
-                                        <Icon Name="IconName.Trash" />
-                                    </button>
+                                    <KmilaTooltip TextKey="NAV_REMOVE_PROJECT" TextArgs="new object[] { project.Name }">
+                                        <button type="button" class="kmila-nav-item__action"
+                                                @onclick="() => RemoveProjectAsync(project)"
+                                                @onclick:stopPropagation="true"
+                                                aria-label="@string.Format(Traductor.T("NAV_REMOVE_PROJECT"), project.Name)">
+                                            <Icon Name="IconName.Trash" />
+                                        </button>
+                                    </KmilaTooltip>
                                 </span>
                             }
                         </div>

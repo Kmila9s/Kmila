@@ -1,0 +1,122 @@
+@namespace Kmila.Shared.Components.VisualRun
+@using Kmila.Shared.Services.VisualRun
+
+@*
+    Multi-digit 7-segment bank (Ring 5, 2026-07-14).
+
+    A single-value composite for designs that emit a concatenated segment
+    bus like calc_top's `seg_bus : std_logic_vector(4*7-1 downto 0)`. One
+    widget replaces N sliced SevenSegmentWidget instances.
+
+    Pin surface: a single `value` In pin whose expected width is
+    `digits * 7`. Bit layout is MSB-first: leftmost 7 bits drive the
+    leftmost digit (digit N-1), rightmost 7 bits drive digit 0. Within
+    each 7-bit slice, MSB = segment a, LSB = segment g (matching
+    seg7_driver.vhd's active-high abcdefg encoding).
+
+    Config keys:
+      • digits (int, default 4, clamp 2..8)
+      • color  (string, default red — same palette as the single-digit widget)
+*@
+
+<div class="kviz-widget kviz-7seg-bank @(EditMode ? "kviz-7seg-bank--edit" : "") @(Selected ? "kviz-widget--selected" : "")"
+     style="--kviz-7seg-color:@ColorVar; left:@(Comp.Position.X)px; top:@(Comp.Position.Y)px;"
+     data-component-id="@Comp.Id"
+     data-digits="@Digits"
+     @onpointerdown="HandlePointerDown">
+    <div class="kviz-7seg-bank__row">
+        @for (int i = Digits - 1; i >= 0; i--)
+        {
+            var d = i;
+            <div class="kviz-7seg" data-digit-index="@d">
+                <div class="kviz-7seg__housing">
+                    <div class="kviz-7seg__seg kviz-7seg__seg--a  @(SegOn(d, 'a') ? "kviz-7seg__seg--on" : "")"></div>
+                    <div class="kviz-7seg__seg kviz-7seg__seg--b  @(SegOn(d, 'b') ? "kviz-7seg__seg--on" : "")"></div>
+                    <div class="kviz-7seg__seg kviz-7seg__seg--c  @(SegOn(d, 'c') ? "kviz-7seg__seg--on" : "")"></div>
+                    <div class="kviz-7seg__seg kviz-7seg__seg--d  @(SegOn(d, 'd') ? "kviz-7seg__seg--on" : "")"></div>
+                    <div class="kviz-7seg__seg kviz-7seg__seg--e  @(SegOn(d, 'e') ? "kviz-7seg__seg--on" : "")"></div>
+                    <div class="kviz-7seg__seg kviz-7seg__seg--f  @(SegOn(d, 'f') ? "kviz-7seg__seg--on" : "")"></div>
+                    <div class="kviz-7seg__seg kviz-7seg__seg--g  @(SegOn(d, 'g') ? "kviz-7seg__seg--on" : "")"></div>
+                </div>
+            </div>
+        }
+    </div>
+    <div class="kviz-7seg-bank__port">@PortLabel</div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public KvizComponent Comp { get; set; } = default!;
+    [Parameter] public VisualRunCoordinator? Coordinator { get; set; }
+    [Parameter] public bool EditMode { get; set; }
+    [Parameter] public bool Selected { get; set; }
+    [Parameter] public EventCallback<Microsoft.AspNetCore.Components.Web.PointerEventArgs> OnPointerDownExternal { get; set; }
+
+    [CascadingParameter(Name = "FrameVersion")] public int FrameVersion { get; set; }
+
+    private int Digits => Math.Clamp(Comp.Config.GetInt("digits", 4), 2, 8);
+
+    private int BusWidth => Digits * 7;
+
+    private string ColorVar => Comp.Config.GetString("color", "red") switch
+    {
+        "green"  => "#22c55e",
+        "blue"   => "#3b82f6",
+        "yellow" => "#facc15",
+        "white"  => "#f8fafc",
+        _        => "#ef4444",
+    };
+
+    private string PortLabel
+    {
+        get
+        {
+            if (Comp.Bindings.TryGetValue("value", out var p) && !string.IsNullOrEmpty(p))
+                return p;
+            return "(unwired)";
+        }
+    }
+
+    // Read the packed `value` bus and pick the 7-bit slice for the given
+    // digit index (0 = rightmost). Returns "0000000" (all off) when the
+    // port is unwired, malformed, or too short.
+    private string SliceForDigit(int digit)
+    {
+        if (Coordinator == null) return new string('0', 7);
+        if (!Comp.Bindings.TryGetValue("value", out var port) || string.IsNullOrEmpty(port))
+            return new string('0', 7);
+        var raw = Coordinator.LatestSlicedValue(port);
+        if (string.IsNullOrEmpty(raw)) return new string('0', 7);
+        // Ensure a canonical length so slicing math holds even on short reads.
+        string padded = raw.Length >= BusWidth ? raw : raw.PadLeft(BusWidth, '0');
+        // MSB-first layout: string[0..6] = digit (Digits-1), string[7..13] = digit (Digits-2), ...
+        int offset = (Digits - 1 - digit) * 7;
+        if (offset < 0 || offset + 7 > padded.Length) return new string('0', 7);
+        return padded.Substring(offset, 7);
+    }
+
+    // Segment lit-check. `segment` is one of a..g; the slice is MSB-first
+    // abcdefg so segment a = slice[0], g = slice[6].
+    private bool SegOn(int digit, char segment)
+    {
+        var slice = SliceForDigit(digit);
+        int idx = segment switch
+        {
+            'a' => 0,
+            'b' => 1,
+            'c' => 2,
+            'd' => 3,
+            'e' => 4,
+            'f' => 5,
+            'g' => 6,
+            _   => -1,
+        };
+        if (idx < 0 || idx >= slice.Length) return false;
+        return slice[idx] == '1';
+    }
+
+    private async Task HandlePointerDown(Microsoft.AspNetCore.Components.Web.PointerEventArgs e)
+    {
+        if (OnPointerDownExternal.HasDelegate)
+            await OnPointerDownExternal.InvokeAsync(e);
+    }
+}

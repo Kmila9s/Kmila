@@ -25,7 +25,8 @@ namespace Kmila.Shared.Services;
 /// </remarks>
 public static class SchematicExporter
 {
-    private const int Padding = 24;
+    private const int RawPadding = 24;
+    private const int HumanPadding = 40;
     private const int TitleHeight = 28;
 
     /// <summary>
@@ -38,6 +39,14 @@ public static class SchematicExporter
     /// palette is honoured cell-by-cell and wire-by-wire so the
     /// exported file matches the live diagram pixel-for-pixel
     /// (modulo trim and background).
+    ///
+    /// When <see cref="SchematicExportRequest.Mode"/> is
+    /// <see cref="SchematicRenderMode.Human"/>, the layout is first
+    /// piped through <see cref="SchematicSimplifier.Simplify"/> and
+    /// several rendering knobs shift toward readability: padding
+    /// grows, fonts grow, wire strokes thicken, and muted internal
+    /// output-net labels are hidden so trivial diagrams don't look
+    /// noisy.
     /// </summary>
     public static string BuildSvg(
         FilteredLayout filtered,
@@ -46,6 +55,18 @@ public static class SchematicExporter
         SchematicColourPalette? palette = null)
     {
         var ci = CultureInfo.InvariantCulture;
+        bool human = req.Mode == SchematicRenderMode.Human;
+        if (human)
+        {
+            filtered = SchematicSimplifier.Simplify(filtered, palette);
+        }
+        int padding = human ? HumanPadding : RawPadding;
+        int labelFont = human ? 14 : 11;
+        int titleFont = human ? 16 : 13;
+        int portLabelFont = human ? 14 : 11;
+        int busStroke = human ? 4 : 3;
+        int wireStroke = human ? 3 : 2;
+
         var bounds = filtered.Bounds;
         bool trim = req.TrimToBounds;
         bool useColor = req.ColorMode == SchematicExportColorMode.Color && palette != null;
@@ -53,15 +74,15 @@ public static class SchematicExporter
         // When trimming, translate everything so (bounds.X, bounds.Y)
         // becomes the export's origin. Otherwise paint everything at
         // its original layout coordinates inside the full canvas.
-        double offsetX = trim ? -bounds.X + Padding : 0;
-        double offsetY = trim ? -bounds.Y + Padding + (req.IncludeTitle ? TitleHeight : 0) : 0;
+        double offsetX = trim ? -bounds.X + padding : 0;
+        double offsetY = trim ? -bounds.Y + padding + (req.IncludeTitle ? TitleHeight : 0) : 0;
 
         double exportW = trim
-            ? bounds.Width + Padding * 2
-            : filtered.Layout.CanvasWidth + Padding * 2;
+            ? bounds.Width + padding * 2
+            : filtered.Layout.CanvasWidth + padding * 2;
         double exportH = trim
-            ? bounds.Height + Padding * 2 + (req.IncludeTitle ? TitleHeight : 0)
-            : filtered.Layout.CanvasHeight + Padding * 2 + (req.IncludeTitle ? TitleHeight : 0);
+            ? bounds.Height + padding * 2 + (req.IncludeTitle ? TitleHeight : 0)
+            : filtered.Layout.CanvasHeight + padding * 2 + (req.IncludeTitle ? TitleHeight : 0);
 
         var sb = new StringBuilder(8192);
         sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
@@ -87,7 +108,7 @@ public static class SchematicExporter
         if (req.IncludeTitle && !string.IsNullOrEmpty(title))
         {
             string titleColour = req.Background == SchematicExportBackground.Dark ? "#f1f5f9" : "#1f2937";
-            sb.Append(ci, $"<text x=\"{Padding}\" y=\"{Padding + 4}\" font-size=\"13\" font-weight=\"600\" ")
+            sb.Append(ci, $"<text x=\"{padding}\" y=\"{padding + 4}\" font-size=\"{titleFont}\" font-weight=\"600\" ")
               .Append(ci, $"fill=\"{titleColour}\">")
               .Append(WebUtility.HtmlEncode(title))
               .Append("</text>\n");
@@ -107,7 +128,7 @@ public static class SchematicExporter
 
             var net = filtered.Layout.Netlist.Nets.FirstOrDefault(n => n.Id == wire.NetId);
             if (net == null) continue;
-            int sw = net.Kind == NetKind.Bus ? 3 : 2;
+            int sw = net.Kind == NetKind.Bus ? busStroke : wireStroke;
             string d = BuildWirePath(wire, offsetX, offsetY);
             string stroke = wireDefault;
             if (useColor && palette != null)
@@ -159,14 +180,17 @@ public static class SchematicExporter
             {
                 sb.Append(ci, $"<text x=\"{GateGlyphs.LabelX(c.Kind).ToString("0.##", ci)}\" ")
                   .Append(ci, $"y=\"{(GateGlyphs.Height / 2 + 4).ToString("0.##", ci)}\" ")
-                  .Append("text-anchor=\"middle\" font-size=\"11\" font-weight=\"600\" ")
+                  .Append(ci, $"text-anchor=\"middle\" font-size=\"{labelFont}\" font-weight=\"600\" ")
                   .Append(ci, $"fill=\"{lbl}\">")
                   .Append(WebUtility.HtmlEncode(label))
                   .Append("</text>");
             }
             // Output net name above the cell (skip auto-named internals
             // so the diagram doesn't get noisy with "_n0"-style stubs).
-            if (c.Outputs.Count > 0)
+            // Human mode suppresses these tiny labels entirely — students
+            // don't need to see every intermediate net name; Raw mode
+            // still shows them for detailed inspection.
+            if (!human && c.Outputs.Count > 0)
             {
                 var outNet = filtered.Layout.Netlist.Nets.FirstOrDefault(n => n.Id == c.Outputs[0].NetId);
                 if (outNet != null && !outNet.Name.StartsWith("_n", StringComparison.Ordinal))
@@ -203,10 +227,13 @@ public static class SchematicExporter
             double labelX = isInput ? x + 12 : x - 12;
             string anchor = isInput ? "start" : "end";
             sb.Append(ci, $"<text x=\"{labelX.ToString("0.##", ci)}\" y=\"{(y + 4).ToString("0.##", ci)}\" ")
-              .Append(ci, $"text-anchor=\"{anchor}\" font-size=\"11\" font-weight=\"600\" ")
+              .Append(ci, $"text-anchor=\"{anchor}\" font-size=\"{portLabelFont}\" font-weight=\"600\" ")
               .Append(ci, $"fill=\"{labelDefault}\">")
               .Append(WebUtility.HtmlEncode(port.Name))
-              .Append(port.Width > 1 ? $"[{port.Width}]" : "")
+              // Use digital-design bit-range notation for multi-bit ports
+              // (`reg_out[7:0]`, not `reg_out[8]`) so students see the
+              // convention they'll meet in every textbook and vendor tool.
+              .Append(port.Width > 1 ? $"[{port.Width - 1}:0]" : "")
               .Append("</text>\n");
         }
 

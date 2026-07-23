@@ -66,6 +66,14 @@
             </div>
 
             <div class="kmila-export-field">
+                <label class="form-label" for="schex-mode">@Traductor.T("EXPORT_MODAL_MODE_LABEL")</label>
+                <select id="schex-mode" class="form-select form-select-sm" @bind="_mode">
+                    <option value="@SchematicRenderMode.Human">@Traductor.T("SCHEMATIC_MODE_HUMAN")</option>
+                    <option value="@SchematicRenderMode.Raw">@Traductor.T("SCHEMATIC_MODE_RAW")</option>
+                </select>
+            </div>
+
+            <div class="kmila-export-field">
                 <label class="form-label" for="schex-bg">@Traductor.T("SCHEMATIC_EXPORT_BG_LABEL")</label>
                 <select id="schex-bg" class="form-select form-select-sm" @bind="_background">
                     <option value="@SchematicExportBackground.White">@Traductor.T("SCHEMATIC_EXPORT_BG_WHITE")</option>
@@ -137,13 +145,17 @@
     </section>
 
     <footer class="kmila-export-footer">
-        <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm" @onclick="CancelAsync">
-            @Traductor.T("EXPORT_MODAL_CANCEL")
-        </button>
-        <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--sm" @onclick="SubmitAsync">
-            <Icon Name="IconName.Download" />
-            <span>@Traductor.T("EXPORT_MODAL_SUBMIT")</span>
-        </button>
+        <KmilaTooltip TextKey="EXPORT_MODAL_CANCEL_TIP">
+            <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm" @onclick="CancelAsync">
+                @Traductor.T("EXPORT_MODAL_CANCEL")
+            </button>
+        </KmilaTooltip>
+        <KmilaTooltip TextKey="EXPORT_MODAL_SUBMIT_TIP">
+            <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--sm" @onclick="SubmitAsync">
+                <Icon Name="IconName.Download" />
+                <span>@Traductor.T("EXPORT_MODAL_SUBMIT")</span>
+            </button>
+        </KmilaTooltip>
     </footer>
 </div>
 
@@ -164,12 +176,18 @@
     [Parameter] public EventCallback<SchematicExportRequest> OnSubmit { get; set; }
     [Parameter] public EventCallback OnCancel { get; set; }
 
+    /// <summary>Initial render mode surfaced by the modal — the viewer
+    /// hands in whatever the user is currently looking at so the export
+    /// defaults match the on-screen view. When absent, Human wins.</summary>
+    [Parameter] public SchematicRenderMode InitialMode { get; set; } = SchematicRenderMode.Human;
+
     private SchematicExportFormat _format = SchematicExportFormat.Svg;
     private int _pngScale = 2;
     private SchematicExportScope _scope = SchematicExportScope.Full;
     private string? _byKind;
     private SchematicExportBackground _background = SchematicExportBackground.White;
     private SchematicExportColorMode _colorMode = SchematicExportColorMode.Color;
+    private SchematicRenderMode _mode = SchematicRenderMode.Human;
     private bool _trim = true;
     private bool _autoInclude = true;
     private bool _includeTitle = true;
@@ -190,6 +208,7 @@
     {
         if (_byKind == null && AvailableKinds.Count > 0)
             _byKind = AvailableKinds[0].ToString();
+        _mode = InitialMode;
         Traductor.StaticOnLangChanged += OnLangChanged;
     }
 
@@ -215,6 +234,7 @@
             Background = _background,
             IncludeTitle = _includeTitle,
             ColorMode = _colorMode,
+            Mode = _mode,
         };
         await OnSubmit.InvokeAsync(req);
     }

@@ -1,0 +1,128 @@
+@namespace Kmila.Shared.Components.VisualRun
+@using Kmila.Shared.Services.VisualRun
+
+<div class="kviz-widget kviz-multi-switch @(EditMode ? "kviz-multi-switch--edit" : "") @(Selected ? "kviz-widget--selected" : "")"
+     style="left:@(Comp.Position.X)px; top:@(Comp.Position.Y)px;"
+     data-component-id="@Comp.Id"
+     data-count="@Count"
+     data-mode="@Mode"
+     data-value="@ValueBits"
+     @onpointerdown="OnRootPointerDown"
+     @onpointerdown:stopPropagation="@(!EditMode)"
+     @oncontextmenu:preventDefault>
+    <div class="kviz-multi-switch__row">
+        @for (int i = 0; i < Count; i++)
+        {
+            var idx = i;
+            var on = IsOn(idx);
+            <div class="kviz-multi-switch__cell">
+                <div class="kviz-multi-switch__lever @(on ? "kviz-multi-switch__lever--on" : "")"
+                     data-lever-index="@idx"
+                     @onpointerdown="e => OnLeverPointerDown(e, idx)"
+                     @onpointerdown:stopPropagation>
+                    <div class="kviz-multi-switch__knob"></div>
+                </div>
+                <div class="kviz-multi-switch__cell-label">@LabelAt(idx)</div>
+            </div>
+        }
+    </div>
+    <div class="kviz-multi-switch__port">@PortLabel</div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public KvizComponent Comp { get; set; } = default!;
+    [Parameter] public VisualRunCoordinator? Coordinator { get; set; }
+    [Parameter] public bool EditMode { get; set; }
+    [Parameter] public bool Selected { get; set; }
+
+    // Per-lever ON state, LSB-numbered (index 0 → bit 0 → rightmost in the
+    // MSB-first vector string). Owned by VisualPanel so it survives Run/Stop
+    // cycles (the coordinator is recreated each Run).
+    [Parameter] public bool[]? States { get; set; }
+
+    [Parameter] public EventCallback<Microsoft.AspNetCore.Components.Web.PointerEventArgs> OnPointerDownExternal { get; set; }
+    [Parameter] public EventCallback<(int Index, bool Value)> OnLeverToggleRequested { get; set; }
+
+    [CascadingParameter(Name = "FrameVersion")] public int FrameVersion { get; set; }
+
+    private int Count => Math.Clamp(Comp.Config.GetInt("count", 4), 2, 8);
+    private string Mode => Comp.Config.GetString("mode", "per-bit") == "vector" ? "vector" : "per-bit";
+
+    private string LabelAt(int i)
+    {
+        if (Comp.Config.TryGetValue("labels", out var el)
+            && el.ValueKind == System.Text.Json.JsonValueKind.Array
+            && i < el.GetArrayLength())
+        {
+            var s = el[i].GetString();
+            if (!string.IsNullOrEmpty(s)) return s;
+        }
+        return $"SW{i}";
+    }
+
+    private bool IsOn(int i)
+    {
+        if (States is { Length: > 0 } arr && i >= 0 && i < arr.Length) return arr[i];
+        return false;
+    }
+
+    // Reports the current MSB-first bit string across all levers. Emitted
+    // as a data-value attribute so Playwright can assert on it without
+    // reading React-like internal state.
+    private string ValueBits
+    {
+        get
+        {
+            var chars = new char[Count];
+            for (int i = 0; i < Count; i++)
+            {
+                // MSB-first: string index 0 = bit (count-1)
+                chars[Count - 1 - i] = IsOn(i) ? '1' : '0';
+            }
+            return new string(chars);
+        }
+    }
+
+    // Show either the vector's bound port (vector mode) or "N ports" hint
+    // for per-bit mode. Keeps the widget compact — full binding list lives
+    // in the props pane.
+    private string PortLabel
+    {
+        get
+        {
+            if (Mode == "vector")
+            {
+                return Comp.Bindings.TryGetValue("value", out var p) && !string.IsNullOrEmpty(p)
+                    ? p
+                    : "(unwired)";
+            }
+            var wired = 0;
+            for (int i = 0; i < Count; i++)
+            {
+                if (Comp.Bindings.TryGetValue($"out{i}", out var pp) && !string.IsNullOrEmpty(pp))
+                    wired++;
+            }
+            return $"{wired}/{Count} wired";
+        }
+    }
+
+    private async Task OnRootPointerDown(Microsoft.AspNetCore.Components.Web.PointerEventArgs e)
+    {
+        if (EditMode && OnPointerDownExternal.HasDelegate)
+            await OnPointerDownExternal.InvokeAsync(e);
+    }
+
+    private async Task OnLeverPointerDown(Microsoft.AspNetCore.Components.Web.PointerEventArgs e, int idx)
+    {
+        if (EditMode)
+        {
+            // Edit mode: treat lever taps as widget-move drags so the DIP
+            // block still selects+drags when the user grabs a lever.
+            if (OnPointerDownExternal.HasDelegate)
+                await OnPointerDownExternal.InvokeAsync(e);
+            return;
+        }
+        if (OnLeverToggleRequested.HasDelegate)
+            await OnLeverToggleRequested.InvokeAsync((idx, !IsOn(idx)));
+    }
+}

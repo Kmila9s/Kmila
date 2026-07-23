@@ -49,14 +49,15 @@
                 <span class="waveform-viewer__chip">@_compareTracks.Count</span>
             </div>
             <div class="waveform-viewer__actions">
-                <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm" @onclick="ZoomIn"   title="@Traductor.T("WAVEFORM_ZOOM_IN")"><Icon Name="IconName.ZoomIn" /></button>
-                <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm" @onclick="ZoomOut"  title="@Traductor.T("WAVEFORM_ZOOM_OUT")"><Icon Name="IconName.ZoomOut" /></button>
-                <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm" @onclick="ZoomReset" title="@Traductor.T("WAVEFORM_ZOOM_RESET")"><Icon Name="IconName.ArrowCounterclockwise" /></button>
-                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm" @onclick="() => OnClearCompare.InvokeAsync()"
-                        title="@Traductor.T("WAVEFORM_COMPARE_CLOSE")">
-                    <Icon Name="IconName.XLg" />
-                    <span>@Traductor.T("WAVEFORM_COMPARE_CLOSE")</span>
-                </button>
+                <KmilaTooltip TextKey="WAVEFORM_ZOOM_IN"><button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm" @onclick="ZoomIn" aria-label="@Traductor.T("WAVEFORM_ZOOM_IN")"><Icon Name="IconName.ZoomIn" /></button></KmilaTooltip>
+                <KmilaTooltip TextKey="WAVEFORM_ZOOM_OUT"><button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm" @onclick="ZoomOut" aria-label="@Traductor.T("WAVEFORM_ZOOM_OUT")"><Icon Name="IconName.ZoomOut" /></button></KmilaTooltip>
+                <KmilaTooltip TextKey="WAVEFORM_ZOOM_RESET"><button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm" @onclick="ZoomReset" aria-label="@Traductor.T("WAVEFORM_ZOOM_RESET")"><Icon Name="IconName.ArrowCounterclockwise" /></button></KmilaTooltip>
+                <KmilaTooltip TextKey="WAVEFORM_COMPARE_CLOSE">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm" @onclick="() => OnClearCompare.InvokeAsync()">
+                        <Icon Name="IconName.XLg" />
+                        <span>@Traductor.T("WAVEFORM_COMPARE_CLOSE")</span>
+                    </button>
+                </KmilaTooltip>
             </div>
         </header>
 
@@ -81,17 +82,20 @@
                 @foreach (var hidden in _hiddenSignals.OrderBy(s => s, StringComparer.Ordinal))
                 {
                     var hiddenName = hidden;
-                    <button type="button" class="waveform-hidden-chip"
-                            @onclick="() => RestoreSignal(hiddenName)"
-                            title="@Traductor.T("WAVEFORM_RESTORE_SIGNAL")">
-                        <span>@hidden</span>
-                        <Icon Name="IconName.XLg" />
-                    </button>
+                    <KmilaTooltip TextKey="WAVEFORM_RESTORE_SIGNAL">
+                        <button type="button" class="waveform-hidden-chip"
+                                @onclick="() => RestoreSignal(hiddenName)">
+                            <span>@hidden</span>
+                            <Icon Name="IconName.XLg" />
+                        </button>
+                    </KmilaTooltip>
                 }
-                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--sm"
-                        @onclick="RestoreAllSignals">
-                    @Traductor.T("WAVEFORM_SHOW_ALL")
-                </button>
+                <KmilaTooltip TextKey="WAVEFORM_SHOW_ALL_TIP">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--sm"
+                            @onclick="RestoreAllSignals">
+                        @Traductor.T("WAVEFORM_SHOW_ALL")
+                    </button>
+                </KmilaTooltip>
             </div>
         }
 
@@ -184,51 +188,62 @@ else if (Data != null && Data.Signals.Count > 0)
                    and keep the viewport centred on the previously-visible
                    time. Reset snaps back to the natural full-range view
                    (static) or the default 10 µs window (live). *@
-                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
-                        @onclick="ZoomIn"
-                        aria-label="@Traductor.T("WAVEFORM_ZOOM_IN")" title="@Traductor.T("WAVEFORM_ZOOM_IN")">
-                    <Icon Name="IconName.ZoomIn" />
-                </button>
-                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
-                        @onclick="ZoomOut"
-                        aria-label="@Traductor.T("WAVEFORM_ZOOM_OUT")" title="@Traductor.T("WAVEFORM_ZOOM_OUT")">
-                    <Icon Name="IconName.ZoomOut" />
-                </button>
-                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
-                        @onclick="ZoomReset"
-                        aria-label="@Traductor.T("WAVEFORM_ZOOM_RESET")" title="@Traductor.T("WAVEFORM_ZOOM_RESET")">
-                    <Icon Name="IconName.ArrowCounterclockwise" />
-                </button>
-                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm @(_showClock ? "" : "is-off")"
-                        @onclick="() => _showClock = !_showClock"
-                        title="@Traductor.T(_showClock ? "WAVEFORM_HIDE_CLOCK" : "WAVEFORM_SHOW_CLOCK")"
-                        aria-pressed="@_showClock">
-                    <Icon Name="@(_showClock ? IconName.EyeFill : IconName.EyeSlash)" />
-                </button>
+                <KmilaTooltip TextKey="WAVEFORM_ZOOM_IN">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                            @onclick="ZoomIn"
+                            aria-label="@Traductor.T("WAVEFORM_ZOOM_IN")">
+                        <Icon Name="IconName.ZoomIn" />
+                    </button>
+                </KmilaTooltip>
+                <KmilaTooltip TextKey="WAVEFORM_ZOOM_OUT">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                            @onclick="ZoomOut"
+                            aria-label="@Traductor.T("WAVEFORM_ZOOM_OUT")">
+                        <Icon Name="IconName.ZoomOut" />
+                    </button>
+                </KmilaTooltip>
+                <KmilaTooltip TextKey="WAVEFORM_ZOOM_RESET">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                            @onclick="ZoomReset"
+                            aria-label="@Traductor.T("WAVEFORM_ZOOM_RESET")">
+                        <Icon Name="IconName.ArrowCounterclockwise" />
+                    </button>
+                </KmilaTooltip>
+                <KmilaTooltip TextKey="@(_showClock ? "WAVEFORM_HIDE_CLOCK" : "WAVEFORM_SHOW_CLOCK")">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm @(_showClock ? "" : "is-off")"
+                            @onclick="() => _showClock = !_showClock"
+                            aria-pressed="@_showClock">
+                        <Icon Name="@(_showClock ? IconName.EyeFill : IconName.EyeSlash)" />
+                    </button>
+                </KmilaTooltip>
                 @* UX-N-014: Time-breakpoint toggle. Clicking adds a breakpoint
                    at the END of the currently visible window so the next Run
                    pauses there. ReplayState fires the pause from
                    OnLiveFrameEmitted when the engine tick crosses the bp ns. *@
-                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
-                        @onclick="HandleAddTimeBreakpoint"
-                        aria-label="@Traductor.T("WAVEFORM_TIME_BP_ADD")"
-                        title="@Traductor.T("WAVEFORM_TIME_BP_ADD")">
-                    <Icon Name="IconName.RecordCircle" />
-                </button>
+                <KmilaTooltip TextKey="WAVEFORM_TIME_BP_ADD">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                            @onclick="HandleAddTimeBreakpoint"
+                            aria-label="@Traductor.T("WAVEFORM_TIME_BP_ADD")">
+                        <Icon Name="IconName.RecordCircle" />
+                    </button>
+                </KmilaTooltip>
 
                 <span class="waveform-viewer__divider" aria-hidden="true"></span>
 
-                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
-                        @onclick="OpenExportModalAsync" disabled="@IsLive"
-                        title="@Traductor.T("WAVEFORM_EXPORT_IMAGE")">
-                    <Icon Name="IconName.Image" />
-                    <span>@Traductor.T("WAVEFORM_EXPORT_IMAGE_SHORT")</span>
-                </button>
-                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
-                        @onclick="HandleVcdExport" title="@Traductor.T("WAVEFORM_EXPORT_VCD")">
-                    <Icon Name="IconName.Download" />
-                    <span>VCD</span>
-                </button>
+                <KmilaTooltip TextKey="WAVEFORM_EXPORT_IMAGE">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                            @onclick="OpenExportModalAsync" disabled="@IsLive">
+                        <Icon Name="IconName.Image" />
+                        <span>@Traductor.T("WAVEFORM_EXPORT_IMAGE_SHORT")</span>
+                    </button>
+                </KmilaTooltip>
+                <KmilaTooltip TextKey="WAVEFORM_EXPORT_VCD">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                            @onclick="HandleVcdExport">
+                        <Icon Name="IconName.Download" />
+                        <span>VCD</span>
+                    </button>
+                </KmilaTooltip>
             </div>
         </header>
 
@@ -240,17 +255,20 @@ else if (Data != null && Data.Signals.Count > 0)
                 @foreach (var hidden in _hiddenSignals.OrderBy(s => s, StringComparer.Ordinal))
                 {
                     var hiddenName = hidden;
-                    <button type="button" class="waveform-hidden-chip"
-                            @onclick="() => RestoreSignal(hiddenName)"
-                            title="@Traductor.T("WAVEFORM_RESTORE_SIGNAL")">
-                        <span>@hidden</span>
-                        <Icon Name="IconName.XLg" />
-                    </button>
+                    <KmilaTooltip TextKey="WAVEFORM_RESTORE_SIGNAL">
+                        <button type="button" class="waveform-hidden-chip"
+                                @onclick="() => RestoreSignal(hiddenName)">
+                            <span>@hidden</span>
+                            <Icon Name="IconName.XLg" />
+                        </button>
+                    </KmilaTooltip>
                 }
-                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--sm"
-                        @onclick="RestoreAllSignals">
-                    @Traductor.T("WAVEFORM_SHOW_ALL")
-                </button>
+                <KmilaTooltip TextKey="WAVEFORM_SHOW_ALL_TIP">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--sm"
+                            @onclick="RestoreAllSignals">
+                        @Traductor.T("WAVEFORM_SHOW_ALL")
+                    </button>
+                </KmilaTooltip>
             </div>
         }
 
@@ -1304,7 +1322,7 @@ else if (Data != null && Data.Signals.Count > 0)
                     var base64 = await JS.InvokeAsync<string>("kmilaSvgToPngBase64", svg, req.PngScale);
                     if (string.IsNullOrEmpty(base64))
                     {
-                        lastResult = FileExportResult.Failure("PNG rasterisation failed.");
+                        lastResult = FileExportResult.Failure(Traductor.T("WAVEFORM_PNG_RASTER_FAILED"));
                         continue;
                     }
                     var bytes = Convert.FromBase64String(base64);
@@ -1316,14 +1334,18 @@ else if (Data != null && Data.Signals.Count > 0)
             {
                 var folder = req.Format == WaveformExportFormat.Svg ? "SVG" : "PNG";
                 var msg = lastResult.Path != null
-                    ? (pages.Count == 1 ? $"Saved: {lastResult.Path}" : $"Saved {pages.Count} pages to /{folder}/")
-                    : $"Waveform exported ({pages.Count} page{(pages.Count == 1 ? "" : "s")}).";
+                    ? (pages.Count == 1
+                        ? Traductor.T("COMMON_SAVED_TO_FMT", lastResult.Path)
+                        : Traductor.T("WAVEFORM_SAVED_PAGES_FMT", pages.Count, folder))
+                    : (pages.Count == 1
+                        ? Traductor.T("WAVEFORM_EXPORT_OK_SINGLE")
+                        : Traductor.T("WAVEFORM_EXPORT_OK_MULTI_FMT", pages.Count));
                 ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), msg, ToastType.Success));
             }
             else if (lastResult != null)
             {
                 ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
-                    lastResult.Error ?? "Export failed.", ToastType.Danger));
+                    lastResult.Error ?? Traductor.T("COMMON_EXPORT_FAILED"), ToastType.Danger));
             }
         }
         catch (Exception ex)

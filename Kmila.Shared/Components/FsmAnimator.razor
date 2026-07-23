@@ -78,44 +78,49 @@
                 <span>@StepLabel</span>
             </div>
 
-            <button type="button" class="kmila-btn-icon"
-                    title="@Traductor.T("CONCEPTS_PLAYER_RESTART")"
-                    aria-label="@Traductor.T("CONCEPTS_PLAYER_RESTART")"
-                    @onclick="OnRestart">
-                <Icon Name="IconName.ArrowCounterclockwise" />
-            </button>
-            <button type="button" class="kmila-btn-icon"
-                    title="@Traductor.T("CONCEPTS_PLAYER_STEP_BACK")"
-                    aria-label="@Traductor.T("CONCEPTS_PLAYER_STEP_BACK")"
-                    disabled="@(_currentIndex == 0)"
-                    @onclick="OnStepBack">
-                <Icon Name="IconName.SkipStart" />
-            </button>
+            <KmilaTooltip TextKey="CONCEPTS_PLAYER_RESTART">
+                <button type="button" class="kmila-btn-icon"
+                        aria-label="@Traductor.T("CONCEPTS_PLAYER_RESTART")"
+                        @onclick="OnRestart">
+                    <Icon Name="IconName.ArrowCounterclockwise" />
+                </button>
+            </KmilaTooltip>
+            <KmilaTooltip TextKey="CONCEPTS_PLAYER_STEP_BACK">
+                <button type="button" class="kmila-btn-icon"
+                        aria-label="@Traductor.T("CONCEPTS_PLAYER_STEP_BACK")"
+                        disabled="@(_currentIndex == 0)"
+                        @onclick="OnStepBack">
+                    <Icon Name="IconName.SkipStart" />
+                </button>
+            </KmilaTooltip>
             @if (_playing)
             {
-                <button type="button" class="kmila-btn-icon kmila-btn-icon--accent"
-                        title="@Traductor.T("CONCEPTS_PLAYER_PAUSE")"
-                        aria-label="@Traductor.T("CONCEPTS_PLAYER_PAUSE")"
-                        @onclick="OnPause">
-                    <Icon Name="IconName.PauseFill" />
-                </button>
+                <KmilaTooltip TextKey="CONCEPTS_PLAYER_PAUSE">
+                    <button type="button" class="kmila-btn-icon kmila-btn-icon--accent"
+                            aria-label="@Traductor.T("CONCEPTS_PLAYER_PAUSE")"
+                            @onclick="OnPause">
+                        <Icon Name="IconName.PauseFill" />
+                    </button>
+                </KmilaTooltip>
             }
             else
             {
-                <button type="button" class="kmila-btn-icon kmila-btn-icon--accent"
-                        title="@Traductor.T("CONCEPTS_PLAYER_PLAY")"
-                        aria-label="@Traductor.T("CONCEPTS_PLAYER_PLAY")"
-                        @onclick="OnPlay">
-                    <Icon Name="IconName.PlayFill" />
-                </button>
+                <KmilaTooltip TextKey="CONCEPTS_PLAYER_PLAY">
+                    <button type="button" class="kmila-btn-icon kmila-btn-icon--accent"
+                            aria-label="@Traductor.T("CONCEPTS_PLAYER_PLAY")"
+                            @onclick="OnPlay">
+                        <Icon Name="IconName.PlayFill" />
+                    </button>
+                </KmilaTooltip>
             }
-            <button type="button" class="kmila-btn-icon"
-                    title="@Traductor.T("CONCEPTS_PLAYER_STEP_FORWARD")"
-                    aria-label="@Traductor.T("CONCEPTS_PLAYER_STEP_FORWARD")"
-                    disabled="@IsAtEnd"
-                    @onclick="OnStepForward">
-                <Icon Name="IconName.SkipEnd" />
-            </button>
+            <KmilaTooltip TextKey="CONCEPTS_PLAYER_STEP_FORWARD">
+                <button type="button" class="kmila-btn-icon"
+                        aria-label="@Traductor.T("CONCEPTS_PLAYER_STEP_FORWARD")"
+                        disabled="@IsAtEnd"
+                        @onclick="OnStepForward">
+                    <Icon Name="IconName.SkipEnd" />
+                </button>
+            </KmilaTooltip>
 
             <label class="kmila-exec-tape__speed">
                 @Traductor.T("CONCEPTS_PLAYER_SPEED")
@@ -139,7 +144,7 @@
             <table class="kmila-exec-signals__table">
                 <tbody>
                     <tr>
-                        <th scope="row">state</th>
+                        <th scope="row">@Traductor.T("FSM_HEADER_STATE")</th>
                         <td>
                             <span class="kmila-exec-signals__value">
                                 @(string.IsNullOrEmpty(CurrentStep.State) ? "—" : CurrentStep.State)

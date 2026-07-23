@@ -9,6 +9,7 @@
 @inject Projects ProjectsRepo
 @inject ProjectFiles ProjectFilesRepo
 @inject Microsoft.AspNetCore.Components.NavigationManager Nav
+@inject Microsoft.JSInterop.IJSRuntime JS
 
 @*
     VisualPanel — the reusable canvas surface. Used in two places:
@@ -25,13 +26,14 @@
     even after a Code-tab Build that touched the VHDL.
 *@
 
-<section class="visual-page @(EmbeddedMode ? "visual-page--embedded" : "")">
+<section class="visual-page @(EmbeddedMode ? "visual-page--embedded" : "") @(_isFullscreen ? "is-fullscreen" : "")">
     @if (!EmbeddedMode)
     {
         <header class="visual-page__header">
-            <button class="kmila-btn-icon" @onclick="GoBack"
-                    title="@Traductor.T("VISUAL_BACK")"
-                    aria-label="@Traductor.T("VISUAL_BACK")">←</button>
+            <KmilaTooltip TextKey="VISUAL_BACK">
+                <button class="kmila-btn-icon" @onclick="GoBack"
+                        aria-label="@Traductor.T("VISUAL_BACK")">←</button>
+            </KmilaTooltip>
             <div class="visual-page__title">
                 <span class="visual-page__project">@(_project?.Name ?? "")</span>
                 <span class="visual-page__entity">@(_entity?.Name ?? Traductor.T("VISUAL_NO_ENTITY"))</span>
@@ -70,11 +72,13 @@
                            value="@(_customDelayMs?.ToString() ?? "")"
                            @onchange="OnCustomDelayChange" />
                 </label>
-                <button class="kmila-btn visual-page__pause-btn"
-                        data-testid="visual-pause-continue"
-                        @onclick="TogglePause">
-                    @(_coord.IsPaused ? "▶ " : "⏸ ")@Traductor.T(_coord.IsPaused ? "VISUAL_CONTINUE" : "VISUAL_PAUSE")
-                </button>
+                <KmilaTooltip TextKey="@(_coord.IsPaused ? "VISUAL_CONTINUE_TIP" : "VISUAL_PAUSE_TIP")">
+                    <button class="kmila-btn visual-page__pause-btn"
+                            data-testid="visual-pause-continue"
+                            @onclick="TogglePause">
+                        @(_coord.IsPaused ? "▶ " : "⏸ ")@Traductor.T(_coord.IsPaused ? "VISUAL_CONTINUE" : "VISUAL_PAUSE")
+                    </button>
+                </KmilaTooltip>
                 <span class="visual-page__tick-readout">
                     @Traductor.T("VISUAL_TICK") <code>@_coord.CurrentTick</code>
                     @if (_lastBreakHitTick is { } hitTick)
@@ -114,18 +118,21 @@
                            value="@_bpInput"
                            @onchange="OnBpInputChange" />
                 </label>
-                <button class="kmila-btn" data-testid="visual-bp-add" @onclick="AddBreakpoint">@Traductor.T("VISUAL_BP_ADD")</button>
+                <KmilaTooltip TextKey="VISUAL_BP_ADD_TIP">
+                    <button class="kmila-btn" data-testid="visual-bp-add" @onclick="AddBreakpoint">@Traductor.T("VISUAL_BP_ADD")</button>
+                </KmilaTooltip>
                 @if (_coord.TickBreakpoints.Count > 0)
                 {
                     <div class="visual-page__bp-list">
                         @foreach (var bp in _coord.TickBreakpoints.OrderBy(t => t))
                         {
                             var b = bp;
-                            <button class="visual-page__bp-chip"
-                                    title="@Traductor.T("VISUAL_BP_REMOVE_TITLE")"
-                                    @onclick="() => RemoveBreakpoint(b)">
-                                @b ×
-                            </button>
+                            <KmilaTooltip TextKey="VISUAL_BP_REMOVE_TITLE">
+                                <button class="visual-page__bp-chip"
+                                        @onclick="() => RemoveBreakpoint(b)">
+                                    @b ×
+                                </button>
+                            </KmilaTooltip>
                         }
                     </div>
                 }
@@ -150,6 +157,12 @@
                        Disabled="@(_coord?.IsRunning == true)" />
 
         <div class="visual-page__canvas-stack">
+          @* Everything inside this wrap is transformed together by the
+             kmilaAttachPanZoom handle attached to the stack root. Canvas,
+             wire overlay, and floating props all live in the same
+             transformed coordinate space so they scroll + zoom in sync. *@
+          <div class="visual-page__canvas-wrap"
+               style="width:@(_doc.Canvas.Width)px; height:@(_doc.Canvas.Height)px;">
             <VisualCanvas Doc="@_doc"
                           Coordinator="@_coord"
                           EditMode="@(_coord?.IsRunning != true)"
@@ -160,6 +173,8 @@
                           SelectedIdChanged="@OnSelectedIdChanged"
                           IsSwitchOnLookup="@IsSwitchOn"
                           OnSwitchToggle="@OnSwitchToggle"
+                          MultiSwitchStatesLookup="@MultiSwitchStates"
+                          OnMultiSwitchToggle="@OnMultiSwitchToggle"
                           OnDrop="@OnCanvasDrop" />
 
             @* Phase 3 wire-visualization overlay. SVG sits on top of the
@@ -178,141 +193,378 @@
                     @((MarkupString)BuildWireOverlaySvg())
                 </svg>
             }
-        </div> @* /visual-page__canvas-stack *@
 
-        <aside class="visual-page__props">
+            @* Floating props card — anchored to the selected widget so
+               settings appear next to the piece the user is touching
+               (matches R3-8 "like Schematic"). Sits inside canvas-stack
+               so it scrolls with the canvas and stays attached during
+               drag. Position is computed from sel.Position + a per-type
+               width, flipping to the widget's left when the widget is
+               close enough to the right edge that the card would clip. *@
             @if (_selectedId is not null && Selected is { } sel)
             {
-                <h6>@sel.Type</h6>
-                @if (sel.Type == "led")
-                {
-                    <label>@Traductor.T("VISUAL_PROP_COLOR")
-                        <select class="kmila-input"
-                                value="@LedColor(sel)"
-                                @onchange="@(e => OnLedColorChange(sel, e))">
-                            <option value="red">red</option>
-                            <option value="green">green</option>
-                            <option value="blue">blue</option>
-                            <option value="yellow">yellow</option>
-                            <option value="white">white</option>
-                        </select>
-                    </label>
-                }
-                else if (sel.Type == "button")
-                {
-                    <label>@Traductor.T("VISUAL_PROP_LABEL")
-                        <input class="kmila-input"
-                               value="@ButtonLabel(sel)"
-                               @onchange="@(e => OnButtonLabelChange(sel, e))" />
-                    </label>
-                    <label class="visual-page__props-checkbox">
-                        <input type="checkbox"
-                               checked="@ButtonBounce(sel)"
-                               @onchange="@(e => OnButtonBounceChange(sel, e))" />
-                        <span>@Traductor.T("VISUAL_PROP_BOUNCE")</span>
-                    </label>
-                    <small class="kmila-muted">@Traductor.T("VISUAL_PROP_BOUNCE_HINT")</small>
-                }
-                else if (sel.Type == "switch")
-                {
-                    <label>@Traductor.T("VISUAL_PROP_LABEL")
-                        <input class="kmila-input"
-                               value="@SwitchLabel(sel)"
-                               @onchange="@(e => OnSwitchLabelChange(sel, e))" />
-                    </label>
-                    <label>@Traductor.T("VISUAL_PROP_DEFAULT_STATE")
-                        <select class="kmila-input"
-                                value="@SwitchDefault(sel)"
-                                @onchange="@(e => OnSwitchDefaultChange(sel, e))">
-                            <option value="0">@Traductor.T("VISUAL_DEFAULT_STATE_OFF")</option>
-                            <option value="1">@Traductor.T("VISUAL_DEFAULT_STATE_ON")</option>
-                        </select>
-                    </label>
-                }
-                else if (sel.Type == "stepper")
-                {
-                    <label>@Traductor.T("VISUAL_PROP_STEPS_PER_REV")
-                        <input class="kmila-input" type="number" min="4" max="4096" step="1"
-                               value="@StepperStepsPerRev(sel)"
-                               @onchange="@(e => OnStepperStepsChange(sel, e))" />
-                    </label>
-                    <label>@Traductor.T("VISUAL_PROP_DIRECTION")
-                        <select class="kmila-input"
-                                value="@StepperDirection(sel)"
-                                @onchange="@(e => OnStepperDirectionChange(sel, e))">
-                            <option value="auto">@Traductor.T("VISUAL_DIRECTION_AUTO")</option>
-                            <option value="cw">@Traductor.T("VISUAL_DIRECTION_CW")</option>
-                            <option value="ccw">@Traductor.T("VISUAL_DIRECTION_CCW")</option>
-                        </select>
-                    </label>
-                }
-                else if (sel.Type == "seven-seg")
-                {
-                    <label>@Traductor.T("VISUAL_PROP_MODE")
-                        <select class="kmila-input"
-                                value="@SevenSegMode(sel)"
-                                @onchange="@(e => OnSevenSegModeChange(sel, e))">
-                            <option value="raw">@Traductor.T("VISUAL_SEVEN_SEG_MODE_RAW")</option>
-                            <option value="hex">@Traductor.T("VISUAL_SEVEN_SEG_MODE_HEX")</option>
-                            <option value="dec">@Traductor.T("VISUAL_SEVEN_SEG_MODE_DEC")</option>
-                        </select>
-                    </label>
-                    <label>@Traductor.T("VISUAL_PROP_COLOR")
-                        <select class="kmila-input"
-                                value="@LedColor(sel)"
-                                @onchange="@(e => OnLedColorChange(sel, e))">
-                            <option value="red">red</option>
-                            <option value="green">green</option>
-                            <option value="blue">blue</option>
-                            <option value="yellow">yellow</option>
-                            <option value="white">white</option>
-                        </select>
-                    </label>
-                }
-                else if (sel.Type == "led-array")
-                {
-                    <label>@Traductor.T("VISUAL_PROP_LENGTH")
-                        <input class="kmila-input" type="number" min="1" max="64"
-                               value="@LedArrayLength(sel)"
-                               @onchange="@(e => OnLedArrayLengthChange(sel, e))" />
-                    </label>
-                    <label>@Traductor.T("VISUAL_PROP_COLOR")
-                        <select class="kmila-input"
-                                value="@LedColor(sel)"
-                                @onchange="@(e => OnLedColorChange(sel, e))">
-                            <option value="red">red</option>
-                            <option value="green">green</option>
-                            <option value="blue">blue</option>
-                            <option value="yellow">yellow</option>
-                            <option value="white">white</option>
-                        </select>
-                    </label>
-                    <label>@Traductor.T("VISUAL_PROP_ORIENTATION")
-                        <select class="kmila-input"
-                                value="@LedArrayOrientation(sel)"
-                                @onchange="@(e => OnLedArrayOrientationChange(sel, e))">
-                            <option value="h">@Traductor.T("VISUAL_ORIENT_H")</option>
-                            <option value="v">@Traductor.T("VISUAL_ORIENT_V")</option>
-                        </select>
-                    </label>
-                }
-                <div class="visual-page__props-binding">
-                    <small>@Traductor.T("VISUAL_PIN_TO_PORT")</small>
-                    @foreach (var b in sel.Bindings)
+                var anchor = PropsAnchor(sel);
+                <aside class="visual-page__props"
+                       style="left:@(anchor.Left)px; top:@(anchor.Top)px;">
+                    <div class="visual-page__props-header">
+                        <span class="visual-page__props-icon" aria-hidden="true">
+                            <Icon Name="@PropsIconFor(sel.Type)" />
+                        </span>
+                        <h6 class="visual-page__props-title">@Traductor.T(PropsTitleKeyFor(sel.Type))</h6>
+                        @{
+                            var dir = KvizWidgetCatalog.DirectionOf(sel.Type);
+                            var pinCounts = KvizWidgetCatalog.PinCountsByDir(sel);
+                            bool mixed = dir is null && pinCounts.InCount > 0 && pinCounts.OutCount > 0;
+                        }
+                        @if (dir is WidgetDirection wdir)
+                        {
+                            <span class="visual-page__props-dir visual-page__props-dir--@(wdir == WidgetDirection.Input ? "in" : "out")"
+                                  title="@Traductor.T(wdir == WidgetDirection.Input ? "VISUAL_WIDGET_DIRECTION_INPUT_HINT" : "VISUAL_WIDGET_DIRECTION_OUTPUT_HINT")">
+                                @Traductor.T(wdir == WidgetDirection.Input ? "VISUAL_WIDGET_DIRECTION_INPUT" : "VISUAL_WIDGET_DIRECTION_OUTPUT")
+                            </span>
+                        }
+                        else if (mixed)
+                        {
+                            <span class="visual-page__props-dir visual-page__props-dir--in"
+                                  title="@Traductor.T("VISUAL_WIDGET_DIRECTION_INPUT_HINT")">
+                                @string.Format(Traductor.T("VISUAL_WIDGET_DIRECTION_INPUT_N"), pinCounts.InCount)
+                            </span>
+                            <span class="visual-page__props-dir visual-page__props-dir--out"
+                                  title="@Traductor.T("VISUAL_WIDGET_DIRECTION_OUTPUT_HINT")">
+                                @string.Format(Traductor.T("VISUAL_WIDGET_DIRECTION_OUTPUT_N"), pinCounts.OutCount)
+                            </span>
+                        }
+                        @* In-place delete for the selected widget (2026-07-19).
+                           A trash icon also lives in the top toolbar, but on
+                           mobile the toolbar horizontally-scrolls and the icon
+                           frequently ends up off-screen — placing a second
+                           entry point next to the props card keeps removal
+                           discoverable without hunting. Reuses RemoveSelected
+                           (same undo push, same run-guard). *@
+                        <KmilaTooltip TextKey="VISUAL_DELETE">
+                            <button type="button"
+                                    class="visual-page__props-delete"
+                                    data-testid="visual-props-delete"
+                                    @onclick="RemoveSelected"
+                                    disabled="@(_coord?.IsRunning == true)"
+                                    aria-label="@Traductor.T("VISUAL_DELETE")">
+                                <Icon Name="IconName.Trash" />
+                            </button>
+                        </KmilaTooltip>
+                        <button type="button"
+                                class="visual-page__props-close"
+                                aria-label="@Traductor.T("COMMON_CLOSE")"
+                                @onclick="() => _selectedId = null">×</button>
+                    </div>
+                    @if (sel.Type == "led")
                     {
-                        <div><code>@b.Key</code> → @(string.IsNullOrEmpty(b.Value) ? Traductor.T("VISUAL_UNWIRED") : b.Value)</div>
+                        <label>@Traductor.T("VISUAL_PROP_COLOR")
+                            <select class="kmila-input"
+                                    value="@LedColor(sel)"
+                                    @onchange="@(e => OnLedColorChange(sel, e))">
+                                <option value="red">@Traductor.T("VISUAL_MATRIX_COLOR_RED")</option>
+                                <option value="green">@Traductor.T("VISUAL_MATRIX_COLOR_GREEN")</option>
+                                <option value="blue">@Traductor.T("VISUAL_MATRIX_COLOR_BLUE")</option>
+                                <option value="yellow">@Traductor.T("VISUAL_MATRIX_COLOR_YELLOW")</option>
+                                <option value="white">@Traductor.T("VISUAL_MATRIX_COLOR_WHITE")</option>
+                            </select>
+                        </label>
                     }
-                    @if (sel.Bindings.Count == 0)
+                    else if (sel.Type == "button")
                     {
-                        <div class="kmila-muted">@Traductor.T("VISUAL_NO_BINDINGS")</div>
+                        <label>@Traductor.T("VISUAL_PROP_LABEL")
+                            <input class="kmila-input"
+                                   value="@ButtonLabel(sel)"
+                                   @onchange="@(e => OnButtonLabelChange(sel, e))" />
+                        </label>
+                        <label class="visual-page__props-checkbox">
+                            <input type="checkbox"
+                                   checked="@ButtonBounce(sel)"
+                                   @onchange="@(e => OnButtonBounceChange(sel, e))" />
+                            <span>@Traductor.T("VISUAL_PROP_BOUNCE")</span>
+                        </label>
+                        <small class="kmila-muted">@Traductor.T("VISUAL_PROP_BOUNCE_HINT")</small>
                     }
-                </div>
+                    else if (sel.Type == "switch")
+                    {
+                        <label>@Traductor.T("VISUAL_PROP_LABEL")
+                            <input class="kmila-input"
+                                   value="@SwitchLabel(sel)"
+                                   @onchange="@(e => OnSwitchLabelChange(sel, e))" />
+                        </label>
+                        <label>@Traductor.T("VISUAL_PROP_DEFAULT_STATE")
+                            <select class="kmila-input"
+                                    value="@SwitchDefault(sel)"
+                                    @onchange="@(e => OnSwitchDefaultChange(sel, e))">
+                                <option value="0">@Traductor.T("VISUAL_DEFAULT_STATE_OFF")</option>
+                                <option value="1">@Traductor.T("VISUAL_DEFAULT_STATE_ON")</option>
+                            </select>
+                        </label>
+                    }
+                    else if (sel.Type == "stepper")
+                    {
+                        <label>@Traductor.T("VISUAL_PROP_STEPS_PER_REV")
+                            <input class="kmila-input" type="number" min="4" max="4096" step="1"
+                                   value="@StepperStepsPerRev(sel)"
+                                   @onchange="@(e => OnStepperStepsChange(sel, e))" />
+                        </label>
+                        <label>@Traductor.T("VISUAL_PROP_DIRECTION")
+                            <select class="kmila-input"
+                                    value="@StepperDirection(sel)"
+                                    @onchange="@(e => OnStepperDirectionChange(sel, e))">
+                                <option value="auto">@Traductor.T("VISUAL_DIRECTION_AUTO")</option>
+                                <option value="cw">@Traductor.T("VISUAL_DIRECTION_CW")</option>
+                                <option value="ccw">@Traductor.T("VISUAL_DIRECTION_CCW")</option>
+                            </select>
+                        </label>
+                    }
+                    else if (sel.Type == "seven-seg")
+                    {
+                        <label>@Traductor.T("VISUAL_PROP_MODE")
+                            <select class="kmila-input"
+                                    value="@SevenSegMode(sel)"
+                                    @onchange="@(e => OnSevenSegModeChange(sel, e))">
+                                <option value="raw">@Traductor.T("VISUAL_SEVEN_SEG_MODE_RAW")</option>
+                                <option value="hex">@Traductor.T("VISUAL_SEVEN_SEG_MODE_HEX")</option>
+                                <option value="dec">@Traductor.T("VISUAL_SEVEN_SEG_MODE_DEC")</option>
+                            </select>
+                        </label>
+                        <label>@Traductor.T("VISUAL_PROP_COLOR")
+                            <select class="kmila-input"
+                                    value="@LedColor(sel)"
+                                    @onchange="@(e => OnLedColorChange(sel, e))">
+                                <option value="red">@Traductor.T("VISUAL_MATRIX_COLOR_RED")</option>
+                                <option value="green">@Traductor.T("VISUAL_MATRIX_COLOR_GREEN")</option>
+                                <option value="blue">@Traductor.T("VISUAL_MATRIX_COLOR_BLUE")</option>
+                                <option value="yellow">@Traductor.T("VISUAL_MATRIX_COLOR_YELLOW")</option>
+                                <option value="white">@Traductor.T("VISUAL_MATRIX_COLOR_WHITE")</option>
+                            </select>
+                        </label>
+                    }
+                    else if (sel.Type == "seven-seg-bank")
+                    {
+                        <label>@Traductor.T("VISUAL_PROP_DIGITS")
+                            <input class="kmila-input" type="number" min="2" max="8"
+                                   value="@SevenSegBankDigits(sel)"
+                                   @onchange="@(e => OnSevenSegBankDigitsChange(sel, e))" />
+                        </label>
+                        <label>@Traductor.T("VISUAL_PROP_COLOR")
+                            <select class="kmila-input"
+                                    value="@LedColor(sel)"
+                                    @onchange="@(e => OnLedColorChange(sel, e))">
+                                <option value="red">@Traductor.T("VISUAL_MATRIX_COLOR_RED")</option>
+                                <option value="green">@Traductor.T("VISUAL_MATRIX_COLOR_GREEN")</option>
+                                <option value="blue">@Traductor.T("VISUAL_MATRIX_COLOR_BLUE")</option>
+                                <option value="yellow">@Traductor.T("VISUAL_MATRIX_COLOR_YELLOW")</option>
+                                <option value="white">@Traductor.T("VISUAL_MATRIX_COLOR_WHITE")</option>
+                            </select>
+                        </label>
+                    }
+                    else if (sel.Type == "led-array")
+                    {
+                        <label>@Traductor.T("VISUAL_PROP_LENGTH")
+                            <input class="kmila-input" type="number" min="1" max="64"
+                                   value="@LedArrayLength(sel)"
+                                   @onchange="@(e => OnLedArrayLengthChange(sel, e))" />
+                        </label>
+                        <label>@Traductor.T("VISUAL_PROP_COLOR")
+                            <select class="kmila-input"
+                                    value="@LedColor(sel)"
+                                    @onchange="@(e => OnLedColorChange(sel, e))">
+                                <option value="red">@Traductor.T("VISUAL_MATRIX_COLOR_RED")</option>
+                                <option value="green">@Traductor.T("VISUAL_MATRIX_COLOR_GREEN")</option>
+                                <option value="blue">@Traductor.T("VISUAL_MATRIX_COLOR_BLUE")</option>
+                                <option value="yellow">@Traductor.T("VISUAL_MATRIX_COLOR_YELLOW")</option>
+                                <option value="white">@Traductor.T("VISUAL_MATRIX_COLOR_WHITE")</option>
+                            </select>
+                        </label>
+                        <label>@Traductor.T("VISUAL_PROP_ORIENTATION")
+                            <select class="kmila-input"
+                                    value="@LedArrayOrientation(sel)"
+                                    @onchange="@(e => OnLedArrayOrientationChange(sel, e))">
+                                <option value="h">@Traductor.T("VISUAL_ORIENT_H")</option>
+                                <option value="v">@Traductor.T("VISUAL_ORIENT_V")</option>
+                            </select>
+                        </label>
+                    }
+                    else if (sel.Type == "lcd-hd44780")
+                    {
+                        <label>@Traductor.T("VISUAL_PROP_MODE")
+                            <select class="kmila-input"
+                                    value="@LcdMode(sel)"
+                                    @onchange="@(e => OnLcdModeChange(sel, e))">
+                                <option value="text">@Traductor.T("VISUAL_LCD_MODE_TEXT")</option>
+                                <option value="raw-4bit">@Traductor.T("VISUAL_LCD_MODE_RAW_4BIT")</option>
+                                <option value="raw-8bit">@Traductor.T("VISUAL_LCD_MODE_RAW_8BIT")</option>
+                            </select>
+                        </label>
+                        <label>@Traductor.T("VISUAL_LCD_ROWS")
+                            <select class="kmila-input"
+                                    value="@LcdRows(sel)"
+                                    @onchange="@(e => OnLcdRowsChange(sel, e))">
+                                <option value="2">2</option>
+                                <option value="4">4</option>
+                            </select>
+                        </label>
+                        <label>@Traductor.T("VISUAL_LCD_COLS")
+                            <select class="kmila-input"
+                                    value="@LcdCols(sel)"
+                                    @onchange="@(e => OnLcdColsChange(sel, e))">
+                                <option value="16">16</option>
+                                <option value="20">20</option>
+                            </select>
+                        </label>
+                    }
+                    else if (sel.Type == "keypad-matrix")
+                    {
+                        <label>@Traductor.T("VISUAL_PROP_MODE")
+                            <select class="kmila-input"
+                                    value="@KeypadMode(sel)"
+                                    @onchange="@(e => OnKeypadModeChange(sel, e))">
+                                <option value="decoded">@Traductor.T("VISUAL_KEYPAD_MODE_DECODED")</option>
+                                <option value="raw-scan">@Traductor.T("VISUAL_KEYPAD_MODE_RAW")</option>
+                            </select>
+                        </label>
+                        <label>@Traductor.T("VISUAL_KEYPAD_ROWS")
+                            <input class="kmila-input" type="number" min="3" max="4" step="1"
+                                   value="@KeypadRows(sel)"
+                                   @onchange="@(e => OnKeypadRowsChange(sel, e))" />
+                        </label>
+                        <label>@Traductor.T("VISUAL_KEYPAD_COLS")
+                            <input class="kmila-input" type="number" min="3" max="4" step="1"
+                                   value="@KeypadCols(sel)"
+                                   @onchange="@(e => OnKeypadColsChange(sel, e))" />
+                        </label>
+                    }
+                    else if (sel.Type == "buzzer-piezo")
+                    {
+                        <label>@Traductor.T("VISUAL_PROP_MODE")
+                            <select class="kmila-input"
+                                    value="@BuzzerMode(sel)"
+                                    @onchange="@(e => OnBuzzerModeChange(sel, e))">
+                                <option value="freq">@Traductor.T("VISUAL_BUZZER_MODE_FREQ")</option>
+                                <option value="signal">@Traductor.T("VISUAL_BUZZER_MODE_SIGNAL")</option>
+                            </select>
+                        </label>
+                        <small class="kmila-muted">@Traductor.T("VISUAL_BUZZER_UNLOCK_HINT")</small>
+                    }
+                    else if (sel.Type == "matrix-3x3-rgb")
+                    {
+                        <label>@Traductor.T("VISUAL_PROP_MODE")
+                            <select class="kmila-input"
+                                    value="@RgbMatrixMode(sel)"
+                                    @onchange="@(e => OnRgbMatrixModeChange(sel, e))">
+                                <option value="planes">@Traductor.T("VISUAL_RGB_MATRIX_MODE_PLANES")</option>
+                                <option value="raw">@Traductor.T("VISUAL_RGB_MATRIX_MODE_RAW")</option>
+                            </select>
+                        </label>
+                        <label>@Traductor.T("VISUAL_PROP_BRIGHTNESS")
+                            <input class="kmila-input" type="range" min="0" max="100" step="1"
+                                   value="@RgbMatrixBrightness(sel)"
+                                   @onchange="@(e => OnRgbMatrixBrightnessChange(sel, e))" />
+                        </label>
+                    }
+                    else if (sel.Type == "matrix-3x3")
+                    {
+                        <label>@Traductor.T("VISUAL_PROP_MODE")
+                            <select class="kmila-input"
+                                    value="@LedMatrixMode(sel)"
+                                    @onchange="@(e => OnLedMatrixModeChange(sel, e))">
+                                <option value="value">@Traductor.T("VISUAL_MATRIX_MODE_VALUE")</option>
+                                <option value="raw">@Traductor.T("VISUAL_MATRIX_MODE_RAW")</option>
+                            </select>
+                        </label>
+                        <label>@Traductor.T("VISUAL_PROP_COLOR")
+                            <select class="kmila-input"
+                                    value="@LedColor(sel)"
+                                    @onchange="@(e => OnLedColorChange(sel, e))">
+                                <option value="red">@Traductor.T("VISUAL_MATRIX_COLOR_RED")</option>
+                                <option value="green">@Traductor.T("VISUAL_MATRIX_COLOR_GREEN")</option>
+                                <option value="blue">@Traductor.T("VISUAL_MATRIX_COLOR_BLUE")</option>
+                                <option value="white">@Traductor.T("VISUAL_MATRIX_COLOR_WHITE")</option>
+                            </select>
+                        </label>
+                        <label>@Traductor.T("VISUAL_PROP_BRIGHTNESS")
+                            <input class="kmila-input" type="range" min="0" max="100" step="1"
+                                   value="@LedMatrixBrightness(sel)"
+                                   @onchange="@(e => OnLedMatrixBrightnessChange(sel, e))" />
+                        </label>
+                    }
+                    else if (sel.Type == "multi-switch")
+                    {
+                        <label>@Traductor.T("VISUAL_PROP_MODE")
+                            <select class="kmila-input"
+                                    value="@MultiSwitchMode(sel)"
+                                    @onchange="@(e => OnMultiSwitchModeChange(sel, e))">
+                                <option value="per-bit">@Traductor.T("VISUAL_MULTI_SWITCH_MODE_PER_BIT")</option>
+                                <option value="vector">@Traductor.T("VISUAL_MULTI_SWITCH_MODE_VECTOR")</option>
+                            </select>
+                        </label>
+                        <label>@Traductor.T("VISUAL_PROP_COUNT")
+                            <input class="kmila-input" type="number" min="2" max="8" step="1"
+                                   value="@MultiSwitchCount(sel)"
+                                   @onchange="@(e => OnMultiSwitchCountChange(sel, e))" />
+                        </label>
+                        <label class="visual-page__props-checkbox">
+                            <input type="checkbox"
+                                   checked="@MultiSwitchBounce(sel)"
+                                   @onchange="@(e => OnMultiSwitchBounceChange(sel, e))" />
+                            <span>@Traductor.T("VISUAL_PROP_BOUNCE")</span>
+                        </label>
+                        <small class="kmila-muted">@Traductor.T("VISUAL_PROP_BOUNCE_HINT")</small>
+                    }
+                    <h6 class="visual-page__props-section">@Traductor.T("VISUAL_PIN_TO_PORT")</h6>
+                    <div class="visual-page__props-binding">
+                        @foreach (var b in sel.Bindings)
+                        {
+                            var wired = !string.IsNullOrEmpty(b.Value);
+                            <div class="visual-page__props-binding-row">
+                                <code>@b.Key</code>
+                                <span class="visual-page__props-binding-arrow" aria-hidden="true">→</span>
+                                <span class="visual-page__props-binding-port @(wired ? null : "visual-page__props-binding-port--unwired")">
+                                    @(wired ? b.Value : Traductor.T("VISUAL_UNWIRED"))
+                                </span>
+                            </div>
+                        }
+                        @if (sel.Bindings.Count == 0)
+                        {
+                            <div class="visual-page__props-binding-empty">@Traductor.T("VISUAL_NO_BINDINGS")</div>
+                        }
+                    </div>
+                </aside>
             }
-            else
-            {
-                <div class="kmila-muted">@Traductor.T("VISUAL_PROPS_HINT")</div>
-            }
-        </aside>
+          </div> @* /visual-page__canvas-wrap *@
+
+          @* §6 Item 4 (2026-07-05) — locator popover. Floats over the
+             canvas-stack (position: absolute; top-right) so it doesn't
+             steal layout from the toolbar. Lists every widget in the
+             doc; per-row Focus button snaps pan-zoom to its position. *@
+          @if (_showLocator && _doc.Components.Count > 0)
+          {
+              <aside class="visual-page__locator" data-testid="visual-locator-panel">
+                  <div class="visual-page__locator-header">
+                      <h6>@Traductor.T("VISUAL_LOCATOR")</h6>
+                      <button type="button" class="visual-page__locator-close"
+                              @onclick="() => _showLocator = false"
+                              aria-label="@Traductor.T("COMMON_CLOSE")">×</button>
+                  </div>
+                  <ul class="visual-page__locator-list">
+                      @foreach (var comp in _doc.Components)
+                      {
+                          var localC = comp;
+                          <li>
+                              <button type="button"
+                                      data-testid="@($"visual-locator-focus-{localC.Id}")"
+                                      class="visual-page__locator-item @(_selectedId == localC.Id ? "is-active" : "")"
+                                      @onclick="() => FocusWidget(localC)">
+                                  <span class="visual-page__locator-item-label">@LocatorLabelFor(localC)</span>
+                              </button>
+                          </li>
+                      }
+                  </ul>
+              </aside>
+          }
+        </div> @* /visual-page__canvas-stack *@
     </div>
 </section>
 
@@ -346,6 +598,19 @@
     private string? _loadError;
     private System.Threading.Timer? _repaintTimer;
 
+    // R3-6 sub-task A — undo/redo history over the whole KvizDoc.
+    // Snapshots are JSON produced by KvizSerializer.Serialize. Every
+    // mutation funnels through MarkDirty(), which pushes the previous
+    // baseline to _undo and re-baselines _lastSnapshot. Load and Save
+    // set _savedSnapshot so _dirty can be computed as
+    // (_lastSnapshot != _savedSnapshot) — including "you undid past
+    // the save and came back to a clean state."
+    private readonly LinkedList<string> _undo = new();
+    private readonly LinkedList<string> _redo = new();
+    private string _lastSnapshot = "";
+    private string _savedSnapshot = "";
+    private const int UndoCap = 50;
+
     private VisualSpeed _speedIndex = VisualSpeed.Normal;
     private int? _customDelayMs;
     private int _settingsRingBuffer;
@@ -369,6 +634,88 @@
     private KvizComponent? Selected =>
         _selectedId is null ? null : _doc.Components.FirstOrDefault(c => c.Id == _selectedId);
 
+    // Header icon for the floating props card — mirrors WidgetPalette's
+    // per-widget IconName mapping so a user sees the same glyph on the
+    // palette chip and on the selected widget's popover.
+    private static IconName PropsIconFor(string type) => type switch
+    {
+        "led"       => IconName.Lightbulb,
+        "button"    => IconName.CircleFill,
+        "switch"    => IconName.ToggleOn,
+        "led-array" => IconName.Grid,
+        "stepper"   => IconName.ArrowRepeat,
+        "seven-seg" => IconName.Display,
+        "seven-seg-bank" => IconName.Display,
+        "multi-switch" => IconName.Sliders,
+        "matrix-3x3" => IconName.Grid3X3Gap,
+        "matrix-3x3-rgb" => IconName.Grid3X3GapFill,
+        "buzzer-piezo" => IconName.VolumeUpFill,
+        "keypad-matrix" => IconName.Grid,
+        "lcd-hd44780" => IconName.Display,
+        _           => IconName.Gear,
+    };
+
+    // Dictionary key for the header title — reuses the palette label
+    // strings so "Button", "LED", … stay in sync across the palette chip
+    // and the props card. Falls back to the raw type slug for unknowns.
+    private static string PropsTitleKeyFor(string type) => type switch
+    {
+        "led"       => "VISUAL_PALETTE_LED",
+        "button"    => "VISUAL_PALETTE_BUTTON",
+        "switch"    => "VISUAL_PALETTE_SWITCH",
+        "led-array" => "VISUAL_PALETTE_LED_ARRAY",
+        "stepper"   => "VISUAL_PALETTE_STEPPER",
+        "seven-seg" => "VISUAL_PALETTE_SEVEN_SEG",
+        "seven-seg-bank" => "VISUAL_PALETTE_SEVEN_SEG_BANK",
+        "multi-switch" => "VISUAL_PALETTE_MULTI_SWITCH",
+        "matrix-3x3" => "VISUAL_PALETTE_LED_MATRIX",
+        "matrix-3x3-rgb" => "VISUAL_PALETTE_RGB_MATRIX",
+        "buzzer-piezo" => "VISUAL_PALETTE_BUZZER",
+        "keypad-matrix" => "VISUAL_PALETTE_KEYPAD",
+        "lcd-hd44780" => "VISUAL_PALETTE_LCD",
+        _           => type,
+    };
+
+    // Anchor the floating props card next to the selected widget. Prefers
+    // widget-right; flips to widget-left when the card would fall off the
+    // canvas right edge. Y clamps between top gap and (canvas.Height -
+    // estimated card height) so the card never renders past the canvas box.
+    // Card width matches the CSS: 240 px on phones, 260 px elsewhere — use
+    // 240 as the smaller of the two so anchor decisions err on "keep it in".
+    private (double Left, double Top) PropsAnchor(KvizComponent sel)
+    {
+        const double CardWidth = 288;   // matches .visual-page__props width in pages.css
+        const double CardHeight = 320;  // conservative estimate; scroll handles overflow
+        const double Gap = 12;
+        double widgetW = sel.Type switch
+        {
+            "led"        => 64,
+            "button"     => 80,
+            "switch"     => 80,
+            "seven-seg"  => 80,
+            "seven-seg-bank" => Math.Clamp(sel.Config.GetInt("digits", 4), 2, 8) * 70 + 16,
+            "stepper"    => 130,
+            "led-array"  => Math.Max(60, sel.Config.GetInt("length", 4) * 20 + 20),
+            "multi-switch" => Math.Clamp(sel.Config.GetInt("count", 4), 2, 8) * 32 + 16,
+            "matrix-3x3" => 108,
+            "matrix-3x3-rgb" => 108,
+            "buzzer-piezo" => 130,
+            "keypad-matrix" => Math.Clamp(sel.Config.GetInt("cols", 4), 3, 4) * 42 + 12,
+            "lcd-hd44780" => Math.Clamp(sel.Config.GetInt("cols", 16), 16, 20) * 14 + 20,
+            _            => 90,
+        };
+        double x = sel.Position.X + widgetW + Gap;
+        if (x + CardWidth > _doc.Canvas.Width)
+        {
+            x = Math.Max(Gap, sel.Position.X - CardWidth - Gap);
+        }
+        x = Math.Clamp(x, Gap, Math.Max(Gap, _doc.Canvas.Width - CardWidth - Gap));
+
+        double y = sel.Position.Y;
+        y = Math.Clamp(y, Gap, Math.Max(Gap, _doc.Canvas.Height - CardHeight - Gap));
+        return (x, y);
+    }
+
     private string EmptyHintText =>
         _entity == null
             ? Traductor.T("VISUAL_EMPTY_NO_ENTITY")
@@ -379,35 +726,413 @@
     private RenderFragment RenderToolbar() => __builder =>
     {
         <text>
+            @* Group 1 — primary action. Run/Stop stands alone as the CTA. *@
             @if (_coord?.IsRunning == true)
             {
-                <button class="kmila-btn kmila-btn--danger" data-testid="visual-stop" @onclick="StopRun">⏹ @Traductor.T("VISUAL_STOP")</button>
+                <KmilaTooltip TextKey="VISUAL_STOP_TIP" Placement="Bottom">
+                    <button class="kmila-btn kmila-btn--danger" data-testid="visual-stop" @onclick="StopRun">
+                        <Icon Name="IconName.StopFill" />
+                        <span>@Traductor.T("VISUAL_STOP")</span>
+                    </button>
+                </KmilaTooltip>
             }
             else
             {
-                <button class="kmila-btn kmila-btn--primary" data-testid="visual-run"
-                        disabled="@(_entity == null)"
-                        @onclick="StartRun">▶ @Traductor.T("VISUAL_RUN")</button>
+                <KmilaTooltip TextKey="VISUAL_RUN_TIP" Placement="Bottom">
+                    <button class="kmila-btn kmila-btn--primary" data-testid="visual-run"
+                            disabled="@(_entity == null)"
+                            @onclick="StartRun">
+                        <Icon Name="IconName.PlayFill" />
+                        <span>@Traductor.T("VISUAL_RUN")</span>
+                    </button>
+                </KmilaTooltip>
             }
-            <button class="kmila-btn" data-testid="visual-wire"          @onclick="OpenWiring"     disabled="@(_entity == null)">@Traductor.T("VISUAL_WIRE")</button>
-            @* Widget-add buttons moved out of the toolbar into a left-side
-               WidgetPalette per the 2026-06-28 UI audit. The palette gives
-               the canvas its own "tool zone" instead of flattening 11
-               buttons in a single row. The AddLed/Button/Switch/etc. methods
-               below still own the spawn logic — see OnPaletteSelected. *@
-            <button class="kmila-btn" data-testid="visual-toggle-wires"
-                    @onclick="ToggleWires"
-                    aria-pressed="@_showWires.ToString().ToLowerInvariant()"
-                    title="@Traductor.T(_showWires ? "VISUAL_HIDE_WIRES" : "VISUAL_SHOW_WIRES")">
-                @Traductor.T(_showWires ? "VISUAL_HIDE_WIRES" : "VISUAL_SHOW_WIRES")
-            </button>
-            <button class="kmila-btn" data-testid="visual-delete"        @onclick="RemoveSelected" disabled="@(_selectedId == null || _coord?.IsRunning == true)">@Traductor.T("VISUAL_DELETE")</button>
-            <button class="kmila-btn" data-testid="visual-save"          @onclick="SaveAsync"      disabled="@(!_dirty)">@(_dirty ? Traductor.T("VISUAL_SAVE_DIRTY") : Traductor.T("VISUAL_SAVED"))</button>
+
+            <span class="kmila-slot-toolbar-divider" aria-hidden="true"></span>
+
+            @* Group 2 — design edits on the currently-open canvas. Wire keeps
+               its label because it's the discoverable path to bind pins;
+               Delete goes icon-only since it's a per-selection ephemeral
+               action and would repeat the same label + Trash idiom used
+               everywhere else in the app. *@
+            <KmilaTooltip TextKey="VISUAL_WIRE_TIP" Placement="Bottom">
+                <button class="kmila-btn" data-testid="visual-wire" @onclick="OpenWiring" disabled="@(_entity == null)">
+                    @Traductor.T("VISUAL_WIRE")
+                </button>
+            </KmilaTooltip>
+            <KmilaTooltip TextKey="VISUAL_DELETE">
+                <button class="kmila-btn-icon" data-testid="visual-delete"
+                        @onclick="RemoveSelected"
+                        disabled="@(_selectedId == null || _coord?.IsRunning == true)"
+                        aria-label="@Traductor.T("VISUAL_DELETE")">
+                    <Icon Name="IconName.Trash" />
+                </button>
+            </KmilaTooltip>
+            <KmilaTooltip TextKey="VISUAL_UNDO_TOOLTIP">
+                <button class="kmila-btn-icon" data-testid="visual-undo"
+                        @onclick="UndoOnce"
+                        disabled="@(_undo.Count == 0 || _coord?.IsRunning == true)"
+                        aria-label="@Traductor.T("VISUAL_UNDO_TOOLTIP")">
+                    <Icon Name="IconName.ArrowCounterclockwise" />
+                </button>
+            </KmilaTooltip>
+            <KmilaTooltip TextKey="VISUAL_REDO_TOOLTIP">
+                <button class="kmila-btn-icon" data-testid="visual-redo"
+                        @onclick="RedoOnce"
+                        disabled="@(_redo.Count == 0 || _coord?.IsRunning == true)"
+                        aria-label="@Traductor.T("VISUAL_REDO_TOOLTIP")">
+                    <Icon Name="IconName.ArrowClockwise" />
+                </button>
+            </KmilaTooltip>
+
+            <span class="kmila-slot-toolbar-divider" aria-hidden="true"></span>
+
+            @* Group 3 — persistence. Save carries the dirty-state text so the
+               user sees "Save*" / "Saved" without having to hover. *@
+            <KmilaTooltip TextKey="VISUAL_SAVE_TIP" Placement="Bottom">
+                <button class="kmila-btn" data-testid="visual-save" @onclick="SaveAsync" disabled="@(!_dirty)">
+                    @(_dirty ? Traductor.T("VISUAL_SAVE_DIRTY") : Traductor.T("VISUAL_SAVED"))
+                </button>
+            </KmilaTooltip>
+            <KmilaTooltip TextKey="VISUAL_CLEAR_CHANGES_TOOLTIP">
+                <button class="kmila-btn kmila-btn--ghost" data-testid="visual-clear-changes"
+                        @onclick="ClearChanges"
+                        disabled="@(!_dirty || _coord?.IsRunning == true)">
+                    <Icon Name="IconName.ArrowClockwise" />
+                    @Traductor.T("VISUAL_CLEAR_CHANGES")
+                </button>
+            </KmilaTooltip>
+
+            <span class="kmila-slot-toolbar-divider kmila-slot-toolbar-divider--pusher" aria-hidden="true"></span>
+
+            @* Group 4 — view controls (right cluster). All icon-only, all
+               carry `data-tip` so hover shows a styled bubble that survives
+               the app's varied host chromes (title tooltips render poorly on
+               MAUI WebView and are invisible on touch). Native `title` +
+               `aria-label` stay for keyboard/screen-reader users. Secondary
+               actions (Fit, Locator, Export, Record) live inside a "More"
+               dropdown so this cluster stays legible on narrow viewports. *@
+            <KmilaTooltip TextKey="@(_showWires ? "VISUAL_HIDE_WIRES" : "VISUAL_SHOW_WIRES")">
+                <button class="kmila-btn-icon @(_showWires ? "is-active" : "")"
+                        data-testid="visual-toggle-wires"
+                        @onclick="ToggleWires"
+                        aria-pressed="@_showWires.ToString().ToLowerInvariant()"
+                        aria-label="@Traductor.T(_showWires ? "VISUAL_HIDE_WIRES" : "VISUAL_SHOW_WIRES")">
+                    <Icon Name="@(_showWires ? IconName.EyeSlash : IconName.Eye)" />
+                </button>
+            </KmilaTooltip>
+            <KmilaTooltip TextKey="WAVEFORM_ZOOM_OUT">
+                <button class="kmila-btn-icon" data-testid="visual-zoom-out"
+                        @onclick="() => ZoomBy(0.8)"
+                        aria-label="@Traductor.T("WAVEFORM_ZOOM_OUT")">
+                    <Icon Name="IconName.ZoomOut" />
+                </button>
+            </KmilaTooltip>
+            <KmilaTooltip TextKey="WAVEFORM_ZOOM_RESET">
+                <button class="kmila-btn-icon" data-testid="visual-zoom-reset"
+                        @onclick="ResetZoom"
+                        aria-label="@Traductor.T("WAVEFORM_ZOOM_RESET")">
+                    <Icon Name="IconName.ArrowCounterclockwise" />
+                </button>
+            </KmilaTooltip>
+            <KmilaTooltip TextKey="WAVEFORM_ZOOM_IN">
+                <button class="kmila-btn-icon" data-testid="visual-zoom-in"
+                        @onclick="() => ZoomBy(1.25)"
+                        aria-label="@Traductor.T("WAVEFORM_ZOOM_IN")">
+                    <Icon Name="IconName.ZoomIn" />
+                </button>
+            </KmilaTooltip>
+
+            @* Recording state must stay INLINE regardless of the More menu —
+               the elapsed chip is critical user feedback and would be hidden
+               behind a click if buried in the dropdown. Idle "Record" lives
+               inside the More dropdown instead (declutters the toolbar). *@
+            @if (_recState != RecState.Idle)
+            {
+                <span class="kmila-btn kmila-btn--danger kmila-tip" data-testid="visual-record-elapsed"
+                      data-tip="@Traductor.T("VISUAL_RECORD_ELAPSED")"
+                      title="@Traductor.T("VISUAL_RECORD_ELAPSED")">
+                    <Icon Name="IconName.RecordCircleFill" /> @FormatElapsed(_recElapsedMs, _recCapMs)
+                </span>
+                <KmilaTooltip TextKey="VISUAL_RECORD_STOP">
+                    <button class="kmila-btn kmila-btn--ghost"
+                            data-testid="visual-record-stop"
+                            @onclick="StopRecording"
+                            aria-label="@Traductor.T("VISUAL_RECORD_STOP")"
+                            disabled="@(_recState == RecState.Stopping)">
+                        @Traductor.T("VISUAL_RECORD_STOP")
+                    </button>
+                </KmilaTooltip>
+            }
+
+            <KmilaTooltip TextKey="@(_isFullscreen ? "SCHEMATIC_FULLSCREEN_EXIT" : "SCHEMATIC_FULLSCREEN_ENTER")">
+                <button class="kmila-btn-icon @(_isFullscreen ? "is-active" : "")"
+                        data-testid="visual-fullscreen"
+                        @onclick="ToggleFullscreen"
+                        aria-label="@Traductor.T(_isFullscreen ? "SCHEMATIC_FULLSCREEN_EXIT" : "SCHEMATIC_FULLSCREEN_ENTER")">
+                    <Icon Name="@(_isFullscreen ? IconName.FullscreenExit : IconName.ArrowsFullscreen)" />
+                </button>
+            </KmilaTooltip>
+
+            @* Overflow "More" dropdown — houses secondary/less-common view
+               actions (Fit, Locator, Export PNG/SVG, Record). Menu items
+               show icon + text label so users don't have to guess what
+               each glyph means. Anchored on the trigger via position:
+               absolute on `.visual-page__more-menu`. Backdrop closes on
+               outside click. *@
+            <div class="visual-page__more-wrap">
+                <KmilaTooltip TextKey="VISUAL_MORE">
+                    <button class="kmila-btn-icon @(_moreOpen ? "is-active" : "")"
+                            data-testid="visual-more-toggle"
+                            @onclick="ToggleMore"
+                            aria-haspopup="menu"
+                            aria-expanded="@_moreOpen.ToString().ToLowerInvariant()"
+                            aria-label="@Traductor.T("VISUAL_MORE")">
+                        <Icon Name="IconName.ThreeDotsVertical" />
+                    </button>
+                </KmilaTooltip>
+                @if (_moreOpen)
+                {
+                    <div class="visual-page__more-backdrop" @onclick="CloseMore"></div>
+                    <div class="visual-page__more-menu" role="menu" data-testid="visual-more-menu">
+                        <KmilaTooltip TextKey="VISUAL_ZOOM_FIT_TIP" Placement="Left">
+                            <button class="visual-page__more-item"
+                                    data-testid="visual-zoom-fit"
+                                    role="menuitem"
+                                    @onclick="OnMoreZoomFit">
+                                <Icon Name="IconName.ArrowsAngleContract" />
+                                <span>@Traductor.T("VISUAL_ZOOM_FIT")</span>
+                            </button>
+                        </KmilaTooltip>
+                        <KmilaTooltip TextKey="VISUAL_LOCATOR_TIP" Placement="Left">
+                            <button class="visual-page__more-item @(_showLocator ? "is-active" : "")"
+                                    data-testid="visual-locator-toggle"
+                                    role="menuitem"
+                                    @onclick="OnMoreLocator">
+                                <Icon Name="IconName.ListUl" />
+                                <span>@Traductor.T("VISUAL_LOCATOR")</span>
+                            </button>
+                        </KmilaTooltip>
+                        <div class="visual-page__more-sep" aria-hidden="true"></div>
+                        <KmilaTooltip TextKey="VISUAL_EXPORT_PNG_TIP" Placement="Left">
+                            <button class="visual-page__more-item"
+                                    data-testid="visual-export-png"
+                                    role="menuitem"
+                                    @onclick="OnMoreExportPng">
+                                <Icon Name="IconName.FileEarmarkImage" />
+                                <span>@Traductor.T("VISUAL_EXPORT_PNG")</span>
+                            </button>
+                        </KmilaTooltip>
+                        <KmilaTooltip TextKey="VISUAL_EXPORT_SVG_TIP" Placement="Left">
+                            <button class="visual-page__more-item"
+                                    data-testid="visual-export-svg"
+                                    role="menuitem"
+                                    @onclick="OnMoreExportSvg">
+                                <Icon Name="IconName.FileEarmarkCode" />
+                                <span>@Traductor.T("VISUAL_EXPORT_SVG")</span>
+                            </button>
+                        </KmilaTooltip>
+                        @if (_recState == RecState.Idle)
+                        {
+                            <div class="visual-page__more-sep" aria-hidden="true"></div>
+                            <KmilaTooltip TextKey="VISUAL_RECORD_TIP" Placement="Left">
+                                <button class="visual-page__more-item"
+                                        data-testid="visual-record"
+                                        role="menuitem"
+                                        @onclick="OnMoreRecord">
+                                    <Icon Name="IconName.RecordCircle" />
+                                    <span>@Traductor.T("VISUAL_RECORD")</span>
+                                </button>
+                            </KmilaTooltip>
+                        }
+                    </div>
+                }
+            </div>
         </text>
     };
 
+    // Audit F-E-03 (2026-07-11): canvas exports used to write bare
+    // `kmila-canvas.<ext>` — no project or timestamp — so a second export
+    // silently overwrote the first in the downloads folder. This helper
+    // builds `kmila-canvas-<projectSlug>-<yyyyMMdd-HHmmss>.<ext>` with the
+    // project slug omitted when unavailable.
+    private string BuildCanvasFilename(string ext)
+    {
+        var slug = (_project?.Name ?? string.Empty)
+            .ToLowerInvariant()
+            .Replace(' ', '-');
+        slug = System.Text.RegularExpressions.Regex.Replace(slug, @"[^a-z0-9\-]", string.Empty);
+        var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+        return string.IsNullOrEmpty(slug)
+            ? $"kmila-canvas-{stamp}.{ext}"
+            : $"kmila-canvas-{slug}-{stamp}.{ext}";
+    }
+
+    private async Task ExportCanvasSvg()
+    {
+        try { await JS.InvokeAsync<bool>("kmilaCanvasExportSvg", ".kviz-canvas", BuildCanvasFilename("svg")); }
+        catch { /* JS not ready — offer no-op; retry on next click */ }
+    }
+
+    private async Task ExportCanvasPng()
+    {
+        try { await JS.InvokeAsync<bool>("kmilaCanvasExportPng", ".kviz-canvas", BuildCanvasFilename("png")); }
+        catch { /* JS not ready — offer no-op; retry on next click */ }
+    }
+
+    // §6 Item 4 (2026-07-05) — zoom-to-fit uses the shared pan-zoom lib's
+    // internal fitToView, now exposed as kmilaPanZoomFit(id). Snapshot
+    // recovery for users who panned the canvas into the void.
+    private bool _showLocator;
+
+    // Overflow "More" dropdown state — a small menu that houses secondary
+    // view actions (Fit, Locator, Export PNG/SVG, Record) to keep the main
+    // toolbar legible on narrow viewports. Each dispatcher closes the menu
+    // before invoking the underlying handler.
+    private bool _moreOpen;
+
+    private void ToggleMore() => _moreOpen = !_moreOpen;
+    private void CloseMore() => _moreOpen = false;
+
+    private async Task OnMoreZoomFit() { _moreOpen = false; await ZoomToFit(); }
+    private void OnMoreLocator() { _moreOpen = false; _showLocator = !_showLocator; }
+    private async Task OnMoreExportPng() { _moreOpen = false; await ExportCanvasPng(); }
+    private async Task OnMoreExportSvg() { _moreOpen = false; await ExportCanvasSvg(); }
+    private async Task OnMoreRecord() { _moreOpen = false; await StartRecording(); }
+
+    private async Task ZoomToFit()
+    {
+        if (_panZoomId <= 0) return;
+        try { await JS.InvokeVoidAsync("kmilaPanZoomFit", _panZoomId); }
+        catch { }
+    }
+
+    private async Task FocusWidget(KvizComponent c)
+    {
+        if (_panZoomId <= 0) return;
+        // Widget bounding-box in canvas coords is approximate — we only
+        // know Position; use a generic 220×140 rect (largest common
+        // widget footprint) so the focus animation always lands with the
+        // widget comfortably inside the viewport.
+        const int approxW = 220;
+        const int approxH = 140;
+        try
+        {
+            await JS.InvokeVoidAsync("kmilaPanZoomFocus", _panZoomId,
+                c.Position.X, c.Position.Y, approxW, approxH,
+                new { padding = 60 });
+        }
+        catch { }
+        _selectedId = c.Id;
+    }
+
+    private string LocatorLabelFor(KvizComponent c)
+    {
+        var typeKey = c.Type switch
+        {
+            "led" => "VISUAL_PALETTE_LED",
+            "button" => "VISUAL_PALETTE_BUTTON",
+            "switch" => "VISUAL_PALETTE_SWITCH",
+            "multi-switch" => "VISUAL_PALETTE_MULTI_SWITCH",
+            "led-array" => "VISUAL_PALETTE_LED_ARRAY",
+            "matrix-3x3" => "VISUAL_PALETTE_LED_MATRIX",
+            "matrix-3x3-rgb" => "VISUAL_PALETTE_RGB_MATRIX",
+            "buzzer-piezo" => "VISUAL_PALETTE_BUZZER",
+            "keypad-matrix" => "VISUAL_PALETTE_KEYPAD",
+            "lcd-hd44780" => "VISUAL_PALETTE_LCD",
+            "stepper" => "VISUAL_PALETTE_STEPPER",
+            "seven-seg" => "VISUAL_PALETTE_SEVEN_SEG",
+            "seven-seg-bank" => "VISUAL_PALETTE_SEVEN_SEG_BANK",
+            _ => "",
+        };
+        var name = typeKey.Length == 0 ? c.Type : Traductor.T(typeKey);
+        return $"{name} ({(int)c.Position.X}, {(int)c.Position.Y})";
+    }
+
+    // §6 Item 1 (2026-07-05) — canvas recording state machine. Idle →
+    // Recording → Stopping → Idle. A 500 ms Timer polls the JS status
+    // so the elapsed chip stays in sync without triggering render on
+    // every rAF. Auto-stops on 2-min hard cap (fired from JS side).
+    private enum RecState { Idle, Recording, Stopping }
+    private RecState _recState = RecState.Idle;
+    private int _recSessionId = -1;
+    private int _recElapsedMs;
+    private int _recCapMs = 120_000;
+    private System.Threading.Timer? _recPoll;
+
+    private async Task StartRecording()
+    {
+        if (_recState != RecState.Idle) return;
+        try
+        {
+            var result = await JS.InvokeAsync<System.Text.Json.JsonElement>(
+                "kmilaCanvasRecordStart",
+                ".kviz-canvas",
+                new { fps = 20, hardCapSeconds = 120, filename = BuildCanvasFilename("webm") });
+            if (result.TryGetProperty("ok", out var ok) && ok.GetBoolean()
+                && result.TryGetProperty("sessionId", out var idEl))
+            {
+                _recSessionId = idEl.GetInt32();
+                _recState = RecState.Recording;
+                _recElapsedMs = 0;
+                _recPoll?.Dispose();
+                _recPoll = new System.Threading.Timer(async _ => await PollRecordStatus(),
+                    null, 500, 500);
+                StateHasChanged();
+            }
+        }
+        catch { /* JS not ready — no-op; user can retry */ }
+    }
+
+    private async Task StopRecording()
+    {
+        if (_recState != RecState.Recording) return;
+        _recState = RecState.Stopping;
+        StateHasChanged();
+        try { await JS.InvokeAsync<System.Text.Json.JsonElement>("kmilaCanvasRecordStop", _recSessionId); }
+        catch { }
+        finally
+        {
+            _recPoll?.Dispose();
+            _recPoll = null;
+            _recState = RecState.Idle;
+            _recSessionId = -1;
+            _recElapsedMs = 0;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task PollRecordStatus()
+    {
+        if (_recState != RecState.Recording) return;
+        try
+        {
+            var s = await JS.InvokeAsync<System.Text.Json.JsonElement>("kmilaCanvasRecordStatus", _recSessionId);
+            if (s.TryGetProperty("elapsedMs", out var em)) _recElapsedMs = em.GetInt32();
+            if (s.TryGetProperty("capMs", out var cm)) _recCapMs = cm.GetInt32();
+            if (s.TryGetProperty("state", out var st) && st.GetString() == "idle")
+            {
+                // JS-side hard-cap force-stopped us — resync UI.
+                _recPoll?.Dispose();
+                _recPoll = null;
+                _recState = RecState.Idle;
+                _recSessionId = -1;
+                _recElapsedMs = 0;
+            }
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
+    }
+
+    private static string FormatElapsed(int elapsedMs, int capMs)
+    {
+        int es = elapsedMs / 1000, cs = capMs / 1000;
+        return $"● {es / 60:D2}:{es % 60:D2} / {cs / 60:D2}:{cs % 60:D2}";
+    }
+
     protected override async Task OnInitializedAsync()
     {
+        Traductor.StaticOnLangChanged += OnLanguageChanged;
         try
         {
             var raw = await DbContext.GetSettingAsync(AppSettings.KEY_VISUAL_RING_BUFFER);
@@ -416,6 +1141,8 @@
         }
         catch { }
     }
+
+    private void OnLanguageChanged() => InvokeAsync(StateHasChanged);
 
     protected override async Task OnParametersSetAsync()
     {
@@ -527,14 +1254,29 @@
             {
                 var content = (await ProjectFilesRepo.ReadFileContentAsync(_kvizFile, _project)).Content;
                 _doc = KvizSerializer.Deserialize(content ?? "") ?? FreshDoc();
+                // Baseline against what's on disk before sanitize touches
+                // the doc — that way if Sanitize prunes stale bindings, the
+                // resulting in-memory state is legitimately dirty and the
+                // user is prompted to save the cleanup.
+                _savedSnapshot = KvizSerializer.Serialize(_doc);
+                // Drop bindings whose pin key no longer matches the widget's
+                // declared pin set (mode changes, hand-edits, stale saves).
+                // R3-5 data-integrity gate — the wiring modal already
+                // enforces direction on write, but historical saves may
+                // still carry mis-directed keys.
+                KvizWidgetCatalog.Sanitize(_doc);
+                _lastSnapshot = KvizSerializer.Serialize(_doc);
             }
             else
             {
                 _doc = FreshDoc();
+                _lastSnapshot = _savedSnapshot = KvizSerializer.Serialize(_doc);
             }
+            _undo.Clear();
+            _redo.Clear();
 
             await ParseEntityAsync();
-            _dirty = false;
+            _dirty = (_lastSnapshot != _savedSnapshot);
         }
         catch (Exception ex)
         {
@@ -669,6 +1411,12 @@
     private async Task StartRun()
     {
         if (_entity == null) return;
+        // Unlock the audio context on this Run click — the buzzer widget
+        // needs a user-gestured resume() before iOS Safari + Android
+        // WebView will actually play. Idempotent + safe on browsers
+        // without WebAudio.
+        try { await JS.InvokeVoidAsync("kmilaAudio.unlock"); }
+        catch { /* JS not ready during prerender / no-audio browser */ }
         await ParseEntityAsync();
         if (_entity == null) return;
         _coord?.Dispose();
@@ -679,7 +1427,7 @@
             .ToList();
         int ringTicks = Math.Max(_doc.Settings.RingBufferTicks, _settingsRingBuffer);
         if (ringTicks <= 0) ringTicks = 2000;
-        _coord = new VisualRunCoordinator(_entity, ringTicks, userDrivenPorts);
+        _coord = new VisualRunCoordinator(_entity, ringTicks, userDrivenPorts, Traductor);
         _coord.Speed = _speedIndex;
         _coord.CustomTickDelayMs = _customDelayMs;
         _coord.OnFrame += _ => RequestRepaint();
@@ -704,7 +1452,12 @@
         {
             if (!c.Bindings.TryGetValue("out", out var port) || string.IsNullOrEmpty(port)) continue;
             var on = IsSwitchOn(c);
-            _coord.Inputs.Set(port, on ? "1" : "0");
+            _coord.WriteInput(port, on ? "1" : "0");
+        }
+        foreach (var c in _doc.Components.Where(c => c.Type == "multi-switch"))
+        {
+            var arr = MultiSwitchStates(c);
+            PushMultiSwitchToCoordinator(c, arr);
         }
     }
 
@@ -770,6 +1523,13 @@
             case "led-array": AddLedArray(); break;
             case "stepper":   AddStepper();  break;
             case "seven-seg": AddSevenSeg(); break;
+            case "seven-seg-bank": AddSevenSegBank(); break;
+            case "multi-switch": AddMultiSwitch(); break;
+            case "matrix-3x3": AddLedMatrix(); break;
+            case "matrix-3x3-rgb": AddRgbMatrix(); break;
+            case "buzzer-piezo": AddBuzzer(); break;
+            case "keypad-matrix": AddKeypad(); break;
+            case "lcd-hd44780": AddLcd(); break;
         }
     }
 
@@ -826,7 +1586,7 @@
             Config = new() { ["color"] = System.Text.Json.JsonSerializer.SerializeToElement("red") },
             Bindings = new(),
         });
-        _dirty = true;
+        MarkDirty();
     }
 
     private void AddButton()
@@ -839,7 +1599,7 @@
             Config = new() { ["label"] = System.Text.Json.JsonSerializer.SerializeToElement("BTN") },
             Bindings = new(),
         });
-        _dirty = true;
+        MarkDirty();
     }
 
     private void AddSwitch()
@@ -857,7 +1617,7 @@
             },
             Bindings = new(),
         });
-        _dirty = true;
+        MarkDirty();
     }
 
     private void AddStepper()
@@ -866,7 +1626,9 @@
         {
             Id = NewId("step"),
             Type = "stepper",
-            Position = new KvizPosition { X = 520, Y = 220 },
+            // Phone-safe default: (60, 340) lands inside a ~400 CSS-px
+            // viewport and clears the top row where LED/Button/Switch spawn.
+            Position = new KvizPosition { X = 60, Y = 340 },
             Config = new()
             {
                 ["stepsPerRev"] = System.Text.Json.JsonSerializer.SerializeToElement(200),
@@ -874,7 +1636,7 @@
             },
             Bindings = new(),
         });
-        _dirty = true;
+        MarkDirty();
     }
 
     private void AddSevenSeg()
@@ -883,7 +1645,9 @@
         {
             Id = NewId("7seg"),
             Type = "seven-seg",
-            Position = new KvizPosition { X = 620, Y = 220 },
+            // Phone-safe default: (220, 340) lands next to the stepper spawn
+            // and stays under 400 CSS-px so a phone viewport shows both.
+            Position = new KvizPosition { X = 220, Y = 340 },
             Config = new()
             {
                 ["mode"]  = System.Text.Json.JsonSerializer.SerializeToElement("hex"),
@@ -891,7 +1655,282 @@
             },
             Bindings = new(),
         });
-        _dirty = true;
+        MarkDirty();
+    }
+
+    private void AddSevenSegBank()
+    {
+        _doc.Components.Add(new KvizComponent
+        {
+            Id = NewId("7segbank"),
+            Type = "seven-seg-bank",
+            Position = new KvizPosition { X = 60, Y = 340 },
+            Config = new()
+            {
+                ["digits"] = System.Text.Json.JsonSerializer.SerializeToElement(4),
+                ["color"]  = System.Text.Json.JsonSerializer.SerializeToElement("red"),
+            },
+            Bindings = new(),
+        });
+        MarkDirty();
+    }
+
+    private void AddMultiSwitch()
+    {
+        _doc.Components.Add(new KvizComponent
+        {
+            Id = NewId("mswitch"),
+            Type = "multi-switch",
+            // Phone-safe default: (60, 460) matches led-array's row — the
+            // widget can reach ~272 CSS-px wide at count=8 (8*32+16), so
+            // start on the far left to stay inside a ~400 CSS-px viewport.
+            Position = new KvizPosition { X = 60, Y = 460 },
+            Config = new()
+            {
+                ["mode"]   = System.Text.Json.JsonSerializer.SerializeToElement("per-bit"),
+                ["count"]  = System.Text.Json.JsonSerializer.SerializeToElement(4),
+                ["bounce"] = System.Text.Json.JsonSerializer.SerializeToElement(false),
+            },
+            Bindings = new(),
+        });
+        MarkDirty();
+    }
+
+    private void AddLedMatrix()
+    {
+        _doc.Components.Add(new KvizComponent
+        {
+            Id = NewId("mtx"),
+            Type = "matrix-3x3",
+            // Phone-safe default: (60, 340) — ~108 CSS-px footprint stays
+            // well inside a ~400 CSS-px viewport and clears the top row.
+            Position = new KvizPosition { X = 60, Y = 340 },
+            Config = new()
+            {
+                ["mode"]       = System.Text.Json.JsonSerializer.SerializeToElement("value"),
+                ["color"]      = System.Text.Json.JsonSerializer.SerializeToElement("red"),
+                ["brightness"] = System.Text.Json.JsonSerializer.SerializeToElement(100),
+            },
+            Bindings = new(),
+        });
+        MarkDirty();
+    }
+
+    private void AddRgbMatrix()
+    {
+        _doc.Components.Add(new KvizComponent
+        {
+            Id = NewId("rgb"),
+            Type = "matrix-3x3-rgb",
+            // Phone-safe default: (60, 460) — clears the mono-matrix row
+            // above. ~108 CSS-px footprint stays inside phone viewport.
+            Position = new KvizPosition { X = 60, Y = 460 },
+            Config = new()
+            {
+                ["mode"]       = System.Text.Json.JsonSerializer.SerializeToElement("planes"),
+                ["brightness"] = System.Text.Json.JsonSerializer.SerializeToElement(100),
+            },
+            Bindings = new(),
+        });
+        MarkDirty();
+    }
+
+    private static string RgbMatrixMode(KvizComponent c)
+        => c.Config.GetString("mode", "planes") == "raw" ? "raw" : "planes";
+
+    private static int RgbMatrixBrightness(KvizComponent c)
+        => Math.Clamp(c.Config.GetInt("brightness", 100), 0, 100);
+
+    private void OnRgbMatrixModeChange(KvizComponent c, ChangeEventArgs e)
+    {
+        var v = (e.Value?.ToString() == "raw") ? "raw" : "planes";
+        c.Config["mode"] = System.Text.Json.JsonSerializer.SerializeToElement(v);
+        // Mode change swaps pin surface — Sanitize drops any binding whose
+        // key isn't valid for the new mode (r|g|b{r}{c} ↔ red/green/blue).
+        KvizWidgetCatalog.Sanitize(_doc);
+        MarkDirty();
+    }
+
+    private void OnRgbMatrixBrightnessChange(KvizComponent c, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var n))
+        {
+            n = Math.Clamp(n, 0, 100);
+            c.Config["brightness"] = System.Text.Json.JsonSerializer.SerializeToElement(n);
+            MarkDirty();
+        }
+    }
+
+    private void AddLcd()
+    {
+        _doc.Components.Add(new KvizComponent
+        {
+            Id = NewId("lcd"),
+            Type = "lcd-hd44780",
+            // Phone-safe default: (60, 340). 16×2 default footprint is
+            // ~240 CSS-px wide, fits inside a ~400-px phone viewport.
+            Position = new KvizPosition { X = 60, Y = 340 },
+            Config = new()
+            {
+                ["mode"] = System.Text.Json.JsonSerializer.SerializeToElement("text"),
+                ["rows"] = System.Text.Json.JsonSerializer.SerializeToElement(2),
+                ["cols"] = System.Text.Json.JsonSerializer.SerializeToElement(16),
+            },
+            Bindings = new(),
+        });
+        MarkDirty();
+    }
+
+    private static string LcdMode(KvizComponent c)
+    {
+        var m = c.Config.GetString("mode", "text");
+        return m == "raw-4bit" || m == "raw-8bit" ? m : "text";
+    }
+    private static int LcdRows(KvizComponent c) => Math.Clamp(c.Config.GetInt("rows", 2), 2, 4);
+    private static int LcdCols(KvizComponent c) => Math.Clamp(c.Config.GetInt("cols", 16), 16, 20);
+
+    private void OnLcdModeChange(KvizComponent c, ChangeEventArgs e)
+    {
+        var raw = e.Value?.ToString();
+        var v = raw == "raw-4bit" ? "raw-4bit" : raw == "raw-8bit" ? "raw-8bit" : "text";
+        c.Config["mode"] = System.Text.Json.JsonSerializer.SerializeToElement(v);
+        KvizWidgetCatalog.Sanitize(_doc);
+        MarkDirty();
+    }
+
+    private void OnLcdRowsChange(KvizComponent c, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var n))
+        {
+            n = Math.Clamp(n, 2, 4);
+            c.Config["rows"] = System.Text.Json.JsonSerializer.SerializeToElement(n);
+            KvizWidgetCatalog.Sanitize(_doc);
+            MarkDirty();
+        }
+    }
+
+    private void OnLcdColsChange(KvizComponent c, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var n))
+        {
+            n = Math.Clamp(n, 16, 20);
+            c.Config["cols"] = System.Text.Json.JsonSerializer.SerializeToElement(n);
+            KvizWidgetCatalog.Sanitize(_doc);
+            MarkDirty();
+        }
+    }
+
+    private void AddKeypad()
+    {
+        _doc.Components.Add(new KvizComponent
+        {
+            Id = NewId("kpd"),
+            Type = "keypad-matrix",
+            // Phone-safe default: (60, 340) — 4×4 default footprint is
+            // ~180 CSS-px wide, fits inside a ~400-px phone viewport.
+            Position = new KvizPosition { X = 60, Y = 340 },
+            Config = new()
+            {
+                ["mode"] = System.Text.Json.JsonSerializer.SerializeToElement("decoded"),
+                ["rows"] = System.Text.Json.JsonSerializer.SerializeToElement(4),
+                ["cols"] = System.Text.Json.JsonSerializer.SerializeToElement(4),
+            },
+            Bindings = new(),
+        });
+        MarkDirty();
+    }
+
+    private static string KeypadMode(KvizComponent c)
+        => c.Config.GetString("mode", "decoded") == "raw-scan" ? "raw-scan" : "decoded";
+    private static int KeypadRows(KvizComponent c) => Math.Clamp(c.Config.GetInt("rows", 4), 3, 4);
+    private static int KeypadCols(KvizComponent c) => Math.Clamp(c.Config.GetInt("cols", 4), 3, 4);
+
+    private void OnKeypadModeChange(KvizComponent c, ChangeEventArgs e)
+    {
+        var v = (e.Value?.ToString() == "raw-scan") ? "raw-scan" : "decoded";
+        c.Config["mode"] = System.Text.Json.JsonSerializer.SerializeToElement(v);
+        // Mode swaps the pin surface entirely — Sanitize drops stale
+        // keys (`key`/`pressed` ↔ `row{N}`/`col{N}`).
+        KvizWidgetCatalog.Sanitize(_doc);
+        MarkDirty();
+    }
+
+    private void OnKeypadRowsChange(KvizComponent c, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var n))
+        {
+            n = Math.Clamp(n, 3, 4);
+            c.Config["rows"] = System.Text.Json.JsonSerializer.SerializeToElement(n);
+            KvizWidgetCatalog.Sanitize(_doc);
+            MarkDirty();
+        }
+    }
+
+    private void OnKeypadColsChange(KvizComponent c, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var n))
+        {
+            n = Math.Clamp(n, 3, 4);
+            c.Config["cols"] = System.Text.Json.JsonSerializer.SerializeToElement(n);
+            KvizWidgetCatalog.Sanitize(_doc);
+            MarkDirty();
+        }
+    }
+
+    private void AddBuzzer()
+    {
+        _doc.Components.Add(new KvizComponent
+        {
+            Id = NewId("buz"),
+            Type = "buzzer-piezo",
+            // Phone-safe default: (60, 580) — clears the RGB matrix row.
+            Position = new KvizPosition { X = 60, Y = 580 },
+            Config = new()
+            {
+                ["mode"] = System.Text.Json.JsonSerializer.SerializeToElement("freq"),
+            },
+            Bindings = new(),
+        });
+        MarkDirty();
+    }
+
+    private static string BuzzerMode(KvizComponent c)
+        => c.Config.GetString("mode", "freq") == "signal" ? "signal" : "freq";
+
+    private void OnBuzzerModeChange(KvizComponent c, ChangeEventArgs e)
+    {
+        var v = (e.Value?.ToString() == "signal") ? "signal" : "freq";
+        c.Config["mode"] = System.Text.Json.JsonSerializer.SerializeToElement(v);
+        // Mode change swaps the pin surface — Sanitize drops any binding
+        // whose key isn't valid for the new mode (freq_hz/enable ↔ signal).
+        KvizWidgetCatalog.Sanitize(_doc);
+        MarkDirty();
+    }
+
+    private static string LedMatrixMode(KvizComponent c)
+        => c.Config.GetString("mode", "value") == "raw" ? "raw" : "value";
+
+    private static int LedMatrixBrightness(KvizComponent c)
+        => Math.Clamp(c.Config.GetInt("brightness", 100), 0, 100);
+
+    private void OnLedMatrixModeChange(KvizComponent c, ChangeEventArgs e)
+    {
+        var v = (e.Value?.ToString() == "raw") ? "raw" : "value";
+        c.Config["mode"] = System.Text.Json.JsonSerializer.SerializeToElement(v);
+        // Mode change swaps the pin surface — Sanitize drops any binding
+        // whose key isn't valid for the new mode (a{r}{c}/k{r}{c} ↔ value).
+        KvizWidgetCatalog.Sanitize(_doc);
+        MarkDirty();
+    }
+
+    private void OnLedMatrixBrightnessChange(KvizComponent c, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var n))
+        {
+            n = Math.Clamp(n, 0, 100);
+            c.Config["brightness"] = System.Text.Json.JsonSerializer.SerializeToElement(n);
+            MarkDirty();
+        }
     }
 
     private static string SevenSegMode(KvizComponent c) => c.Config.GetString("mode", "raw");
@@ -911,6 +1950,18 @@
         SetCfg(c, "mode", v);
     }
 
+    private static int SevenSegBankDigits(KvizComponent c) => Math.Clamp(c.Config.GetInt("digits", 4), 2, 8);
+
+    private void OnSevenSegBankDigitsChange(KvizComponent c, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var n))
+        {
+            n = Math.Clamp(n, 2, 8);
+            c.Config["digits"] = System.Text.Json.JsonSerializer.SerializeToElement(n);
+            MarkDirty();
+        }
+    }
+
     private static int StepperStepsPerRev(KvizComponent c) => c.Config.GetInt("stepsPerRev", 200);
     private static string StepperDirection(KvizComponent c) => c.Config.GetString("direction", "auto");
 
@@ -919,7 +1970,7 @@
         if (int.TryParse(e.Value?.ToString(), out var n) && n >= 4 && n <= 4096)
         {
             c.Config["stepsPerRev"] = System.Text.Json.JsonSerializer.SerializeToElement(n);
-            _dirty = true;
+            MarkDirty();
         }
     }
 
@@ -936,7 +1987,10 @@
         {
             Id = NewId("ledarr"),
             Type = "led-array",
-            Position = new KvizPosition { X = 420, Y = 220 },
+            // Phone-safe default: 4 LEDs in a horizontal strip (~120 CSS-px
+            // wide) at (60, 460) — stays under the 400-px phone viewport
+            // and clears the stepper+7seg row.
+            Position = new KvizPosition { X = 60, Y = 460 },
             Config = new()
             {
                 ["length"] = System.Text.Json.JsonSerializer.SerializeToElement(4),
@@ -945,7 +1999,7 @@
             },
             Bindings = new(),
         });
-        _dirty = true;
+        MarkDirty();
     }
 
     private readonly Dictionary<string, bool> _switchStates = new();
@@ -961,7 +2015,7 @@
         _switchStates[ev.comp.Id] = ev.value;
         if (_coord != null && ev.comp.Bindings.TryGetValue("out", out var port) && !string.IsNullOrEmpty(port))
         {
-            _coord.Inputs.Set(port, ev.value ? "1" : "0");
+            _coord.WriteInput(port, ev.value ? "1" : "0");
         }
         await InvokeAsync(StateHasChanged);
     }
@@ -979,6 +2033,132 @@
         _switchStates.Remove(c.Id);
     }
 
+    // Multi-switch — per-lever states owned here so they survive Run/Stop
+    // cycles (same rationale as _switchStates). Array length matches the
+    // component's configured count; a mid-simulation count change reshapes
+    // the array via OnMultiSwitchCountChange.
+    private readonly Dictionary<string, bool[]> _multiSwitchStates = new();
+
+    private bool[] MultiSwitchStates(KvizComponent c)
+    {
+        var n = Math.Clamp(c.Config.GetInt("count", 4), 2, 8);
+        if (_multiSwitchStates.TryGetValue(c.Id, out var arr))
+        {
+            if (arr.Length == n) return arr;
+            // Resize preserving the leading bits — count went up (append
+            // false) or down (truncate).
+            var resized = new bool[n];
+            Array.Copy(arr, resized, Math.Min(arr.Length, n));
+            _multiSwitchStates[c.Id] = resized;
+            return resized;
+        }
+        var fresh = new bool[n];
+        _multiSwitchStates[c.Id] = fresh;
+        return fresh;
+    }
+
+    private async Task OnMultiSwitchToggle((KvizComponent comp, int index, bool value) ev)
+    {
+        var arr = MultiSwitchStates(ev.comp);
+        if (ev.index < 0 || ev.index >= arr.Length) return;
+        arr[ev.index] = ev.value;
+        PushMultiSwitchToCoordinator(ev.comp, arr);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // Emit the current per-lever state through the coordinator. Handles
+    // both variants: per-bit publishes one bit per bound "out{i}" pin;
+    // vector assembles an MSB-first bit string on "value". When bounce
+    // is enabled and vector-mode has a wired port, the coordinator's
+    // FIFO chatter overlay wobbles the value briefly on each change
+    // (raw per-bit callers stay chatter-free — see the plan invariant).
+    private void PushMultiSwitchToCoordinator(KvizComponent c, bool[] states)
+    {
+        if (_coord == null) return;
+        var bounce = c.Config.GetBool("bounce", false);
+        var mode = c.Config.GetString("mode", "per-bit");
+        if (mode == "vector")
+        {
+            if (!c.Bindings.TryGetValue("value", out var port) || string.IsNullOrEmpty(port)) return;
+            var chars = new char[states.Length];
+            for (int i = 0; i < states.Length; i++)
+                chars[states.Length - 1 - i] = states[i] ? '1' : '0';
+            var bits = new string(chars);
+            _coord.WriteInput(port, bits);
+            // Bounce needs a raw port name — sliced vector bindings skip
+            // bounce (deferred, same rationale as ButtonWidget).
+            bool sliced = port.IndexOf('[') >= 0;
+            if (bounce && !sliced)
+            {
+                // 6-tick alternation between prior and new bit strings —
+                // reuse the existing EnqueueBounce FIFO by simulating a
+                // "flap" on the whole vector.
+                var flap = InvertBits(bits);
+                _coord.EnqueueBounce(port, new[] { flap, bits, flap, bits, flap, bits });
+            }
+        }
+        else
+        {
+            for (int i = 0; i < states.Length; i++)
+            {
+                if (!c.Bindings.TryGetValue($"out{i}", out var port) || string.IsNullOrEmpty(port)) continue;
+                var bit = states[i] ? "1" : "0";
+                _coord.WriteInput(port, bit);
+                // Raw per-bit variant intentionally never debounces — the
+                // handoff invariant is that students see chatter unless
+                // they opt in explicitly via the assisted vector mode.
+            }
+        }
+    }
+
+    private static string InvertBits(string bits)
+    {
+        var chars = new char[bits.Length];
+        for (int i = 0; i < bits.Length; i++)
+            chars[i] = bits[i] == '1' ? '0' : '1';
+        return new string(chars);
+    }
+
+    private static string MultiSwitchMode(KvizComponent c) =>
+        c.Config.GetString("mode", "per-bit") == "vector" ? "vector" : "per-bit";
+
+    private static int MultiSwitchCount(KvizComponent c) =>
+        Math.Clamp(c.Config.GetInt("count", 4), 2, 8);
+
+    private static bool MultiSwitchBounce(KvizComponent c) => c.Config.GetBool("bounce", false);
+
+    private void OnMultiSwitchModeChange(KvizComponent c, ChangeEventArgs e)
+    {
+        var v = (e.Value?.ToString() == "vector") ? "vector" : "per-bit";
+        c.Config["mode"] = System.Text.Json.JsonSerializer.SerializeToElement(v);
+        // Mode change swaps the pin surface — Sanitize drops any binding
+        // whose key isn't valid for the new mode (out{i} ↔ value).
+        KvizWidgetCatalog.Sanitize(_doc);
+        MarkDirty();
+    }
+
+    private void OnMultiSwitchCountChange(KvizComponent c, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var n))
+        {
+            n = Math.Clamp(n, 2, 8);
+            c.Config["count"] = System.Text.Json.JsonSerializer.SerializeToElement(n);
+            // Count shrink invalidates trailing out{i} bindings — Sanitize
+            // catches those. Also reshape the state array so the widget's
+            // next render sees the right number of levers.
+            KvizWidgetCatalog.Sanitize(_doc);
+            _ = MultiSwitchStates(c);
+            MarkDirty();
+        }
+    }
+
+    private void OnMultiSwitchBounceChange(KvizComponent c, ChangeEventArgs e)
+    {
+        var v = e.Value is bool b ? b : (e.Value?.ToString() == "on" || e.Value?.ToString() == "True");
+        c.Config["bounce"] = System.Text.Json.JsonSerializer.SerializeToElement(v);
+        MarkDirty();
+    }
+
     private static int LedArrayLength(KvizComponent c) => c.Config.GetInt("length", 4);
     private static string LedArrayOrientation(KvizComponent c) => c.Config.GetString("orientation", "h");
 
@@ -987,7 +2167,7 @@
         if (int.TryParse(e.Value?.ToString(), out var n) && n >= 1 && n <= 64)
         {
             c.Config["length"] = System.Text.Json.JsonSerializer.SerializeToElement(n);
-            _dirty = true;
+            MarkDirty();
         }
     }
 
@@ -997,15 +2177,17 @@
     private void RemoveSelected()
     {
         if (_selectedId == null) return;
+        _switchStates.Remove(_selectedId);
+        _multiSwitchStates.Remove(_selectedId);
         _doc.Components.RemoveAll(c => c.Id == _selectedId);
         _selectedId = null;
-        _dirty = true;
+        MarkDirty();
     }
 
     private void SetCfg(KvizComponent c, string key, string value)
     {
         c.Config.Put(key, value);
-        _dirty = true;
+        MarkDirty();
     }
 
     private static string LedColor(KvizComponent c) => c.Config.GetString("color", "red");
@@ -1023,12 +2205,238 @@
     {
         bool on = e.Value is bool b ? b : false;
         c.Config.Put("bounce", on);
-        _dirty = true;
+        MarkDirty();
     }
 
-    private void MarkDirty() { _dirty = true; }
+    // Single mutation-commit hook. Every mutation site funnels through
+    // here (many still say `_dirty = true` inline — route them via
+    // MarkDirty() so snapshot capture stays uniform). The previous
+    // baseline is pushed onto the undo stack, then _lastSnapshot is
+    // re-baselined against the current post-mutation doc. Redo is
+    // invalidated by any new user action.
+    private void MarkDirty()
+    {
+        RecomputeCanvasBounds();
+        _undo.AddLast(_lastSnapshot);
+        while (_undo.Count > UndoCap) _undo.RemoveFirst();
+        _lastSnapshot = KvizSerializer.Serialize(_doc);
+        _redo.Clear();
+        _dirty = (_lastSnapshot != _savedSnapshot);
+    }
 
-    private void OnSelectedIdChanged(string? id) { _selectedId = id; }
+    // Widgets are absolutely positioned inside .visual-page__canvas-wrap,
+    // which is inline-styled to Canvas.Width × Canvas.Height. Auto-fit
+    // model: the canvas is sized to the widget bounding box + padding,
+    // rounded up to a CanvasGrowStep boundary so pixel-scale drag doesn't
+    // re-fire size changes. Grows when a widget moves past the edge;
+    // shrinks when the outermost widget moves inward or is deleted
+    // (with a 2-step hysteresis to avoid oscillation). Minimum floor
+    // stays at 1200×800 so the empty canvas still feels roomy.
+    private const int WidgetOverflowPad = 240;
+    private const int CanvasGrowStep    = 400;
+    private const int MinCanvasW        = 1200;
+    private const int MinCanvasH        = 800;
+
+    private void RecomputeCanvasBounds()
+    {
+        double maxX = 0, maxY = 0;
+        foreach (var c in _doc.Components)
+        {
+            if (c.Position.X > maxX) maxX = c.Position.X;
+            if (c.Position.Y > maxY) maxY = c.Position.Y;
+        }
+        int neededW = Math.Max((int)Math.Ceiling(maxX) + WidgetOverflowPad, MinCanvasW);
+        int neededH = Math.Max((int)Math.Ceiling(maxY) + WidgetOverflowPad, MinCanvasH);
+        int targetW = ((neededW / CanvasGrowStep) + 1) * CanvasGrowStep;
+        int targetH = ((neededH / CanvasGrowStep) + 1) * CanvasGrowStep;
+
+        bool changed = false;
+        // Grow immediately when a widget passes the edge.
+        if (targetW > _doc.Canvas.Width)
+        {
+            _doc.Canvas.Width = targetW;
+            changed = true;
+        }
+        // Shrink only when the gap exceeds 2 * step so tiny drags don't
+        // ping-pong the canvas size on every mutation.
+        else if (_doc.Canvas.Width - targetW >= 2 * CanvasGrowStep)
+        {
+            _doc.Canvas.Width = targetW;
+            changed = true;
+        }
+
+        if (targetH > _doc.Canvas.Height)
+        {
+            _doc.Canvas.Height = targetH;
+            changed = true;
+        }
+        else if (_doc.Canvas.Height - targetH >= 2 * CanvasGrowStep)
+        {
+            _doc.Canvas.Height = targetH;
+            changed = true;
+        }
+
+        if (changed) _pendingPanZoomInvalidate = true;
+    }
+
+    private void UndoOnce()
+    {
+        if (_undo.Count == 0) return;
+        _redo.AddLast(_lastSnapshot);
+        var prev = _undo.Last!.Value;
+        _undo.RemoveLast();
+        var restored = KvizSerializer.Deserialize(prev);
+        if (restored != null) _doc = restored;
+        _lastSnapshot = prev;
+        _dirty = (_lastSnapshot != _savedSnapshot);
+        // Widget IDs may not exist in the restored doc — safer to
+        // drop selection than to reference a stale id.
+        _selectedId = null;
+        StateHasChanged();
+    }
+
+    private void RedoOnce()
+    {
+        if (_redo.Count == 0) return;
+        _undo.AddLast(_lastSnapshot);
+        while (_undo.Count > UndoCap) _undo.RemoveFirst();
+        var next = _redo.Last!.Value;
+        _redo.RemoveLast();
+        var restored = KvizSerializer.Deserialize(next);
+        if (restored != null) _doc = restored;
+        _lastSnapshot = next;
+        _dirty = (_lastSnapshot != _savedSnapshot);
+        _selectedId = null;
+        StateHasChanged();
+    }
+
+    // R3-6 sub-task B — revert every in-memory change back to the
+    // last-saved snapshot. Not destructive: the discarded state is
+    // pushed to the undo stack first so the user can regret the
+    // revert with Ctrl/Cmd+Z. Idempotent when already clean.
+    private void ClearChanges()
+    {
+        if (_lastSnapshot == _savedSnapshot) return;
+        _undo.AddLast(_lastSnapshot);
+        while (_undo.Count > UndoCap) _undo.RemoveFirst();
+        var restored = KvizSerializer.Deserialize(_savedSnapshot);
+        if (restored != null) _doc = restored;
+        _lastSnapshot = _savedSnapshot;
+        _redo.Clear();
+        _dirty = false;
+        _selectedId = null;
+        ToastService.Notify(Message(
+            Traductor.T("COMMON_MESSAGE"),
+            Traductor.T("VISUAL_CLEAR_CHANGES_TOAST"),
+            ToastType.Info));
+        StateHasChanged();
+    }
+
+    private void OnSelectedIdChanged(string? id)
+    {
+        var isNew = id is not null && id != _selectedId;
+        _selectedId = id;
+        if (isNew) _pendingPropsScroll = id;
+    }
+
+    // Deferred until OnAfterRenderAsync so the props card's DOM exists when
+    // the JS reads its rect — Razor renders the card in the same pass that
+    // sets _selectedId, but Blazor commits the render before this hook runs.
+    private string? _pendingPropsScroll;
+
+    // Pan/zoom + fullscreen state. Pan-zoom is a JS-managed transform on
+    // .kviz-canvas driven by the shared kmilaAttachPanZoom library (same
+    // one Schematic + Waveform use). Attach happens on the first render
+    // pass; detach happens on Dispose. When fullscreen toggles the panel
+    // pins to the viewport via CSS, but the pan-zoom handle survives —
+    // no reattach needed because the root element identity stays the same.
+    private int _panZoomId = -1;
+    private bool _panZoomAttached;
+    private bool _isFullscreen;
+    // Set by MarkDirty() when the canvas dims changed (widget dragged past
+    // the previous extent). Consumed on the next render pass to nudge the
+    // pan-zoom lib to re-measure its cached bounds so the fresh inline
+    // width/height on .visual-page__canvas-wrap is honoured.
+    private bool _pendingPanZoomInvalidate;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_panZoomAttached)
+        {
+            try
+            {
+                _panZoomId = await JS.InvokeAsync<int>("kmilaAttachPanZoom",
+                    ".visual-page__canvas-stack",
+                    new
+                    {
+                        targetSelector = ".visual-page__canvas-wrap",
+                        minScale = 0.25,
+                        maxScale = 4.0,
+                        fitOnAttach = false,
+                        // Widgets own their own drag; keep pan-zoom off them.
+                        skipTargetSelectors = new[] { ".kviz-widget" },
+                        // Plain mouse wheel pans (Ctrl+wheel still zooms).
+                        panOnWheel = true,
+                        // Smaller clamp than the default 80 px — widgets
+                        // near the far edge of an auto-grown canvas need
+                        // to stay reachable on phone-sized viewports.
+                        minVisible = 24,
+                    });
+                _panZoomAttached = _panZoomId > 0;
+            }
+            catch { /* JS not ready during prerender / SSR — retry next pass */ }
+        }
+
+        if (_pendingPanZoomInvalidate && _panZoomId > 0)
+        {
+            _pendingPanZoomInvalidate = false;
+            try { await JS.InvokeVoidAsync("kmilaPanZoomInvalidateBounds", _panZoomId); }
+            catch { /* JS not ready — the ResizeObserver on the wrap picks up the growth anyway */ }
+        }
+
+        if (_pendingPropsScroll is not null)
+        {
+            var id = _pendingPropsScroll;
+            _pendingPropsScroll = null;
+            try
+            {
+                await JS.InvokeVoidAsync("kmilaVisualEnsurePropsVisible", id);
+            }
+            catch { /* JS not ready during prerender / SSR paths */ }
+        }
+    }
+
+    private async Task ZoomBy(double factor)
+    {
+        if (_panZoomId <= 0) return;
+        try { await JS.InvokeVoidAsync("kmilaPanZoomZoom", _panZoomId, factor); }
+        catch { }
+    }
+
+    private async Task ResetZoom()
+    {
+        if (_panZoomId <= 0) return;
+        try { await JS.InvokeVoidAsync("kmilaPanZoomReset", _panZoomId); }
+        catch { }
+    }
+
+    private async Task ToggleFullscreen()
+    {
+        _isFullscreen = !_isFullscreen;
+        StateHasChanged();
+        // The transform on the canvas anchors to the pre-fullscreen root
+        // rect; once the parent snaps to viewport size, clamp/fit needs to
+        // rerun so the content doesn't leave gaps or slip off-viewport.
+        if (_panZoomId > 0)
+        {
+            try
+            {
+                await Task.Yield();  // let the class flip commit first
+                await JS.InvokeVoidAsync("kmilaPanZoomReset", _panZoomId);
+            }
+            catch { }
+        }
+    }
 
     private async Task SaveAsync()
     {
@@ -1059,6 +2467,9 @@
             _kvizFile.Project = _project;
             await ProjectFilesRepo.UpdateAsync(_kvizFile);
         }
+        // Re-baseline: what's now on disk matches _lastSnapshot. Keep
+        // undo/redo intact — undoing past a save is a legitimate flow.
+        _savedSnapshot = _lastSnapshot;
         _dirty = false;
     }
 
@@ -1069,7 +2480,15 @@
 
     public void Dispose()
     {
+        Traductor.StaticOnLangChanged -= OnLanguageChanged;
         StopRepaintTicker();
         _coord?.Dispose();
+        if (_panZoomId > 0)
+        {
+            try { _ = JS.InvokeVoidAsync("kmilaDetachPanZoom", _panZoomId).AsTask(); }
+            catch { }
+            _panZoomId = -1;
+            _panZoomAttached = false;
+        }
     }
 }

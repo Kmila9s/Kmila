@@ -40,27 +40,29 @@
 
         @* --- Build status chip --- *@
         @{ var (buildValue, buildVariant, buildClickable) = GetBuildDisplay(); }
-        <button type="button"
-                class="kmila-status-bar__stat kmila-status-bar__stat--@buildVariant"
-                disabled="@(!buildClickable)"
-                @onclick="() => DockState.SetActive(EditorTab.Output)"
-                title="@Traductor.T("STATUS_BUILD_TOOLTIP")">
-            <span class="kmila-status-bar__label">@Traductor.T("STATUS_BUILD"):</span>
-            <span class="kmila-status-bar__value">@buildValue</span>
-        </button>
+        <KmilaTooltip TextKey="STATUS_BUILD_TOOLTIP" Placement="Top">
+            <button type="button"
+                    class="kmila-status-bar__stat kmila-status-bar__stat--@buildVariant"
+                    disabled="@(!buildClickable)"
+                    @onclick="() => DockState.SetActive(EditorTab.Output)">
+                <span class="kmila-status-bar__label">@Traductor.T("STATUS_BUILD"):</span>
+                <span class="kmila-status-bar__value">@buildValue</span>
+            </button>
+        </KmilaTooltip>
 
         @* --- Resource % chip (only when both FPGA + entities are available) --- *@
         @if (ResourcePercent is double pct && SelectedFPGA?.FPGA?.Model is string model)
         {
             var variant = pct >= 100 ? "danger" : pct >= 80 ? "warning" : pct >= 60 ? "info" : "success";
-            <button type="button"
-                    class="kmila-status-bar__stat kmila-status-bar__stat--@variant"
-                    @onclick="() => DockState.SetActive(EditorTab.Entities)"
-                    title="@Traductor.T("STATUS_RESOURCE_TOOLTIP")">
-                <span class="kmila-status-bar__value">@pct.ToString("F0")%</span>
-                <span class="kmila-status-bar__muted">@Traductor.T("STATUS_OF")</span>
-                <span class="kmila-status-bar__mono">@model</span>
-            </button>
+            <KmilaTooltip TextKey="STATUS_RESOURCE_TOOLTIP" Placement="Top">
+                <button type="button"
+                        class="kmila-status-bar__stat kmila-status-bar__stat--@variant"
+                        @onclick="() => DockState.SetActive(EditorTab.Entities)">
+                    <span class="kmila-status-bar__value">@pct.ToString("F0")%</span>
+                    <span class="kmila-status-bar__muted">@Traductor.T("STATUS_OF")</span>
+                    <span class="kmila-status-bar__mono">@model</span>
+                </button>
+            </KmilaTooltip>
         }
 
         @* --- Sim status chip (read-only; reflects state) --- *@

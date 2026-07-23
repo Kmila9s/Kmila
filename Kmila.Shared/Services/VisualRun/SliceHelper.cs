@@ -14,11 +14,14 @@ namespace Kmila.Shared.Services.VisualRun;
 // 4-bit value 0xA renders as "1010" (bit3 bit2 bit1 bit0). A slice of
 // "[2]" picks position 2 from the right = '0', "[3:1]" picks "101".
 //
-// This is read-only at the moment — output widgets can consume a slice
-// of a multi-bit OUT port, but input widgets (Switch, Button) still
-// drive whole ports. Write-side merging (multiple inputs claiming the
-// same port at different bits) is deferred — input-side fan-in needs
-// coordinator-level overlay logic that's a bigger lift.
+// Read side: output widgets consume a slice of a multi-bit OUT port
+// via <see cref="Extract"/>.
+// Write side (Ring 5, 2026-07-14): input widgets can now bind their
+// Out pins to a slice of a multi-bit IN port. The coordinator stores
+// per-slice contributions and composes them via <see cref="Compose"/>
+// at drain time. Disjoint slices from different widgets pack into one
+// port cleanly; overlaps behave as last-writer-wins on the overlap
+// bits (surface as a wiring warning in the modal, not enforced here).
 public static class SliceHelper
 {
     /// <summary>
@@ -89,6 +92,67 @@ public static class SliceHelper
     /// <summary>Convenience: render a slice back to canonical "[H:L]" or "[N]" text.</summary>
     public static string Format(BitSlice slice)
         => slice.High == slice.Low ? $"[{slice.High}]" : $"[{slice.High}:{slice.Low}]";
+
+    /// <summary>
+    /// Assembles a full port bit-string (MSB on left, <paramref name="portWidth"/>
+    /// chars) from a set of per-slice contributions. Undriven bits default
+    /// to '0'. Overlapping slices resolve by dictionary iteration order —
+    /// callers that need strict enforcement should validate via
+    /// <see cref="DetectOverlap"/> first.
+    /// </summary>
+    /// <param name="portWidth">Width of the target packed vector in bits.</param>
+    /// <param name="contributions">Slice → value pairs. Value is treated as MSB-on-left.</param>
+    public static string Compose(int portWidth, IEnumerable<KeyValuePair<BitSlice, string>> contributions)
+    {
+        if (portWidth <= 0) return string.Empty;
+        var buf = new char[portWidth];
+        for (int i = 0; i < portWidth; i++) buf[i] = '0';
+        foreach (var kv in contributions)
+        {
+            var slice = kv.Key;
+            var raw = kv.Value ?? string.Empty;
+            int sw = slice.Width;
+            if (sw <= 0) continue;
+            // Normalize the contribution to the slice's width: shorter → pad
+            // with leading '0'; longer → keep the trailing sw chars.
+            string norm = raw.Length == sw
+                ? raw
+                : raw.Length < sw
+                    ? raw.PadLeft(sw, '0')
+                    : raw[^sw..];
+            // Slice bits are LSB-numbered. norm[0] is the MSB char (slice.High);
+            // string layout is MSB-on-left so bit N maps to char index
+            // (portWidth - 1 - N).
+            for (int b = 0; b < sw; b++)
+            {
+                int bit = slice.High - b;
+                if (bit < 0 || bit >= portWidth) continue;
+                int pos = portWidth - 1 - bit;
+                buf[pos] = norm[b];
+            }
+        }
+        return new string(buf);
+    }
+
+    /// <summary>
+    /// Reports overlapping bit ranges within a set of slices. Returns the
+    /// list of colliding (a, b) pairs where a.High/Low intersects b.High/Low.
+    /// Callers use this to raise wiring warnings in the modal.
+    /// </summary>
+    public static IReadOnlyList<(BitSlice a, BitSlice b)> DetectOverlap(IReadOnlyList<BitSlice> slices)
+    {
+        var collisions = new List<(BitSlice, BitSlice)>();
+        for (int i = 0; i < slices.Count; i++)
+            for (int j = i + 1; j < slices.Count; j++)
+            {
+                var a = slices[i];
+                var b = slices[j];
+                int loMax = Math.Max(a.Low, b.Low);
+                int hiMin = Math.Min(a.High, b.High);
+                if (loMax <= hiMin) collisions.Add((a, b));
+            }
+        return collisions;
+    }
 }
 
 /// <summary>

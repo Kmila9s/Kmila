@@ -75,50 +75,83 @@ else
                 @foreach (var m in _modes)
                 {
                     var isActive = _mode == m.Mode;
-                    <button type="button" role="tab" aria-selected="@isActive"
-                            class="schematic-mode @(isActive ? "is-active" : "")"
-                            @onclick="() => SetMode(m.Mode)"
-                            title="@Traductor.T(m.HintKey)">
-                        <Icon Name="@m.Icon" />
-                        <span>@Traductor.T(m.LabelKey)</span>
-                    </button>
+                    <KmilaTooltip TextKey="@m.HintKey" Placement="Bottom">
+                        <button type="button" role="tab" aria-selected="@isActive"
+                                class="schematic-mode @(isActive ? "is-active" : "")"
+                                @onclick="() => SetMode(m.Mode)">
+                            <Icon Name="@m.Icon" />
+                            <span>@Traductor.T(m.LabelKey)</span>
+                        </button>
+                    </KmilaTooltip>
                 }
             </div>
             <div class="schematic-viewer__actions">
-                <button type="button"
-                        class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm @(_selectMode ? "is-active" : "")"
-                        @onclick="ToggleSelectMode"
-                        title="@Traductor.T("SCHEMATIC_SELECT_MODE")">
-                    <Icon Name="IconName.UiChecksGrid" />
-                    @if (HasMultiSelection)
-                    {
-                        <span class="schematic-toolbar__count">@(_selCells.Count + _selNets.Count + _selPortNets.Count)</span>
-                    }
-                </button>
-                <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm" @onclick="ShuffleColours" title="@Traductor.T("SCHEMATIC_SHUFFLE_COLOURS")">
-                    <Icon Name="IconName.Palette" />
-                </button>
-                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--accent kmila-btn--sm"
-                        @onclick="OpenExportModalAsync"
-                        title="@Traductor.T("SCHEMATIC_EXPORT_TITLE")">
-                    <Icon Name="IconName.Download" />
-                    <span>@Traductor.T("SCHEMATIC_EXPORT_BUTTON")</span>
-                </button>
-                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm" @onclick="() => Zoom(1.25)" title="@Traductor.T("WAVEFORM_ZOOM_IN")">
-                    <Icon Name="IconName.ZoomIn" />
-                </button>
-                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm" @onclick="() => Zoom(0.8)" title="@Traductor.T("WAVEFORM_ZOOM_OUT")">
-                    <Icon Name="IconName.ZoomOut" />
-                </button>
-                <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm" @onclick="ResetZoom" title="@Traductor.T("WAVEFORM_ZOOM_RESET")">
-                    <Icon Name="IconName.ArrowCounterclockwise" />
-                </button>
-                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm @(_isFullscreen ? "is-active" : "")"
-                        @onclick="ToggleFullscreen"
-                        title="@Traductor.T(_isFullscreen ? "SCHEMATIC_FULLSCREEN_EXIT" : "SCHEMATIC_FULLSCREEN_ENTER")"
-                        aria-label="@Traductor.T(_isFullscreen ? "SCHEMATIC_FULLSCREEN_EXIT" : "SCHEMATIC_FULLSCREEN_ENTER")">
-                    <Icon Name="@(_isFullscreen ? IconName.FullscreenExit : IconName.ArrowsFullscreen)" />
-                </button>
+                <div class="kmila-export-pill" role="radiogroup"
+                     aria-label="@Traductor.T("SCHEMATIC_MODE_TITLE")"
+                     data-render-mode="@_renderMode"
+                     title="@Traductor.T("SCHEMATIC_MODE_TITLE")">
+                    <button type="button" role="radio"
+                            aria-checked="@(_renderMode == SchematicRenderMode.Human)"
+                            data-mode-option="Human"
+                            class="kmila-export-pill__opt @(_renderMode == SchematicRenderMode.Human ? "is-active" : "")"
+                            @onclick="() => SetRenderMode(SchematicRenderMode.Human)">
+                        <Icon Name="IconName.PersonHearts" />
+                        <span>@Traductor.T("SCHEMATIC_MODE_HUMAN")</span>
+                    </button>
+                    <button type="button" role="radio"
+                            aria-checked="@(_renderMode == SchematicRenderMode.Raw)"
+                            data-mode-option="Raw"
+                            class="kmila-export-pill__opt @(_renderMode == SchematicRenderMode.Raw ? "is-active" : "")"
+                            @onclick="() => SetRenderMode(SchematicRenderMode.Raw)">
+                        <Icon Name="IconName.Diagram2" />
+                        <span>@Traductor.T("SCHEMATIC_MODE_RAW")</span>
+                    </button>
+                </div>
+                <KmilaTooltip TextKey="SCHEMATIC_SELECT_MODE">
+                    <button type="button"
+                            class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm @(_selectMode ? "is-active" : "")"
+                            @onclick="ToggleSelectMode">
+                        <Icon Name="IconName.UiChecksGrid" />
+                        @if (HasMultiSelection)
+                        {
+                            <span class="schematic-toolbar__count">@(_selCells.Count + _selNets.Count + _selPortNets.Count)</span>
+                        }
+                    </button>
+                </KmilaTooltip>
+                <KmilaTooltip TextKey="SCHEMATIC_SHUFFLE_COLOURS">
+                    <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm" @onclick="ShuffleColours" aria-label="@Traductor.T("SCHEMATIC_SHUFFLE_COLOURS")">
+                        <Icon Name="IconName.Palette" />
+                    </button>
+                </KmilaTooltip>
+                <KmilaTooltip TextKey="SCHEMATIC_EXPORT_TITLE">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--accent kmila-btn--sm"
+                            @onclick="OpenExportModalAsync">
+                        <Icon Name="IconName.Download" />
+                        <span>@Traductor.T("SCHEMATIC_EXPORT_BUTTON")</span>
+                    </button>
+                </KmilaTooltip>
+                <KmilaTooltip TextKey="WAVEFORM_ZOOM_IN">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm" @onclick="() => Zoom(1.25)" aria-label="@Traductor.T("WAVEFORM_ZOOM_IN")">
+                        <Icon Name="IconName.ZoomIn" />
+                    </button>
+                </KmilaTooltip>
+                <KmilaTooltip TextKey="WAVEFORM_ZOOM_OUT">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm" @onclick="() => Zoom(0.8)" aria-label="@Traductor.T("WAVEFORM_ZOOM_OUT")">
+                        <Icon Name="IconName.ZoomOut" />
+                    </button>
+                </KmilaTooltip>
+                <KmilaTooltip TextKey="WAVEFORM_ZOOM_RESET">
+                    <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm" @onclick="ResetZoom" aria-label="@Traductor.T("WAVEFORM_ZOOM_RESET")">
+                        <Icon Name="IconName.ArrowCounterclockwise" />
+                    </button>
+                </KmilaTooltip>
+                <KmilaTooltip TextKey="@(_isFullscreen ? "SCHEMATIC_FULLSCREEN_EXIT" : "SCHEMATIC_FULLSCREEN_ENTER")">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm @(_isFullscreen ? "is-active" : "")"
+                            @onclick="ToggleFullscreen"
+                            aria-label="@Traductor.T(_isFullscreen ? "SCHEMATIC_FULLSCREEN_EXIT" : "SCHEMATIC_FULLSCREEN_ENTER")">
+                        <Icon Name="@(_isFullscreen ? IconName.FullscreenExit : IconName.ArrowsFullscreen)" />
+                    </button>
+                </KmilaTooltip>
             </div>
         </header>
 
@@ -141,32 +174,35 @@ else
                 </span>
                 @if (Replay.IsLivePaused)
                 {
-                    <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--sm"
-                            title="@Traductor.T("SIM_RESUME")"
-                            aria-label="@Traductor.T("SIM_RESUME")"
-                            @onclick="() => Replay.LiveResume()">
-                        <Icon Name="IconName.PlayFill" />
-                        <span>@Traductor.T("SIM_RESUME")</span>
-                    </button>
+                    <KmilaTooltip TextKey="SIM_RESUME">
+                        <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--sm"
+                                aria-label="@Traductor.T("SIM_RESUME")"
+                                @onclick="() => Replay.LiveResume()">
+                            <Icon Name="IconName.PlayFill" />
+                            <span>@Traductor.T("SIM_RESUME")</span>
+                        </button>
+                    </KmilaTooltip>
                 }
                 else
                 {
-                    <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--sm"
-                            title="@Traductor.T("SIM_PAUSE")"
-                            aria-label="@Traductor.T("SIM_PAUSE")"
-                            @onclick="() => Replay.LivePause()">
-                        <Icon Name="IconName.PauseFill" />
-                        <span>@Traductor.T("SIM_PAUSE")</span>
-                    </button>
+                    <KmilaTooltip TextKey="SIM_PAUSE">
+                        <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--sm"
+                                aria-label="@Traductor.T("SIM_PAUSE")"
+                                @onclick="() => Replay.LivePause()">
+                            <Icon Name="IconName.PauseFill" />
+                            <span>@Traductor.T("SIM_PAUSE")</span>
+                        </button>
+                    </KmilaTooltip>
                 }
-                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
-                        title="@Traductor.T("CONCEPTS_PLAYER_STEP_FORWARD")"
-                        aria-label="@Traductor.T("CONCEPTS_PLAYER_STEP_FORWARD")"
-                        disabled="@(!Replay.IsLivePaused)"
-                        @onclick="() => Replay.LiveStep()">
-                    <Icon Name="IconName.SkipEnd" />
-                    <span>@Traductor.T("CONCEPTS_PLAYER_STEP_FORWARD")</span>
-                </button>
+                <KmilaTooltip TextKey="CONCEPTS_PLAYER_STEP_FORWARD">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                            aria-label="@Traductor.T("CONCEPTS_PLAYER_STEP_FORWARD")"
+                            disabled="@(!Replay.IsLivePaused)"
+                            @onclick="() => Replay.LiveStep()">
+                        <Icon Name="IconName.SkipEnd" />
+                        <span>@Traductor.T("CONCEPTS_PLAYER_STEP_FORWARD")</span>
+                    </button>
+                </KmilaTooltip>
                 <span class="schematic-debug-bar__hint">@Traductor.T("SCHEMATIC_DEBUG_LIVE_HINT")</span>
             </div>
         }
@@ -217,7 +253,12 @@ else
                     if (wire.ToCellId != null && IsCellHidden(wire.ToCellId)) continue;
                     var path = BuildWirePath(wire);
                     var stroke = WireColour(net);
-                    int sw = net.Kind == NetKind.Bus ? 3 : 2;
+                    // Human mode thickens both bus and wire strokes so a
+                    // dense diagram is easier to trace at a glance. Raw
+                    // keeps the original tighter values.
+                    int sw = _renderMode == SchematicRenderMode.Human
+                        ? (net.Kind == NetKind.Bus ? 4 : 3)
+                        : (net.Kind == NetKind.Bus ? 3 : 2);
                     var classes = WireCssClasses(net, wire);
                     <path class="@classes" d="@path" fill="none" stroke="@stroke"
                           stroke-width="@sw" stroke-linejoin="round"
@@ -290,11 +331,13 @@ else
                 <aside class="schematic-info" style="@_infoStyle" @onclick:stopPropagation="true">
                     <header class="schematic-info__head">
                         <strong>@_selectionTitle</strong>
-                        <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
-                                @onclick="ClearSelection"
-                                title="@Traductor.T("SCHEMATIC_CLOSE_INFO")">
-                            <Icon Name="IconName.XLg" />
-                        </button>
+                        <KmilaTooltip TextKey="SCHEMATIC_CLOSE_INFO">
+                            <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
+                                    @onclick="ClearSelection"
+                                    aria-label="@Traductor.T("SCHEMATIC_CLOSE_INFO")">
+                                <Icon Name="IconName.XLg" />
+                            </button>
+                        </KmilaTooltip>
                     </header>
 
                     @if (_selectionDoc is not null)
@@ -450,6 +493,22 @@ else
     private HashSet<string> _selCells = new();
     private HashSet<string> _selNets = new();
     private HashSet<string> _selPortNets = new();
+
+    /// <summary>
+    /// Human vs. Raw render mode for the on-screen viewer. Human is
+    /// the default so the schematic opens looking legible; Raw shows
+    /// every internal label and thin wire. Sticky per component instance
+    /// (session-local) — no AppSettings persistence in v1. Also seeds
+    /// the export modal's initial mode so the export matches the view.
+    /// </summary>
+    private SchematicRenderMode _renderMode = SchematicRenderMode.Human;
+
+    private void SetRenderMode(SchematicRenderMode mode)
+    {
+        if (_renderMode == mode) return;
+        _renderMode = mode;
+        StateHasChanged();
+    }
 
     /// <summary>Per-cell colour assignments. Cells of the same kind share
     /// a hue, vary by lightness across instances. Reseeded on every
@@ -1372,6 +1431,8 @@ else
         var col = CellColour(c);
         string label = CellLabel(c);
         var ci = System.Globalization.CultureInfo.InvariantCulture;
+        bool human = _renderMode == SchematicRenderMode.Human;
+        int labelFont = human ? 14 : 11;
         var sb = new System.Text.StringBuilder();
         foreach (var d in GateGlyphs.Paths(c.Kind))
         {
@@ -1381,14 +1442,18 @@ else
         {
             sb.Append($"<text x=\"{GateGlyphs.LabelX(c.Kind).ToString("0.##", ci)}\" ")
               .Append($"y=\"{(GateGlyphs.Height / 2 + 4).ToString("0.##", ci)}\" ")
-              .Append("text-anchor=\"middle\" font-size=\"11\" font-weight=\"600\" ")
+              .Append($"text-anchor=\"middle\" font-size=\"{labelFont}\" font-weight=\"600\" ")
               .Append("font-family=\"ui-monospace, Menlo, monospace\" ")
               .Append($"fill=\"{col.Label}\">")
               .Append(System.Net.WebUtility.HtmlEncode(label))
               .Append("</text>");
         }
+        // Human mode suppresses the tiny grey output-net label above each
+        // cell — a dense diagram gets much easier to scan when only the
+        // gate labels remain. Raw keeps the label so students can still
+        // trace intermediate net names.
         var outName = CellOutputName(c);
-        if (!string.IsNullOrEmpty(outName))
+        if (!human && !string.IsNullOrEmpty(outName))
         {
             sb.Append($"<text x=\"{(GateGlyphs.Width / 2).ToString("0.##", ci)}\" y=\"-6\" ")
               .Append("text-anchor=\"middle\" font-size=\"9\" ")
@@ -1406,14 +1471,16 @@ else
         string anchor = isInput ? "start" : "end";
         string colour = PortColour(port);
         var ci = System.Globalization.CultureInfo.InvariantCulture;
+        bool human = _renderMode == SchematicRenderMode.Human;
+        int portFont = human ? 14 : 11;
         var sb = new System.Text.StringBuilder();
         sb.Append($"<circle cx=\"{pos.X.ToString("0.##", ci)}\" cy=\"{pos.Y.ToString("0.##", ci)}\" ")
           .Append($"r=\"6\" fill=\"{colour}\" stroke=\"var(--schematic-cell-stroke)\" stroke-width=\"1.5\" />");
         sb.Append($"<text x=\"{labelX.ToString("0.##", ci)}\" y=\"{(pos.Y + 4).ToString("0.##", ci)}\" ")
-          .Append($"text-anchor=\"{anchor}\" font-size=\"11\" font-weight=\"600\" ")
+          .Append($"text-anchor=\"{anchor}\" font-size=\"{portFont}\" font-weight=\"600\" ")
           .Append("font-family=\"ui-monospace, Menlo, monospace\" fill=\"var(--text-strong)\">")
           .Append(System.Net.WebUtility.HtmlEncode(port.Name))
-          .Append(port.Width > 1 ? $"[{port.Width}]" : "")
+          .Append(port.Width > 1 ? $"[{port.Width - 1}:0]" : "")
           .Append("</text>");
         return sb.ToString();
     }
@@ -1519,6 +1586,7 @@ else
             { "AvailableKinds", (IReadOnlyList<CellKind>)kinds },
             { "HasNaiveFocus", _focusedSourceLine != null },
             { "HasSelection", HasMultiSelection },
+            { "InitialMode", _renderMode },
             { "OnSubmit", EventCallback.Factory.Create<SchematicExportRequest>(this, HandleExportSubmitAsync) },
             { "OnCancel", EventCallback.Factory.Create(this, () => _exportModal.HideAsync()) },
         };
@@ -1590,13 +1658,15 @@ else
 
             if (result.Saved)
             {
-                var msg = result.Path != null ? $"Saved: {result.Path}" : "Schematic exported.";
+                var msg = result.Path != null
+                    ? Traductor.T("COMMON_SAVED_TO_FMT", result.Path)
+                    : Traductor.T("SCHEMATIC_EXPORT_OK");
                 ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), msg, ToastType.Success));
             }
             else
             {
                 ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
-                    result.Error ?? "Export failed.", ToastType.Danger));
+                    result.Error ?? Traductor.T("COMMON_EXPORT_FAILED"), ToastType.Danger));
             }
         }
         catch (Exception ex)

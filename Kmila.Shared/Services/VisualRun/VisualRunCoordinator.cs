@@ -32,6 +32,7 @@ public sealed class VisualRunCoordinator : IDisposable
     // The auto-clock loop must NOT toggle these — otherwise it'd race with
     // the user's input. Empty for the Phase 0 trivial passthrough path.
     private readonly HashSet<string> _userDrivenPorts;
+    private readonly Traductor? _traductor;
     private List<Variable> _clockPorts = new();
     private DeltaCycleEngine? _engine;
     private CancellationTokenSource? _cts;
@@ -56,6 +57,16 @@ public sealed class VisualRunCoordinator : IDisposable
     // from Task.Run.
     private readonly Dictionary<string, Queue<string>> _bounceQueues = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _bounceGate = new();
+
+    // Ring 5 (2026-07-14): write-side fan-in. When a widget binding carries
+    // a slice spec ("cols_in[0]", "bus[7:4]"), the widget's driven value
+    // lands here — keyed by (port name, slice). At drain time each port's
+    // contributions are composed by SliceHelper.Compose into the full
+    // packed vector and pushed to Inputs, then the existing drain path
+    // writes it to the port variable.
+    private readonly Dictionary<string, Dictionary<BitSlice, string>> _slicedInputs
+        = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _slicedGate = new();
     public VisualSpeed Speed { get; set; } = VisualSpeed.Normal;
     // Phase 2: when non-null, overrides Speed's preset delay. Lets the UI's
     // numeric step-rate field hold an exact value (e.g. 5 ms/tick) without
@@ -84,11 +95,13 @@ public sealed class VisualRunCoordinator : IDisposable
     /// <summary>Raised after the loop task has fully completed (canceled or errored). Safe place to flip UI back to idle.</summary>
     public event Action? OnStopped;
 
-    public VisualRunCoordinator(Entity entity, int ringCapacity = 2000, IEnumerable<string>? userDrivenPorts = null)
+    public VisualRunCoordinator(Entity entity, int ringCapacity = 2000, IEnumerable<string>? userDrivenPorts = null, Traductor? traductor = null)
     {
         _entity = entity ?? throw new ArgumentNullException(nameof(entity));
+        _traductor = traductor;
         _arch = entity.Architecture
-            ?? throw new InvalidOperationException($"Entity '{entity.Name}' has no architecture.");
+            ?? throw new InvalidOperationException(LocalizeErr("VISUAL_ERR_NO_ARCHITECTURE",
+                "Entity '{0}' has no architecture.", entity.Name));
         _allSignals = new HashSet<Variable>();
         foreach (var p in entity.Ports) _allSignals.Add(p);
         foreach (var s in _arch.Signals) _allSignals.Add(s);
@@ -121,6 +134,46 @@ public sealed class VisualRunCoordinator : IDisposable
         if (string.IsNullOrEmpty(name)) return string.Empty;
         var full = LatestPortValue(name);
         return SliceHelper.Extract(full, slice);
+    }
+
+    /// <summary>
+    /// Widget-facing convenience: writes a value for a binding string. When
+    /// the binding contains a slice spec (e.g. "cols_in[0]" or "bus[7:4]"),
+    /// dispatches to <see cref="SetSlicedInput"/>; otherwise falls through
+    /// to <see cref="InputStateMap.Set"/>. Widgets can call this
+    /// unconditionally without having to know whether the user chose a
+    /// whole-port or sliced binding.
+    /// </summary>
+    public void WriteInput(string binding, string value)
+    {
+        if (string.IsNullOrEmpty(binding)) return;
+        if (binding.IndexOf('[') >= 0)
+            SetSlicedInput(binding, value);
+        else
+            Inputs.Set(binding, value);
+    }
+
+    /// <summary>
+    /// Write-side fan-in (Ring 5): store a per-slice contribution for a
+    /// packed input port. Called via <see cref="WriteInput"/> when a binding
+    /// string like "cols_in[0]" is resolved. Contributions are re-composed
+    /// each drain via <see cref="SliceHelper.Compose"/> — disjoint slices
+    /// from different widgets pack correctly; undriven bits default to '0'.
+    /// </summary>
+    public void SetSlicedInput(string binding, string value)
+    {
+        var (portName, slice) = SliceHelper.Parse(binding);
+        if (string.IsNullOrEmpty(portName) || slice is null) return;
+        if (!_portsByName.ContainsKey(portName)) return;
+        lock (_slicedGate)
+        {
+            if (!_slicedInputs.TryGetValue(portName, out var perSlice))
+            {
+                perSlice = new Dictionary<BitSlice, string>();
+                _slicedInputs[portName] = perSlice;
+            }
+            perSlice[slice.Value] = value ?? string.Empty;
+        }
     }
 
     public Task StartAsync()
@@ -263,7 +316,7 @@ public sealed class VisualRunCoordinator : IDisposable
         catch (OperationCanceledException) { /* expected on Stop */ }
         catch (Exception ex)
         {
-            OnError?.Invoke($"{ex.GetType().Name}: {ex.Message}");
+            OnError?.Invoke(LocalizeErr("VISUAL_ERR_RUNTIME", "Runtime error: {0}", ex.Message));
         }
         finally
         {
@@ -306,6 +359,24 @@ public sealed class VisualRunCoordinator : IDisposable
 
     private void DrainInputsToPorts()
     {
+        // Ring 5: compose sliced contributions into a packed port value
+        // BEFORE reading the InputStateMap snapshot, so the composed value
+        // flows through the same drain path (bounce + normalize + port
+        // write). Only touches ports that have at least one slice
+        // contribution — a whole-port `Inputs.Set` still wins for ports
+        // with no sliced writers.
+        lock (_slicedGate)
+        {
+            foreach (var (portName, perSlice) in _slicedInputs)
+            {
+                if (perSlice.Count == 0) continue;
+                if (!_portsByName.TryGetValue(portName, out var port)) continue;
+                int width = port.Size > 0 ? port.Size : 1;
+                string composed = SliceHelper.Compose(width, perSlice);
+                Inputs.Set(portName, composed);
+            }
+        }
+
         // Pull the next chatter value for every port that has a non-empty
         // bounce queue. A port with chatter ignores InputStateMap this
         // tick; once the queue drains the steady-state intent reasserts.
@@ -393,5 +464,16 @@ public sealed class VisualRunCoordinator : IDisposable
         try { _loopTask?.Wait(500); } catch { }
         _cts?.Dispose();
         _engine?.Dispose();
+    }
+
+    // Localizes an error message when a Traductor instance was injected by
+    // the caller (VisualPanel). Falls back to the English template so tests
+    // and non-UI callers that instantiate the coordinator without DI still
+    // get a sensible message.
+    private string LocalizeErr(string key, string fallbackFormat, params object[] args)
+    {
+        var template = _traductor?.T(key);
+        if (string.IsNullOrEmpty(template)) template = fallbackFormat;
+        return string.Format(template, args);
     }
 }

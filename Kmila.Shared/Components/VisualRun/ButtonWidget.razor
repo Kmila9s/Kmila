@@ -66,7 +66,11 @@
     {
         if (Coordinator == null) return;
         if (!Comp.Bindings.TryGetValue("out", out var port) || string.IsNullOrEmpty(port)) return;
-        if (Bounce)
+        // Bounce only makes sense on a whole-port binding — the bounce
+        // FIFO writes a raw port name, not a sliced binding. Slice-bound
+        // buttons skip bounce silently (deferred to a follow-up).
+        bool sliced = port.IndexOf('[') >= 0;
+        if (Bounce && !sliced)
         {
             // 6-step chatter that starts by going to the *new* level then
             // wobbles. After the queue drains, the steady intent from
@@ -75,6 +79,6 @@
             string b = value == "1" ? "0" : "1";
             Coordinator.EnqueueBounce(port, new[] { a, b, a, b, a, b });
         }
-        Coordinator.Inputs.Set(port, value);
+        Coordinator.WriteInput(port, value);
     }
 }

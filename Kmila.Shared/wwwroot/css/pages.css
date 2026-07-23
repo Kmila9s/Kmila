@@ -12,6 +12,23 @@
 
 
 /* ============================================================================
+   Accessibility utilities
+   ============================================================================ */
+
+.visually-hidden {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+}
+
+
+/* ============================================================================
    App Shell — sidebar + main area
    ============================================================================ */
 
@@ -2198,10 +2215,22 @@
    Scoped to phone (≤ 768 px) so the desktop's content-height behaviour
    for the editor card stays unchanged. */
 @media (max-width: 768px) {
+    /* R3-3 (editor-mobile audit 2026-07-02): scoped outer-scroll lock
+       for the editor route. During Monaco / Visual / Blocks mount the
+       flex chain briefly overflows its box; without a guardrail on the
+       shell + content, that transient overflow opens a second (outer)
+       scrollbar that steals swipe gestures. `.editor-workbench` already
+       clips at `overflow: hidden`, and Monaco / Blocks canvas / Visual
+       canvas own their inner `overflow: auto`, so the inner scroll
+       survives. Non-editor routes are untouched thanks to `:has(.editor-page)`. */
+    .kmila-shell__main:has(.editor-page) {
+        overflow: hidden;
+    }
     .kmila-shell__main > .content:has(.editor-page) {
         display: flex;
         flex-direction: column;
         min-height: 0;
+        overflow: hidden;
     }
 }
 
@@ -7201,6 +7230,35 @@
     font-weight: var(--fw-semibold);
 }
 
+/* Inline no-FPGA hint chip inside .run-bar__actions. Sits next to Build so
+   the reason for the greyed action is visible on touch (title tooltips don't
+   fire on touch). Reuses the danger tone from .run-bar__fpga--missing. */
+.run-bar__no-fpga-hint {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-pill);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    background-color: rgba(239, 68, 68, 0.08);
+    color: var(--danger);
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    line-height: 1;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.run-bar__no-fpga-hint:hover,
+.run-bar__no-fpga-hint:focus-visible {
+    background-color: rgba(239, 68, 68, 0.14);
+    outline: none;
+}
+/* At narrow container widths the label is dropped; only the icon remains so
+   the chip stays out of the way of Build/Run/Stop labels. */
+@container run-bar (max-width: 640px) {
+    .run-bar__no-fpga-hint-label { display: none; }
+}
+
 
 /* Settings: custom FPGA + language cards */
 .settings-card--wide { grid-column: 1 / -1; }
@@ -8040,12 +8098,12 @@
 
 .kmila-toast-host {
     position: fixed;
-    /* B-1 (editor-mobile audit 2026-06-29 — round 2 v3): on phone the
-       toast keeps the TopBar's hamburger + breadcrumb + profile cluster
-       visible, but it WAS still overlapping the editor view-tabs row
-       below. Switch to bottom-anchored on phone so toasts surface above
-       the RunBar/dock peek and never cover view-tabs. On wider screens
-       keep the original top-anchor below the TopBar. */
+    /* Toast is top-anchored on every viewport, clearing the TopBar and
+       the iOS safe-area notch. Previous bottom-anchored phone override
+       (B-1 round-2 v3, 2026-06-29) was reverted per user request
+       2026-07-05: bottom placement was obscured by the sticky RunBar /
+       dock and easy to miss; top placement surfaces above every editor
+       chrome layer. */
     top: calc(var(--topbar-height, 56px) + env(safe-area-inset-top, 0px) + var(--space-2));
     left: 50%;
     transform: translateX(-50%);
@@ -8060,8 +8118,6 @@
 
 @media (max-width: 768px) {
     .kmila-toast-host {
-        top: auto;
-        bottom: calc(var(--dock-h, 64px) + var(--runbar-h, 56px) + env(safe-area-inset-bottom, 0px) + var(--space-2));
         /* Tighter card on phone so it never spans the full viewport. */
         width: min(360px, calc(100vw - var(--space-3) * 2));
     }
@@ -9878,7 +9934,18 @@
     body:has(.kmila-dock--snap-peek) { --dock-h: 18dvh; }
     body:has(.kmila-dock--snap-half) { --dock-h: 50dvh; }
     body:has(.kmila-dock--snap-full) { --dock-h: 88dvh; }
-    body:has(.kmila-dock--collapsed) { --dock-h: 56px; }
+    /* R3-1 (editor-mobile audit 2026-07-02, polish 2026-07-02):
+       collapsed dock reserves 88 px. First cut was 72 px = tab
+       min-height 48 + `.kmila-dock__tabs` top padding 8 + border 1 +
+       horizontal scrollbar 5 + 10 slack, but the icon-over-label tab
+       column plus the count-pip badge takes closer to 62-72 px of
+       content-height, so 72 px left the label 2 px shy of being
+       clipped on some devices. 88 px reserves 26 px slack above the
+       measured content-height, which is comfortable and still leaves
+       Monaco/Blocks/Visual most of the viewport. Kept in sync with
+       `.kmila-dock.kmila-dock--collapsed { height: var(--dock-h) }`
+       below so both surfaces agree. */
+    body:has(.kmila-dock--collapsed) { --dock-h: 88px; }
 
     .kmila-dock {
         position: fixed;
@@ -9886,7 +9953,14 @@
         right: 0;
         bottom: calc(var(--statusbar-h) + env(safe-area-inset-bottom, 0px));
         z-index: var(--z-drawer);
-        box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.18);
+        /* R3-1 polish (editor-mobile audit 2026-07-02): the previous
+           `box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.18)` cast a 24-px
+           blur upward from the dock's top edge, which landed directly on
+           the RunBar (RunBar is `position: fixed` and pinned to the dock
+           top). The visual result was a dark halo across the RunBar's
+           bottom. Removing the shadow here — RunBar has its own border
+           and background contrast against Monaco already. */
+        box-shadow: none;
         border-top-left-radius: var(--radius-lg);
         border-top-right-radius: var(--radius-lg);
         /* Override the desktop default of `height: var(--kmila-dock-height, 320px)`
@@ -9897,6 +9971,19 @@
         min-height: 0 !important;
         max-height: 88dvh;
         transition: height var(--duration-base) var(--ease-standard);
+    }
+
+    /* R3-1 (editor-mobile audit 2026-07-02): on mobile, force the
+       collapsed dock to the exact same 72 px `--dock-h` reserves.
+       Without this override, the desktop `.kmila-dock.kmila-dock--collapsed`
+       rule at line ~9456 wins on specificity (2 classes vs 1) and sets
+       `height: auto`, leaving the dock box ~62-72 px while `--dock-h`
+       is only 56 px → RunBar sits below the dock's top edge and its
+       top row gets clipped. Pinning `.kmila-dock.kmila-dock--collapsed`
+       to `var(--dock-h)` here keeps the two in lockstep. */
+    .kmila-dock.kmila-dock--collapsed {
+        height: var(--dock-h) !important;
+        min-height: var(--dock-h) !important;
     }
 
     /* Default + half + full: panel visible (the half-height default lets
@@ -9910,7 +9997,13 @@
        previously the comma-selector also matched .kmila-shell__main, which
        added the same padding on every page and left a phantom empty gutter
        below the footer on short pages (audit 2026-06-15 S-05 follow-up). */
-    .editor-page,
+    /* R3-3 (editor-mobile audit 2026-07-02): single owner of the dock/
+       runbar/statusbar bottom reservation is the shell. Applying the
+       same padding to both `.editor-page` and the shell double-counted
+       the reservation, pushing the body's intrinsic height past 100dvh
+       and opening the outer scrollbar. Keeping the shell as owner lets
+       `.content` (flex:1 0 auto) grow to `shell − topbar − padding`, and
+       `.editor-page` (flex:1 1 auto; min-height:0) fills that cleanly. */
     .kmila-shell__main:has(.editor-page) {
         padding-bottom: calc(
             var(--dock-h) + var(--runbar-h) + var(--statusbar-h)
@@ -11108,6 +11201,52 @@
 .schematic-viewer.is-fullscreen .schematic-viewer__body {
     flex: 1 1 auto;
     min-height: 0;
+}
+
+/* Visual runtime fullscreen — same fixed-viewport treatment as schematic
+   + flow so the canvas gets full-screen real estate. Unlike those two
+   the visual panel benefits from breathing room around the canvas so
+   dropped widgets don't collide with the phone chrome (notch + home
+   indicator) or feel edge-to-edge cramped. Padding uses safe-area
+   fallbacks so notched phones don't clip content but larger devices
+   still get a comfortable margin. */
+.visual-page.is-fullscreen {
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--z-modal, 1050) - 5);
+    background: var(--surface-2);
+    box-shadow: var(--shadow-3);
+    display: flex;
+    flex-direction: column;
+    padding-top:    max(env(safe-area-inset-top),    var(--space-4));
+    padding-right:  max(env(safe-area-inset-right),  var(--space-4));
+    padding-bottom: max(env(safe-area-inset-bottom), var(--space-4));
+    padding-left:   max(env(safe-area-inset-left),   var(--space-4));
+    gap: var(--space-3);
+    /* Small rounded rectangle inside the outer padding so the surface
+       reads as a floating card rather than a modal that ate the screen. */
+    border-radius: var(--radius-lg, 12px);
+}
+.visual-page.is-fullscreen .visual-page__workspace {
+    flex: 1 1 auto;
+    min-height: 0;
+    /* Inner card treatment so the workspace surface has its own border +
+       rounding inside the outer padding. Keeps the "canvas within a
+       framed space" feel while the outer body carries the true margin. */
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md, 8px);
+    overflow: hidden;
+    background: var(--surface-1);
+}
+.visual-page.is-fullscreen .visual-page__header,
+.visual-page.is-fullscreen .visual-page__toolbar--embedded {
+    flex: 0 0 auto;
+}
+
+body:has(.visual-page.is-fullscreen) .kmila-dock,
+body:has(.visual-page.is-fullscreen) .run-bar,
+body:has(.visual-page.is-fullscreen) .status-bar {
+    display: none;
 }
 
 /* Flow diagram fullscreen — mirrors the schematic block above. The flow
@@ -12362,6 +12501,14 @@
 .editor-workbench__view-tab-badge--paused {
     color: var(--warning, #f59e0b);
 }
+/* Editor sync mode (2026-07-06) — stale-preview pip on the non-active
+   Code/Blocks tab when Manual sync mode is active and the source tab has
+   unsynced edits. Reuses the badge geometry; slate accent so it doesn't
+   compete with the live/paused chips. */
+.editor-workbench__view-tab-badge--stale {
+    color: var(--warning, #f59e0b);
+    font-size: calc(var(--fs-xs) * 1.1);
+}
 @keyframes kmila-view-tab-pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.45; }
@@ -12667,6 +12814,50 @@
         height: auto;
         min-height: 32px;
         margin: 0 var(--space-1);
+    }
+}
+
+/* 2026-07-20 Phase 23 — categoryToolbox headers rendered by
+   kmila-blocks.js `_renderPaletteItem` when it encounters
+   `item.kind === 'category'`. Small, muted label + top border acts as
+   both section header AND visual divider (the sep between groups is
+   implicit — the header itself supplies the top rule). Uses shared
+   design tokens so light+dark themes get symmetrical treatment. */
+.kmila-toolbox-category {
+    width: 100%;
+    padding: var(--space-2) 0 var(--space-1);
+    margin-top: var(--space-2);
+    border-top: 1px solid var(--border-subtle);
+    color: var(--fg-muted);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    /* First-of-type: no top border/margin — the very first category
+       reads as the palette's own top edge without an extra rule. */
+}
+.kmila-toolbox-category:first-child {
+    border-top: none;
+    margin-top: 0;
+    padding-top: 0;
+}
+/* Mobile bottom-sheet layout: headers become inline chips between
+   horizontally-scrolling block groups. */
+@media (max-width: 640.98px) {
+    .kmila-toolbox-category {
+        flex: 0 0 auto;
+        width: auto;
+        border-top: none;
+        border-left: 1px solid var(--border-subtle);
+        padding: 0 var(--space-2);
+        margin: 0 var(--space-1);
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
+        white-space: nowrap;
+    }
+    .kmila-toolbox-category:first-child {
+        border-left: none;
+        padding-left: 0;
     }
 }
 
@@ -13532,8 +13723,136 @@
 .visual-page__toolbar {
     display: flex;
     gap: var(--space-2);
-    margin-left: auto;
+    /* Fill the parent row (header) so the internal
+       `.kmila-slot-toolbar-divider--pusher` has slack to consume — the old
+       `margin-left: auto` here shrink-wrapped the whole toolbar to its
+       content and killed the inner spacer. `min-width: 0` prevents flex-child
+       overflow when the row is tight. In the embedded case the toolbar is a
+       block-level child that already spans 100 % of its parent, so the
+       `flex` property is inert there but harmless. */
+    flex: 1 1 auto;
+    min-width: 0;
     flex-wrap: wrap;
+    align-items: center;
+}
+
+/* Custom hover tooltip that reads `data-tip`. Native `title` tooltips are
+   inconsistent across the MAUI WebView + Blazor Server hosts and are invisible
+   on touch, so icon-only buttons in the visual toolbar carry both:
+     - data-tip → styled bubble (below), delayed to avoid flicker
+     - title    → native fallback + accessibility tree
+   The bubble sits above the button with a small arrow and is theme-aware. It
+   never intercepts pointer events so it can't block the click it advertises. */
+.kmila-tip { position: relative; }
+.kmila-tip[data-tip]::after {
+    content: attr(data-tip);
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 8px);
+    transform: translateX(-50%) translateY(2px);
+    padding: 4px 8px;
+    /* The `--surface-inverse` / `--text-inverse` tokens are a paired inverse
+       (light-mode: dark surface + light text; dark-mode: light surface + dark
+       text) — kept together so contrast survives both themes. An earlier
+       version used `--text-on-inverse` here, which the token system doesn't
+       define, so it fell back to a hard-coded near-white and rendered
+       invisible on dark mode (light text on the now-light inverse surface). */
+    background: var(--surface-inverse);
+    color: var(--text-inverse);
+    font-size: var(--fs-xs);
+    line-height: 1.2;
+    font-family: var(--font-sans);
+    font-weight: var(--fw-medium, 500);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-2);
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    z-index: var(--z-tooltip, 1200);
+    transition: opacity var(--duration-fast) var(--ease-standard) 0ms,
+                transform var(--duration-fast) var(--ease-standard) 0ms;
+}
+.kmila-tip[data-tip]:hover::after,
+.kmila-tip[data-tip]:focus-visible::after {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+    /* Small delay so quick pointer sweeps across the toolbar don't strobe. */
+    transition-delay: 250ms;
+}
+/* When a button is right at the toolbar edge the centered bubble could clip;
+   the parent overflow guards let it escape the flex row. */
+.visual-page__toolbar { overflow: visible; }
+/* Touch devices don't fire hover reliably — suppress the bubble so it doesn't
+   linger after a tap on iOS/Android. `title` still exists for long-press. */
+@media (hover: none) {
+    .kmila-tip[data-tip]::after { display: none; }
+}
+
+/* "More" overflow dropdown — houses secondary view actions so the toolbar
+   stays legible when a viewport can't fit every button on one row. The
+   trigger sits inline with the other icon buttons; the panel floats below
+   it. A transparent backdrop catches outside clicks. */
+.visual-page__more-wrap {
+    position: relative;
+    display: inline-flex;
+}
+.visual-page__more-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--z-popover, 1100) - 1);
+    background: transparent;
+}
+.visual-page__more-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: var(--z-popover, 1100);
+    min-width: 200px;
+    max-width: min(280px, calc(100vw - 16px));
+    padding: 4px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-3);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    animation: kmilaPop var(--duration-fast) var(--ease-standard);
+}
+[dir="rtl"] .visual-page__more-menu { right: auto; left: 0; }
+.visual-page__more-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background: none;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-default);
+    font-family: inherit;
+    font-size: var(--fs-sm);
+    text-align: left;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color var(--duration-fast) var(--ease-standard);
+}
+[dir="rtl"] .visual-page__more-item { text-align: right; }
+.visual-page__more-item:hover,
+.visual-page__more-item:focus-visible {
+    background: var(--surface-3);
+    color: var(--text-strong);
+}
+.visual-page__more-item.is-active {
+    background: var(--kmila-accent-soft, var(--surface-3));
+    color: var(--kmila-accent, var(--text-strong));
+    font-weight: var(--fw-semibold, 600);
+}
+.visual-page__more-item > .bi { flex-shrink: 0; }
+.visual-page__more-item > span { flex: 1 1 auto; min-width: 0; }
+.visual-page__more-sep {
+    height: 1px;
+    margin: 4px 6px;
+    background: var(--border-subtle);
 }
 
 .visual-page__error {
@@ -13555,7 +13874,7 @@
    estate. Chips are stacked vertically; each is a button that emits an
    OnSelected event upstream to VisualPanel's OnPaletteSelected dispatcher. */
 .visual-page__palette {
-    flex: 0 0 96px;
+    flex: 0 0 116px;
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
@@ -13563,6 +13882,79 @@
     border-right: 1px solid var(--border-subtle);
     background: var(--surface-2);
     overflow-y: auto;
+}
+
+/* Collapsible category group inside the palette. Desktop: vertical list
+   with a header row (icon + label + chevron) that toggles its chip body. */
+.visual-page__palette-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.visual-page__palette-group-header {
+    appearance: none;
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-2);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--fs-2xs);
+    font-weight: var(--fw-semibold);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    cursor: pointer;
+    width: 100%;
+    transition: background-color var(--duration-fast) var(--ease-standard),
+                color var(--duration-fast) var(--ease-standard);
+}
+
+.visual-page__palette-group-header:hover,
+.visual-page__palette-group-header:focus-visible {
+    background: var(--surface-3);
+    color: var(--text-default);
+    outline: none;
+}
+
+.visual-page__palette-group-icon {
+    display: inline-flex;
+    color: var(--kmila-accent);
+    font-size: 14px;
+    line-height: 1;
+}
+
+.visual-page__palette-group-label {
+    flex: 1;
+    min-width: 0;
+    text-align: start;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.visual-page__palette-group-chevron {
+    display: inline-flex;
+    font-size: 12px;
+    line-height: 1;
+    transition: transform var(--duration-fast) var(--ease-standard);
+}
+
+.visual-page__palette-group[data-open="false"] .visual-page__palette-group-chevron {
+    transform: rotate(-90deg);
+}
+
+.visual-page__palette-group-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.visual-page__palette-group[data-open="false"] .visual-page__palette-group-body {
+    display: none;
 }
 
 .visual-page__palette-title {
@@ -13654,15 +14046,39 @@
     .visual-page__palette::-webkit-scrollbar { display: none; }
     .visual-page__palette-title { display: none; }
     .visual-page__palette-chip { flex: 0 0 88px; }
-    /* Props pane stacks below the canvas instead of clamping to a 240 px
-       right column (which would still be there in row direction even after
-       the workspace flips). Cap its height so the canvas keeps majority of
-       the viewport when no widget is selected. */
+    /* Mobile: each group becomes an inline pill header followed by its
+       chip strip; collapsed groups render just the pill. All groups sit
+       in the same horizontally-scrolling palette strip. */
+    .visual-page__palette-group {
+        flex-direction: row;
+        align-items: center;
+        gap: var(--space-1);
+        flex-shrink: 0;
+        padding-inline-end: var(--space-2);
+        border-inline-end: 1px solid var(--border-subtle);
+    }
+    .visual-page__palette-group:last-child { border-inline-end: none; }
+    .visual-page__palette-group-header {
+        flex: 0 0 auto;
+        width: auto;
+        padding: var(--space-1) var(--space-2);
+        background: var(--surface-1);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-pill);
+    }
+    .visual-page__palette-group-body {
+        flex-direction: row;
+        gap: var(--space-1);
+    }
+    /* Props card on phones is narrower + max-height clipped so it doesn't
+       obscure the widget. It's still absolutely positioned inside
+       canvas-stack (see base rule below) — the inline style supplies
+       widget-anchored left/top. */
     .visual-page__props {
-        width: 100%;
-        max-height: 38dvh;
-        border-left: none;
-        border-top: 1px solid var(--border-subtle);
+        width: min(272px, calc(100vw - 2 * var(--space-3)));
+        max-height: 45dvh;
+        padding: var(--space-3);
+        gap: var(--space-2);
     }
     /* Canvas + canvas-stack must be allowed to shrink in the column flex,
        otherwise the inner SVG min-content keeps it 600 px+ tall and the
@@ -13707,6 +14123,16 @@
    wrapper exists so the SVG can be a sibling and shares scroll behavior. */
 .visual-page__canvas-stack {
     position: relative;
+    overflow: hidden;   /* pan-zoom lib clips the transformed wrap here */
+}
+
+/* Pan-zoom target: wraps canvas + wires + props so they translate/scale
+   together. Its own dimensions are inline-styled to canvas dims so the
+   pan-zoom lib measures a stable natural size regardless of canvas
+   background/grid state. */
+.visual-page__canvas-wrap {
+    position: relative;
+    /* transform-origin + transform get set by the pan-zoom JS on attach. */
 }
 .visual-page__wires {
     position: absolute;
@@ -13732,51 +14158,382 @@
     dominant-baseline: middle;
 }
 
-.visual-page__props {
-    width: 240px;
-    border-left: 1px solid var(--border-subtle);
+/* §6 Item 4 (2026-07-05) — locator popover. Same glass-slab language as
+   props card, but pinned to canvas-stack's top-right (not widget-anchored).
+   Fixed width so long widget labels don't reshape the panel; internal
+   scroll for long widget lists. */
+.visual-page__locator {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    z-index: 6;
+    width: 260px;
+    max-height: 60dvh;
+    display: flex;
+    flex-direction: column;
     padding: var(--space-3);
-    background: var(--surface-2);
+    background: color-mix(in srgb, var(--surface-2) 88%, transparent);
+    -webkit-backdrop-filter: blur(14px) saturate(1.4);
+    backdrop-filter: blur(14px) saturate(1.4);
+    border: 1px solid color-mix(in srgb, var(--kmila-accent) 12%, var(--border-default));
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-3);
+    color: var(--text);
+}
+.visual-page__locator-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    margin-bottom: var(--space-2);
+}
+.visual-page__locator-header h6 {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+.visual-page__locator-close {
+    background: transparent;
+    border: 0;
+    color: var(--text-2);
+    font-size: 1.1rem;
+    line-height: 1;
+    padding: 0 var(--space-1);
+    cursor: pointer;
+}
+.visual-page__locator-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: var(--space-2);
+    gap: 2px;
+}
+.visual-page__locator-item {
+    display: block;
+    width: 100%;
+    text-align: start;
+    padding: var(--space-1) var(--space-2);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    color: var(--text);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease;
+}
+.visual-page__locator-item:hover {
+    background: color-mix(in srgb, var(--kmila-accent) 10%, transparent);
+    border-color: color-mix(in srgb, var(--kmila-accent) 25%, transparent);
+}
+.visual-page__locator-item.is-active {
+    background: color-mix(in srgb, var(--kmila-accent) 18%, transparent);
+    border-color: color-mix(in srgb, var(--kmila-accent) 40%, transparent);
+}
+.visual-page__locator-item-label {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.visual-page__props {
+    /* Floating widget-anchored card. Lives inside .visual-page__canvas-stack
+       (which is position: relative) so left/top from the inline style are
+       expressed in canvas coordinates — the card scrolls with the canvas
+       and stays attached during drag. Glass surface + strong shadow so it
+       reads as a floating popover, not a stacked panel (matches toast +
+       block-editor slab language). */
+    position: absolute;
+    z-index: 5;
+    width: 288px;
+    max-height: 60dvh;
+    padding: var(--space-4);
+    background: color-mix(in srgb, var(--surface-2) 82%, transparent);
+    -webkit-backdrop-filter: blur(14px) saturate(1.4);
+    backdrop-filter: blur(14px) saturate(1.4);
+    border: 1px solid color-mix(in srgb, var(--kmila-accent) 12%, var(--border-default));
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-3),
+                inset 0 1px 0 color-mix(in srgb, #ffffff 40%, transparent);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
     font-size: var(--fs-sm);
+    /* Subtle enter animation — appears next to the widget, doesn't slide
+       in from an unrelated edge. */
+    animation: kmila-props-in 140ms ease-out;
+}
+
+@keyframes kmila-props-in {
+    from { opacity: 0; transform: translateY(-2px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+
+/* Fallback for WebViews without backdrop-filter (older Android). */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .visual-page__props { background: var(--surface-2); }
 }
 
 .visual-page__props label {
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
-    font-weight: 500;
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-medium);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.visual-page__props label .kmila-input {
+    /* The uppercase-label styling shouldn't inherit into the control. */
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: var(--fw-regular);
+    color: var(--text-default);
+    font-size: var(--fs-sm);
+}
+
+.visual-page__props-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding-bottom: var(--space-3);
+    border-bottom: 1px solid var(--border-subtle);
+    margin-bottom: var(--space-1);
+}
+
+.visual-page__props-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    color: var(--kmila-accent);
+    background: color-mix(in oklab, var(--kmila-accent) 14%, transparent);
+    border-radius: var(--radius-md);
+    font-size: 15px;
+}
+
+.visual-page__props-title {
+    margin: 0;
+    text-transform: capitalize;
+    font-size: var(--fs-md);
+    font-weight: var(--fw-semibold);
+    color: var(--text-strong);
+    letter-spacing: -0.005em;
+    /* Truncate long titles gracefully. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+/* Direction chip in the props pane header — visually differentiates
+   input widgets (drive stimulus into the design) from output widgets
+   (visualize design outputs). R3-5 data-integrity gate: makes intent
+   explicit so users don't attempt to bind a button to a design output. */
+.visual-page__props-dir {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: var(--radius-pill);
+    font-size: var(--fs-2xs);
+    font-weight: var(--fw-semibold);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    line-height: 1.5;
+    margin-inline-start: auto;
+    border: 1px solid transparent;
+    flex-shrink: 0;
+}
+
+.visual-page__props-dir--in {
+    background: color-mix(in oklab, var(--kmila-accent) 14%, transparent);
+    color: var(--kmila-accent);
+    border-color: color-mix(in oklab, var(--kmila-accent) 32%, transparent);
+}
+
+.visual-page__props-dir--out {
+    background: color-mix(in oklab, var(--success, #16a34a) 14%, transparent);
+    color: var(--success, #16a34a);
+    border-color: color-mix(in oklab, var(--success, #16a34a) 32%, transparent);
+}
+
+.visual-page__props-delete {
+    appearance: none;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    line-height: 1;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.visual-page__props-delete:hover:not(:disabled),
+.visual-page__props-delete:focus-visible:not(:disabled) {
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+
+.visual-page__props-delete:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+}
+
+.visual-page__props-delete:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.visual-page__props-close {
+    appearance: none;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.25rem;
+    line-height: 1;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background-color 120ms ease, color 120ms ease;
+}
+
+.visual-page__props-close:hover,
+.visual-page__props-close:focus-visible {
+    background: var(--surface-3);
+    color: var(--text-default);
+}
+.visual-page__props-close:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+}
+
+/* Section label above the bindings list — quiet uppercase eyebrow that
+   separates config controls from wire-binding readout. */
+.visual-page__props-section {
+    font-size: var(--fs-2xs);
+    font-weight: var(--fw-semibold);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin: 0;
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border-subtle);
 }
 
 /* Phase 3++ checkbox row in the props pane (e.g. button bounce). Flips
-   the default vertical label stack into a horizontal checkbox + text. */
+   the default vertical label stack into a horizontal checkbox + text.
+   Also restores normal (non-eyebrow) text styling for the checkbox
+   label so it reads as an option, not a section header. */
 .visual-page__props label.visual-page__props-checkbox {
     flex-direction: row;
     align-items: center;
     gap: var(--space-2);
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-medium);
+    color: var(--text-default);
 }
 .visual-page__props label.visual-page__props-checkbox input[type="checkbox"] {
     width: 16px;
     height: 16px;
-    accent-color: var(--accent, #f59e0b);
+    accent-color: var(--kmila-accent);
+    flex-shrink: 0;
 }
 
+.visual-page__props > small {
+    /* Hint copy under a checkbox (e.g. VISUAL_PROP_BOUNCE_HINT).
+       Marker: sits below its associated label, subtly. */
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
+    line-height: 1.4;
+    margin-top: calc(-1 * var(--space-2));
+    padding-inline-start: calc(16px + var(--space-2));
+}
+
+/* Wire-binding list — one row per pin. Muted eyebrow for the section
+   heading; monospace key ("out", "anode") and value (port name) with
+   a subtle chevron in between so users read it as "pin → port". */
 .visual-page__props-binding {
-    margin-top: var(--space-3);
-    padding-top: var(--space-2);
-    border-top: 1px dashed var(--border-subtle);
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--space-1);
+}
+.visual-page__props-binding-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 4px var(--space-2);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--surface-1) 60%, transparent);
+    font-size: var(--fs-xs);
+    line-height: 1.4;
+}
+.visual-page__props-binding-row code {
+    font-family: var(--font-mono);
+    font-size: var(--fs-2xs);
+    color: var(--text-default);
+    background: transparent;
+    padding: 0;
+    flex-shrink: 0;
+}
+.visual-page__props-binding-row .visual-page__props-binding-arrow {
+    color: var(--text-muted);
+    opacity: 0.6;
+    flex-shrink: 0;
+}
+.visual-page__props-binding-row .visual-page__props-binding-port {
+    font-family: var(--font-mono);
+    font-size: var(--fs-2xs);
+    color: var(--kmila-accent);
+    font-weight: var(--fw-medium);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+.visual-page__props-binding-row .visual-page__props-binding-port--unwired {
+    color: var(--text-muted);
+    font-style: italic;
+    font-weight: var(--fw-regular);
+}
+.visual-page__props-binding-empty {
+    color: var(--text-muted);
+    font-style: italic;
+    font-size: var(--fs-xs);
+    padding: 4px 0;
 }
 
 /* Canvas */
 .kviz-canvas {
     position: relative;
-    touch-action: none;
+    /* Was `touch-action: none` — blocked native pan on phones. Canvas is
+       1200×800 CSS-px fixed and always wider than a phone viewport, so the
+       user needs native two-finger + one-finger pan to reach widgets past
+       the initial fold. Widgets keep their own `touch-action: none` (see
+       `.kviz-widget` below), so drag still works: touching a widget wins
+       the gesture; touching empty canvas hands the gesture to the browser
+       for a native scroll. */
+    touch-action: pan-x pan-y;
     user-select: none;
     -webkit-user-select: none;
 }
@@ -13921,6 +14678,11 @@
 
 .kviz-wiring-modal,
 .examples-gallery-modal {
+    /* Reset Bootstrap's `.modal { position:fixed; top:0; left:0; width:100%; height:100% }`
+       so the backdrop's `place-items: center` can center us. */
+    position: relative;
+    top: auto;
+    left: auto;
     background: var(--surface-1);
     border-radius: var(--radius-lg);
     box-shadow: 0 20px 50px rgba(0,0,0,0.25);
@@ -13928,6 +14690,7 @@
     max-height: 84vh;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
 }
 .examples-gallery-modal { width: min(760px, 94vw); }
 .examples-gallery-modal__body {
@@ -14094,6 +14857,91 @@
     color: var(--text-muted);
 }
 
+/* ── Multi-switch widget (FW-2) ──────────────────────────────────────── */
+/* Horizontal DIP row. Each cell is a mini vertical switch + label so the
+   widget reads like a real SPST bank on a breakout board. Levers stack
+   vertically inside cells to keep the row compact at count=8. */
+.kviz-multi-switch {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    touch-action: none;
+    user-select: none;
+}
+
+.kviz-multi-switch--edit { cursor: move; }
+
+.kviz-multi-switch__row {
+    display: flex;
+    flex-direction: row;
+    gap: 4px;
+    padding: 6px 8px;
+    background: var(--kviz-multi-switch-body, #f1f5f9);
+    border: 1px solid var(--kviz-multi-switch-body-border, #94a3b8);
+    border-radius: 6px;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.12);
+}
+
+.kviz-multi-switch__cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    width: 28px;
+}
+
+.kviz-multi-switch__lever {
+    width: 20px;
+    height: 32px;
+    border-radius: 4px;
+    background: var(--kviz-switch-track-off, #cbd5e1);
+    border: 1px solid var(--kviz-switch-track-off-border, #94a3b8);
+    position: relative;
+    transition: background 120ms ease, border-color 120ms ease;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.15);
+    cursor: pointer;
+}
+
+.kviz-multi-switch__knob {
+    width: 16px;
+    height: 12px;
+    border-radius: 2px;
+    background: linear-gradient(180deg, var(--kviz-switch-knob-light, #f8fafc) 0%, var(--kviz-switch-knob-dark, #e2e8f0) 100%);
+    border: 1px solid var(--kviz-switch-knob-border, #475569);
+    position: absolute;
+    left: 50%;
+    top: calc(100% - 14px);
+    transform: translateX(-50%);
+    transition: top 140ms cubic-bezier(.4,.0,.2,1);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.35);
+}
+
+.kviz-multi-switch__lever--on {
+    background: var(--kviz-switch-track-on, #22c55e);
+    border-color: var(--kviz-switch-track-on-border, #166534);
+}
+
+.kviz-multi-switch__lever--on .kviz-multi-switch__knob {
+    top: 2px;
+}
+
+.kviz-multi-switch__cell-label {
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    color: var(--text-muted);
+    white-space: nowrap;
+    max-width: 32px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.kviz-multi-switch__port {
+    font-size: var(--fs-xs);
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+}
+
 /* ── LED array widget (Phase 1) ──────────────────────────────────────── */
 .kviz-led-array {
     display: flex;
@@ -14138,6 +14986,319 @@
 }
 
 .kviz-led-array__port {
+    font-size: var(--fs-xs);
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+}
+
+/* ───── FW-1: 3×3 mono LED matrix ─────
+   Fixed 3×3 grid of small round LEDs. Cell size + gap tuned so the housing
+   comes out at ~96 CSS-px — matches the phone-safe footprint declared in
+   VisualPanel.AddLedMatrix. --kviz-matrix-color is set inline by the widget
+   from the color config; --kviz-matrix-on-opacity carries the brightness
+   knob (0..1). */
+.kviz-matrix-3x3 {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    touch-action: none;
+    user-select: none;
+}
+
+.kviz-matrix-3x3--edit { cursor: move; }
+
+.kviz-matrix-3x3__grid {
+    display: grid;
+    grid-template-columns: repeat(3, 20px);
+    grid-template-rows: repeat(3, 20px);
+    gap: 6px;
+    padding: 8px;
+    background: var(--kviz-housing-dark, #0b0f14);
+    border-radius: 8px;
+    border: 1px solid var(--kviz-housing-border, #1f2937);
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.6);
+}
+
+.kviz-matrix-3x3__cell {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, var(--kviz-housing-shadow, #1f2937) 0%, var(--kviz-housing-dark, #0b0f14) 80%);
+    border: 1px solid var(--kviz-housing-ring, #111);
+    transition: background 50ms linear, box-shadow 50ms linear, opacity 50ms linear;
+}
+
+.kviz-matrix-3x3__cell--on {
+    background: radial-gradient(circle at 30% 30%,
+        color-mix(in srgb, var(--kviz-matrix-color) 80%, white 20%) 0%,
+        var(--kviz-matrix-color) 70%);
+    box-shadow:
+        0 0 6px var(--kviz-matrix-color),
+        0 0 12px color-mix(in srgb, var(--kviz-matrix-color) 60%, transparent),
+        inset 0 0 3px rgba(255,255,255,0.5);
+    opacity: var(--kviz-matrix-on-opacity, 1);
+}
+
+.kviz-matrix-3x3__port {
+    font-size: var(--fs-xs);
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+}
+
+/* ───── FW-1b: 3×3 RGB LED matrix ─────
+   Same grid layout as FW-1 mono. Cell colour comes from an inline
+   --cell-color set by the widget (mix of the three R/G/B planes). Off
+   cells fall back to the shared dark grey housing tone. */
+.kviz-matrix-3x3-rgb {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    touch-action: none;
+    user-select: none;
+}
+
+.kviz-matrix-3x3-rgb--edit { cursor: move; }
+
+.kviz-matrix-3x3-rgb__grid {
+    display: grid;
+    grid-template-columns: repeat(3, 20px);
+    grid-template-rows: repeat(3, 20px);
+    gap: 6px;
+    padding: 8px;
+    background: var(--kviz-housing-dark, #0b0f14);
+    border-radius: 8px;
+    border: 1px solid var(--kviz-housing-border, #1f2937);
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.6);
+}
+
+.kviz-matrix-3x3-rgb__cell {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, var(--kviz-housing-shadow, #1f2937) 0%, var(--kviz-housing-dark, #0b0f14) 80%);
+    border: 1px solid var(--kviz-housing-ring, #111);
+    transition: background 50ms linear, box-shadow 50ms linear, opacity 50ms linear;
+}
+
+.kviz-matrix-3x3-rgb__cell--on {
+    background: radial-gradient(circle at 30% 30%,
+        color-mix(in srgb, var(--cell-color, #fff) 80%, white 20%) 0%,
+        var(--cell-color, #fff) 70%);
+    box-shadow:
+        0 0 6px var(--cell-color, #fff),
+        0 0 12px color-mix(in srgb, var(--cell-color, #fff) 60%, transparent),
+        inset 0 0 3px rgba(255,255,255,0.5);
+    opacity: var(--kviz-matrix-on-opacity, 1);
+}
+
+.kviz-matrix-3x3-rgb__port {
+    font-size: var(--fs-xs);
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+}
+
+/* ───── FW-5: Piezo buzzer ─────
+   Speaker icon inside a rounded chip. Two concentric pulse rings animate
+   when the buzzer is active (either enable = '1' in freq mode, or
+   signal = '1' in raw mode). Rings and glow use the shared brand accent
+   so the buzzer visually reads as an "output" alongside LED-family
+   widgets. */
+.kviz-buzzer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px;
+    touch-action: none;
+    user-select: none;
+}
+
+.kviz-buzzer--edit { cursor: move; }
+
+.kviz-buzzer__body {
+    position: relative;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--kmila-brand-slate, #3b82f6);
+    background: var(--kviz-housing-dark, #0b0f14);
+    border-radius: 50%;
+    border: 1px solid var(--kviz-housing-border, #1f2937);
+}
+
+.kviz-buzzer__icon {
+    width: 22px;
+    height: 22px;
+    z-index: 1;
+}
+
+.kviz-buzzer__ring {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 40px;
+    height: 40px;
+    margin: -20px 0 0 -20px;
+    border-radius: 50%;
+    border: 2px solid var(--kmila-brand-slate, #3b82f6);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.kviz-buzzer--active .kviz-buzzer__ring--1 {
+    animation: kviz-buzzer-pulse 900ms ease-out infinite;
+}
+.kviz-buzzer--active .kviz-buzzer__ring--2 {
+    animation: kviz-buzzer-pulse 900ms ease-out infinite;
+    animation-delay: 450ms;
+}
+.kviz-buzzer--active .kviz-buzzer__body {
+    box-shadow:
+        0 0 6px var(--kmila-brand-slate, #3b82f6),
+        0 0 12px color-mix(in srgb, var(--kmila-brand-slate, #3b82f6) 40%, transparent);
+}
+
+@keyframes kviz-buzzer-pulse {
+    0%   { transform: scale(0.8); opacity: 0.7; }
+    100% { transform: scale(2.0); opacity: 0.0; }
+}
+
+.kviz-buzzer__meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-family: var(--font-mono);
+}
+
+.kviz-buzzer__freq {
+    font-size: var(--fs-xs);
+    color: var(--text-color, #111);
+    font-weight: 600;
+    min-width: 60px;
+}
+
+.kviz-buzzer__port {
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+}
+
+/* ───── FW-4: matrix keypad ─────
+   3×3 / 3×4 / 4×3 / 4×4 grid of pill-shaped keys. Each key is a 42×42
+   CSS-px square with a rounded background; `--pressed` swaps in a
+   filled accent for a tactile press feedback. Cols count is set on
+   the grid template inline via `grid-template-columns` per widget. */
+.kviz-keypad {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    touch-action: none;
+    user-select: none;
+}
+
+.kviz-keypad--edit { cursor: move; }
+
+.kviz-keypad__grid {
+    display: grid;
+    /* grid-template-columns supplied inline (repeat(Cols, 42px)) */
+    grid-auto-rows: 42px;
+    gap: 4px;
+    padding: 6px;
+    background: var(--surface-card, #ffffff);
+    border-radius: 10px;
+    border: 1px solid var(--border-color, #d0d5dd);
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.kviz-keypad__key {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 14px;
+    background: var(--surface-input, #f8fafc);
+    color: var(--text-color, #111);
+    border-radius: 8px;
+    border: 1px solid var(--border-color, #d0d5dd);
+    box-shadow: 0 1px 0 rgba(0,0,0,0.05);
+    transition: background 40ms linear, transform 40ms linear;
+    cursor: pointer;
+}
+
+.kviz-keypad__key--pressed {
+    background: var(--kmila-brand-slate, #3b82f6);
+    color: #ffffff;
+    transform: translateY(1px);
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.25);
+}
+
+.kviz-keypad__port {
+    font-size: var(--fs-xs);
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+}
+
+/* ───── FW-3: HD44780 character LCD ─────
+   rows×cols cell grid rendering each ASCII char in a monospace green-
+   on-dark cell to evoke a real backlit LCD. Backlight config toggles
+   the `--on` / `--off` glow. Cell width fixed at 14 CSS-px so 16×2
+   displays at ~240 px and 20×4 at ~300 px — fits mobile viewports. */
+.kviz-lcd {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    touch-action: none;
+    user-select: none;
+}
+
+.kviz-lcd--edit { cursor: move; }
+
+.kviz-lcd__screen {
+    display: grid;
+    /* grid-template-columns supplied inline (repeat(Cols, 14px)) */
+    grid-auto-rows: 18px;
+    gap: 1px;
+    padding: 6px 8px;
+    background: #163f2c;
+    border-radius: 4px;
+    border: 2px solid #0b2a1c;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.6);
+    color: #a7f3c4;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 14px;
+    line-height: 1;
+}
+
+.kviz-lcd--on .kviz-lcd__screen {
+    background: #14532d;
+    color: #ecfccb;
+    box-shadow:
+        inset 0 1px 2px rgba(0,0,0,0.4),
+        0 0 6px rgba(163, 230, 53, 0.4);
+}
+
+.kviz-lcd--off .kviz-lcd__screen {
+    background: #1a2e24;
+    color: #4b6e58;
+}
+
+.kviz-lcd__cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    overflow: hidden;
+}
+
+.kviz-lcd__char { white-space: pre; }
+
+.kviz-lcd__port {
     font-size: var(--fs-xs);
     font-family: var(--font-mono);
     color: var(--text-muted);
@@ -14215,6 +15376,33 @@
     font-family: var(--font-mono);
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
+}
+
+/* ───── Ring 5 (2026-07-14): 7-seg bank (multi-digit composite) ─────
+   Tiles N SevenSegmentWidget-style digits side by side. Reuses the
+   .kviz-7seg__housing + .kviz-7seg__seg selectors so segment art stays
+   in sync with the single-digit widget. */
+.kviz-7seg-bank {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    user-select: none;
+    -webkit-user-select: none;
+}
+.kviz-7seg-bank--edit { cursor: move; }
+.kviz-7seg-bank__row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+}
+.kviz-7seg-bank__port {
+    font-size: var(--fs-xs);
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    padding-left: 2px;
 }
 
 /* ───── Phase 2: Stepper widget ───── */
@@ -14374,4 +15562,213 @@
 }
 .visual-page__bp-chip:hover {
     background: var(--surface-4, #15192a);
+}
+
+/* ============================================================================
+   KmilaTooltip — universal styled tooltip (v=30, 2026-07-19).
+
+   ARCHITECTURE (rewritten in v=30):
+     • Wrapper span is `display: block` so it doesn't shrink full-width
+       children (widget palette chips previously collapsed to content width
+       under the v=29 `display: inline-flex`). In flex-row toolbars the
+       wrapper still sizes to content because flex items with `width: auto`
+       are content-based; in flex-column parents (`align-items: stretch`
+       default) it stretches to fill the cross-axis, which is what palette
+       chips want. Block wrapper works in both cases where inline-flex
+       failed on the second.
+     • Bubble (`::after`) and arrow (`::before`) are `position: fixed`. That
+       escapes BOTH ancestor stacking contexts AND ancestor overflow:hidden
+       / overflow:auto clipping — the two failure modes that made v=29
+       tooltips render "behind" the Visual editor's canvas card (canvas
+       owned a competing stacking context; toolbar had overflow-x:auto that
+       implicitly clipped y too).
+     • Position is driven by CSS custom properties (--kt-l/--kt-t/--kt-r/
+       --kt-b/--kt-w/--kt-h) which kmila-shared-head.js refreshes on every
+       mouseover + focusin against the wrapper's getBoundingClientRect().
+       No Blazor JS interop needed — a single delegated listener pair on
+       document handles every wrapper on the page.
+     • z-index of 2147483000 sits just below int32 max, guaranteeing the
+       bubble wins against every modal / dialog / overlay in the app.
+   ============================================================================ */
+.kmila-tooltip {
+    /* Wrapper is truly layout-neutral via display: contents — the wrapper
+       generates no box, so its child (typically a <button>) sits in the
+       parent flex/grid/block layout exactly as it did before wrapping.
+       This is what fixes "widget palette chips don't take full column
+       width": with display: block the chip was a grandchild of the flex
+       column and <button> quirks kept it content-sized; with contents the
+       chip is once again a DIRECT flex item, inheriting align-items:
+       stretch cleanly. The ::after bubble still works because it uses
+       position: fixed anchored to CSS variables (below) — it doesn't need
+       the wrapper to be a positioning context. */
+    display: contents;
+}
+
+.kmila-tooltip__sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.kmila-tooltip::after,
+.kmila-tooltip::before {
+    position: fixed;
+    z-index: 2147483000;   /* Guaranteed-win layer. */
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 120ms ease;
+    transition-delay: 0ms;
+    /* Fallback when kmila-shared-head.js hasn't refreshed --kt-* yet: park
+       the bubble at (0,0) but keep it invisible via opacity:0. First hover
+       fires the JS listener before the reveal delay finishes. */
+    left: 0;
+    top: 0;
+}
+
+.kmila-tooltip::after {
+    content: attr(data-kmila-tip);
+    padding: var(--space-1, 4px) var(--space-3, 10px);
+    background-color: var(--surface-inverse, #0f172a);
+    color: var(--text-inverse, #f8fafc);
+    font-size: var(--fs-xs, 12px);
+    font-weight: var(--fw-medium, 500);
+    line-height: 1.35;
+    max-width: 260px;
+    width: max-content;   /* size to content, capped at max-width */
+    white-space: normal;
+    text-align: center;
+    border-radius: var(--radius-sm, 6px);
+    box-shadow: var(--shadow-2, 0 4px 12px rgba(0,0,0,0.18));
+}
+
+.kmila-tooltip::before {
+    content: "";
+    width: 0;
+    height: 0;
+    border: 5px solid transparent;
+}
+
+/* Reveal on hover + keyboard focus. `:has(:hover)` and `:has(:focus-within)`
+   are required because the wrapper is display: contents — it has no box, so
+   `.kmila-tooltip:hover` can never match. `:has()` reads descendant state
+   regardless of the wrapper's own box, so the bubble reveals when any
+   descendant (the wrapped button, typically) is hovered / focused. Support:
+   Chrome 105+, Firefox 121+, Safari 15.4+ — well ahead of Kmila's target
+   dates (all Kmila platforms ship 2023+ WebViews). */
+.kmila-tooltip:has(:hover)::after,
+.kmila-tooltip:has(:hover)::before,
+.kmila-tooltip:has(:focus-within)::after,
+.kmila-tooltip:has(:focus-within)::before {
+    opacity: 1;
+    transition-delay: 500ms;
+}
+
+/* --- Placement — TOP ---------------------------------------------------- */
+.kmila-tooltip--top::after {
+    left: calc(var(--kt-l, 0px) + var(--kt-w, 0px) / 2);
+    top: var(--kt-t, 0px);
+    transform: translate(-50%, calc(-100% - 8px));
+}
+.kmila-tooltip--top::before {
+    left: calc(var(--kt-l, 0px) + var(--kt-w, 0px) / 2);
+    top: var(--kt-t, 0px);
+    transform: translate(-50%, calc(-100% - 3px));
+    border-top-color: var(--surface-inverse, #0f172a);
+    border-bottom-width: 0;
+}
+
+/* --- Placement — BOTTOM ------------------------------------------------- */
+.kmila-tooltip--bottom::after {
+    left: calc(var(--kt-l, 0px) + var(--kt-w, 0px) / 2);
+    top: var(--kt-b, 0px);
+    transform: translate(-50%, 8px);
+}
+.kmila-tooltip--bottom::before {
+    left: calc(var(--kt-l, 0px) + var(--kt-w, 0px) / 2);
+    top: var(--kt-b, 0px);
+    transform: translate(-50%, 3px);
+    border-bottom-color: var(--surface-inverse, #0f172a);
+    border-top-width: 0;
+}
+
+/* --- Placement — LEFT (bubble on the wrapper's LTR-left) ---------------- */
+.kmila-tooltip--left::after {
+    left: var(--kt-l, 0px);
+    top: calc(var(--kt-t, 0px) + var(--kt-h, 0px) / 2);
+    transform: translate(calc(-100% - 8px), -50%);
+}
+.kmila-tooltip--left::before {
+    left: var(--kt-l, 0px);
+    top: calc(var(--kt-t, 0px) + var(--kt-h, 0px) / 2);
+    transform: translate(calc(-100% - 3px), -50%);
+    border-left-color: var(--surface-inverse, #0f172a);
+    border-right-width: 0;
+}
+
+/* --- Placement — RIGHT (bubble on the wrapper's LTR-right) -------------- */
+.kmila-tooltip--right::after {
+    left: var(--kt-r, 0px);
+    top: calc(var(--kt-t, 0px) + var(--kt-h, 0px) / 2);
+    transform: translate(8px, -50%);
+}
+.kmila-tooltip--right::before {
+    left: var(--kt-r, 0px);
+    top: calc(var(--kt-t, 0px) + var(--kt-h, 0px) / 2);
+    transform: translate(3px, -50%);
+    border-right-color: var(--surface-inverse, #0f172a);
+    border-left-width: 0;
+}
+
+/* RTL: Left ↔ Right placements swap so the bubble stays on the reading-
+   direction side. The arrow ::before also has to flip its colored / zeroed
+   border sides so the wedge still points at the button. Same convention as
+   NavMenu's collapsed-sidebar tooltip. */
+[dir="rtl"] .kmila-tooltip--left::after {
+    left: var(--kt-r, 0px);
+    transform: translate(8px, -50%);
+}
+[dir="rtl"] .kmila-tooltip--left::before {
+    left: var(--kt-r, 0px);
+    transform: translate(3px, -50%);
+    border-left-color: transparent;
+    border-right-color: var(--surface-inverse, #0f172a);
+    border-right-width: 5px;   /* restore — LTR --left::before zeroed this */
+    border-left-width: 0;      /* sharpen the wedge tip */
+}
+[dir="rtl"] .kmila-tooltip--right::after {
+    left: var(--kt-l, 0px);
+    transform: translate(calc(-100% - 8px), -50%);
+}
+[dir="rtl"] .kmila-tooltip--right::before {
+    left: var(--kt-l, 0px);
+    transform: translate(calc(-100% - 3px), -50%);
+    border-right-color: transparent;
+    border-left-color: var(--surface-inverse, #0f172a);
+    border-left-width: 5px;    /* restore — LTR --right::before zeroed this */
+    border-right-width: 0;     /* sharpen the wedge tip */
+}
+
+/* Reduced-motion: skip the fade tail. */
+@media (prefers-reduced-motion: reduce) {
+    .kmila-tooltip::after,
+    .kmila-tooltip::before {
+        transition: opacity 60ms ease;
+    }
+}
+
+/* Coarse-pointer (touch) — long-press should still surface the bubble
+   quickly. Shortens the 500 ms delay to 150 ms so tap-and-hold reveals. */
+@media (hover: none) {
+    .kmila-tooltip:hover::after,
+    .kmila-tooltip:hover::before,
+    .kmila-tooltip:focus-within::after,
+    .kmila-tooltip:focus-within::before {
+        transition-delay: 150ms;
+    }
 }

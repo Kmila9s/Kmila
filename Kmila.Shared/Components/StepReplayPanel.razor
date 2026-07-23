@@ -31,32 +31,35 @@
              aria-label="@Traductor.T("EDITOR_REPLAY_LIVE_CONTROLS")">
             @if (Replay.IsLivePaused)
             {
-                <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--sm"
-                        title="@Traductor.T("SIM_RESUME")"
-                        aria-label="@Traductor.T("SIM_RESUME")"
-                        @onclick="OnResumeLive">
-                    <Icon Name="IconName.PlayFill" />
-                    <span>@Traductor.T("SIM_RESUME")</span>
-                </button>
+                <KmilaTooltip TextKey="SIM_RESUME">
+                    <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--sm"
+                            aria-label="@Traductor.T("SIM_RESUME")"
+                            @onclick="OnResumeLive">
+                        <Icon Name="IconName.PlayFill" />
+                        <span>@Traductor.T("SIM_RESUME")</span>
+                    </button>
+                </KmilaTooltip>
             }
             else
             {
-                <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--sm"
-                        title="@Traductor.T("SIM_PAUSE")"
-                        aria-label="@Traductor.T("SIM_PAUSE")"
-                        @onclick="OnPauseLive">
-                    <Icon Name="IconName.PauseFill" />
-                    <span>@Traductor.T("SIM_PAUSE")</span>
-                </button>
+                <KmilaTooltip TextKey="SIM_PAUSE">
+                    <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--sm"
+                            aria-label="@Traductor.T("SIM_PAUSE")"
+                            @onclick="OnPauseLive">
+                        <Icon Name="IconName.PauseFill" />
+                        <span>@Traductor.T("SIM_PAUSE")</span>
+                    </button>
+                </KmilaTooltip>
             }
-            <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
-                    title="@Traductor.T("CONCEPTS_PLAYER_STEP_FORWARD")"
-                    aria-label="@Traductor.T("CONCEPTS_PLAYER_STEP_FORWARD")"
-                    disabled="@(!Replay.IsLivePaused)"
-                    @onclick="OnStepLive">
-                <Icon Name="IconName.SkipEnd" />
-                <span>@Traductor.T("CONCEPTS_PLAYER_STEP_FORWARD")</span>
-            </button>
+            <KmilaTooltip TextKey="CONCEPTS_PLAYER_STEP_FORWARD">
+                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                        aria-label="@Traductor.T("CONCEPTS_PLAYER_STEP_FORWARD")"
+                        disabled="@(!Replay.IsLivePaused)"
+                        @onclick="OnStepLive">
+                    <Icon Name="IconName.SkipEnd" />
+                    <span>@Traductor.T("CONCEPTS_PLAYER_STEP_FORWARD")</span>
+                </button>
+            </KmilaTooltip>
             <span class="kmila-replay__live-hint">
                 @Traductor.T("EDITOR_REPLAY_LIVE_HINT")
             </span>
@@ -77,12 +80,13 @@
                        @bind="_pendingBreakpointLine" @bind:event="oninput"
                        @onkeydown="OnBreakpointInputKeyDown"
                        class="kmila-replay__bp-input" />
-                <button type="button" class="kmila-btn-icon"
-                        title="@Traductor.T("EDITOR_REPLAY_BREAKPOINTS_ADD")"
-                        aria-label="@Traductor.T("EDITOR_REPLAY_BREAKPOINTS_ADD")"
-                        @onclick="OnAddBreakpoint">
-                    <Icon Name="IconName.PlusCircle" />
-                </button>
+                <KmilaTooltip TextKey="EDITOR_REPLAY_BREAKPOINTS_ADD">
+                    <button type="button" class="kmila-btn-icon"
+                            aria-label="@Traductor.T("EDITOR_REPLAY_BREAKPOINTS_ADD")"
+                            @onclick="OnAddBreakpoint">
+                        <Icon Name="IconName.PlusCircle" />
+                    </button>
+                </KmilaTooltip>
             </div>
             @if (Replay.Breakpoints.Count == 0)
             {
@@ -104,12 +108,13 @@
                                     <Icon Name="IconName.ExclamationTriangle" />
                                 </span>
                             }
-                            <button type="button" class="kmila-btn-icon"
-                                    title="@Traductor.T("EDITOR_REPLAY_BREAKPOINTS_REMOVE")"
-                                    aria-label="@Traductor.T("EDITOR_REPLAY_BREAKPOINTS_REMOVE")"
-                                    @onclick="() => Replay.ToggleBreakpoint(line)">
-                                <Icon Name="IconName.XCircle" />
-                            </button>
+                            <KmilaTooltip TextKey="EDITOR_REPLAY_BREAKPOINTS_REMOVE">
+                                <button type="button" class="kmila-btn-icon"
+                                        aria-label="@Traductor.T("EDITOR_REPLAY_BREAKPOINTS_REMOVE")"
+                                        @onclick="() => Replay.ToggleBreakpoint(line)">
+                                    <Icon Name="IconName.XCircle" />
+                                </button>
+                            </KmilaTooltip>
                         </li>
                     }
                 </ul>

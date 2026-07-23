@@ -82,6 +82,11 @@ public static class GateGlyphs
         CellKind.LT => "<", CellKind.LTE => "≤",
         CellKind.GT => ">", CellKind.GTE => "≥",
         CellKind.BLACKBOX_PROCESS => "process",
+        // Blackbox component ships with its entity name in `Attrs["Op"]`,
+        // so `Label(kind)` is only reached when that attr is empty —
+        // fall back to the generic "component" tag rather than the
+        // verbose enum name.
+        CellKind.BLACKBOX_COMPONENT => "component",
         _ => kind.ToString().ToLowerInvariant(),
     };
 

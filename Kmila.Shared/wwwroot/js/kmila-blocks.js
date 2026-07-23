@@ -406,24 +406,51 @@
             }
         }
 
+        // 2026-07-20 Phase 23 — categoryToolbox support. Alongside the
+        // pre-P23 `block` + `sep` kinds, `category` items now render a
+        // header + recurse into their nested `contents`. Single-depth
+        // only (no nested categories). Deliberately headers-only — no
+        // collapse/expand, no icons, no per-category color. Data-attr
+        // `data-category` on the header lets Playwright + CSS target
+        // by category name.
         _renderPalette(toolboxJson) {
             if (this.readOnly) return;
             this.paletteEl.innerHTML = '';
             const contents = (toolboxJson && toolboxJson.contents) || [];
             for (const item of contents) {
-                if (item.kind === 'sep') {
-                    const sep = document.createElement('div');
-                    sep.className = 'kmila-block-palette__sep';
-                    this.paletteEl.appendChild(sep);
-                    continue;
+                this._renderPaletteItem(item);
+            }
+        }
+
+        _renderPaletteItem(item) {
+            if (!item) return;
+            if (item.kind === 'sep') {
+                const sep = document.createElement('div');
+                sep.className = 'kmila-block-palette__sep';
+                this.paletteEl.appendChild(sep);
+                return;
+            }
+            if (item.kind === 'category') {
+                const header = document.createElement('div');
+                header.className = 'kmila-toolbox-category';
+                header.dataset.category = item.name || '';
+                header.textContent = item.name || '';
+                this.paletteEl.appendChild(header);
+                for (const child of (item.contents || [])) {
+                    // Single-depth: skip nested categories to keep the
+                    // renderer flat + predictable. Nested cats fall
+                    // through as unknown kinds (silently ignored).
+                    if (child.kind === 'category') continue;
+                    this._renderPaletteItem(child);
                 }
-                if (item.kind === 'block' && BLOCK_DEFS[item.type]) {
-                    const template = new Block(this, item.type);
-                    template.el.classList.add('kmila-block--palette');
-                    template.el.dataset.paletteType = item.type;
-                    template.el.tabIndex = 0;
-                    this.paletteEl.appendChild(template.el);
-                }
+                return;
+            }
+            if (item.kind === 'block' && BLOCK_DEFS[item.type]) {
+                const template = new Block(this, item.type);
+                template.el.classList.add('kmila-block--palette');
+                template.el.dataset.paletteType = item.type;
+                template.el.tabIndex = 0;
+                this.paletteEl.appendChild(template.el);
             }
         }
 

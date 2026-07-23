@@ -51,10 +51,12 @@
                            @bind:event="oninput" />
                     @if (!string.IsNullOrEmpty(_filter))
                     {
-                        <button type="button" class="projects-search__clear"
-                                @onclick="() => _filter = string.Empty">
-                            <Icon Name="IconName.X" />
-                        </button>
+                        <KmilaTooltip TextKey="LOGS_CLEAR_FILTER_TIP">
+                            <button type="button" class="projects-search__clear"
+                                    @onclick="() => _filter = string.Empty">
+                                <Icon Name="IconName.X" />
+                            </button>
+                        </KmilaTooltip>
                     }
                 </label>
 
@@ -72,26 +74,42 @@
             </div>
 
             <div class="kmila-slot-header-tools__actions">
-                <button type="button"
-                        class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm logs-page__toggle @(_autoScroll ? "is-active" : "")"
-                        @onclick="() => _autoScroll = !_autoScroll"
-                        title="@Traductor.T("LOGS_AUTOSCROLL")">
-                    <Icon Name="IconName.ArrowDownSquare" />
-                </button>
+                <KmilaTooltip TextKey="LOGS_AUTOSCROLL">
+                    <button type="button"
+                            class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm logs-page__toggle @(_autoScroll ? "is-active" : "")"
+                            @onclick="() => _autoScroll = !_autoScroll"
+                            aria-label="@Traductor.T("LOGS_AUTOSCROLL")">
+                        <Icon Name="IconName.ArrowDownSquare" />
+                    </button>
+                </KmilaTooltip>
 
-                <button type="button"
-                        class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm logs-page__toggle @(_paused ? "is-active" : "")"
-                        @onclick="() => _paused = !_paused"
-                        title="@Traductor.T(_paused ? "LOGS_RESUME" : "LOGS_PAUSE")">
-                    <Icon Name="@(_paused ? IconName.PlayFill : IconName.PauseFill)" />
-                </button>
+                <KmilaTooltip TextKey="@(_paused ? "LOGS_RESUME" : "LOGS_PAUSE")">
+                    <button type="button"
+                            class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm logs-page__toggle @(_paused ? "is-active" : "")"
+                            @onclick="() => _paused = !_paused"
+                            aria-label="@Traductor.T(_paused ? "LOGS_RESUME" : "LOGS_PAUSE")">
+                        <Icon Name="@(_paused ? IconName.PlayFill : IconName.PauseFill)" />
+                    </button>
+                </KmilaTooltip>
 
-                <button type="button"
-                        class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--danger kmila-btn-icon--sm"
-                        @onclick="Store.Clear"
-                        title="@Traductor.T("LOGS_CLEAR")">
-                    <Icon Name="IconName.Trash" />
-                </button>
+                <KmilaTooltip TextKey="LOGS_EXPORT">
+                    <button type="button"
+                            class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
+                            @onclick="ExportLogsAsync"
+                            disabled="@(_snapshot.Count == 0)"
+                            aria-label="@Traductor.T("LOGS_EXPORT")">
+                        <Icon Name="IconName.Download" />
+                    </button>
+                </KmilaTooltip>
+
+                <KmilaTooltip TextKey="LOGS_CLEAR">
+                    <button type="button"
+                            class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--danger kmila-btn-icon--sm"
+                            @onclick="Store.Clear"
+                            aria-label="@Traductor.T("LOGS_CLEAR")">
+                        <Icon Name="IconName.Trash" />
+                    </button>
+                </KmilaTooltip>
             </div>
         </div>
     </header>
@@ -135,14 +153,15 @@
                        stacktrace when something breaks. *@
                     @if (e.Level >= Microsoft.Extensions.Logging.LogLevel.Error)
                     {
-                        <button type="button"
-                                class="logs-row__report kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
-                                title="@Traductor.T("LOGS_REPORT_THIS")"
-                                aria-label="@Traductor.T("LOGS_REPORT_THIS")"
-                                @onclick="() => ReportEntryAsync(e)">
-                            <Icon Name="IconName.FlagFill" />
-                            <span>@Traductor.T("LOGS_REPORT_SHORT")</span>
-                        </button>
+                        <KmilaTooltip TextKey="LOGS_REPORT_THIS">
+                            <button type="button"
+                                    class="logs-row__report kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                                    aria-label="@Traductor.T("LOGS_REPORT_THIS")"
+                                    @onclick="() => ReportEntryAsync(e)">
+                                <Icon Name="IconName.FlagFill" />
+                                <span>@Traductor.T("LOGS_REPORT_SHORT")</span>
+                            </button>
+                        </KmilaTooltip>
                     }
                 </li>
             }
@@ -286,6 +305,35 @@
         {
             // Ghost-failing a log-report button is better than a toast —
             // if the browser blocked the popup the user will try again.
+        }
+    }
+
+    private async Task ExportLogsAsync()
+    {
+        if (_snapshot.Count == 0) return;
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"# Kmila app log — exported {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+        foreach (var e in _snapshot)
+        {
+            sb.Append(e.Timestamp.ToString("HH:mm:ss.fff"))
+              .Append(" [").Append(e.Level.ToString().ToUpperInvariant()).Append("] ")
+              .Append(ShortenCategory(e.Category)).Append(" — ")
+              .AppendLine(e.Message);
+            if (!string.IsNullOrEmpty(e.Exception))
+                sb.AppendLine(e.Exception);
+        }
+        var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+        var result = await Export.SaveTextAsync(ExportCategory.Logs,
+            $"kmila-app-{stamp}.log", "text/plain", sb.ToString());
+        if (result.Saved)
+        {
+            var msg = result.Path != null ? $"Saved: {result.Path}" : Traductor.T("OUTPUT_LOG_DOWNLOADED");
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), msg, ToastType.Success));
+        }
+        else
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                result.Error ?? Traductor.T("COMMON_EXPORT_FAILED"), ToastType.Danger));
         }
     }
 

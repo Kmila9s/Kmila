@@ -1,0 +1,313 @@
+@namespace Kmila.Shared.Components.VisualRun
+@using Kmila.Shared.Services.VisualRun
+
+@*
+    Matrix keypad widget (FW-4).
+
+    Sizes: 3×3, 3×4, 4×3, 4×4 via `rows` / `cols` config (each clamped 3..4).
+    Labels default to the standard telephone/hex 4×4 layout
+    (1 2 3 A / 4 5 6 B / 7 8 9 C / * 0 # D).
+
+    Two modes:
+      • "decoded" (default, assisted) — 2 pins:
+          `key`     : std_logic_vector(3 downto 0) = ordinal 0..15 of
+                       lowest-index pressed key (row-major scan)
+          `pressed` : std_logic strobe = OR of every key state
+        The widget scans internally so the design never sees the raw
+        matrix — great for beginner designs that just want "which
+        digit did the user press?".
+      • "raw-scan" — real matrix: `row0..rowN-1` are widget INPUTS
+        (design drives them, typically low to select a row) and
+        `col0..colM-1` are widget OUTPUTS (widget grounds a col when a
+        key at (r, c) is pressed AND the design has driven row_r low).
+        Matches the exact behaviour of a real membrane keypad; the
+        student writes their own scanner.
+
+    First widget with a MIXED pin-direction surface — the props pane
+    renders "Input N · Output M" via KvizWidgetCatalog.PinCountsByDir
+    instead of the single-direction chip other widgets use.
+*@
+
+<div class="kviz-widget kviz-keypad kviz-keypad--@Mode @(EditMode ? "kviz-keypad--edit" : "") @(Selected ? "kviz-widget--selected" : "")"
+     style="left:@(Comp.Position.X)px; top:@(Comp.Position.Y)px;"
+     data-component-id="@Comp.Id"
+     data-mode="@Mode"
+     data-rows="@Rows"
+     data-cols="@Cols"
+     data-key="@KeyBits"
+     data-pressed="@(AnyPressed ? "1" : "0")"
+     @onpointerdown="OnRootPointerDown"
+     @onpointerdown:stopPropagation="@(!EditMode)">
+    <div class="kviz-keypad__grid" style="grid-template-columns: repeat(@Cols, 42px);">
+        @for (int r = 0; r < Rows; r++)
+        {
+            for (int c = 0; c < Cols; c++)
+            {
+                var lr = r; var lc = c;
+                var pressed = _pressed[lr, lc];
+                <div class="kviz-keypad__key @(pressed ? "kviz-keypad__key--pressed" : "")"
+                     data-key-row="@lr" data-key-col="@lc"
+                     @onpointerdown="e => OnKeyPointerDown(e, lr, lc)"
+                     @onpointerup="() => OnKeyPointerUp(lr, lc)"
+                     @onpointerleave="() => OnKeyPointerUp(lr, lc)"
+                     @onpointercancel="() => OnKeyPointerUp(lr, lc)"
+                     @onpointerdown:stopPropagation>@LabelFor(lr, lc)</div>
+            }
+        }
+    </div>
+    <div class="kviz-keypad__port">@PortLabel</div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public KvizComponent Comp { get; set; } = default!;
+    [Parameter] public VisualRunCoordinator? Coordinator { get; set; }
+    [Parameter] public bool EditMode { get; set; }
+    [Parameter] public bool Selected { get; set; }
+    [Parameter] public EventCallback<Microsoft.AspNetCore.Components.Web.PointerEventArgs> OnPointerDownExternal { get; set; }
+
+    [CascadingParameter(Name = "FrameVersion")] public int FrameVersion { get; set; }
+
+    // Per-key pressed state — owned here rather than in VisualPanel
+    // because the keypad's press semantics (multi-press, hold, release
+    // on leave) are entirely local. Sized to the current rows/cols on
+    // every reference via ReshapeIfNeeded.
+    private bool[,] _pressed = new bool[4, 4];
+    private int _lastRows = 4, _lastCols = 4;
+
+    // Last-published values so we don't hammer the coordinator's
+    // InputStateMap on every repaint. Also gives us a snapshot to diff
+    // if we ever want to log transitions.
+    private readonly Dictionary<string, string> _lastPublished = new(StringComparer.OrdinalIgnoreCase);
+
+    private int Rows => Math.Clamp(Comp.Config.GetInt("rows", 4), 3, 4);
+    private int Cols => Math.Clamp(Comp.Config.GetInt("cols", 4), 3, 4);
+    private string Mode => Comp.Config.GetString("mode", "decoded") == "raw-scan" ? "raw-scan" : "decoded";
+
+    // Default labels — telephone/hex 4×4 layout, truncated for smaller
+    // sizes. Kept in a single flat string so a user-supplied `labels`
+    // JSON array can override cell-by-cell without breaking positions.
+    private static readonly string[] DefaultLabels4x4 = new[]
+    {
+        "1","2","3","A",
+        "4","5","6","B",
+        "7","8","9","C",
+        "*","0","#","D",
+    };
+
+    private string LabelFor(int r, int c)
+    {
+        int idx = r * 4 + c; // labels array stored in 4-col shape
+        if (Comp.Config.TryGetValue("labels", out var el)
+            && el.ValueKind == System.Text.Json.JsonValueKind.Array)
+        {
+            int len = el.GetArrayLength();
+            int flat = r * Cols + c;
+            if (flat < len)
+            {
+                var s = el[flat].GetString();
+                if (!string.IsNullOrEmpty(s)) return s;
+            }
+        }
+        return idx < DefaultLabels4x4.Length ? DefaultLabels4x4[idx] : "?";
+    }
+
+    private void ReshapeIfNeeded()
+    {
+        int r = Rows, c = Cols;
+        if (_pressed.GetLength(0) == r && _pressed.GetLength(1) == c) return;
+        var next = new bool[r, c];
+        int minR = Math.Min(_lastRows, r);
+        int minC = Math.Min(_lastCols, c);
+        for (int i = 0; i < minR; i++)
+            for (int j = 0; j < minC; j++)
+                next[i, j] = _pressed[i, j];
+        _pressed = next;
+        _lastRows = r;
+        _lastCols = c;
+    }
+
+    protected override void OnParametersSet()
+    {
+        ReshapeIfNeeded();
+    }
+
+    private bool AnyPressed
+    {
+        get
+        {
+            for (int r = 0; r < Rows; r++)
+                for (int c = 0; c < Cols; c++)
+                    if (_pressed[r, c]) return true;
+            return false;
+        }
+    }
+
+    // MSB-first 4-bit encoding of the lowest-index pressed key. The
+    // encoding parses the KEY LABEL first: a single hex-digit character
+    // ('0'..'9' or 'A'..'F', case-insensitive) maps to its natural value
+    // so pressing "5" → 0101, pressing "A" → 1010. This matches every
+    // real hex keypad and matches student intuition ("press 5, see 5").
+    // Non-hex labels ('*', '#', or custom strings) fall back to the
+    // row-major ordinal so the widget still emits *something* unique
+    // per key. Reported 2026-07-05 by Daniel while testing the
+    // `keypad-display` sample — the ordinal-only variant confused users
+    // who read the label as the value.
+    private string KeyBits
+    {
+        get
+        {
+            for (int r = 0; r < Rows; r++)
+                for (int c = 0; c < Cols; c++)
+                    if (_pressed[r, c])
+                    {
+                        int val = ValueForKey(r, c);
+                        return Convert.ToString(val & 0xF, 2).PadLeft(4, '0');
+                    }
+            return "0000";
+        }
+    }
+
+    private int ValueForKey(int r, int c)
+    {
+        var label = LabelFor(r, c);
+        if (label.Length == 1)
+        {
+            char ch = label[0];
+            if (ch >= '0' && ch <= '9') return ch - '0';
+            if (ch >= 'A' && ch <= 'F') return 10 + (ch - 'A');
+            if (ch >= 'a' && ch <= 'f') return 10 + (ch - 'a');
+        }
+        return (r * Cols + c) & 0xF;
+    }
+
+    private string PortLabel
+    {
+        get
+        {
+            if (Mode == "decoded")
+            {
+                var k = Comp.Bindings.TryGetValue("key", out var kp) ? kp : null;
+                var p = Comp.Bindings.TryGetValue("pressed", out var pp) ? pp : null;
+                if (string.IsNullOrEmpty(k) && string.IsNullOrEmpty(p)) return "(unwired)";
+                return $"{k ?? "?"} · {p ?? "?"}";
+            }
+            var (inC, outC) = KvizWidgetCatalog.PinCountsByDir(Comp);
+            int wired = 0;
+            foreach (var b in Comp.Bindings.Values)
+                if (!string.IsNullOrEmpty(b)) wired++;
+            return $"{wired}/{inC + outC} wired";
+        }
+    }
+
+    private async Task OnRootPointerDown(Microsoft.AspNetCore.Components.Web.PointerEventArgs e)
+    {
+        if (EditMode && OnPointerDownExternal.HasDelegate)
+            await OnPointerDownExternal.InvokeAsync(e);
+    }
+
+    private async Task OnKeyPointerDown(Microsoft.AspNetCore.Components.Web.PointerEventArgs e, int r, int c)
+    {
+        if (EditMode)
+        {
+            // Edit mode: treat key taps as widget-move drags so the whole
+            // keypad still selects + drags when the user grabs a cell.
+            if (OnPointerDownExternal.HasDelegate)
+                await OnPointerDownExternal.InvokeAsync(e);
+            return;
+        }
+        _pressed[r, c] = true;
+        PublishState();
+        // Very fast taps (adb input, mobile touch tap) can release
+        // `pressed` back to 0 before the coordinator's next tick drain
+        // sees the '1' — clocked designs like keypad_display would
+        // never latch. Hold `pressed` (and `key` in decoded mode) high
+        // for a few ticks via the existing bounce FIFO so a rising
+        // clock edge always lands inside the press window.
+        if (Coordinator == null) return;
+        if (Mode == "decoded")
+        {
+            if (Comp.Bindings.TryGetValue("pressed", out var pp) && !string.IsNullOrEmpty(pp))
+                Coordinator.EnqueueBounce(pp, new[] { "1", "1", "1", "1", "1", "1" });
+            if (Comp.Bindings.TryGetValue("key", out var kp) && !string.IsNullOrEmpty(kp))
+            {
+                var kb = KeyBits;
+                Coordinator.EnqueueBounce(kp, new[] { kb, kb, kb, kb, kb, kb });
+            }
+        }
+    }
+
+    private void OnKeyPointerUp(int r, int c)
+    {
+        if (EditMode) return;
+        if (!_pressed[r, c]) return;
+        _pressed[r, c] = false;
+        PublishState();
+    }
+
+    // Push the current key-press state to bound ports so the design
+    // sees the update on the next tick. Decoded mode writes `key` +
+    // `pressed`; raw-scan writes each col based on the currently-driven
+    // row values. Also called on every repaint via OnAfterRenderAsync
+    // so raw-scan's col outputs track the design's row drive in real
+    // time — the scan handshake needs both press events AND row-drive
+    // events to update cols correctly.
+    private void PublishState()
+    {
+        if (Coordinator == null) return;
+        if (Mode == "decoded")
+        {
+            PublishIfChanged("key", KeyBits);
+            PublishIfChanged("pressed", AnyPressed ? "1" : "0");
+        }
+        else
+        {
+            // Read each row pin's current value once and cache; cheap
+            // lookup for the col-drive loop below.
+            var rowLow = new bool[Rows];
+            for (int r = 0; r < Rows; r++)
+            {
+                if (!Comp.Bindings.TryGetValue($"row{r}", out var rp) || string.IsNullOrEmpty(rp))
+                {
+                    // Unwired row is treated as high (idle scan) — no key
+                    // on that row will ever ground its col.
+                    rowLow[r] = false;
+                    continue;
+                }
+                var rv = Coordinator.LatestSlicedValue(rp);
+                rowLow[r] = !string.IsNullOrEmpty(rv) && rv[^1] == '0';
+            }
+            // Col value = '0' iff any key at (r, c) is pressed AND row_r
+            // is being driven low. Matches a real diode-less keypad's
+            // pull-up-then-scan-low behaviour.
+            for (int c = 0; c < Cols; c++)
+            {
+                bool grounded = false;
+                for (int r = 0; r < Rows; r++)
+                {
+                    if (_pressed[r, c] && rowLow[r]) { grounded = true; break; }
+                }
+                PublishIfChanged($"col{c}", grounded ? "0" : "1");
+            }
+        }
+    }
+
+    private void PublishIfChanged(string pinName, string value)
+    {
+        if (Coordinator == null) return;
+        if (!Comp.Bindings.TryGetValue(pinName, out var port) || string.IsNullOrEmpty(port)) return;
+        if (_lastPublished.TryGetValue(port, out var prev) && prev == value) return;
+        _lastPublished[port] = value;
+        Coordinator.WriteInput(port, value);
+    }
+
+    // Raw-scan mode needs to re-publish col outputs whenever the row
+    // inputs change — even without a press event. Piggyback on the
+    // per-frame render pulse (FrameVersion cascade) and re-run
+    // PublishState() every render pass while a coordinator is
+    // attached. Cheap: PublishIfChanged short-circuits when nothing
+    // changed.
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (Coordinator != null && !EditMode) PublishState();
+    }
+}

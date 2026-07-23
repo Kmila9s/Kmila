@@ -21,18 +21,22 @@
             <span class="files-list__count">@_projectFiles.Count</span>
         }
         <div class="files-list__toolbar">
-            <button type="button"
-                    class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
-                    title="@Traductor.T("FILES_NEW_FILE")"
-                    @onclick="() => RequestNewFile(string.Empty)">
-                <Icon Name="IconName.FileEarmarkPlus" />
-            </button>
-            <button type="button"
-                    class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
-                    title="@Traductor.T("FILES_NEW_FOLDER")"
-                    @onclick="() => StartNewFolder(string.Empty)">
-                <Icon Name="IconName.FolderPlus" />
-            </button>
+            <KmilaTooltip TextKey="FILES_NEW_FILE">
+                <button type="button"
+                        class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                        aria-label="@Traductor.T("FILES_NEW_FILE")"
+                        @onclick="() => RequestNewFile(string.Empty)">
+                    <Icon Name="IconName.FileEarmarkPlus" />
+                </button>
+            </KmilaTooltip>
+            <KmilaTooltip TextKey="FILES_NEW_FOLDER">
+                <button type="button"
+                        class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                        aria-label="@Traductor.T("FILES_NEW_FOLDER")"
+                        @onclick="() => StartNewFolder(string.Empty)">
+                    <Icon Name="IconName.FolderPlus" />
+                </button>
+            </KmilaTooltip>
         </div>
     </header>
 
@@ -193,23 +197,26 @@
 
                         @if (!isEditing)
                         {
-                            <button type="button"
-                                    class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm file-row__open"
-                                    @onclick="() => OpenFileAsync(file)">
-                                <Icon Name="IconName.BoxArrowUpRight" />
-                                <span>@Traductor.T("FILES_OPEN")</span>
-                            </button>
+                            <KmilaTooltip TextKey="FILES_OPEN_TIP" Placement="Left">
+                                <button type="button"
+                                        class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm file-row__open"
+                                        @onclick="() => OpenFileAsync(file)">
+                                    <Icon Name="IconName.BoxArrowUpRight" />
+                                    <span>@Traductor.T("FILES_OPEN")</span>
+                                </button>
+                            </KmilaTooltip>
 
                             var fileMenuKey = $"file:{file.Id}";
-                            <button type="button"
-                                    class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm file-row__menu-btn @(_openMenuKey == fileMenuKey ? "is-open" : "")"
-                                    data-kmila-menu-key="@fileMenuKey"
-                                    aria-label="@Traductor.T("FILES_MORE_ACTIONS")"
-                                    title="@Traductor.T("FILES_MORE_ACTIONS")"
-                                    @onclick:stopPropagation="true"
-                                    @onclick="async (e) => await ToggleMenuAsync(fileMenuKey, e)">
-                                <Icon Name="IconName.ThreeDotsVertical" />
-                            </button>
+                            <KmilaTooltip TextKey="FILES_MORE_ACTIONS">
+                                <button type="button"
+                                        class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm file-row__menu-btn @(_openMenuKey == fileMenuKey ? "is-open" : "")"
+                                        data-kmila-menu-key="@fileMenuKey"
+                                        aria-label="@Traductor.T("FILES_MORE_ACTIONS")"
+                                        @onclick:stopPropagation="true"
+                                        @onclick="async (e) => await ToggleMenuAsync(fileMenuKey, e)">
+                                    <Icon Name="IconName.ThreeDotsVertical" />
+                                </button>
+                            </KmilaTooltip>
                         }
                     </li>
                 }
@@ -235,27 +242,35 @@
             if (k.StartsWith("folder:"))
             {
                 var path = k.Substring("folder:".Length);
-                <button type="button" class="file-row__menu-item"
-                        @onclick="() => OnMenuItem(() => RequestNewFile(path))">
-                    <Icon Name="IconName.FileEarmarkPlus" />
-                    <span>@Traductor.T("FILES_NEW_FILE")</span>
-                </button>
-                <button type="button" class="file-row__menu-item"
-                        @onclick="() => OnMenuItemSync(() => StartNewFolder(path))">
-                    <Icon Name="IconName.FolderPlus" />
-                    <span>@Traductor.T("FILES_NEW_FOLDER")</span>
-                </button>
-                <button type="button" class="file-row__menu-item"
-                        @onclick="() => OnMenuItemSync(() => StartFolderRename(path))">
-                    <Icon Name="IconName.Pencil" />
-                    <span>@Traductor.T("FILES_FOLDER_RENAME")</span>
-                </button>
-                <button type="button"
-                        class="file-row__menu-item file-row__menu-item--danger"
-                        @onclick="() => OnMenuItem(() => RemoveFolderAsync(path))">
-                    <Icon Name="IconName.Trash" />
-                    <span>@Traductor.T("FILES_DELETE")</span>
-                </button>
+                <KmilaTooltip TextKey="FILES_NEW_FILE_IN_FOLDER_TIP" Placement="Left">
+                    <button type="button" class="file-row__menu-item"
+                            @onclick="() => OnMenuItem(() => RequestNewFile(path))">
+                        <Icon Name="IconName.FileEarmarkPlus" />
+                        <span>@Traductor.T("FILES_NEW_FILE")</span>
+                    </button>
+                </KmilaTooltip>
+                <KmilaTooltip TextKey="FILES_NEW_SUBFOLDER_TIP" Placement="Left">
+                    <button type="button" class="file-row__menu-item"
+                            @onclick="() => OnMenuItemSync(() => StartNewFolder(path))">
+                        <Icon Name="IconName.FolderPlus" />
+                        <span>@Traductor.T("FILES_NEW_FOLDER")</span>
+                    </button>
+                </KmilaTooltip>
+                <KmilaTooltip TextKey="FILES_FOLDER_RENAME_TIP" Placement="Left">
+                    <button type="button" class="file-row__menu-item"
+                            @onclick="() => OnMenuItemSync(() => StartFolderRename(path))">
+                        <Icon Name="IconName.Pencil" />
+                        <span>@Traductor.T("FILES_FOLDER_RENAME")</span>
+                    </button>
+                </KmilaTooltip>
+                <KmilaTooltip TextKey="FILES_FOLDER_DELETE_TIP" Placement="Left">
+                    <button type="button"
+                            class="file-row__menu-item file-row__menu-item--danger"
+                            @onclick="() => OnMenuItem(() => RemoveFolderAsync(path))">
+                        <Icon Name="IconName.Trash" />
+                        <span>@Traductor.T("FILES_DELETE")</span>
+                    </button>
+                </KmilaTooltip>
             }
             else if (k.StartsWith("file:") && int.TryParse(k.Substring("file:".Length), out var fid))
             {
@@ -263,24 +278,30 @@
                 if (f != null)
                 {
                     var fIsEntry = _entryFileName != null && string.Equals(_entryFileName, f.RelativePath, StringComparison.Ordinal);
-                    <button type="button" role="menuitem"
-                            class="file-row__menu-item"
-                            @onclick="() => OnMenuItem(() => ToggleEntryPointAsync(f))">
-                        <Icon Name="@(fIsEntry ? IconName.StarFill : IconName.Star)" />
-                        <span>@Traductor.T(fIsEntry ? "FILES_CLEAR_ENTRY" : "FILES_SET_AS_ENTRY")</span>
-                    </button>
-                    <button type="button" role="menuitem"
-                            class="file-row__menu-item"
-                            @onclick="() => OnMenuItemSync(() => StartRename(f))">
-                        <Icon Name="IconName.Pencil" />
-                        <span>@Traductor.T("FILES_RENAME")</span>
-                    </button>
-                    <button type="button" role="menuitem"
-                            class="file-row__menu-item"
-                            @onclick="() => OnMenuItem(() => OpenDetailsAsync(f))">
-                        <Icon Name="IconName.InfoCircle" />
-                        <span>@Traductor.T("FILES_DETAILS")</span>
-                    </button>
+                    <KmilaTooltip TextKey="@(fIsEntry ? "FILES_CLEAR_ENTRY_TIP" : "FILES_SET_AS_ENTRY_TIP")" Placement="Left">
+                        <button type="button" role="menuitem"
+                                class="file-row__menu-item"
+                                @onclick="() => OnMenuItem(() => ToggleEntryPointAsync(f))">
+                            <Icon Name="@(fIsEntry ? IconName.StarFill : IconName.Star)" />
+                            <span>@Traductor.T(fIsEntry ? "FILES_CLEAR_ENTRY" : "FILES_SET_AS_ENTRY")</span>
+                        </button>
+                    </KmilaTooltip>
+                    <KmilaTooltip TextKey="FILES_RENAME_TIP" Placement="Left">
+                        <button type="button" role="menuitem"
+                                class="file-row__menu-item"
+                                @onclick="() => OnMenuItemSync(() => StartRename(f))">
+                            <Icon Name="IconName.Pencil" />
+                            <span>@Traductor.T("FILES_RENAME")</span>
+                        </button>
+                    </KmilaTooltip>
+                    <KmilaTooltip TextKey="FILES_DETAILS_TIP" Placement="Left">
+                        <button type="button" role="menuitem"
+                                class="file-row__menu-item"
+                                @onclick="() => OnMenuItem(() => OpenDetailsAsync(f))">
+                            <Icon Name="IconName.InfoCircle" />
+                            <span>@Traductor.T("FILES_DETAILS")</span>
+                        </button>
+                    </KmilaTooltip>
                     @foreach (var target in MoveTargetsFor(f))
                     {
                         var capturedPath = target.Path;
@@ -291,12 +312,14 @@
                             <span>@Traductor.T("FILES_MOVE_TO"): @target.Label</span>
                         </button>
                     }
-                    <button type="button" role="menuitem"
-                            class="file-row__menu-item file-row__menu-item--danger"
-                            @onclick="() => OnMenuItem(() => RemoveFileAsync(f))">
-                        <Icon Name="IconName.Trash" />
-                        <span>@Traductor.T("FILES_DELETE")</span>
-                    </button>
+                    <KmilaTooltip TextKey="FILES_FILE_DELETE_TIP" Placement="Left">
+                        <button type="button" role="menuitem"
+                                class="file-row__menu-item file-row__menu-item--danger"
+                                @onclick="() => OnMenuItem(() => RemoveFileAsync(f))">
+                            <Icon Name="IconName.Trash" />
+                            <span>@Traductor.T("FILES_DELETE")</span>
+                        </button>
+                    </KmilaTooltip>
                 }
             }
         }

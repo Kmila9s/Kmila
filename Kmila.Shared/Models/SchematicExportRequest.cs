@@ -96,6 +96,34 @@ public class SchematicExportRequest
     /// the on-screen palette including the result of any Shuffle
     /// button click since the viewer last rebuilt.</summary>
     public SchematicExportColorMode ColorMode { get; set; } = SchematicExportColorMode.Color;
+
+    /// <summary>Render simplification mode. Human = education-friendly
+    /// (bigger padding + fonts, muted internal names hidden, thicker
+    /// buses, planned-for-v2 structural collapse). Raw = every glyph
+    /// and label the netlist produces. Human is the default so the
+    /// diagram opens looking readable; Raw is one click away for the
+    /// full picture.</summary>
+    public SchematicRenderMode Mode { get; set; } = SchematicRenderMode.Human;
+}
+
+/// <summary>
+/// How much simplification the schematic renderer applies before
+/// emission. Ships in v1 as two modes; a future version may expose a
+/// slider for intermediate levels of detail.
+/// </summary>
+public enum SchematicRenderMode
+{
+    /// <summary>Everything the netlist produces, per-instance, per-bit.
+    /// Same output the viewer + exporter shipped before this mode was
+    /// introduced.</summary>
+    Raw,
+
+    /// <summary>Education-friendly view: bigger padding + fonts, muted
+    /// internal net names suppressed, thicker bus strokes. Structural
+    /// simplification passes (bus collapse, register consolidation,
+    /// buffer elision) are planned for v2 and live in
+    /// <see cref="Kmila.Shared.Services.SchematicSimplifier"/>.</summary>
+    Human,
 }
 
 /// <summary>

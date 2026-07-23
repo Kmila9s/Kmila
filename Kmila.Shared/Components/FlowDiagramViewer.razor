@@ -43,36 +43,42 @@
             {
                 <span class="flow-diagram__count">@_entityCount</span>
             }
-            <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
-                    @onclick="ExportSvgAsync"
-                    title="@Traductor.T("FLOW_EXPORT_SVG")">
-                <Icon Name="IconName.Download" />
-                <span>SVG</span>
-            </button>
-            <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
-                    @onclick="ExportPngAsync"
-                    title="@Traductor.T("FLOW_EXPORT_PNG")">
-                <Icon Name="IconName.FileEarmarkImage" />
-                <span>PNG</span>
-            </button>
-            <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
-                    @onclick="ExportUmlAsync"
-                    title="@Traductor.T("FLOW_EXPORT_UML")">
-                <Icon Name="IconName.FileEarmarkCode" />
-                <span>UML</span>
-            </button>
-            <button type="button"
-                    class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm @(_isFullscreen ? "is-active" : "")"
-                    @onclick="ToggleFullscreen"
-                    title="@Traductor.T(_isFullscreen ? "SCHEMATIC_FULLSCREEN_EXIT" : "SCHEMATIC_FULLSCREEN_ENTER")"
-                    aria-label="@Traductor.T(_isFullscreen ? "SCHEMATIC_FULLSCREEN_EXIT" : "SCHEMATIC_FULLSCREEN_ENTER")">
-                <Icon Name="@(_isFullscreen ? IconName.FullscreenExit : IconName.ArrowsFullscreen)" />
-            </button>
-            <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
-                    @onclick="OnRefreshClicked"
-                    title="@Traductor.T("FLOW_REFRESH")">
-                <Icon Name="IconName.ArrowClockwise" />
-            </button>
+            <KmilaTooltip TextKey="FLOW_EXPORT_SVG">
+                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                        @onclick="ExportSvgAsync">
+                    <Icon Name="IconName.Download" />
+                    <span>SVG</span>
+                </button>
+            </KmilaTooltip>
+            <KmilaTooltip TextKey="FLOW_EXPORT_PNG">
+                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                        @onclick="ExportPngAsync">
+                    <Icon Name="IconName.FileEarmarkImage" />
+                    <span>PNG</span>
+                </button>
+            </KmilaTooltip>
+            <KmilaTooltip TextKey="FLOW_EXPORT_UML">
+                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                        @onclick="ExportUmlAsync">
+                    <Icon Name="IconName.FileEarmarkCode" />
+                    <span>UML</span>
+                </button>
+            </KmilaTooltip>
+            <KmilaTooltip TextKey="@(_isFullscreen ? "SCHEMATIC_FULLSCREEN_EXIT" : "SCHEMATIC_FULLSCREEN_ENTER")">
+                <button type="button"
+                        class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm @(_isFullscreen ? "is-active" : "")"
+                        @onclick="ToggleFullscreen"
+                        aria-label="@Traductor.T(_isFullscreen ? "SCHEMATIC_FULLSCREEN_EXIT" : "SCHEMATIC_FULLSCREEN_ENTER")">
+                    <Icon Name="@(_isFullscreen ? IconName.FullscreenExit : IconName.ArrowsFullscreen)" />
+                </button>
+            </KmilaTooltip>
+            <KmilaTooltip TextKey="FLOW_REFRESH">
+                <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
+                        @onclick="OnRefreshClicked"
+                        aria-label="@Traductor.T("FLOW_REFRESH")">
+                    <Icon Name="IconName.ArrowClockwise" />
+                </button>
+            </KmilaTooltip>
         </header>
         <div class="flow-diagram__body">
             @* mermaid auto-detects pre.mermaid and replaces with SVG. The
@@ -202,7 +208,7 @@
             if (string.IsNullOrEmpty(svg))
             {
                 ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
-                    "Mermaid diagram not ready yet.", ToastType.Danger));
+                    Traductor.T("FLOW_MERMAID_NOT_READY"), ToastType.Danger));
                 return;
             }
             var result = await Export.SaveTextAsync(ExportCategory.Svg, fileName, "image/svg+xml", svg);
@@ -224,7 +230,7 @@
             if (string.IsNullOrEmpty(base64))
             {
                 ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
-                    "Mermaid diagram not ready yet.", ToastType.Danger));
+                    Traductor.T("FLOW_MERMAID_NOT_READY"), ToastType.Danger));
                 return;
             }
             var bytes = Convert.FromBase64String(base64);
@@ -254,7 +260,7 @@
             if (string.IsNullOrEmpty(uml))
             {
                 ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
-                    "No entities to export.", ToastType.Danger));
+                    Traductor.T("FLOW_EXPORT_NO_ENTITIES"), ToastType.Danger));
                 return;
             }
             var result = await Export.SaveTextAsync(ExportCategory.Uml, fileName, "text/plain", uml);
@@ -270,13 +276,15 @@
     {
         if (result.Saved)
         {
-            var msg = result.Path != null ? $"Saved: {result.Path}" : "Flow diagram exported.";
+            var msg = result.Path != null
+                ? Traductor.T("COMMON_SAVED_TO_FMT", result.Path)
+                : Traductor.T("FLOW_EXPORT_OK");
             ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), msg, ToastType.Success));
         }
         else
         {
             ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
-                result.Error ?? "Export failed.", ToastType.Danger));
+                result.Error ?? Traductor.T("COMMON_EXPORT_FAILED"), ToastType.Danger));
         }
     }
 

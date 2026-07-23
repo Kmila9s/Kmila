@@ -39,7 +39,7 @@
                     <tbody>
                         @foreach (var c in Doc.Components)
                         {
-                            foreach (var pin in PinsOf(c))
+                            foreach (var pin in KvizWidgetCatalog.PinsOf(c))
                             {
                                 var localC = c;
                                 var localPin = pin;
@@ -65,81 +65,50 @@
             }
         </div>
         <div class="modal-footer">
-            <button class="kmila-btn" data-testid="visual-wiring-done" @onclick="Close">@Traductor.T("VISUAL_WIRING_DONE")</button>
+            <KmilaTooltip TextKey="VISUAL_WIRING_DONE_TIP">
+                <button class="kmila-btn" data-testid="visual-wiring-done" @onclick="Close">@Traductor.T("VISUAL_WIRING_DONE")</button>
+            </KmilaTooltip>
         </div>
     </div>
 </div>
 
 @code {
     [Parameter] public bool IsOpen { get; set; }
-    [Parameter] public string Title { get; set; } = "Wiring";
+    [Parameter] public string Title { get; set; } = "";
     [Parameter] public KvizDoc? Doc { get; set; }
     [Parameter] public Entity? Entity { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
 
-    private record Pin(string Name, PinDir Direction);
-    private enum PinDir { In, Out }
+    // PinDir + PinsOf moved to KvizWidgetCatalog so VisualPanel can share
+    // them for direction chips + load-time binding sanitizer (R3-5).
 
-    private static IEnumerable<Pin> PinsOf(KvizComponent c)
-    {
-        switch (c.Type)
-        {
-            case "led":       return new[] { new Pin("anode",  PinDir.In) };
-            case "button":    return new[] { new Pin("out",    PinDir.Out) };
-            case "switch":    return new[] { new Pin("out",    PinDir.Out) };
-            case "led-array": return new[] { new Pin("anodes", PinDir.In) };
-            case "stepper":   return new[]
-            {
-                new Pin("phaseA",  PinDir.In),
-                new Pin("phaseB",  PinDir.In),
-                new Pin("phaseAn", PinDir.In),
-                new Pin("phaseBn", PinDir.In),
-            };
-            case "seven-seg":
-                // Dynamic pin set: raw mode exposes 7 segment pins + dp;
-                // decoded modes ("hex" / "dec") collapse a..g into a single
-                // 4-bit value pin and keep dp as an optional manual wire.
-                var mode = c.Config.GetString("mode", "raw");
-                if (mode == "raw")
-                {
-                    return new[]
-                    {
-                        new Pin("a",  PinDir.In),
-                        new Pin("b",  PinDir.In),
-                        new Pin("c",  PinDir.In),
-                        new Pin("d",  PinDir.In),
-                        new Pin("e",  PinDir.In),
-                        new Pin("f",  PinDir.In),
-                        new Pin("g",  PinDir.In),
-                        new Pin("dp", PinDir.In),
-                    };
-                }
-                return new[]
-                {
-                    new Pin("value", PinDir.In),
-                    new Pin("dp",    PinDir.In),
-                };
-            default: return Array.Empty<Pin>();
-        }
-    }
-
-    private static string LabelOf(KvizComponent c)
+    private string LabelOf(KvizComponent c)
     {
         if (c.Type == "led")
-            return $"LED ({c.Config.GetString("color", "red")})";
+            return string.Format(Traductor.T("VISUAL_WIRING_ROW_LED"), LocalizedColor(c.Config.GetString("color", "red")));
         if (c.Type == "button")
-            return $"Button \"{c.Config.GetString("label", "BTN")}\"";
+            return string.Format(Traductor.T("VISUAL_WIRING_ROW_BUTTON"), c.Config.GetString("label", "BTN"));
         if (c.Type == "switch")
-            return $"Switch \"{c.Config.GetString("label", "SW")}\"";
+            return string.Format(Traductor.T("VISUAL_WIRING_ROW_SWITCH"), c.Config.GetString("label", "SW"));
         if (c.Type == "led-array")
-            return $"LED array ({c.Config.GetInt("length", 4)})";
+            return string.Format(Traductor.T("VISUAL_WIRING_ROW_LED_ARRAY"), c.Config.GetInt("length", 4));
         if (c.Type == "stepper")
-            return $"Stepper ({c.Config.GetInt("stepsPerRev", 200)}/rev)";
+            return string.Format(Traductor.T("VISUAL_WIRING_ROW_STEPPER"), c.Config.GetInt("stepsPerRev", 200));
         if (c.Type == "seven-seg")
-            return $"7-seg ({c.Config.GetString("mode", "raw")})";
+            return string.Format(Traductor.T("VISUAL_WIRING_ROW_SEVEN_SEG"), c.Config.GetString("mode", "raw"));
         return c.Type;
     }
+
+    private string LocalizedColor(string color) => color switch
+    {
+        "red" => Traductor.T("VISUAL_MATRIX_COLOR_RED"),
+        "green" => Traductor.T("VISUAL_MATRIX_COLOR_GREEN"),
+        "blue" => Traductor.T("VISUAL_MATRIX_COLOR_BLUE"),
+        "yellow" => Traductor.T("VISUAL_MATRIX_COLOR_YELLOW"),
+        "white" => Traductor.T("VISUAL_MATRIX_COLOR_WHITE"),
+        _ => color,
+    };
 
     private string CurrentBinding(KvizComponent c, string pin)
         => c.Bindings.TryGetValue(pin, out var v) ? v : "";
@@ -171,44 +140,88 @@
     private readonly record struct BindOpt(string Binding, string Display);
 
     /// <summary>
-    /// Phase 3++ slice-aware options. For multi-bit OUT ports going into a
-    /// SINGLE-BIT widget pin, expose each bit `[N]` as a separate choice
-    /// in addition to the whole-port option. For multi-bit pins on the
-    /// widget side (e.g. led-array.anodes), only the whole port + natural
-    /// half-splits are offered. Inputs (PinDir.Out toward design = student
-    /// drives a design IN port) stay whole-port only because write-side
-    /// slice merging isn't implemented yet.
+    /// Slice-aware options for the wiring dropdown. Whenever the design
+    /// port is wider than 1 bit — regardless of widget-pin direction —
+    /// the dropdown offers slice choices in addition to the whole-port
+    /// binding. Single-bit widget pins get per-bit options `[N]`;
+    /// multi-bit widget pins get natural power-of-two splits scaled to
+    /// widths 4 / 8 / 16 / 28 / 32 / 64 / 128 / 256 for the common
+    /// LCD-line, seg-bus, matrix, and byte-vector cases.
+    /// Ring 5 (2026-07-14): read-side and write-side both slice-capable
+    /// now that <see cref="VisualRunCoordinator.SetSlicedInput"/> ships.
     /// </summary>
-    private IEnumerable<BindOpt> CompatibleOptions(Pin pin)
+    private IEnumerable<BindOpt> CompatibleOptions(KvizPin pin)
     {
         if (Entity == null) yield break;
-        bool sliceableSide = pin.Direction == PinDir.In; // reading from a design output → slice ok
         bool widgetIsMultiBit = IsMultiBitPin(pin.Name);
         foreach (var p in CompatiblePorts(pin.Direction))
         {
             int width = p.Size > 0 ? p.Size : 1;
             yield return new BindOpt(p.Name, $"{p.Name} ({DirText(p.PortType)})");
-            if (!sliceableSide || width <= 1) continue;
+            if (width <= 1) continue;
             if (!widgetIsMultiBit)
             {
-                // 1-bit widget → offer each individual bit
+                // 1-bit widget pin → offer each individual bit.
                 for (int b = width - 1; b >= 0; b--)
                     yield return new BindOpt($"{p.Name}[{b}]", $"{p.Name}[{b}]");
             }
             else
             {
-                // Multi-bit widget on a wider bus → offer natural splits.
-                // For an 8-bit bus, suggest [7:4] and [3:0] (the two nibbles).
-                if (width == 4)
-                {
-                    yield return new BindOpt($"{p.Name}[3:0]", $"{p.Name}[3:0]");
-                }
-                else if (width == 8)
-                {
-                    yield return new BindOpt($"{p.Name}[7:4]", $"{p.Name}[7:4]");
-                    yield return new BindOpt($"{p.Name}[3:0]", $"{p.Name}[3:0]");
-                }
+                // Multi-bit widget pin on a wider bus → offer natural splits.
+                foreach (var (hi, lo) in NaturalSplits(width))
+                    yield return new BindOpt($"{p.Name}[{hi}:{lo}]", $"{p.Name}[{hi}:{lo}]");
             }
+        }
+    }
+
+    /// <summary>
+    /// Natural-split enumeration for the wiring modal dropdown. Returns
+    /// (high, low) pairs — call sites format them as `port[H:L]`.
+    /// Widths 4 / 8 offer nibbles, 16 / 32 / 64 / 128 / 256 offer halves,
+    /// 28 / 32 offer digit-quarters (7-bit or 8-bit each — for 7-segment
+    /// digit lanes and byte-packed vectors respectively).
+    /// </summary>
+    private static IEnumerable<(int High, int Low)> NaturalSplits(int width)
+    {
+        switch (width)
+        {
+            case 4:
+                yield return (3, 0);
+                break;
+            case 8:
+                yield return (7, 4);
+                yield return (3, 0);
+                break;
+            case 16:
+                yield return (15, 8);
+                yield return (7, 0);
+                break;
+            case 28:
+                yield return (27, 21);
+                yield return (20, 14);
+                yield return (13, 7);
+                yield return (6, 0);
+                break;
+            case 32:
+                yield return (31, 16);
+                yield return (15, 0);
+                yield return (31, 24);
+                yield return (23, 16);
+                yield return (15, 8);
+                yield return (7, 0);
+                break;
+            case 64:
+                yield return (63, 32);
+                yield return (31, 0);
+                break;
+            case 128:
+                yield return (127, 64);
+                yield return (63, 0);
+                break;
+            case 256:
+                yield return (255, 128);
+                yield return (127, 0);
+                break;
         }
     }
 
@@ -217,12 +230,27 @@
     /// Used to decide whether to offer per-bit slice options or natural-
     /// range options in the binding dropdown.
     /// </summary>
-    private static bool IsMultiBitPin(string pinName) => pinName switch
+    private static bool IsMultiBitPin(string pinName)
     {
-        "anodes" => true,   // led-array
-        "value"  => true,   // seven-seg decoded mode
-        _        => false,
-    };
+        // Explicit whitelist first — fast-path for the common shapes.
+        switch (pinName)
+        {
+            case "anodes":   // led-array
+            case "value":    // seven-seg decoded, multi-switch vector, matrix-3x3 value, seven-seg-4digit
+            case "freq_hz":  // buzzer freq mode
+            case "key":      // keypad decoded
+            case "red":      // matrix-3x3-rgb planes
+            case "green":
+            case "blue":
+                return true;
+        }
+        // LCD text-mode line{N} pins — 128-bit each for a 16-col HD44780.
+        if (pinName.StartsWith("line") && pinName.Length > 4
+            && int.TryParse(pinName.AsSpan(4), out var lineIdx)
+            && lineIdx >= 0 && lineIdx < 8)
+            return true;
+        return false;
+    }
 
     private static string DirText(PortType t) => t switch
     {

@@ -1,9 +1,9 @@
 namespace Kmila.Shared.Services;
 
 /// <summary>
-/// The five tabs in the Editor's bottom dock. Ordering mirrors the user-facing
-/// left-to-right tab strip: Entities (parsed design) · Ports (inputs) ·
-/// Waveforms (outputs) · Files · Output (build/run log).
+/// The eight tabs in the Editor's bottom dock. Ordering mirrors the user-facing
+/// left-to-right tab strip: Entities (parsed design) · Schematic · Flow · Ports
+/// (inputs) · Waveforms (outputs) · Runs · Files · Output (build/run log).
 /// </summary>
 public enum EditorTab
 {
@@ -13,7 +13,6 @@ public enum EditorTab
     Ports,
     Waveforms,
     Runs,
-    Replay,
     Files,
     Output
 }

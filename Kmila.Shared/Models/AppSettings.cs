@@ -105,7 +105,47 @@ public class AppSettings
     /// </summary>
     public const string KEY_VISUAL_RING_BUFFER = "KMILA_VISUAL_RING_BUFFER";
 
+    /// <summary>
+    /// Editor sync mode (2026-07-06). Controls how Code↔Blocks cross-editor
+    /// sync fires. "auto" (default) syncs on every view-tab switch — a Code
+    /// edit is instantly visible in the Blocks canvas and vice-versa. "manual"
+    /// requires the user to click Save before propagating; tab-switch shows
+    /// the last-synced state. Run/Build always sync regardless of mode.
+    /// Stored as "auto" / "manual"; any other value falls back to auto.
+    /// </summary>
+    public const string KEY_EDITOR_SYNC_MODE = "KMILA_EDITOR_SYNC_MODE";
+
     #endregion
+}
+
+/// <summary>
+/// Cross-editor (Code↔Blocks) sync policy. Persisted via
+/// <see cref="AppSettings.KEY_EDITOR_SYNC_MODE"/>.
+/// </summary>
+public enum EditorSyncMode
+{
+    /// <summary>Sync fires on every Code↔Blocks tab switch (default; pre-2026-07-06 behavior).</summary>
+    Auto,
+    /// <summary>Sync only fires on explicit Save. Tab-switch shows the last-synced state.</summary>
+    Manual
+}
+
+/// <summary>
+/// Persistence helpers for <see cref="EditorSyncMode"/>.
+/// </summary>
+public static class EditorSyncModeExtensions
+{
+    public static string ToToken(this EditorSyncMode mode) => mode switch
+    {
+        EditorSyncMode.Manual => "manual",
+        _                     => "auto"
+    };
+
+    public static EditorSyncMode ParseToken(string? token) => (token ?? string.Empty).Trim().ToLowerInvariant() switch
+    {
+        "manual" => EditorSyncMode.Manual,
+        _        => EditorSyncMode.Auto
+    };
 }
 
 /// <summary>

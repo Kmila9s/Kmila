@@ -63,8 +63,16 @@
     <!-- App Icon - Kmila branding with dark slate blue -->
     <MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.png" Color="#475569" ForegroundScale="0.65" />
 
-    <!-- Splash Screen - Kmila branding -->
-    <MauiSplashScreen Include="Resources\AppIcon\appiconfg.png" Color="#475569" BaseSize="256,256" />
+    <!-- Splash Screen - Kmila branding.
+         Audit 2026-07-11: was pointing at `AppIcon\appiconfg.png` (621×775
+         portrait — includes the adaptive-icon safe-zone padding AND the
+         "Kmila" wordmark below the icon block). On Android 12+ the system
+         splash icon container is only ~288dp with a ~108dp guaranteed
+         safe zone, so the padded portrait PNG rendered as a tiny near-
+         invisible dog. Fix: use a square 621×621 icon-only crop generated
+         from the same source, saved under Resources/Splash/splash-icon.png,
+         with a larger BaseSize so the icon fills more of the splash frame. -->
+    <MauiSplashScreen Include="Resources\Splash\splash_icon.png" Color="#475569" BaseSize="192,192" />
 
     <!-- Images -->
     <MauiImage Include="Resources\Images\*" />

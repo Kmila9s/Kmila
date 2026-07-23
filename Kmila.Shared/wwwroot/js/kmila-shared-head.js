@@ -187,7 +187,13 @@
     //    orphaned editors from prior route navigations don't get hit either
     //    — same pattern the Concepts highlight bridge uses in js/app.js.
     // -------------------------------------------------------------------------
-    window.kmilaSetMonacoMarkers = function (markers) {
+    // 2026-07-20 Phase 23a — optional `owner` parameter so parser markers
+    // (default owner `"kmila-vhdl"`, unchanged) and emitter markers
+    // (`"kmila-vhdl-emit"`, published by Editor.razor's
+    // PublishEmitterDiagnosticsAsync) can be cleared independently.
+    // Each `setModelMarkers` call replaces ONLY that owner's marker set,
+    // per Monaco contract, so the two publishers never stomp each other.
+    window.kmilaSetMonacoMarkers = function (markers, owner) {
         try {
             if (!window.monaco || !window.monaco.editor) return;
             // Defensive: C# callers must wrap their array in (object) so
@@ -195,6 +201,9 @@
             // forgets, `markers` arrives as a single object — coerce to an
             // empty array rather than passing garbage to setModelMarkers.
             var safe = Array.isArray(markers) ? markers : [];
+            var ownerStr = (typeof owner === "string" && owner.length > 0)
+                ? owner
+                : "kmila-vhdl";
             var editors = (window.monaco.editor.getEditors && window.monaco.editor.getEditors()) || [];
             var hits = 0;
             for (var i = 0; i < editors.length; i++) {
@@ -204,17 +213,17 @@
                 if (!dom.closest || !dom.closest(".editor-monaco")) continue;
                 var model = e.getModel && e.getModel();
                 if (!model) continue;
-                window.monaco.editor.setModelMarkers(model, "kmila-vhdl", safe);
+                window.monaco.editor.setModelMarkers(model, ownerStr, safe);
                 hits++;
             }
             // Fall back to the old all-models behaviour when no editor in
             // .editor-monaco was found — covers tests / future-proofing.
-            // Safe because the owner string ("kmila-vhdl") namespaces our
-            // markers so unrelated models can't be permanently dirtied.
+            // Safe because the owner string namespaces our markers so
+            // unrelated models can't be permanently dirtied.
             if (hits === 0) {
                 var models = window.monaco.editor.getModels();
                 for (var j = 0; j < models.length; j++) {
-                    window.monaco.editor.setModelMarkers(models[j], "kmila-vhdl", safe);
+                    window.monaco.editor.setModelMarkers(models[j], ownerStr, safe);
                 }
             }
         } catch (e) {
@@ -368,10 +377,15 @@
         return new Promise(function (resolve) {
             try {
                 var s = (typeof scale === "number" && scale > 0) ? scale : 2;
-                var widthMatch = /\bwidth="(\d+)"/.exec(svgText);
-                var heightMatch = /\bheight="(\d+)"/.exec(svgText);
-                var w = widthMatch ? parseInt(widthMatch[1], 10) : 1200;
-                var h = heightMatch ? parseInt(heightMatch[1], 10) : 400;
+                // Match decimal widths — SchematicExporter emits "0.##"
+                // formatted numbers with a fractional part (e.g. 393.5).
+                // The prior `\d+` regex silently dropped the fraction,
+                // producing a canvas shorter than the SVG and leaving
+                // the background rect uncovered at the bottom.
+                var widthMatch = /\bwidth="(\d+(?:\.\d+)?)"/.exec(svgText);
+                var heightMatch = /\bheight="(\d+(?:\.\d+)?)"/.exec(svgText);
+                var w = widthMatch ? parseFloat(widthMatch[1]) : 1200;
+                var h = heightMatch ? parseFloat(heightMatch[1]) : 400;
 
                 var canvas = document.createElement("canvas");
                 canvas.width = Math.max(1, Math.floor(w * s));
@@ -418,10 +432,15 @@
         return new Promise(function (resolve) {
             try {
                 var s = (typeof scale === "number" && scale > 0) ? scale : 2;
-                var widthMatch = /\bwidth="(\d+)"/.exec(svgText);
-                var heightMatch = /\bheight="(\d+)"/.exec(svgText);
-                var w = widthMatch ? parseInt(widthMatch[1], 10) : 1200;
-                var h = heightMatch ? parseInt(heightMatch[1], 10) : 400;
+                // Match decimal widths — SchematicExporter emits "0.##"
+                // formatted numbers with a fractional part (e.g. 393.5).
+                // The prior `\d+` regex silently dropped the fraction,
+                // producing a canvas shorter than the SVG and leaving
+                // the background rect uncovered at the bottom.
+                var widthMatch = /\bwidth="(\d+(?:\.\d+)?)"/.exec(svgText);
+                var heightMatch = /\bheight="(\d+(?:\.\d+)?)"/.exec(svgText);
+                var w = widthMatch ? parseFloat(widthMatch[1]) : 1200;
+                var h = heightMatch ? parseFloat(heightMatch[1]) : 400;
 
                 var canvas = document.createElement("canvas");
                 canvas.width = Math.max(1, Math.floor(w * s));
@@ -540,4 +559,58 @@
     } else {
         watchForDock();
     }
+
+
+    // -------------------------------------------------------------------------
+    // 6) KmilaTooltip anchor-position sync (v=6, 2026-07-19 Phase 3 followup).
+    //
+    // The KmilaTooltip bubble is rendered as a ::after pseudo-element on the
+    // wrapper span. Before this hook, that pseudo was position:absolute and
+    // therefore (a) inherited every ancestor stacking context and (b) got
+    // clipped by any ancestor with overflow:hidden — hitting BOTH failure
+    // modes on the same site: e.g. VisualPanel's Save button, whose tooltip
+    // rendered "behind the canvas card" because .visual-page__toolbar had
+    // overflow-x:auto (which implicitly clips y too) and the canvas parent
+    // owns a competing stacking context.
+    //
+    // Fix: switch the bubble to position:fixed (see pages.css .kmila-tooltip
+    // block) and drive its top/left from CSS custom properties that we
+    // refresh here whenever pointer or keyboard focus reaches a wrapper.
+    // position:fixed anchors to the viewport, escaping BOTH stacking-context
+    // and overflow-clip constraints, with a z-index high enough to always
+    // win against Blazor/Bootstrap modals.
+    //
+    // Delegated on document via mouseover/focusin (both bubble) so a single
+    // pair of listeners covers every wrapper on the page, present or future,
+    // with no per-instance JS interop required from Blazor.
+    // -------------------------------------------------------------------------
+    function _kmilaTooltipAnchorSync(target) {
+        if (!(target instanceof Element)) return;
+        var tip = target.closest ? target.closest(".kmila-tooltip") : null;
+        if (!tip) return;
+        // The wrapper is display: contents (v=30 followup: fixes widget
+        // palette chips not stretching), so it has no box of its own and
+        // getBoundingClientRect() on it returns zeros. Use the first real
+        // child (the wrapped button in the canonical case) as the anchor
+        // instead — its rect is what we want the bubble to point at anyway.
+        var anchor = tip.firstElementChild || tip;
+        var r = anchor.getBoundingClientRect();
+        // A wrapper still detached from the visible layout (hidden ancestor,
+        // Blazor not yet rendered) reports a zero-size rect — skip so the
+        // pseudo keeps its last known coords instead of jumping to (0,0).
+        if (r.width === 0 && r.height === 0) return;
+        var s = tip.style;
+        s.setProperty("--kt-l", r.left + "px");
+        s.setProperty("--kt-r", r.right + "px");
+        s.setProperty("--kt-t", r.top + "px");
+        s.setProperty("--kt-b", r.bottom + "px");
+        s.setProperty("--kt-w", r.width + "px");
+        s.setProperty("--kt-h", r.height + "px");
+    }
+    document.addEventListener("mouseover", function (e) {
+        _kmilaTooltipAnchorSync(e.target);
+    });
+    document.addEventListener("focusin", function (e) {
+        _kmilaTooltipAnchorSync(e.target);
+    });
 })();

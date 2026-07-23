@@ -15,7 +15,7 @@
          ║   stay in sync automatically. Bump ?v= when the shared file       ║
          ║   changes. See memory: project_dual_host_pages.md.                ║
          ╚═══════════════════════════════════════════════════════════════════╝ -->
-    <script src="_content/Kmila.Shared/js/kmila-shared-head.js?v=5"></script>
+    <script src="_content/Kmila.Shared/js/kmila-shared-head.js?v=7"></script>
     <!-- ╔═══════════════════════════════════════════════════════════════════╗
          ║  OFFLINE-FIRST: vendored copies of Bootstrap CSS, Bootstrap Icons, ║
          ║  and JetBrains Mono live under Kmila.Shared/wwwroot/lib/. Mirror   ║
@@ -62,15 +62,42 @@
             };
         };
         mermaid.initialize(kmilaMermaidConfig());
-        window.kmilaMermaidRun = function () {
+        // v11.15.0 code-splits diagram grammars into lazy chunks. `mermaid.run`
+        // alone can race the first `import()` for the flowchart chunk on
+        // hydration — the pre exists but the parser isn't loaded yet, so
+        // every diagram falls to the "Syntax error / version 11.15.0" SVG.
+        // Awaiting `mermaid.parse(src)` before `run` forces the chunk import
+        // to resolve first. Single-flight + pending flag coalesces overlapping
+        // calls from load handler, OnAfterRender, and the theme-swap observer.
+        let mermaidRunning = false;
+        let mermaidPending = false;
+        window.kmilaMermaidRun = async function () {
+            if (mermaidRunning) { mermaidPending = true; return; }
+            mermaidRunning = true;
             try {
-                document.querySelectorAll('pre.mermaid').forEach(function (el) {
-                    if (!el.hasAttribute('data-kmila-mermaid-src')) {
-                        el.setAttribute('data-kmila-mermaid-src', el.textContent || '');
+                do {
+                    mermaidPending = false;
+                    await new Promise(r => requestAnimationFrame(r));
+                    const nodes = Array.from(document.querySelectorAll('pre.mermaid:not([data-processed])'));
+                    for (const el of nodes) {
+                        if (!el.hasAttribute('data-kmila-mermaid-src')) {
+                            el.setAttribute('data-kmila-mermaid-src', el.textContent || '');
+                        }
                     }
-                });
-                mermaid.run({ querySelector: 'pre.mermaid' });
-            } catch (e) { console.warn('[mermaid]', e); }
+                    for (const el of nodes) {
+                        const src = el.getAttribute('data-kmila-mermaid-src') || '';
+                        try {
+                            await mermaid.parse(src);
+                            await mermaid.run({ nodes: [el] });
+                        } catch (e) {
+                            console.warn('[mermaid]', e, src.slice(0, 80));
+                            el.removeAttribute('data-processed');
+                        }
+                    }
+                } while (mermaidPending);
+            } finally {
+                mermaidRunning = false;
+            }
         };
         new MutationObserver(() => {
             mermaid.initialize(kmilaMermaidConfig());
@@ -92,8 +119,8 @@
          ╚═══════════════════════════════════════════════════════════════════╝ -->
     <link rel="stylesheet" href="_content/Kmila.Shared/css/tokens.css?v=8" />
     <link rel="stylesheet" href="_content/Kmila.Shared/app.css?v=8" />
-    <link rel="stylesheet" href="_content/Kmila.Shared/css/pages.css?v=23" />
-    <link rel="stylesheet" href="_content/Kmila.Shared/css/buttons.css?v=12" />
+    <link rel="stylesheet" href="_content/Kmila.Shared/css/pages.css?v=32" />
+    <link rel="stylesheet" href="_content/Kmila.Shared/css/buttons.css?v=13" />
     <link rel="stylesheet" href="app.css" />
     <link rel="stylesheet" href="Kmila.styles.css" />
     <link rel="icon" href="data:,">
@@ -141,6 +168,11 @@
          tab. Pure registry calls; harmless to load app-wide. -->
     <script src="_content/Kmila.Shared/js/kmila-blocks-vhdl.js"></script>
 
+    <!-- FW-5 buzzer audio subsystem. Thin WebAudio wrapper (unlock /
+         setTone / stop). Widgets call it directly; iOS + Android WebView
+         both require a user-gestured unlock before audio plays. -->
+    <script src="_content/Kmila.Shared/js/kmila-audio.js"></script>
+
     <!-- Disable Monaco web-workers on Android WebView. The framework loads
          workers from `_content/BlazorMonaco/...` via a blob: URL, and the
          resulting WorkerGlobalScope can't `importScripts` back across the
@@ -175,7 +207,18 @@
          language) and after editor.main.js (provides colorizeElement). -->
     <script src="_content/Kmila.Shared/js/lesson-code.js?v=20260522a"></script>
     <!-- Kmila app utilities (file download, etc.) -->
-    <script src="_content/Kmila.Shared/js/app.js?v=20260527a"></script>
+    <script src="_content/Kmila.Shared/js/app.js?v=20260719a"></script>
+    <!-- Visual Runtime canvas rasteriser (§6 Items 1+2). Bespoke pure-2D
+         painter for the 12 widget families — no html2canvas, no CSS
+         parsing, no external deps. Must load BEFORE the record/export
+         helpers so their feature detection sees kmilaCanvasRender. -->
+    <script src="_content/Kmila.Shared/js/kmila-canvas-paint.js?v=1"></script>
+    <!-- Visual Runtime canvas export (§6 Item 2). SVG via foreignObject;
+         PNG via the shared kmilaCanvasRender. PDF deferred (jspdf). -->
+    <script src="_content/Kmila.Shared/js/kmila-canvas-export.js?v=3"></script>
+    <!-- Visual Runtime canvas recording v1 (§6 Item 1). MediaRecorder +
+         offscreen canvas fed by kmilaCanvasRender frames; webm output. -->
+    <script src="_content/Kmila.Shared/js/kmila-canvas-record.js?v=3"></script>
     <!-- Welcome tour (first-run coachmark overlay) — kmila-tutorial.js -->
     <script src="_content/Kmila.Shared/js/kmila-tutorial.js?v=3"></script>
     <script src="_framework/blazor.webview.js" autostart="false"></script>
