@@ -328,7 +328,7 @@ public class ProgramBuilder : IDisposable
             {
                 foreach (var p in entity.Ports)
                 {
-                    if (p == null) continue;
+                    if (p is null) continue;
                     Console.WriteLine($"[Sim.Port] name={p.Name ?? "?"} dir={p.PortType} size={p.Size}");
                 }
             }

@@ -141,6 +141,20 @@
                 }
                 break;
 
+            // F-092 (R10 2026-08-08) — `/visual/{id}` is a per-project standalone
+            // view. Before this case existed, the switch fell through to `default`
+            // and rendered the literal segment "visual" as the terminal crumb
+            // (untranslated in every language). Mirror the editor pattern so users
+            // see the project name in their language, consistent with `/editor/{id}`.
+            case "visual":
+                crumbs.Add(new(Traductor.T("NAV_PROJECTS"), "/projects", IconName.Collection));
+                if (segments.Length >= 2 && int.TryParse(segments[1], out var visualProjectId))
+                {
+                    var visualName = _projects.FirstOrDefault(p => p.Id == visualProjectId)?.Name ?? segments[1];
+                    crumbs.Add(new(visualName, null, IconName.PuzzleFill));
+                }
+                break;
+
             case "learn":
                 crumbs.Add(new(Traductor.T("NAV_LEARN"), "/learn", IconName.MortarboardFill));
                 break;

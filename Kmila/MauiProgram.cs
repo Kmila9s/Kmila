@@ -79,30 +79,9 @@ public static class MauiProgram
         // FileSystem.AppDataDirectory, so compiled artifacts survive app
         // updates the same way user-imported FPGAs and language packs do.
         builder.Services.AddSingleton<LibraryCompiler.Services.LibraryCompiler>(provider =>
-        {
-            var userAssets = provider.GetRequiredService<UserAssetStore>();
-            var blobLogger = provider.GetService<ILogger<FileSystemBlobStore>>();
-            var blobStore  = new FileSystemBlobStore(userAssets.LibraryCacheDir, blobLogger);
-
-            return new LibraryCompiler.Services.LibraryCompiler(
-                new LibraryCompiler.Services.LibraryCompilerOptions(
-                    OpenLibrarySource: (key, ct) =>
-                    {
-                        // Same multi-package #package= fragment handling as
-                        // the Web host — see Program.cs for the full
-                        // commentary.
-                        var (path, package) = UserAssetStore.ParseLibrarySourceKey(key);
-                        if (!string.IsNullOrEmpty(path) && Path.IsPathRooted(path) && File.Exists(path))
-                        {
-                            var bytes = UserAssetStore.ReadPackageBytes(path, package);
-                            if (bytes != null) return Task.FromResult<Stream?>(new MemoryStream(bytes));
-                        }
-                        return Task.FromResult<Stream?>(null);
-                    },
-                    CacheStore:        blobStore,
-                    AdditionalSources: userAssets.ListUserLibrarySources(),
-                    Policy:            LibraryCompiler.Services.LibraryBuildPolicy.AlwaysPersistent));
-        });
+            LibraryCompilerFactory.Create(
+                provider.GetRequiredService<UserAssetStore>(),
+                provider.GetService<ILogger<FileSystemBlobStore>>()));
 
         // ProgramBuilder handles compiling/building FPGA programs from user projects
         builder.Services.AddSingleton<ProgramBuilder>();
@@ -133,6 +112,11 @@ public static class MauiProgram
         // MainLayout via @inject so its constructor (which wires the
         // subscriptions) actually runs at app startup.
         builder.Services.AddSingleton<SimulationCoordinator>();
+
+        // Registry of live VisualRunCoordinator instances by project id — the
+        // NavMenu / ProjectsView Stop button uses this to reach the visual
+        // engine owned by VisualPanel. Singleton on MAUI (single-window app).
+        builder.Services.AddSingleton<Kmila.Shared.Services.VisualRun.VisualRunRegistry>();
 
         // Sim-end notifier — native iOS / Android local notifications. Both
         // platforms request authorization lazily on first fire so the prompt
@@ -342,6 +326,29 @@ public static class MauiProgram
         // (matches the surrounding state-service pattern in this file).
         builder.Services.AddSingleton<KmilaToastService>();
 
+#if KMILA_MAUI_API && !IOS
+        // Tier 5.2 Phase B — embedded Kestrel host serving /api/v1 inside the
+        // MAUI process. Registered here; opt-in start controlled by the
+        // KEY_LOCAL_API_* AppSettings triple. See EmbeddedApiHost.cs.
+        // Registered against the shared ILocalApiHost interface so
+        // Settings.razor (compiled into both hosts) can inject it without
+        // pulling a MAUI-only type reference into Kmila.Shared.
+        //
+        // Rev 3 (2026-08-02) — the whole embedded-API code path is now
+        // compile-time excluded from the iOS TFM. Settings.razor's Local API
+        // card and auth-token row already gate on `LocalApi is not null` and
+        // `LocalApiTokens is not null`, so both hide gracefully when nothing
+        // is registered. App Store review can't see the runtime-refused
+        // HttpListener code path at all.
+        builder.Services.AddSingleton<Kmila.Services.EmbeddedApiHost>();
+        builder.Services.AddSingleton<Kmila.Shared.Services.Api.ILocalApiHost>(
+            sp => sp.GetRequiredService<Kmila.Services.EmbeddedApiHost>());
+        // Phase B follow-up — cross-host bearer-token holder. EmbeddedApiHost
+        // reads Current per-request; Settings.razor writes via Set() when
+        // the user regenerates the token.
+        builder.Services.AddSingleton<Kmila.Shared.Services.Api.LocalApiTokenProvider>();
+#endif
+
         // Enable Blazor developer tools and debug logging in DEBUG builds only
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();
@@ -373,6 +380,44 @@ public static class MauiProgram
                 // First-launch path: AppSettings table may not exist yet.
             }
         });
+
+#if KMILA_MAUI_API && !IOS
+        // Tier 5.2 Phase B — auto-start the embedded /api/v1 host when the
+        // user has opted in via Settings. Fire-and-forget on a thread-pool
+        // thread for the same sync-over-async reason as the library-build-mode
+        // block above. Delays 2 s so the Blazor WebView finishes its first
+        // paint before Kestrel starts pumping requests; a slow bench request
+        // hitting a cold IEEE build during first paint would jank the UI.
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var db      = app.Services.GetRequiredService<Kmila.Shared.Data.ApplicationDbContext>();
+                var enabled = (await db.GetSettingAsync(Kmila.Shared.Models.AppSettings.KEY_LOCAL_API_ENABLED)) == "true";
+                if (!enabled) return;
+
+                var portStr = await db.GetSettingAsync(Kmila.Shared.Models.AppSettings.KEY_LOCAL_API_PORT);
+                int port    = int.TryParse(portStr, out var p) ? p : 5298; // matches SimulatorBench default
+
+                var lanStr  = await db.GetSettingAsync(Kmila.Shared.Models.AppSettings.KEY_LOCAL_API_BIND_LAN);
+                bool lan    = lanStr == "true";
+
+                // Phase B follow-up — hydrate the bearer token before the
+                // host starts accepting. Empty setting = no auth.
+                var token   = await db.GetSettingAsync(Kmila.Shared.Models.AppSettings.KEY_LOCAL_API_TOKEN);
+                app.Services.GetRequiredService<Kmila.Shared.Services.Api.LocalApiTokenProvider>().Set(token);
+
+                var host = app.Services.GetRequiredService<Kmila.Services.EmbeddedApiHost>();
+                await Task.Delay(TimeSpan.FromSeconds(2));
+                await host.StartAsync(port, lan, CancellationToken.None);
+            }
+            catch
+            {
+                // First-launch path (AppSettings table not yet created) or
+                // port-in-use — the Settings toggle handler retries on click.
+            }
+        });
+#endif
 
         // Reconcile the resolver against disk on every UserAssetStore
         // change (Settings import / delete, external file mutations).

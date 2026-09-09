@@ -72,6 +72,11 @@ public sealed class HeadlessSimulator
         Interpreter.Services.EntityRegistry.Instance.Clear();
         Interpreter.Services.PackageRegistry.Instance.Clear();
         Interpreter.Services.FunctionRegistry.Instance.Clear();
+        // F-G-08 pass 5 (2026-07-22): zero the parse-profile counters so
+        // each simulate call gets a fresh reading. No-op when the env var
+        // isn't set (Reset is unconditional but the counters are also
+        // untouched in that case).
+        Parser.Services.ParseProfile.Reset();
         Phase("registries-cleared");
         foreach (var f in project.ListFiles())
         {
@@ -202,6 +207,14 @@ public sealed class HeadlessSimulator
         if (runner.Engine != null)
         {
             log.Add($"[diag] {runner.Engine.GetDiagnosticSummary()}");
+        }
+        // F-G-08 pass 5 (2026-07-22): surface parse-side hot-path counters.
+        // Gated on env var so the log stays terse by default.
+        if (Parser.Services.ParseProfile.Enabled)
+        {
+            var profileLine = Parser.Services.ParseProfile.Summarize();
+            log.Add($"[diag] {profileLine}");
+            if (phaseTrace) Console.Error.WriteLine(profileLine);
         }
 
         string vcd = history.ExportToVcd(entity.Name, timescaleNs: tickResNs);

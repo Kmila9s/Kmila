@@ -18,11 +18,11 @@ begin
     begin
         if reset = '1' then
             q_int <= (others => '0');
-        -- BUG: register is clocked on the falling edge instead of the rising edge
-        elsif falling_edge(clk) then
-            if load = '1' then
-                q_int <= d;
-            end if;
+        elsif rising_edge(clk) then
+            -- BUG: `load` is ignored — the register latches d on every
+            -- rising edge, so q shadows d one cycle late whether or not
+            -- load is asserted.
+            q_int <= d;
         end if;
     end process;
     q <= q_int;

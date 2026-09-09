@@ -244,14 +244,17 @@
                first visit (`_visualVisited` latches true) so the entity
                re-parse + .kviz load only fires when the user opens the
                canvas. After first visit, stays mounted (`display:none`)
-               so the coordinator + canvas state survive tab switches. *@
+               so the coordinator + canvas state survive tab switches —
+               IsActiveTab pauses the coord's loop while hidden so no CPU
+               burns on the invisible subtree. *@
             @if (_visualVisited)
             {
                 <div class="editor-workbench__view editor-workbench__view--visual"
                      style="@(_editorCardTab == EditorCardTab.Visual ? "" : "display:none")">
                     <Kmila.Shared.Components.VisualRun.VisualPanel
                         ProjectId="@ProjectId"
-                        EmbeddedMode="true" />
+                        EmbeddedMode="true"
+                        IsActiveTab="@(_editorCardTab == EditorCardTab.Visual)" />
                 </div>
             }
 
@@ -892,7 +895,24 @@
     /// </summary>
     private void OnSimParamsChanged()
     {
-        if (_waveformData == null) return;
+        // Session 30 (2026-07-24): reattach mid-run hydration. When the
+        // Editor mounts on a project that has an in-flight sim (user
+        // navigated away then returned via sidebar/toast), the singleton
+        // Builder+engine kept ticking but this component's _waveformData
+        // is null. OnAfterProjectChanged (:1101) only fires when the
+        // project switch triggers a fresh load — on plain reattach the
+        // handler doesn't rerun. Rehydrate from the live engine here
+        // whenever Sim transitions into Running/Paused with no local
+        // waveform yet. See memory project-simulation-coordinator.
+        if (_waveformData == null)
+        {
+            if (Sim.State == SimState.Running || Sim.State == SimState.Paused)
+            {
+                if (HydrateWaveformFromLiveEngine())
+                    InvokeAsync(StateHasChanged);
+            }
+            return;
+        }
         if (Sim.Time != _lastBuiltTime || Sim.Scale != _lastBuiltScale)
         {
             _waveformData = null;
@@ -2039,7 +2059,14 @@
         {
             AutomaticLayout = true,
             Language="vhdl",
-            FontSize = 16, // Mobile-friendly: 16px prevents iOS zoom on focus
+            // 14px reads well on both desktop and phone. The old 16px was
+            // premised on iOS zoom-on-focus prevention, but Monaco renders
+            // into a contenteditable div — iOS only zooms genuine <input>
+            // controls under 16px, so the premise didn't apply. On a 420dpi
+            // phone (real-device audit 2026-08-02) 16px yielded only ~15
+            // chars per wrapped line because of narrow container + wide
+            // mono glyphs; 14px gives ~20 chars while staying readable.
+            FontSize = 14,
             TabSize = 4,
             InsertSpaces = true,
             // Monaco's default context menu surfaces desktop-only shortcuts

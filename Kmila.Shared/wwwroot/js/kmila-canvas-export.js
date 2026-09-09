@@ -1,14 +1,16 @@
 /* Kmila Visual Runtime — canvas export (§6 Item 2).
  *
- * Exports the current canvas view as PNG (via kmilaCanvasRender) or SVG
- * (via the DOM<-foreignObject serialisation path). PDF export is still
- * deferred until jspdf is vendored (offline-first).
+ * Exports the current canvas view as PNG (via kmilaCanvasRender), SVG
+ * (via the DOM<-foreignObject serialisation path), or PDF (2026-07-26:
+ * jspdf 2.5.2 vendored under wwwroot/lib/jspdf/ — mirrors the PNG path
+ * then wraps the bitmap into a single-page PDF at native canvas dims).
  *
  * Public API on window:
  *   kmilaCanvasExportSvg(rootSelector, filename) → Promise<boolean>
  *   kmilaCanvasExportPng(rootSelector, filename) → Promise<boolean>
+ *   kmilaCanvasExportPdf(rootSelector, filename) → Promise<boolean>
  *   kmilaCanvasExportSupportsPng()               → boolean
- *   kmilaCanvasExportSupportsPdf()               → boolean (false in v1)
+ *   kmilaCanvasExportSupportsPdf()               → boolean
  */
 (function () {
     // ── SVG helpers (foreignObject path — lossless for SVG viewers) ──
@@ -98,10 +100,47 @@
         });
     }
 
+    // PDF export (2026-07-26): same rasterisation pipeline as PNG, then
+    // wraps the bitmap into a single-page PDF via jspdf's UMD build.
+    // jspdf's own .save() runs the download so downloadBlob is bypassed.
+    // Format/orientation follow the canvas aspect; hotfixes:['px_scaling']
+    // keeps the px→PDF mapping 1:1 so the output matches the raster PNG
+    // pixel-for-pixel at print time.
+    async function exportPdf(rootSelector, filename) {
+        if (typeof window.kmilaCanvasRender !== 'function') return false;
+        if (!window.jspdf || !window.jspdf.jsPDF) return false;
+        const root = (typeof rootSelector === 'string')
+            ? document.querySelector(rootSelector) : rootSelector;
+        if (!root) return false;
+        const w = root.offsetWidth || 800;
+        const h = root.offsetHeight || 600;
+        const cvs = document.createElement('canvas');
+        cvs.width = w; cvs.height = h;
+        try { window.kmilaCanvasRender(root, cvs); }
+        catch (_) { return false; }
+        try {
+            const dataUrl = cvs.toDataURL('image/png');
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({
+                orientation: w > h ? 'landscape' : 'portrait',
+                unit: 'px',
+                format: [w, h],
+                hotfixes: ['px_scaling'],
+            });
+            doc.addImage(dataUrl, 'PNG', 0, 0, w, h);
+            doc.save(filename || 'kmila-canvas.pdf');
+            return true;
+        } catch (_) { return false; }
+    }
+
     window.kmilaCanvasExportSvg = exportSvg;
     window.kmilaCanvasExportPng = exportPng;
+    window.kmilaCanvasExportPdf = exportPdf;
     window.kmilaCanvasExportSupportsPng = function () {
         return typeof window.kmilaCanvasRender === 'function';
     };
-    window.kmilaCanvasExportSupportsPdf = function () { return false; };
+    window.kmilaCanvasExportSupportsPdf = function () {
+        return typeof window.kmilaCanvasRender === 'function'
+            && !!(window.jspdf && window.jspdf.jsPDF);
+    };
 })();

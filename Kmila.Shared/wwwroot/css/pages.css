@@ -66,6 +66,18 @@
    leftover space, basis:auto keeps natural sizing on long pages. */
 .kmila-shell__main > .content {
     flex: 1 0 auto;
+    /* Reserve the iOS home-indicator via env(). On desktop env() collapses
+       to 0, no effect. Android WebView reports 0 for `safe-area-inset-bottom`
+       (viewport-fit=cover doesn't populate the inset when the app doesn't
+       draw edge-to-edge — Xiaomi HyperOS confirmed 2026-08-02). Below on
+       touch devices we add a 12 px floor so the last row of any page
+       clears the gesture-nav strip on Android too. */
+    padding-bottom: env(safe-area-inset-bottom, 0);
+}
+@media (pointer: coarse) {
+    .kmila-shell__main > .content {
+        padding-bottom: max(env(safe-area-inset-bottom, 0px), 12px);
+    }
 }
 
 /* Slim footer at the bottom of every page. Lives inside .kmila-shell__main
@@ -710,6 +722,39 @@
     }
 }
 
+/* F-081 (Round 9 2026-08-05, CDP-discovered) — at xl (1.20) text scale on
+   ≤ 640 px viewports the breadcrumb text overflows even the topbar's shrunk
+   allotment, and the 2026-06-14 `clip` rule leaves it silently truncated at
+   the wrong edge (e.g. "ample · Demo board" instead of "Sample · Demo boar…"
+   in AR + LTR project name). At normal 1.0x scale the text fits, so this
+   never fires. `calc(1 * var(...))` is a load-bearing feature-test: if the
+   var is unset (LTR pre-Blazor-boot) the calc evaluates and this rule
+   scopes cleanly to the moment the scale is elevated. Falls back to
+   ellipsis so the truncation is at least indicative and not silent. */
+@media (max-width: 640.98px) {
+    :root[style*="--user-text-scale: 1.2"] .kmila-breadcrumbs__current > span,
+    :root[style*="--user-text-scale: 1.20"] .kmila-breadcrumbs__current > span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+}
+
+/* F-089 (Round 10 2026-08-08, CDP-discovered) — at viewports below 380 CSS px
+   (physical 560 dpi Xiaomi 13T Pro without density override → 308 CSS px, or
+   any user who raises system density, or split-screen), "Sample · Demo board"
+   silent-clips to just "Demo board" at md scale because the F-081 rule above
+   is scoped to xl only. Below the 375 px audit threshold that motivated the
+   2026-06-14 clip decision, every crumb is at real risk of clipping regardless
+   of text scale, so surface the truncation with an ellipsis. The 380 px
+   breakpoint gives a small buffer above the 375 px threshold so ordinary
+   375-411 px phones keep the deliberate 2026-06-14 clip. */
+@media (max-width: 380px) {
+    .kmila-breadcrumbs__current > span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+}
+
 /* Tablet sweet-spot 641–820 px: the full 3-crumb trail still overflows the
    topbar once the ConfigurationsPill + ProfileMenu cluster claims its slice,
    producing mid-word truncation like "Ejemplo · Contad…" (audit 2026-06-14
@@ -999,6 +1044,13 @@
     flex-direction: column;
     gap: 2px;
     animation: kmilaPop var(--duration-fast) var(--ease-standard);
+    /* 7 languages × ~44 px would run 300+ px tall; when the pill sits mid-page
+       on a phone the last entries (JP, AR) end up off-screen and unreachable
+       because the panel doesn't scroll internally (real-device audit
+       2026-08-02, F-046). Cap to viewport minus safe-area and let it scroll. */
+    max-height: min(70dvh, var(--kmila-viewport-h, 70dvh) - 32px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 [dir="rtl"] .kmila-lang-picker__panel {
@@ -1575,15 +1627,6 @@
     gap: var(--space-2);
 }
 
-/* Dual-action row (Create new + Try a sample) in the empty state */
-.projects-empty__actions {
-    display: inline-flex;
-    flex-wrap: wrap;
-    gap: var(--space-3);
-    justify-content: center;
-    margin-top: var(--space-2);
-}
-
 /* Header "Try a sample" — ghost button, picks up accent tint on hover */
 .projects-sample {
     display: inline-flex;
@@ -1638,6 +1681,42 @@
     gap: var(--space-5);
 }
 
+/* F-032 (real-device audit 2026-08-02) — Settings → Text-size row wrapped
+   "Compact · Small · Normal · Comfortable · Large" to two lines on phones
+   with `Large` alone on line 2. Make the row a proper flex line that
+   scrolls horizontally below 480 CSS px instead of wrapping, matching
+   the dock-tabs / view-tabs affordance elsewhere. */
+.kmila-text-size-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    align-items: center;
+}
+@media (max-width: 480px) {
+    .kmila-text-size-row {
+        /* F-032b (Round 9 2026-08-05) — !important IS load-bearing. The base
+           `.kmila-text-size-row { flex-wrap: wrap }` declared at line 1667
+           has the same specificity as this media-scoped rule, and Chromium's
+           computed style resolves to `wrap` even though this rule is later
+           in the file (CDP-verified: with `!important` removed, the row
+           shows `computed flex-wrap: wrap`). The specific cascade path is
+           unclear but the behavior is deterministic. Retain `!important`.
+           If you need to remove it, first change the base rule at line 1667
+           to `nowrap` and drop this override — that's the cleanest path. */
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+        scrollbar-width: none;
+        -webkit-mask-image: linear-gradient(to right, black calc(100% - 24px), transparent);
+                mask-image: linear-gradient(to right, black calc(100% - 24px), transparent);
+    }
+    .kmila-text-size-row::-webkit-scrollbar { display: none; }
+    .kmila-text-size-row .kmila-btn-tab {
+        flex: 0 0 auto !important;
+        padding-inline: var(--space-2);
+    }
+}
+
+
 .settings-card {
     background-color: var(--surface-2);
     /* Stronger boundary so cards visually separate from the page bg
@@ -1648,6 +1727,18 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+}
+
+/* When any <details> popover inside the card is open (currently the
+   LanguageChanger, potentially future pickers), lift the overflow clip
+   so the absolutely-positioned panel can extend below the card boundary.
+   Otherwise 7 languages × ~44 px ran below the card's bottom edge and
+   the last entries (JP, AR) became physically unreachable on phones
+   (real-device audit 2026-08-02, F-046). The German-compound-noun
+   overflow guard the base rule provides is only needed when the card is
+   idle — once details[open] is set, the popover is the priority. */
+.settings-card:has(details[open]) {
+    overflow: visible;
     /* Container query target. Lets each card decide row stacking based
        on its OWN width — the surrounding grid puts cards at ~360 px on
        2-up desktop, where viewport-based media queries can't tell us
@@ -2103,6 +2194,20 @@
     }
     .projects-search { width: 100%; }
     .projects-cta { width: 100%; justify-content: center; }
+    /* F-011 (Projects action-row asymmetry, R9 2026-08-05) — the DOM order
+       [Sample, Examples, Create new] rendered as `[Sample | Examples]` on line
+       1 and `[Create new]` full-width on line 2 (Round 8 baseline), which read
+       as visually off-balance (2 up top, 1 below). Lift the primary CTA to
+       order:-1 so the visible order becomes `[Create new] · [Sample | Examples]`
+       — main action full-width on top with a clear hierarchy, secondaries
+       symmetric on the row below (each takes half via flex-grow). */
+    .projects-cta { order: -1; }
+    .projects-sample,
+    .projects-examples {
+        flex: 1 1 0;
+        min-width: 0;
+        justify-content: center;
+    }
     .project-card__actions { opacity: 1; pointer-events: auto; }
 }
 
@@ -2271,6 +2376,16 @@
     flex-shrink: 0;
 }
 
+/* On phones the workbench header (file name + lang chip on the left,
+   Ln/Col + split toggle + Ctrl+S kbd hint on the right) duplicates the
+   file-tab strip below it and eats ~44 px of already-scarce vertical
+   space. Split-panes and Ctrl+S both belong to desktop, and the tab
+   strip already carries the file name — so hide the whole header on
+   ≤ 768 px. Real-device audit 2026-08-02 (F-025). */
+@media (max-width: 768px) {
+    .editor-workbench__header { display: none; }
+}
+
 .editor-file-info {
     display: inline-flex;
     align-items: center;
@@ -2433,6 +2548,44 @@
     width: 100%;
     height: 60dvh;
     min-height: 400px;
+    /* F-078 (R9 2026-08-05, CDP-verified critical bug) — under `<html dir="rtl">`
+       Monaco inherits `direction: rtl`, which cascades into `.view-line`
+       elements. Monaco's internal viewport math assumes LTR and computes each
+       line's `left` as an offset from the container's inline-start. In RTL
+       mode inline-start = right edge, so those "left offsets" are added to a
+       massively-far-right origin, producing `.view-line { left: 12782469px }`
+       — 12 million pixels off-screen. The Monaco editor appears completely
+       blank on Arabic. Force `direction: ltr` on the container so Monaco's
+       LTR-assumed layout works. Code is monospace ASCII anyway — a code
+       editor's inline axis has nothing to do with the app-wide language
+       direction. Editor UI elements (gutter, minimap, scrollbar) naturally
+       belong on the LTR-native sides too. */
+    direction: ltr;
+    text-align: left;
+}
+
+/* F-079 (R9 2026-08-05, sibling of F-078) — the same RTL-inheritance trap
+   hits every viewer that renders LTR-native content (code blocks, gate
+   schematics, waveform traces, flow diagrams). Their internal layout
+   assumes LTR and computes child positions with `left` offsets from an
+   assumed left-edge origin; under `direction: rtl` those offsets are
+   applied from the RIGHT edge and content lands far off-screen. Force
+   LTR on each viewer's outer container so the app's Arabic UI can wrap
+   an LTR content plane. Chrome (drawer, TopBar, breadcrumbs) still
+   inherits RTL from `<html>` and mirrors correctly. */
+.kmila-block-editor,
+.schematic-viewer,
+.waveform-viewer,
+.flow-diagram-viewer,
+/* F-091 (R10 2026-08-08, sibling of F-079) — /visual/{id} standalone.
+   Same class of bug: kviz-widget children carry absolute `left: <px>` from
+   layout code that assumes LTR. Under inherited RTL the palette / workspace
+   / widget canvas renders with negative x-coordinates (some widgets land
+   at left: -450 CSS px) and 227 CSS px of horizontal overflow scroll. Force
+   LTR on the standalone Visual container. TopBar / breadcrumb / footer
+   still inherit RTL from <html>. */
+.visual-page {
+    direction: ltr;
 }
 
 @media (max-width: 768px) {
@@ -3359,9 +3512,16 @@
         white-space: nowrap;
     }
 }
-/* Extremely narrow widths still fall back to icon-only so 8 tabs can fit
-   without forcing a horizontal scroll the user can't discover. */
-@media (max-width: 380px) {
+/* Narrower phones (≤ 480 px CSS) fall back to icon-only so all 8 tabs
+   (Entities · Schematic · Flow · Ports · Waveforms · Runs · Files · Output)
+   fit without the last three sliding off-screen. Real-device audit
+   2026-08-02 on a 1080 × 2400 @ 420dpi Xiaomi 13T (411 CSS px viewport)
+   showed only 5.5 tabs visible with the previous 380 px threshold: 8 × 64
+   min-width + chevron reserve exceeded the available width and the
+   horizontal-scroll affordance (mask fade) was too subtle for touch users
+   to discover. Long-press on any tab still surfaces its label via
+   KmilaTooltip. */
+@media (max-width: 480px) {
     .kmila-dock__tab-label { display: none; }
     .kmila-dock__tab { flex-direction: row; min-width: 44px; }
 }
@@ -4580,9 +4740,20 @@
 }
 
 @media (max-width: 768px) {
+    /* F-023 (Round 10 2026-08-08): the fixed `55dvh` above extended the
+       workbench body 234 CSS px behind the fixed RunBar + Dock overlays,
+       leaving a dark empty band inside the Monaco viewport for any file
+       shorter than the visible line count and wasting render work. On phones
+       the shell already reserves the bottom chrome via `padding-bottom:
+       calc(--dock-h + --runbar-h + --statusbar-h + safe-area)` at
+       `.kmila-shell__main:has(.editor-page)`, so the parent flex chain
+       (`.editor-page → .editor-workbench → __body--panes`) can flex-fill
+       exactly the visible slot when we drop the fixed height. `min-height`
+       stays so the pane never collapses below the tap-target floor. */
     .editor-workbench__body--panes {
-        height: 55dvh;
-        min-height: 320px;
+        height: auto;
+        flex: 1 1 auto;
+        min-height: 220px;
     }
 }
 
@@ -7254,8 +7425,12 @@
     outline: none;
 }
 /* At narrow container widths the label is dropped; only the icon remains so
-   the chip stays out of the way of Build/Run/Stop labels. */
-@container run-bar (max-width: 640px) {
+   the chip stays out of the way of Build/Run/Stop labels. The container is
+   named `runbar` in `.run-bar` (no hyphen) — the old `@container run-bar`
+   silently no-op'd, letting the long RUNBAR_FPGA_REQUIRED sentence overflow
+   the row and push Run/Stop/burger off-screen on phones (real-device audit
+   2026-08-02). */
+@container runbar (max-width: 640px) {
     .run-bar__no-fpga-hint-label { display: none; }
 }
 
@@ -9059,6 +9234,30 @@
     flex-shrink: 0;
 }
 
+/* Visual-mode chip beside the "Running/Paused" pill — distinguishes a
+   visual sim (paused when its tab is hidden, stopped on project change)
+   from a signal-only background sim (persists across navigation). Uses
+   a muted surface tone so the primary running pill stays dominant. */
+.project-card__mode-chip,
+.kmila-nav-item__mode-chip {
+    display: inline-flex;
+    align-items: center;
+    margin-left: var(--space-2);
+    padding: 1px var(--space-2);
+    border-radius: 999px;
+    background-color: var(--surface-3);
+    color: var(--kmila-text-muted, var(--kmila-muted, #667));
+    font-size: var(--fs-2xs);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    vertical-align: middle;
+}
+[dir="rtl"] .project-card__mode-chip,
+[dir="rtl"] .kmila-nav-item__mode-chip {
+    margin-left: 0;
+    margin-right: var(--space-2);
+}
+
 /* The progress strip sits below the description, hugging the body width. */
 .project-card__progress {
     margin-top: var(--space-2);
@@ -10045,7 +10244,7 @@
         min-width: 1.2em;
         height: 1.2em;
         padding: 0 0.25em;
-        font-size: 10px;
+        font-size: calc(10px * var(--user-text-scale, 1));
         line-height: 1.2em;
     }
     [dir="rtl"] .kmila-dock__tab .kmila-dock__count {
@@ -11367,6 +11566,18 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     color: #b45309;
 }
 
+.schematic-diagnostics__item--info {
+    color: var(--text-muted, #64748b);
+}
+
+.schematic-diagnostics__item--warning {
+    color: #b45309;
+}
+
+.schematic-diagnostics__item--error {
+    color: #b91c1c;
+}
+
 .schematic-viewer__body {
     flex: 1 1 0;
     width: 100%;
@@ -12646,13 +12857,19 @@ body:has(.visual-page.is-fullscreen) .status-bar {
    block rendering. */
 @media (max-width: 768px) {
     .editor-workbench__view--blocks .kmila-block-editor__canvas {
+        /* 2026-08-08 mobile round 11 — Fix 5: reserve room for the new
+           category-tabs palette strip (~7 rem: 34 px tab row + 60 px chip
+           row + 12 px padding + separator) so the palette actually
+           surfaces above the run bar instead of getting pushed off-screen
+           by an over-tall canvas. Previous 9 rem subtraction did not
+           account for the taller palette. */
         min-height: calc(100dvh
             - var(--topbar-height, 56px)
             - var(--dock-h, 64px)
             - var(--runbar-h, 56px)
             - env(safe-area-inset-top, 0px)
             - env(safe-area-inset-bottom, 0px)
-            - 9rem /* view-tabs + editor-card padding/border */);
+            - 16rem /* view-tabs + editor-card padding + palette pill+chip rows */);
     }
 }
 
@@ -12758,6 +12975,20 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     gap: 8px;
     align-items: stretch;
 }
+/* 2026-08-08 mobile round 11 — Fix 2: category-tab pill row + chip
+   strip wrappers rendered by kmila-blocks.js _renderPalette. On desktop
+   the pill row is hidden (the vertical sidebar already lists all
+   categories inline via .kmila-toolbox-category); the strip inherits
+   the palette's vertical flex flow. On mobile both switch to horizontal
+   scrollers — see @media (max-width: 640.98px) below. */
+.kmila-block-palette__tabs { display: none; }
+.kmila-block-palette__strip {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+    min-width: 0;
+}
 
 /* Phone: palette swaps to a bottom strip so the canvas keeps the full
    viewport width. Previously 132 px side-rail stole 35 % of a 375 px
@@ -12776,19 +13007,112 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     .kmila-block-palette {
         width: 100%;
         flex: 0 0 auto;
-        flex-direction: row;
+        flex-direction: column;
         border-right: 0;
         border-top: 1px solid var(--border-subtle);
-        padding: var(--space-2);
-        overflow-x: auto;
+        padding: 6px var(--space-2) var(--space-2);
+        overflow-x: hidden;
         overflow-y: hidden;
-        gap: 6px;
+        gap: 0;
+        align-items: stretch;
         order: 2;
         box-shadow: 0 -4px 12px rgba(15, 23, 42, 0.06);
-        /* Cap height so the canvas keeps the lion's share of vertical
-           real estate. ~88 px fits two rows of palette pills on a phone
-           and leaves room for compact items like value atoms. */
-        max-height: 96px;
+        /* 2026-08-08 mobile round 11 — Fix 3: no more max-height clip.
+           The palette now hosts a category-tab pill row + a single
+           horizontally-scrolling chip strip. That fits in ~112 px of
+           intrinsic height without truncating tall block previews. */
+    }
+    /* Category-tab pill row (rendered by kmila-blocks.js _renderPalette).
+       Horizontal, sticky-ish above the block chip strip, brand-tinted
+       active state. */
+    .kmila-block-palette__tabs {
+        display: flex;
+        flex: 0 0 auto;
+        gap: 8px;
+        margin-bottom: 8px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: none;
+        /* Fix 8: soft snap points so a swipe eases onto a pill instead
+           of stopping mid-gap; proximity (not mandatory) so a decisive
+           swipe past two pills still lands where the user expects. */
+        scroll-snap-type: x proximity;
+        scroll-padding-inline: 8px;
+        scroll-behavior: smooth;
+    }
+    .kmila-block-palette__tabs::-webkit-scrollbar { display: none; }
+    .kmila-block-palette__tab {
+        appearance: none;
+        -webkit-appearance: none;
+        border: 1px solid var(--border-default);
+        background-color: var(--surface-1);
+        color: var(--text-default);
+        border-radius: 999px;
+        padding: 6px 14px;
+        font: 500 var(--fs-xs) inherit;
+        white-space: nowrap;
+        cursor: pointer;
+        transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+        min-height: 36px;
+        scroll-snap-align: start;
+    }
+    .kmila-block-palette__tab[aria-selected="true"] {
+        background-color: var(--kmila-accent);
+        color: var(--surface-1);
+        border-color: var(--kmila-accent);
+    }
+    /* Chip strip: horizontally-scrolling row of the active category's
+       block chips. This is the ONLY thing that scrolls horizontally
+       now — the tab row above it lists the six categories so students
+       don't hunt through 60+ blocks in one endless strip. Override the
+       desktop rule that lays the strip out as a vertical stack. */
+    .kmila-block-palette__strip {
+        display: flex;
+        flex-direction: row;
+        align-items: flex-start;
+        flex: 1 1 auto;
+        gap: 10px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding: 2px 4px 6px;
+        min-height: 0;
+        /* Fix 8: same soft snap the tab row uses — chips ease onto a
+           natural stop. `scroll-padding-inline: 12px` keeps the first
+           chip from jamming against the palette's inline-start edge. */
+        scroll-snap-type: x proximity;
+        scroll-padding-inline: 12px;
+        scroll-behavior: smooth;
+        /* Momentum + hide the native scrollbar; users know from the
+           tab row that this strip scrolls. */
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+    }
+    .kmila-block-palette__strip::-webkit-scrollbar { display: none; }
+    /* Chip children participate in scroll snap. Also switch touch-action
+       so the browser handles the palette's horizontal scroll — the drag
+       logic still fires on vertical/large-displacement gestures via the
+       Fix 7 movement threshold. */
+    .kmila-block-palette__strip > .kmila-block--palette {
+        scroll-snap-align: start;
+        touch-action: pan-x;
+    }
+    /* Cap the whole palette so it doesn't overflow the editor's
+       overflow:hidden container. ~140 px leaves room for the tab pill
+       row (~38 px) + one row of chips (~68 px) + padding, and keeps
+       the canvas the majority of the viewport. */
+    .kmila-block-palette {
+        max-height: 140px;
+    }
+    /* Category headers rendered inline by _renderPaletteItem become
+       redundant once the tab row exists — hide on phone. Separators too. */
+    .kmila-block-palette .kmila-toolbox-category,
+    .kmila-block-palette .kmila-block-palette__sep { display: none; }
+    /* Non-active category chips get `data-palette-visible="false"` from
+       the tab-click handler in kmila-blocks.js. Using a bespoke data-
+       attribute instead of `hidden`/`aria-hidden` so desktop (where all
+       chips must always show) is unaffected by the same JS state. */
+    .kmila-block-palette[data-mobile-cat] .kmila-block--palette[data-palette-visible="false"] {
+        display: none !important;
     }
     .kmila-block-canvas {
         order: 1;
@@ -12865,6 +13189,12 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     flex: 1 1 auto;
     position: relative;
     overflow: auto;
+    /* 2026-08-08 mobile round 11 — Fix 5: allow two-finger + one-finger
+       pan through long block stacks. Blocks inside still carry
+       `touch-action:none` (see .kmila-block) so drag detection works;
+       the canvas surface between blocks gets pan-x pan-y so students
+       can scroll a 2 645 px stack on a 582 px viewport. */
+    touch-action: pan-x pan-y;
     background-image:
         radial-gradient(circle, color-mix(in srgb, var(--border-subtle) 60%, transparent) 1px, transparent 1px);
     background-size: 20px 20px;
@@ -12888,6 +13218,19 @@ body:has(.visual-page.is-fullscreen) .status-bar {
 }
 .kmila-block-canvas::-webkit-scrollbar-track {
     background: transparent;
+}
+
+/* 2026-08-08 mobile round 11 — canvas mobile overrides. This block
+   MUST live after the desktop `.kmila-block-canvas` rule above; the
+   earlier @media at ~line 12980 gets overwritten by the desktop rule
+   at ~line 13051 (same specificity, later wins in cascade). Placing
+   the mobile version here lets it actually beat the desktop values. */
+@media (max-width: 640.98px) {
+    .kmila-block-canvas {
+        order: 1;
+        flex: 1 1 0;
+        min-height: 0;
+    }
 }
 
 .kmila-block-trash {
@@ -12938,10 +13281,16 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     font: 500 0.92rem/1.25 inherit;
     box-shadow: var(--shadow-2);
     user-select: none;
-    touch-action: none;
+    /* 2026-08-08 mobile round 11 (Fix 9) — idle blocks let the browser
+       pan the canvas/scroll the palette. Only after the block has been
+       ACTIVATED via double-tap (see .kmila-block--active) do we flip
+       touch-action to `none` so the JS drag path takes over. Result:
+       a single-finger swipe scrolls the workspace naturally, and
+       students commit to a move with a deliberate double-tap. */
+    touch-action: pan-x pan-y;
     -webkit-touch-callout: none;
     -webkit-user-select: none;
-    cursor: grab;
+    cursor: pointer;
     transition: box-shadow 120ms ease, transform 120ms ease, opacity 120ms ease;
     vertical-align: middle;
     position: relative;
@@ -12970,11 +13319,34 @@ body:has(.visual-page.is-fullscreen) .status-bar {
 }
 
 @media (max-width: 640.98px) {
-    .kmila-block { padding: 8px 10px 8px 16px; font-size: 0.86rem; gap: 4px; }
+    .kmila-block { padding: 8px 10px 8px 16px; font-size: 0.86rem; gap: 4px; max-width: 100%; }
     .kmila-block__statement { margin-inline-start: 12px; padding: 4px 6px; }
+    /* 2026-08-08 mobile round 11 — Fix 1: mobile inset numbers match the
+       reduced .kmila-block padding of `8px 10px 8px 16px`, so chained
+       peers still land flush with the head block's inline-start edge. */
+    .kmila-block__next-slot { margin-inline-start: -16px; margin-inline-end: -10px; }
+    /* Fix 4: rows must actually wrap on narrow canvases. `flex-wrap:wrap`
+       is inherited from the desktop rule; the problem is that inputs have
+       `flex:1 1 6ch` which lets them shrink but not stack. Force each
+       text/dropdown to claim its own line once we're under 641 px so
+       long identifiers like `data_in : std_logic_vector` render fully
+       instead of clipping. Labels stay inline (they hug the field). */
+    .kmila-block__row { row-gap: 6px; }
+    .kmila-block-canvas > .kmila-block .kmila-block__field--text,
+    .kmila-block-canvas > .kmila-block .kmila-block__field--dropdown,
+    .kmila-block__statement .kmila-block__field--text,
+    .kmila-block__statement .kmila-block__field--dropdown,
+    .kmila-block__next-slot .kmila-block__field--text,
+    .kmila-block__next-slot .kmila-block__field--dropdown {
+        flex-basis: 100%;
+        min-width: 0;
+    }
 }
 
 .kmila-block--dragging {
+    /* Dragging always takes the pointer — no browser pan/scroll while
+       a drag is in flight. */
+    touch-action: none;
     box-shadow:
         var(--shadow-3),
         inset 0 0 0 1px color-mix(in srgb, var(--border-focus) 60%, transparent);
@@ -12983,6 +13355,26 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     transform: rotate(-0.8deg);
     opacity: 0.96;
     z-index: 20;
+}
+
+/* 2026-08-08 mobile round 11 (Fix 9) — "picked up" / active block.
+   Reached via a double-tap; hosts the drag capture until dropped. */
+.kmila-block--active {
+    touch-action: none;
+    cursor: grab;
+    outline: 2px solid var(--kmila-accent);
+    outline-offset: 2px;
+    box-shadow:
+        var(--shadow-3),
+        0 0 0 4px color-mix(in srgb, var(--kmila-accent) 22%, transparent);
+    animation: kmila-block-active-pulse 1.4s ease-in-out infinite alternate;
+}
+@keyframes kmila-block-active-pulse {
+    from { box-shadow: var(--shadow-3), 0 0 0 4px color-mix(in srgb, var(--kmila-accent) 22%, transparent); }
+    to   { box-shadow: var(--shadow-3), 0 0 0 6px color-mix(in srgb, var(--kmila-accent) 12%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .kmila-block--active { animation: none; }
 }
 
 .kmila-block--over-trash {
@@ -12996,6 +13388,32 @@ body:has(.visual-page.is-fullscreen) .status-bar {
 .kmila-block--palette:hover {
     transform: translateY(-1px);
     box-shadow: var(--shadow-3);
+}
+/* 2026-08-08 mobile round 11 — Fix 3: palette blocks in phone bottom-strip
+   render as CHIPS. Statement slots, statement labels, and the next-slot
+   are decorative — they clip the 96 px strip and confuse the student.
+   Show only the first (name) row of the block so students see WHAT they
+   are picking up. Full block materializes normally on the canvas after
+   drop (_onPointerDown clones a fresh Block that does NOT carry the
+   -chip class). */
+.kmila-block--palette-chip {
+    align-self: flex-start;
+    max-width: 220px;
+}
+.kmila-block--palette-chip .kmila-block__statement,
+.kmila-block--palette-chip .kmila-block__statement-label,
+.kmila-block--palette-chip .kmila-block__next-slot {
+    display: none;
+}
+/* Palette chips also don't need internal-child fill or long text inputs
+   to expand — cap the field width so a chip stays a chip. */
+.kmila-block--palette-chip .kmila-block__row {
+    flex-wrap: nowrap;
+}
+.kmila-block--palette-chip .kmila-block__field--text,
+.kmila-block--palette-chip .kmila-block__field--dropdown {
+    max-width: 12ch;
+    flex: 0 1 auto;
 }
 
 /* Family tints — strip + chip color only, no background fill */
@@ -13216,9 +13634,20 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     display: flex;
     flex-direction: column;
     align-items: stretch;
+    /* 2026-08-08 mobile round 11 — Fix 1: cancel the parent block's inline
+       padding so chained peers (port→port→port, signal→signal, case-when
+       chains…) align back to the head block's inline-start edge instead
+       of cascading right one nesting level at a time. The parent's
+       padding is `8px 12px 8px 18px` (see .kmila-block); mobile drops it
+       to `8px 10px 8px 16px` inside the ≤640px media query. */
+    margin-inline-start: -18px;
+    margin-inline-end:   -12px;
 }
 
-.kmila-block__next-slot > .kmila-block { margin-top: 6px; }
+/* Chained peers fill the head block's full width (matches the same rule
+   that already exists for .kmila-block__statement > .kmila-block and
+   .kmila-block-canvas > .kmila-block at ~line 13279). */
+.kmila-block__next-slot > .kmila-block { margin-top: 6px; width: 100%; }
 .kmila-block__statement > .kmila-block { margin-top: 0; }
 .kmila-block__statement > .kmila-block + .kmila-block { margin-top: 4px; }
 
@@ -13323,7 +13752,17 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     margin: 0 4px;
 }
 @media (max-width: 640.98px) {
-    .kmila-block-toolbar { top: var(--space-2); inset-inline-end: var(--space-2); }
+    /* 2026-08-08 mobile round 11 — Fix 6: on phones the top-anchored
+       toolbar sat directly on top of the first block, obscuring its
+       right edge. Re-anchor to bottom-start so it lives above the
+       palette strip and out of the way of block content. Bottom
+       distance = 140 px palette max-height + 8 px gap + safe-area. */
+    .kmila-block-toolbar {
+        top: auto;
+        bottom: calc(148px + env(safe-area-inset-bottom, 0px));
+        inset-inline-start: var(--space-2);
+        inset-inline-end: auto;
+    }
     .kmila-block-toolbar__btn { width: 40px; height: 40px; font-size: 1.05rem; }
 }
 
@@ -13599,7 +14038,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
 }
 
 .kmila-template-card__icon {
-    font-size: 22px;
+    font-size: calc(22px * var(--user-text-scale, 1));
     color: var(--accent-fg);
     margin-bottom: var(--space-1);
 }
@@ -13692,7 +14131,13 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     flex-direction: column;
     height: 100%;
     min-height: 0;
+    max-width: 100%;
     background: var(--surface-1);
+    /* Defensive isolation: even if a widget/panned canvas paints outside
+       its scroll container, it must not push the whole page (html/body have
+       overflow-x: hidden as a global backstop; this pins the visual panel
+       to its allotted column). */
+    overflow-x: clip;
 }
 
 .visual-page__header {
@@ -13923,7 +14368,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
 .visual-page__palette-group-icon {
     display: inline-flex;
     color: var(--kmila-accent);
-    font-size: 14px;
+    font-size: calc(14px * var(--user-text-scale, 1));
     line-height: 1;
 }
 
@@ -13938,7 +14383,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
 
 .visual-page__palette-group-chevron {
     display: inline-flex;
-    font-size: 12px;
+    font-size: calc(12px * var(--user-text-scale, 1));
     line-height: 1;
     transition: transform var(--duration-fast) var(--ease-standard);
 }
@@ -14008,7 +14453,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
 }
 
 .visual-page__palette-chip-icon {
-    font-size: 18px;
+    font-size: calc(18px * var(--user-text-scale, 1));
     color: var(--kmila-accent);
     line-height: 1;
 }
@@ -14098,16 +14543,79 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     }
     /* V-2: Visual toolbar wraps awkwardly with 4+1 buttons. Switch to a
        single horizontal scrollable row so all buttons remain reachable and
-       the "Saved" pill no longer orphans on row 2. */
+       the "Saved" pill no longer orphans on row 2.
+       Scroll-snap ensures the strip settles on a whole button after a swipe
+       instead of mid-label — earlier mobile builds showed "Dete…", "…nect",
+       "…arda" at the strip edges when the user came to rest mid-scroll. */
     .visual-page__toolbar {
         flex-wrap: nowrap;
         overflow-x: auto;
         scrollbar-width: none;
         margin-left: 0;
         width: 100%;
+        scroll-snap-type: x proximity;
+        scroll-padding-inline: var(--space-2);
     }
     .visual-page__toolbar::-webkit-scrollbar { display: none; }
-    .visual-page__toolbar > * { flex-shrink: 0; }
+    .visual-page__toolbar > * { flex-shrink: 0; scroll-snap-align: start; }
+    /* Primary CTA (Run/Stop) sticks to the leading edge of the scrolling
+       toolbar strip so it stays reachable even after the user drags the
+       strip to inspect a trailing button. Without this the primary action
+       can scroll fully off-screen — the biggest reachability regression on
+       phones. Uses inset-inline-start so RTL flips the anchor edge.
+       Toolbar-matching background + trailing shadow separate it visually
+       from the scrolling buttons that pass underneath — otherwise the
+       outlined primary button reads as translucent and the icons behind it
+       bleed through. */
+    .visual-page__toolbar .kmila-btn.kmila-btn--primary,
+    .visual-page__toolbar .kmila-btn.kmila-btn--danger {
+        position: sticky;
+        inset-inline-start: 0;
+        z-index: 2;
+        background-color: var(--surface-2);
+        box-shadow: var(--space-2) 0 var(--space-2) calc(-1 * var(--space-2)) var(--surface-2);
+        /* Sticky positioning inside the flex row was collapsing the button
+           to icon-only width. Force the natural width so both icon and label
+           always render; the label is what actually communicates the action. */
+        flex: 0 0 auto;
+        width: auto;
+        min-width: max-content;
+    }
+
+    /* Compact-label pattern on very narrow phones: every non-primary toolbar
+       button that carries both an icon and a text `<span>` label collapses to
+       its icon so all ten buttons fit in the visible strip without the primary
+       Run/Stop CTA scrolling off-screen. Tooltip + aria-label carry the label
+       for a11y. Primary + danger CTAs are excluded so Ejecutar / Detener keep
+       their words — that button's colour alone isn't enough for first-time
+       users. The clear-changes button has inline text (not wrapped in <span>)
+       so it needs the font-size trick to hide its label. */
+    .visual-page__toolbar .kmila-btn:not(.kmila-btn--primary):not(.kmila-btn--danger) > span {
+        display: none;
+    }
+    .visual-page__toolbar [data-testid="visual-clear-changes"] {
+        font-size: 0;
+        gap: 0;
+    }
+    .visual-page__toolbar [data-testid="visual-clear-changes"] > i {
+        font-size: var(--fs-base);
+    }
+    /* Dirty-state dot on the Save button — replaces the "Save*" text label
+       once the icon-only mode kicks in. Pure CSS so the button node keeps its
+       structure across breakpoints. */
+    .visual-page__toolbar .kmila-btn.is-dirty {
+        position: relative;
+    }
+    .visual-page__toolbar .kmila-btn.is-dirty::after {
+        content: "";
+        position: absolute;
+        top: 4px;
+        inset-inline-end: 4px;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--kmila-accent, currentColor);
+    }
 }
 
 .visual-page__workspace > .kviz-canvas,
@@ -14316,7 +14824,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     color: var(--kmila-accent);
     background: color-mix(in oklab, var(--kmila-accent) 14%, transparent);
     border-radius: var(--radius-md);
-    font-size: 15px;
+    font-size: calc(15px * var(--user-text-scale, 1));
 }
 
 .visual-page__props-title {
@@ -15219,7 +15727,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     justify-content: center;
     font-family: var(--font-mono);
     font-weight: 600;
-    font-size: 14px;
+    font-size: calc(14px * var(--user-text-scale, 1));
     background: var(--surface-input, #f8fafc);
     color: var(--text-color, #111);
     border-radius: 8px;
@@ -15271,7 +15779,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     color: #a7f3c4;
     font-family: var(--font-mono);
     font-weight: 600;
-    font-size: 14px;
+    font-size: calc(14px * var(--user-text-scale, 1));
     line-height: 1;
 }
 
@@ -15455,7 +15963,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     width: 18px;
     height: 18px;
     border-radius: 4px;
-    font-size: 10px;
+    font-size: calc(10px * var(--user-text-scale, 1));
     font-family: var(--font-mono);
     display: flex; align-items: center; justify-content: center;
     background: var(--surface-2, #2a3142);
@@ -15771,4 +16279,143 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     .kmila-tooltip:focus-within::before {
         transition-delay: 150ms;
     }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Z11 · Landscape sweep (2026-07-26)
+   ═══════════════════════════════════════════════════════════════════════════
+   Phone-in-landscape viewports (typically ≤ 500 px tall × 500-950 px wide)
+   were never gated on viewport height — every mobile shim in this stylesheet
+   is width-only. The result on a 667×375 or 900×400 device is vertical
+   starvation: TopBar (3.5rem) + view-tabs (~48 px) + toolbar (~44 px) +
+   status bar (~24 px) ≈ 200 px of chrome, leaving 175–200 px for the actual
+   editor / viewer / waveform content.
+
+   All rules below sit behind `(orientation: landscape) and (max-height:
+   500px)` so desktop, portrait mobile, and tablets in landscape are
+   untouched. Rules that also want to fire on tall-but-short desktop windows
+   (e.g. a laptop with a maximised browser at 1920×420) can drop the
+   `orientation: landscape` clause — kept in for the phone-first sweep.
+
+   Fix layers reclaim ~40–60 px of vertical: TopBar padding tightens,
+   view-tabs lose top padding, waveform toolbar collapses to a compact
+   min-height, and the schematic info bottom-sheet climbs from 50 dvh to
+   65 dvh so text is legible at 375-tall. Monaco keeps its existing 240 px
+   floor from the earlier `(max-width: 768) and (orientation: landscape)`
+   block at :2447. */
+
+@media (orientation: landscape) and (max-height: 500px) {
+    /* TopBar — reclaim ~16 px */
+    .kmila-topbar,
+    .kmila-topbar__inner {
+        min-height: 2.5rem;
+    }
+    .kmila-topbar__inner {
+        padding-block: var(--space-1);
+    }
+
+    /* Editor view-tabs — reclaim ~8 px */
+    .editor-workbench__view-tabs {
+        padding-top: var(--space-1);
+    }
+
+    /* Waveform toolbar — pinned sticky, don't let it dominate a 375-tall
+       viewport. `min-height: 44px` was set for tap-target purposes; keep
+       the same floor but shrink vertical padding so the inner buttons
+       don't stack the toolbar into a 60+ px band. */
+    .waveform-viewer__toolbar {
+        padding-block: var(--space-1);
+    }
+
+    /* Schematic info bottom-sheet — the base rule at :10161 caps it at
+       50 dvh. On a 375-tall viewport that's 187 px, too small for the
+       inspector's typical 4-6 lines of key/value data. Lift to 65 dvh
+       (≈ 244 px) which is still short enough to leave the canvas visible
+       above the sheet. */
+    .schematic-info {
+        max-height: 65dvh;
+    }
+    .schematic-basket {
+        /* Basket sits above the info sheet — move it in lock-step so the
+           two don't overlap when the sheet grows. */
+        bottom: 66dvh;
+    }
+
+    /* Schematic + Flow canvas bodies — no aspect-ratio, no min-height. In
+       landscape short viewports the surrounding flex chrome (toolbar +
+       info panel + basket) could squeeze the canvas below usability. Pin
+       a floor so the drag surface stays large enough to render meaningful
+       geometry. 40 dvh at 375-tall = 150 px which is small but scrollable
+       via pan-zoom; below that gestures become unreliable. */
+    .schematic-viewer__body,
+    .flow-diagram__body {
+        min-height: 40dvh;
+    }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Z12 · Soft-keyboard sweep (2026-07-26)
+   ═══════════════════════════════════════════════════════════════════════════
+   Neither `100vh` nor `100dvh` shrinks when a soft keyboard opens — both are
+   keyboard-INCLUSIVE flavors of the layout viewport. So a modal capped at
+   `max-height: 85dvh` on a 375-tall phone with a 200-px keyboard visible
+   only exposes ~175 px of the modal; the footer buttons (submit, save, etc.)
+   render off-screen, invisible under the IME.
+
+   `kmila-shared-head.js` section Z12 publishes two hooks onto <html> that
+   this block reads:
+     • `--kmila-viewport-h`  → visualViewport.height in px (kbd-aware)
+     • `data-kmila-kbd="open"` → set when keyboard consumes ≥ 150 px
+
+   Any rule that would trap a control under the keyboard should either:
+     a) Cap its `max-height` at `min(<base>, var(--kmila-viewport-h) - <chrome>)`
+        so it never grows past the visible area, OR
+     b) Hide itself while the keyboard is open, since it competes for the
+        exact space the user is trying to type into.
+
+   The choice below leans on (a) for MODAL content (needs to stay reachable)
+   and (b) for BOTTOM-STICKY UI like the phone dock / run-bar (never useful
+   while the user is typing into an input inside a modal or the editor). */
+
+/* Every published control that caps at `dvh` — the caps are what trap
+   controls under the keyboard, so shrink them into the visible band. The
+   `min(...)` keeps the desktop / kbd-closed cap intact via fallback. */
+.modal-content {
+    max-height: min(85dvh, var(--kmila-viewport-h, 85dvh) - 16px);
+}
+.file-row__menu-panel {
+    max-height: min(80vh, var(--kmila-viewport-h, 80vh) - 16px);
+}
+.kmila-config-pill__panel,
+.kmila-profile-menu__panel {
+    max-height: min(80vh, var(--kmila-viewport-h, 80vh) - 16px);
+}
+
+/* Keyboard-open mode: hide bottom-anchored floating UI that's already
+   covered by the keyboard. `.kmila-dock` and `.run-bar` are phone-only
+   fixed-position surfaces (pages.css:9951, :10068) and the user cannot
+   interact with them while the IME is open anyway — hiding them prevents
+   the visual "peek behind the keyboard" flash on Android WebView. */
+html[data-kmila-kbd="open"] .kmila-dock,
+html[data-kmila-kbd="open"] .run-bar {
+    display: none !important;
+}
+
+/* Bottom-sheet-styled schematic-info modal on phones (pages.css:10169)
+   already caps at 50 dvh; when the keyboard is open, tighten to the
+   visible band so its content stays scrollable rather than clipped. */
+html[data-kmila-kbd="open"] .schematic-info {
+    max-height: min(50dvh, var(--kmila-viewport-h, 50dvh) - 32px);
+}
+
+/* Blazor error banner sits `position: fixed; bottom: 0` on
+   MainLayout.razor.css:14 — critical enough to still show over the
+   keyboard rather than hide, but pin it above the IME so its Reload
+   button stays tappable. `--kmila-viewport-h` gives the visible height;
+   subtract from layout viewport to derive keyboard offset. When
+   `data-kmila-kbd` is not set, the calc collapses to 0 so nothing moves. */
+html[data-kmila-kbd="open"] #blazor-error-ui {
+    bottom: calc(100dvh - var(--kmila-viewport-h, 100dvh));
 }

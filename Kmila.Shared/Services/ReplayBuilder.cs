@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Kmila.Shared.Models;
+using Interpreter.Models;
 
 namespace Kmila.Shared.Services;
 
@@ -212,8 +213,12 @@ public static class ReplayBuilder
         return map;
     }
 
+    // Pass 18 (2026-07-30): use the shared balanced-paren fragment so
+    // `mem(to_integer(unsigned(addr))) <= din;` picks up the LHS
+    // identifier `mem` instead of matching nothing and leaving the line
+    // out of the line-highlight map.
     private static readonly Regex _assignRx = new(
-        @"([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\([^)]*\))?\s*(?:<=|:=)",
+        @"([a-zA-Z_][a-zA-Z0-9_]*)" + OperationsRegex.BalancedIndexSuffix + @"\s*(?:<=|:=)",
         RegexOptions.Compiled);
 
     private static readonly Regex _conditionRx = new(

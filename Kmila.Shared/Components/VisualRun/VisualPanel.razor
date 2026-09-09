@@ -10,6 +10,8 @@
 @inject ProjectFiles ProjectFilesRepo
 @inject Microsoft.AspNetCore.Components.NavigationManager Nav
 @inject Microsoft.JSInterop.IJSRuntime JS
+@inject Kmila.Shared.Services.SimulationParameters Sim
+@inject Kmila.Shared.Services.VisualRun.VisualRunRegistry Registry
 
 @*
     VisualPanel — the reusable canvas surface. Used in two places:
@@ -76,7 +78,8 @@
                     <button class="kmila-btn visual-page__pause-btn"
                             data-testid="visual-pause-continue"
                             @onclick="TogglePause">
-                        @(_coord.IsPaused ? "▶ " : "⏸ ")@Traductor.T(_coord.IsPaused ? "VISUAL_CONTINUE" : "VISUAL_PAUSE")
+                        <Icon Name="@(_coord.IsPaused ? IconName.PlayFill : IconName.PauseFill)" />
+                        <span>@Traductor.T(_coord.IsPaused ? "VISUAL_CONTINUE" : "VISUAL_PAUSE")</span>
                     </button>
                 </KmilaTooltip>
                 <span class="visual-page__tick-readout">
@@ -583,6 +586,18 @@
     // sits flush against the editor's own breadcrumb + tab row.
     [Parameter] public bool EmbeddedMode { get; set; }
 
+    // Editor.razor keeps the VisualPanel mounted (display:none) when the user
+    // switches to Code/Blocks/Replay — otherwise the coord's Task.Run loop
+    // would keep ticking against a hidden subtree. Editor drives this
+    // parameter from _editorCardTab == Visual; on the standalone /visual/{id}
+    // route it stays true. Transitions are handled in OnParametersSetAsync:
+    // true→false auto-pauses the coord, false→true auto-resumes it (only when
+    // WE paused it — a user Pause via the toolbar sets no flag, so auto-resume
+    // never overrules the user's intent).
+    [Parameter] public bool IsActiveTab { get; set; } = true;
+    private bool _lastIsActiveTab = true;
+    private bool _autoPausedByTabHide;
+
     private int _projectId = -1;
     private Project? _project;
     private List<ProjectFile> _files = new();
@@ -757,7 +772,8 @@
                everywhere else in the app. *@
             <KmilaTooltip TextKey="VISUAL_WIRE_TIP" Placement="Bottom">
                 <button class="kmila-btn" data-testid="visual-wire" @onclick="OpenWiring" disabled="@(_entity == null)">
-                    @Traductor.T("VISUAL_WIRE")
+                    <Icon Name="IconName.Link45Deg" />
+                    <span>@Traductor.T("VISUAL_WIRE")</span>
                 </button>
             </KmilaTooltip>
             <KmilaTooltip TextKey="VISUAL_DELETE">
@@ -790,8 +806,9 @@
             @* Group 3 — persistence. Save carries the dirty-state text so the
                user sees "Save*" / "Saved" without having to hover. *@
             <KmilaTooltip TextKey="VISUAL_SAVE_TIP" Placement="Bottom">
-                <button class="kmila-btn" data-testid="visual-save" @onclick="SaveAsync" disabled="@(!_dirty)">
-                    @(_dirty ? Traductor.T("VISUAL_SAVE_DIRTY") : Traductor.T("VISUAL_SAVED"))
+                <button class="kmila-btn @(_dirty ? "is-dirty" : "")" data-testid="visual-save" @onclick="SaveAsync" disabled="@(!_dirty)">
+                    <Icon Name="@(_dirty ? IconName.Save : IconName.Check2)" />
+                    <span>@(_dirty ? Traductor.T("VISUAL_SAVE_DIRTY") : Traductor.T("VISUAL_SAVED"))</span>
                 </button>
             </KmilaTooltip>
             <KmilaTooltip TextKey="VISUAL_CLEAR_CHANGES_TOOLTIP">
@@ -932,6 +949,15 @@
                                 <span>@Traductor.T("VISUAL_EXPORT_SVG")</span>
                             </button>
                         </KmilaTooltip>
+                        <KmilaTooltip TextKey="VISUAL_EXPORT_PDF_TIP" Placement="Left">
+                            <button class="visual-page__more-item"
+                                    data-testid="visual-export-pdf"
+                                    role="menuitem"
+                                    @onclick="OnMoreExportPdf">
+                                <Icon Name="IconName.FileEarmarkPdf" />
+                                <span>@Traductor.T("VISUAL_EXPORT_PDF")</span>
+                            </button>
+                        </KmilaTooltip>
                         @if (_recState == RecState.Idle)
                         {
                             <div class="visual-page__more-sep" aria-hidden="true"></div>
@@ -942,6 +968,15 @@
                                         @onclick="OnMoreRecord">
                                     <Icon Name="IconName.RecordCircle" />
                                     <span>@Traductor.T("VISUAL_RECORD")</span>
+                                </button>
+                            </KmilaTooltip>
+                            <KmilaTooltip TextKey="VISUAL_RECORD_SPLIT_TIP" Placement="Left">
+                                <button class="visual-page__more-item"
+                                        data-testid="visual-record-split"
+                                        role="menuitem"
+                                        @onclick="OnMoreRecordSplit">
+                                    <Icon Name="IconName.LayoutSplit" />
+                                    <span>@Traductor.T("VISUAL_RECORD_SPLIT")</span>
                                 </button>
                             </KmilaTooltip>
                         }
@@ -980,6 +1015,15 @@
         catch { /* JS not ready — offer no-op; retry on next click */ }
     }
 
+    // §6 Item 2 (2026-07-26) — PDF export via vendored jspdf 2.5.2.
+    // Rasterizer path identical to PNG; jspdf wraps the bitmap into a
+    // single-page PDF at native canvas dimensions.
+    private async Task ExportCanvasPdf()
+    {
+        try { await JS.InvokeAsync<bool>("kmilaCanvasExportPdf", ".kviz-canvas", BuildCanvasFilename("pdf")); }
+        catch { /* JS not ready — offer no-op; retry on next click */ }
+    }
+
     // §6 Item 4 (2026-07-05) — zoom-to-fit uses the shared pan-zoom lib's
     // internal fitToView, now exposed as kmilaPanZoomFit(id). Snapshot
     // recovery for users who panned the canvas into the void.
@@ -998,7 +1042,9 @@
     private void OnMoreLocator() { _moreOpen = false; _showLocator = !_showLocator; }
     private async Task OnMoreExportPng() { _moreOpen = false; await ExportCanvasPng(); }
     private async Task OnMoreExportSvg() { _moreOpen = false; await ExportCanvasSvg(); }
-    private async Task OnMoreRecord() { _moreOpen = false; await StartRecording(); }
+    private async Task OnMoreExportPdf() { _moreOpen = false; await ExportCanvasPdf(); }
+    private async Task OnMoreRecord()      { _moreOpen = false; await StartRecording(withRunbar: false); }
+    private async Task OnMoreRecordSplit() { _moreOpen = false; await StartRecording(withRunbar: true);  }
 
     private async Task ZoomToFit()
     {
@@ -1060,15 +1106,19 @@
     private int _recCapMs = 120_000;
     private System.Threading.Timer? _recPoll;
 
-    private async Task StartRecording()
+    private async Task StartRecording(bool withRunbar = false)
     {
         if (_recState != RecState.Idle) return;
         try
         {
+            var fname = BuildCanvasFilename("webm");
+            if (withRunbar) fname = fname.Replace(".webm", "-split.webm");
             var result = await JS.InvokeAsync<System.Text.Json.JsonElement>(
                 "kmilaCanvasRecordStart",
                 ".kviz-canvas",
-                new { fps = 20, hardCapSeconds = 120, filename = BuildCanvasFilename("webm") });
+                new { fps = 20, hardCapSeconds = 120,
+                      filename = fname,
+                      withRunbar = withRunbar, runbarHeight = 80 });
             if (result.TryGetProperty("ok", out var ok) && ok.GetBoolean()
                 && result.TryGetProperty("sessionId", out var idEl))
             {
@@ -1127,7 +1177,7 @@
     private static string FormatElapsed(int elapsedMs, int capMs)
     {
         int es = elapsedMs / 1000, cs = capMs / 1000;
-        return $"● {es / 60:D2}:{es % 60:D2} / {cs / 60:D2}:{cs % 60:D2}";
+        return $"{es / 60:D2}:{es % 60:D2} / {cs / 60:D2}:{cs % 60:D2}";
     }
 
     protected override async Task OnInitializedAsync()
@@ -1146,8 +1196,40 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        // Auto pause/resume on tab-switch. Handled BEFORE the project-id check
+        // because a tab flip on the same project fires OnParametersSetAsync
+        // without pid change; we must still react. When WE paused it we set
+        // _autoPausedByTabHide; a user-initiated Pause via the toolbar leaves
+        // that flag false so the auto-resume path below skips it.
+        if (IsActiveTab != _lastIsActiveTab)
+        {
+            _lastIsActiveTab = IsActiveTab;
+            if (!IsActiveTab)
+            {
+                if (_coord != null && _coord.IsRunning && !_coord.IsPaused)
+                {
+                    _coord.Pause();
+                    _autoPausedByTabHide = true;
+                }
+            }
+            else if (_autoPausedByTabHide)
+            {
+                _coord?.Resume();
+                _autoPausedByTabHide = false;
+            }
+        }
+
         if (!int.TryParse(ProjectId, out var pid)) return;
         if (pid == _projectId) return;
+
+        // Project changed. Kill any coord bound to the previous project's
+        // Entity — otherwise the loop keeps ticking against a stale object
+        // and pollutes Sim.RunningProjectId with the wrong id. StopRun
+        // handles cancellation + join; Sim/Registry cleanup happens in the
+        // OnStopped callback wired in StartRun.
+        if (_coord != null) await StopRun();
+        _autoPausedByTabHide = false;
+
         _projectId = pid;
         await LoadProjectAsync();
     }
@@ -1430,9 +1512,26 @@
         _coord = new VisualRunCoordinator(_entity, ringTicks, userDrivenPorts, Traductor);
         _coord.Speed = _speedIndex;
         _coord.CustomTickDelayMs = _customDelayMs;
+        var coordForCallbacks = _coord;
+        var pidForCallbacks = _projectId;
         _coord.OnFrame += _ => RequestRepaint();
         _coord.OnError += msg => { _loadError = msg; InvokeAsync(StateHasChanged); };
-        _coord.OnStopped += () => InvokeAsync(StateHasChanged);
+        _coord.OnStopped += () =>
+        {
+            // Capture pid + coord in the closure: if the user hopped to a new
+            // project and started a fresh visual sim before this old coord's
+            // loop task got around to raising OnStopped, we must NOT clear the
+            // NEW project's Sim.RunningProjectId. Registry.Unregister keys off
+            // (pid, coord) too so a fresh Start's registration survives.
+            Registry.Unregister(pidForCallbacks, coordForCallbacks);
+            if (Sim.RunningMode == Kmila.Shared.Services.SimMode.Visual
+                && Sim.RunningProjectId == pidForCallbacks)
+            {
+                Sim.EndRun();
+            }
+            if (pidForCallbacks == _projectId) _autoPausedByTabHide = false;
+            InvokeAsync(StateHasChanged);
+        };
         _coord.OnBreakpointHit += t =>
         {
             _lastBreakHitTick = t;
@@ -1440,6 +1539,8 @@
             InvokeAsync(StateHasChanged);
         };
         await _coord.StartAsync();
+        Registry.Register(_projectId, _coord);
+        Sim.BeginRun(_projectId, Kmila.Shared.Services.SimMode.Visual);
         SeedSwitchInputs();
         StartRepaintTicker();
         StateHasChanged();

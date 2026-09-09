@@ -147,6 +147,7 @@ else
                 </KmilaTooltip>
                 <KmilaTooltip TextKey="@(_isFullscreen ? "SCHEMATIC_FULLSCREEN_EXIT" : "SCHEMATIC_FULLSCREEN_ENTER")">
                     <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm @(_isFullscreen ? "is-active" : "")"
+                            data-kmila-fullscreen-toggle
                             @onclick="ToggleFullscreen"
                             aria-label="@Traductor.T(_isFullscreen ? "SCHEMATIC_FULLSCREEN_EXIT" : "SCHEMATIC_FULLSCREEN_ENTER")">
                         <Icon Name="@(_isFullscreen ? IconName.FullscreenExit : IconName.ArrowsFullscreen)" />
@@ -212,8 +213,20 @@ else
             <ul class="schematic-diagnostics">
                 @foreach (var d in _layout.Netlist.Diagnostics)
                 {
-                    <li class="schematic-diagnostics__item schematic-diagnostics__item--@d.Kind.ToLowerInvariant()">
-                        <Icon Name="IconName.InfoCircle" />
+                    var sev = d.Severity switch
+                    {
+                        global::Interpreter.Synthesis.DiagnosticSeverity.Error   => "error",
+                        global::Interpreter.Synthesis.DiagnosticSeverity.Warning => "warning",
+                        _ => "info",
+                    };
+                    var icon = d.Severity switch
+                    {
+                        global::Interpreter.Synthesis.DiagnosticSeverity.Error   => IconName.ExclamationOctagon,
+                        global::Interpreter.Synthesis.DiagnosticSeverity.Warning => IconName.ExclamationTriangle,
+                        _ => IconName.InfoCircle,
+                    };
+                    <li class="schematic-diagnostics__item schematic-diagnostics__item--@d.Kind.ToLowerInvariant() schematic-diagnostics__item--@sev">
+                        <Icon Name="@icon" />
                         <span>@d.Message</span>
                     </li>
                 }

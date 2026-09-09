@@ -1,4 +1,5 @@
 using Interpreter.Services;
+using Interpreter.Models;
 using Kmila.Shared.Models;
 
 namespace Kmila.Shared.Services;
@@ -608,8 +609,10 @@ public class ReplayState
         var map = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
         if (string.IsNullOrEmpty(source)) return map;
         var lines = source.Replace("\r\n", "\n").Split('\n');
+        // Pass 18 (2026-07-30): use OperationsRegex.BalancedIndexSuffix
+        // so nested-paren LHS shapes surface in the live-line map.
         var assignRx = new System.Text.RegularExpressions.Regex(
-            @"([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\([^)]*\))?\s*(?:<=|:=)",
+            @"([a-zA-Z_][a-zA-Z0-9_]*)" + OperationsRegex.BalancedIndexSuffix + @"\s*(?:<=|:=)",
             System.Text.RegularExpressions.RegexOptions.Compiled);
         var conditionRx = new System.Text.RegularExpressions.Regex(
             @"\b(if|elsif|while|until|assert|return)\b",

@@ -42,12 +42,21 @@ public class EditorDockState
     public event Action? OnChange;
 
     /// <summary>Sets the dock height (clamped to 200..1200) and fires OnChange.</summary>
+    /// <remarks>
+    /// Also un-collapses the dock. Reached only from the drag-grabber (see
+    /// EditorDock.OnGrabberMove), so a resize gesture implies the user wants
+    /// the panel visible — otherwise the drag looks broken on a collapsed
+    /// mobile dock (the collapsed class pins `height: var(--dock-h)` to 88 px
+    /// and `--kmila-dock-height` is rendered as `auto`, so the dragged value
+    /// is discarded and the visible dock never moves).
+    /// </remarks>
     public void SetHeight(int px)
     {
         px = Math.Clamp(px, 200, 1200);
-        if (px == Height) return;
+        var changed = px != Height || IsCollapsed;
         Height = px;
-        OnChange?.Invoke();
+        IsCollapsed = false;
+        if (changed) OnChange?.Invoke();
     }
 
     /// <summary>

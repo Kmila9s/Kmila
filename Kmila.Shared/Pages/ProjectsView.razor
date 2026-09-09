@@ -3,6 +3,7 @@
 @implements IDisposable
 @inject Kmila.Shared.Services.SimulationParameters Sim
 @inject Kmila.Shared.Services.ProgramBuilder Builder
+@inject Kmila.Shared.Services.VisualRun.VisualRunRegistry VisualRegistry
 
 <PageTitle>@Traductor.T("NAV_PROJECTS")</PageTitle>
 
@@ -88,26 +89,15 @@
     }
     else if (_projects.Count == 0)
     {
+        @* F-014 (Round 10 2026-08-08) — action row dropped: the header cluster
+           above already carries [Sample · Examples · Create new] and stays
+           visible in every state, so duplicating Create-new + Sample here
+           produced 5 CTAs on the empty screen. Empty state is now purely
+           informational; the header owns all actions. *@
         <div class="projects-empty">
             <div class="projects-empty__icon"><Icon Name="IconName.Folder2" /></div>
             <h2>@Traductor.T("PROJECTS_EMPTY_TITLE")</h2>
             <p>@Traductor.T("PROJECTS_EMPTY_BODY")</p>
-            <div class="projects-empty__actions">
-                <KmilaTooltip TextKey="PROJECTS_CREATE_NEW_TIP">
-                    <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--lg" @onclick="CreateProjectAsync">
-                        <Icon Name="IconName.PlusLg" />
-                        <span>@Traductor.T("PROJECTS_CREATE_NEW")</span>
-                    </button>
-                </KmilaTooltip>
-                @* slot/empty-state-actions — stray Bootstrap btn-lg removed so both
-                   CTAs size at .kmila-btn--lg identically (proposal 2026-06-28). *@
-                <KmilaTooltip TextKey="PROJECTS_CREATE_SAMPLE_TIP">
-                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--lg" @onclick="CreateSampleAsync">
-                        <Icon Name="IconName.LightningChargeFill" />
-                        <span>@Traductor.T("PROJECTS_CREATE_SAMPLE")</span>
-                    </button>
-                </KmilaTooltip>
-            </div>
         </div>
     }
     else if (!Filtered.Any())
@@ -130,8 +120,13 @@
             @foreach (var project in Filtered)
             {
                 var isRunning = Sim.RunningProjectId == project.Id;
-                var isPaused  = isRunning && Sim.State == SimState.Paused;
-                var pct       = (int)Math.Round(Sim.Progress);
+                var isVisualMode = isRunning && Sim.RunningMode == Kmila.Shared.Services.SimMode.Visual;
+                Kmila.Shared.Services.VisualRun.VisualRunCoordinator? visualCoord = null;
+                if (isVisualMode) VisualRegistry.TryGet(project.Id, out visualCoord);
+                var isPaused = isRunning && (isVisualMode
+                    ? (visualCoord?.IsPaused ?? false)
+                    : Sim.State == SimState.Paused);
+                var pct = (int)Math.Round(Sim.Progress);
                 <article class="project-card @(isRunning ? "project-card--running" : "")">
                     <a href="@($"/editor/{project.Id}")" class="project-card__link" aria-label="@project.Name">
                         <div class="project-card__avatar">
@@ -144,8 +139,12 @@
                                 {
                                     <span class="project-card__running-badge" title="@(isPaused ? Traductor.T("SIDEBAR_PROJECT_PAUSED") : Traductor.T("SIDEBAR_PROJECT_RUNNING"))">
                                         <span class="project-card__running-dot" aria-hidden="true"></span>
-                                        @(isPaused ? Traductor.T("RUN_STATE_PAUSED") : Traductor.T("RUN_STATE_RUNNING")) · @pct%
+                                        @(isPaused ? Traductor.T("RUN_STATE_PAUSED") : Traductor.T("RUN_STATE_RUNNING"))@(isVisualMode ? "" : $" · {pct}%")
                                     </span>
+                                    @if (isVisualMode)
+                                    {
+                                        <span class="project-card__mode-chip">@Traductor.T("SIM_MODE_VISUAL")</span>
+                                    }
                                 }
                             </h3>
                             @if (!string.IsNullOrWhiteSpace(project.Description))
@@ -158,7 +157,7 @@
                                     @Traductor.T("PROJECTS_NO_DESCRIPTION")
                                 </p>
                             }
-                            @if (isRunning)
+                            @if (isRunning && !isVisualMode)
                             {
                                 <div class="project-card__progress" role="progressbar" aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100">
                                     <div class="project-card__progress-fill" style="width: @pct%;"></div>
@@ -253,6 +252,7 @@
             <div class="modal-header">
                 <h5>@Traductor.T("EXAMPLES_GALLERY_TITLE")</h5>
                 <button class="kmila-btn-icon" @onclick="CloseExamplesGallery"
+                        data-kmila-modal-close
                         aria-label="@Traductor.T("COMMON_CLOSE")">×</button>
             </div>
             <div class="modal-body examples-gallery-modal__body">
@@ -340,12 +340,20 @@
     }
 
     /// <summary>
-    /// Pauses the active simulation directly from a project card. Mirrors
-    /// the sidebar / Run-bar handler so the user can park a long sim without
-    /// jumping into the editor.
+    /// Pauses the active simulation directly from a project card. Branches on
+    /// <see cref="SimulationParameters.RunningMode"/>: signal runs go through
+    /// the ProgramBuilder timer, visual runs pause the <see cref="VisualRunCoordinator"/>
+    /// resolved from <see cref="VisualRunRegistry"/>.
     /// </summary>
     private void OnPauseSimulation()
     {
+        if (Sim.RunningMode == Kmila.Shared.Services.SimMode.Visual)
+        {
+            var pid = Sim.RunningProjectId;
+            if (pid.HasValue && VisualRegistry.TryGet(pid.Value, out var coord) && coord is { IsPaused: false })
+                coord.Pause();
+            return;
+        }
         if (Sim.State != SimState.Running) return;
         Builder.PauseTimer();
         Sim.SetState(SimState.Paused);
@@ -354,6 +362,13 @@
     /// <summary>Resumes a paused simulation from a project card.</summary>
     private void OnResumeSimulation()
     {
+        if (Sim.RunningMode == Kmila.Shared.Services.SimMode.Visual)
+        {
+            var pid = Sim.RunningProjectId;
+            if (pid.HasValue && VisualRegistry.TryGet(pid.Value, out var coord) && coord is { IsPaused: true })
+                coord.Resume();
+            return;
+        }
         if (Sim.State != SimState.Paused) return;
         Builder.ContinueTimer();
         Sim.SetState(SimState.Running);
@@ -367,6 +382,14 @@
     /// </summary>
     private void OnStopSimulation()
     {
+        if (Sim.RunningMode == Kmila.Shared.Services.SimMode.Visual)
+        {
+            var pid = Sim.RunningProjectId;
+            if (pid.HasValue && VisualRegistry.TryGet(pid.Value, out var coord) && coord != null)
+                coord.Stop();
+            // VisualPanel's OnStopped callback clears Sim.EndRun + unregisters.
+            return;
+        }
         if (Sim.State != SimState.Running && Sim.State != SimState.Paused) return;
         Builder.StopTimer();
         Sim.SetState(SimState.Complete);

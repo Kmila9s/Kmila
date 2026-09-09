@@ -31,8 +31,11 @@ begin
             -- BEGIN_EDIT
             -- TODO: increment rd_ptr ONLY when pop = '1' AND the FIFO is
             -- not empty (use is_empty = '0').
+            -- (Common first-attempt stub — forgets the empty guard, so
+            -- rd_ptr races past wr_ptr on the first pop against an empty
+            -- FIFO and `empty` starts reporting stale values.)
             if pop = '1' then
-                rd_ptr <= rd_ptr;
+                rd_ptr <= rd_ptr + 1;
             end if;
             -- END_EDIT
         end if;

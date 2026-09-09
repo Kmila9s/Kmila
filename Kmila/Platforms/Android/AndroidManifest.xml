@@ -1,6 +1,18 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:allowBackup="true" android:icon="@mipmap/appicon" android:roundIcon="@mipmap/appicon_round" android:supportsRtl="true"></application>
+    <application android:allowBackup="true" android:icon="@mipmap/appicon" android:roundIcon="@mipmap/appicon_round" android:supportsRtl="true">
+        <!-- Tier 5.2 Phase B follow-up — foreground service that keeps
+             EmbeddedApiHost's HttpListener alive when the user backgrounds
+             the app. Without foregroundServiceType, Android 14+ (API 34+)
+             refuses to promote the service. `dataSync` matches Google's
+             taxonomy for locally-served data most closely (no Play Store
+             justification headache — see the CHANGELOG). Exported=false:
+             only same-process starts, no cross-app IPC. -->
+        <service
+            android:name="kmila.kmila.EmbeddedApiForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+    </application>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Legacy storage permissions are scoped to API ≤ 28. On API 29+
@@ -9,4 +21,13 @@
          prompt on modern devices. -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+    <!-- Tier 5.2 Phase B follow-up — foreground-service triad. API 34+
+         additionally requires the granular FOREGROUND_SERVICE_DATA_SYNC
+         that matches the service's declared foregroundServiceType.
+         POST_NOTIFICATIONS is API-33-runtime; when the user denies it, the
+         service still runs (headless foreground bucket) but the ongoing
+         notification is suppressed. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 </manifest>

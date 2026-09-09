@@ -64,7 +64,7 @@ public static class StimulusBuilder
         {
             foreach (var p in entity.Ports)
             {
-                if (p == null || string.IsNullOrEmpty(p.Name)) continue;
+                if (p is null || string.IsNullOrEmpty(p.Name)) continue;
                 allPorts[p.Name] = p;
             }
         }
@@ -126,7 +126,7 @@ public static class StimulusBuilder
                 // Pass 1 — prefer an explicit IN port with a clock-like name.
                 foreach (var p in entity.Ports)
                 {
-                    if (p == null) continue;
+                    if (p is null) continue;
                     Constants.PortType dir;
                     try { dir = p.PortType; } catch { continue; }
                     if (dir != Constants.PortType.IN) continue;
@@ -144,7 +144,7 @@ public static class StimulusBuilder
                 {
                     foreach (var p in entity.Ports)
                     {
-                        if (p == null) continue;
+                        if (p is null) continue;
                         if (!IsClockPortName(p.Name)) continue;
                         autoClkPort = p;
                         break;
@@ -196,14 +196,14 @@ public static class StimulusBuilder
         // auto-injection as if no clock stim were provided. The "CLOCK"
         // marker comes from sample-config builders and a handful of legacy
         // tests; with this guard, both stop suppressing the auto-clock.
-        if (autoClkPort != null)
+        if (autoClkPort is not null)
         {
             stimuli.RemoveAll(s =>
                 (ReferenceEquals(s.Signal, autoClkPort) ||
                  string.Equals(s.Signal?.Name, autoClkPort.Name, StringComparison.OrdinalIgnoreCase))
                 && string.Equals(s.Value, "CLOCK", StringComparison.OrdinalIgnoreCase));
         }
-        bool clkStimProvided = autoClkPort != null &&
+        bool clkStimProvided = autoClkPort is not null &&
             stimuli.Any(s => ReferenceEquals(s.Signal, autoClkPort) ||
                              string.Equals(s.Signal?.Name, autoClkPort.Name, StringComparison.OrdinalIgnoreCase));
         if (!clkStimProvided)

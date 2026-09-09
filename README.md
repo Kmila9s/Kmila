@@ -5,10 +5,11 @@
 **Author:** Ulrich Tamayo Daniel
 **Email:** dulricht1700@alumno.ipn.mx
 **Email 2:** danielulrichtamayo@gmail.com
-**Version:** 1.19.0
-**Last Updated:** May 22, 2026
+**Version:** 1.25.0
+**Last Updated:** August 11, 2026
 
 > **Recent changelog highlights** (full details in [`Documentacion/`](../../Documentacion/)):
+> - **2026-08-11 Visual-sim background prevention + toolbar polish** — Visual simulations no longer keep ticking when hidden. New `SimMode { Signal, Visual }` enum + `RunningMode` property on `SimulationParameters`, new DI service `Kmila.Shared/Services/VisualRun/VisualRunRegistry.cs` (scoped Web / singleton MAUI), new `[Parameter] bool IsActiveTab` on `VisualPanel` that auto-pauses the coord on tab-switch and stops it on project-switch (with `_autoPausedByTabHide` guarding so a user Pause survives tab flips). `OnStopped` captures per-run pid + coord locals so a fast Stop→Run→new-project sequence can't have an old loop task clear the new run's state. NavMenu / ProjectsView inject the registry, distinguish visual runs via a "Visual" mode chip, and route their Pause/Resume/Stop buttons through `Registry.TryGet` when `Sim.RunningMode == SimMode.Visual`. Seven new dictionary keys (`SIM_MODE_VISUAL`). Phone-verified on device 2eec4397 via CDP: tab-switch pause (125→18→122 ticks/2s windows), manual-pause preservation (0 tick advance across hide/show), editor-unmount full stop, sidebar Stop terminates coord, mode chip renders. **Toolbar polish surfaced during verification**: Unicode emoji prefixes (`⏸`, `▶`, `●`) replaced with Bootstrap-icon components — see `memory/feedback_no_ui_emojis`. Global `html, body { overflow-x: hidden }` closes the "slide" issue where a diagonal pan-zoom gesture on the canvas made `document.body.scrollWidth` exceed viewport and let the browser pan the whole document sideways. Mobile toolbar CTA (`Ejecutar` / `Detener`) is now `position: sticky; inset-inline-start: 0` with a solid background so the primary action stays visible while trailing buttons scroll; `> span` labels hide via CSS on `≤640.98 px` (Wire/Save/Clear-changes retrofitted with icons; Save gets an `.is-dirty::after` pseudo-dot to preserve state feedback). See `Documentacion/CHANGELOG.md` + memories `project_visual_run_bg_prevent_2026-08-11`, `feedback_no_ui_emojis`, `project_maui_fast_deploy_trap_2026-08-11`.
 > - **2026-07-20 Ring 5 A3-A7 unblocked + user-fn reactivity CLOSED** — Parked interpreter bug from 2026-07-05 closed. New `Interpreter/Models/DeferredUserFunction.cs` wrapper defers user-declared VHDL function calls to `Operation.Execute` / `ScheduledOperation.Execute` per fire, re-parsing arg expressions against live signal state. Four wiring sites: `Operation.cs::ParseUserDefinedFunctionCall`, `Operation.cs::Execute`, `ScheduledOperation.cs::Execute`, `ShuntingYard.cs` allowlist. Two SimulatorBench fences shipped: `139-lfsr-through-fn` (single-arg) + `140-multiarg-userfn` (two-arg — mirrors capstone `q_mul`/`q_div` shape). Ring 5's A3 (MUL) / A4 (DIV) / A5 (POW) / A6 (POW) / A7 (LN) cases previously flagged "USR-FN GAP" now compute live per clock. **SimulatorBench source 123/123 + --roundtrip 123/123**. See `Documentacion/CHANGELOG.md` + memory `project_user_fn_reactivity_gap`.
 > - **2026-07-20 Block editor 1:1 audit + Phases 19/20/21/22/23/23a — SHIPPED, AUDIT COMPLETE** — Corpus **1218 → 36 raws (−97.0 %)**, byte-idem **226/226** (100 %), 133/133 xUnit, Playwright 10/10, SimulatorBench source + --roundtrip both **123/123** (full semantic parity). Silent-loss diagnostics now line-marked in Monaco under owner `"kmila-vhdl-emit"`. Toolbox palette categorized into 6 sections (Top-level/Declarations/Concurrent/Sequential/Expressions/Comments) via real `categoryToolbox`. New block families in schema: `component_decl` / `procedure_decl` / `function_decl` / `param` / `procedure_call` (Phase 19). Byte-idem 6-failure gap closed by `FindArchitectureBegin` walker + `SkipString` in scope walkers + `EntityRe` `\k<name>` backreference. `--roundtrip` gap closed by `NeedsParensForBinop` (mixed and/or preservation) + `JsonSerializerOptions.MaxDepth = 512` (33-arm case JSON depth crash). See `Documentacion/HANDOFF_block_editor_1to1_2026-07-19.md`.
 > - **2026-07-19 KmilaTooltip widget-palette width follow-up (Phase 3.5b, v=31)** — Palette chips still didn't fill their column after v=30's `display: block` fix. Root cause was subtler: `<button>` elements have a quirk where `display: flex; width: auto` doesn't fill parent the way `<div>` does, so once the chip became a grandchild of `.visual-page__palette-group-body` (via my wrapper), the block wrapper stretched but the button inside stayed content-sized. Real fix: wrapper is now `display: contents` — the wrapper generates no box, so the button becomes a **direct** flex-item of the palette-group-body again and inherits `align-items: stretch` exactly as before wrapping. Follow-through: hover selectors switched to `:has(:hover)` / `:has(:focus-within)` (a display:contents wrapper has no box to hover), JS anchor uses `firstElementChild` instead of the wrapper (getBoundingClientRect on display:contents returns zeros). DOM structure and Playwright suite unchanged. `pages.css?v=30→v=31`, `kmila-shared-head.js?v=6→v=7`.
@@ -45,7 +46,13 @@ Kmila-9s is a free, open-source, multiplatform academic platform focused on the 
 *   **Single-surface workbench:** The Editor page is a workbench — Monaco at the top with **four view-tabs** (Code · Blocks · Step replay · Visual), a **Run bar** for build/run/pause/stop with full state machine, a **bottom dock** with seven tabs (Entities · Schematic · Ports · Waveforms · Runs · Files · Output), and a **status bar** showing file info + resource % + sim state. No simulation modal; everything is one scroll.
 *   **Schematic dock tab:** A new dock tab renders the synthesised netlist for the selected entity (`SchematicViewer.razor`, backed by `Interpreter.Synthesis.Synthesizer` and the `LayeredLayout` placement pass). Lets students cross-reference behavioural VHDL against its inferred structural form.
 *   **Runs history dock tab:** The **Runs** tab lists past simulation runs persisted via `SimulationSnapshotStore`, so students can compare results between code edits without re-running every time.
-*   **Lesson mode:** Two new pages — `Learn.razor` (catalog) and `LessonView.razor` (per-lesson reader) — render the bundled lessons sourced from `LessonCatalog`, with progress saved by `LessonProgressStore`.
+*   **Lesson mode:** Two pages — `Learn.razor` (catalog) and `LessonView.razor` (per-lesson reader) — render the bundled lessons sourced from `LessonCatalog`, with progress saved by `LessonProgressStore`.
+*   **Concepts track:** An interactive concepts curriculum (`Concepts.razor` catalog, `ConceptView.razor` reader, `ConceptExerciseView.razor` block-exercise runner) sourced from `ConceptCatalog` and the `wwwroot/Concepts/` bundle (7-language content + block exercises), with progress in `ConceptProgressStore`. Exercises run in the block editor and animate via `ExecutionPlayer`.
+*   **Practice mode (auto-graded exercises):** `Practice.razor` (catalog) + `PracticeView.razor` (workspace) present exercises in three modalities — **m1 from-zero**, **m2 fix-a-bug**, **m3 fill-a-gap** — sourced from `PracticeCatalog` and the `wwwroot/Practice/` bundle. The in-process grader (`Services/Practice/PracticeEvaluator`) builds the candidate VHDL, runs it against reference test cases, and returns a verdict (BuildError > RuntimeError > WrongAnswer > Solved); attempts persist through `PracticeAttemptStore` and a whole session can be exported (`PracticeSessionExportService`). Note the sibling `PracticeValidator` tool is a *separate* offline authoring/validation utility — the shipping grader is in-process.
+*   **Block Editor with VHDL round-trip:** `BlockEditor.razor` (backed by the in-house `wwwroot/js/kmila-blocks.js` DOM engine, not Blockly) offers a Blocks view-tab in the editor. `VhdlBlockBuilder` parses VHDL → blocks and `VhdlBlockEmitter` emits blocks → VHDL, so students can move between text and blocks losslessly.
+*   **Step Replay & Runs:** After each run, `ReplayBuilder` converts `WaveformData` into an `ExecutionTimeline`; `StepReplayPanel.razor` renders a scrubber over it, while `RunsPanel.razor` (Runs dock tab) lists past runs saved by `SimulationSnapshotStore` for re-run / compare / replay.
+*   **Schematic, Flow & Waveform viewers + exporters:** `SchematicViewer.razor` (synthesised netlist, via `Interpreter.Synthesis`), `FlowDiagramViewer.razor` (control-flow, via `PlantUmlFlowEmitter`), and `WaveformViewer.razor`, each with matching exporters — `SchematicExporter`, `WaveformExporter` — surfaced through `ExportSchematicModal` / `ExportWaveformModal`. `FsmAnimator` / `GateAnimator` animate FSM and gate-level behaviour.
+*   **Local headless-simulation API (`/api/v1`) + Swagger:** A local HTTP surface (`Services/Api/`, endpoints `/health`, `/projects`, `/projects/{id}/files`, `/simulate`) lets external tooling drive builds + simulations without the UI. On Web it's mapped in `Kmila.Web/Program.cs` (Minimal API + .NET 9 `AddOpenApi`); on MAUI native heads it's served by an in-process `System.Net.HttpListener` host (`Kmila/Services/EmbeddedApiHost.cs`) sharing the same handler bodies (`SimulationApiHandlers.cs`). A vendored Swagger UI lives under `wwwroot/api-docs/` reading the committed `wwwroot/openapi/v1.json`; `/api-docs` redirects to it.
 *   **FPGA Resource Validation:** Pick a target device in the TopBar chip (searchable across 34 devices — AMD/Xilinx Spartan-6 and Artix-7, Intel/Altera Cyclone IV E, and Lattice iCE40 HX / iCE40 UltraPlus / ECP5; full JSON catalogue under `App/Kmila/Devices/`). Resource chip in the status bar stays green → amber → red as the design grows relative to the selected device. Clickable to jump to the Entities tab.
 *   **Configurations on the fly:** Save / load named simulation setups (FPGA + time + port moments) from a TopBar pill — round-trip through SQLite, no file management needed.
 *   **Examples gallery (4 pre-wired projects):** "Examples" button on the Projects page opens a card grid: **Demo Board** (every visual widget at once — counter, heartbeat LED, 7-seg, stepper, LED array), **Counter Clock** (two decimal 7-segs counting 00 → 99 with overflow LED), **Traffic Light FSM** (3-state Moore), **8-bit Shift Register** (eight individual LEDs each wired to one bit via slice syntax). One click creates the project + drops you onto the Visual tab with the canvas already wired — five clicks total from a fresh install to a running animation.
@@ -70,10 +77,16 @@ Kmila-9s is a free, open-source, multiplatform academic platform focused on the 
 - **Version Control**: GitHub
 
 ### External Dependencies
-- **VHDL Parser**: Debugger.Repositories.Parser (custom implementation)
-- **VHDL Interpreter**: Interpreter module with ProgressReporter for real-time build status updates
-- **Simulation Timer**: TimeMachine.Repositories.Timer
-- **UI Components**: BlazorBootstrap Grid, Modal, Button, Icon, Progress, Spinner, Alert components
+
+The compile-time `ProjectReference`s in `Kmila.Shared/Kmila.Shared.csproj` are **Debugger**, **Interpreter**, and **LibraryCompiler**. **Parser** and **TimeMachine** come in transitively (Debugger → Parser; Interpreter → TimeMachine). **Interpreter.Synthesis** — the schematic / netlist synthesis backend — ships inside the Interpreter project and is used directly by the schematic viewer + exporter.
+
+- **VHDL Parser**: `Parser` (custom tokenizer + Entity/Architecture/Package parsers); reached via Debugger and LibraryCompiler
+- **VHDL Debugger**: `Debugger` — structural façade + lint layer over the Parser
+- **VHDL Interpreter**: `Interpreter` module (`DeltaCycleEngine` + schedulers + `SignalHistory`) with `ProgressReporter` for real-time build status updates
+- **Netlist Synthesis**: `Interpreter.Synthesis` — synthesizes a structural `Netlist` from behavioural VHDL; drives `SchematicViewer`, `SchematicExporter`, and the gate/FSM animators
+- **Library Compiler**: `LibraryCompiler` — resolves + compiles IEEE and user VHDL libraries with a hash-keyed cache (`LibraryCompilerFactory` wires it into the app)
+- **Simulation Timer**: `TimeMachine` (`Timer`) — step-by-step interactive playback path; comes transitively via Interpreter
+- **UI Components**: BlazorBootstrap Grid, Modal, Button, Icon, Progress, Spinner, Alert components; Monaco (`BlazorMonaco`); Markdown (`Markdig`); persistence (`sqlite-net-pcl`)
 
 ## 5. Project Goals
 
@@ -438,6 +451,12 @@ The `Kmila.Shared` project contains the core logic, UI components, and data mode
 *   **Visual.razor** — Thin route wrapper for `/visual/{ProjectId}` direct URL access. Renders `<VisualPanel EmbeddedMode="false">` with a full header (back-button + project title) — same component the Editor's Visual view-tab uses with `EmbeddedMode="true"` to suppress the header. Useful for share-links + Playwright tests.
 *   **Learn.razor** — Lesson catalog. Reads from `LessonCatalog`, paints lesson cards with progress badges sourced from `LessonProgressStore`. Entry point for the in-app teaching path that complements the interactive editor.
 *   **LessonView.razor** — Per-lesson reader. Renders Markdown content via `MarkdownRenderer`, marks completion in `LessonProgressStore`, and links back to a sample editor session when a lesson has an associated VHDL exercise.
+*   **Concepts.razor** — Concepts-track catalog. Reads from `ConceptCatalog` (`wwwroot/Concepts/` bundle, 7 languages) and paints concept cards with progress from `ConceptProgressStore`.
+*   **ConceptView.razor** — Per-concept reader with theory content and links into the block-based exercises.
+*   **ConceptExerciseView.razor** — Block-exercise runner for a concept. Hosts the block editor and the `ExecutionPlayer` step-through so students build + watch a design execute inline.
+*   **Practice.razor** — Practice catalog. Lists auto-graded exercises from `PracticeCatalog` (`wwwroot/Practice/` bundle) grouped by the m1-from-zero / m2-fix-bug / m3-fill-gap modalities, with per-exercise attempt status from `PracticeAttemptStore`.
+*   **PracticeView.razor** — Practice workspace. Monaco (or starter/gap scaffold) + Submit; on submit calls the in-process `PracticeEvaluator`, shows the verdict and per-test mismatches, and offers a session export (`PracticeSessionExportService` via `ExportPracticeSessionModal`).
+*   **Privacy.razor** — Static privacy-policy page linked from the profile menu / footer.
 *   **Settings.razor** — Skeleton preference surface with four token-styled cards (Appearance, Editor, Simulation, Diagnostics). Diagnostics card links to the Logs viewer.
 *   **Logs.razor** — Live viewer over `AppLogStore`. Search (message + category), level filter (All / Info+ / Warning+ / Error+), auto-scroll, pause, clear. Renders up to 500 recent entries out of a 2000-entry ring buffer.
 
@@ -462,6 +481,18 @@ The `Kmila.Shared` project contains the core logic, UI components, and data mode
 *   **ResourceProgressBar.razor** — Slim pill-shaped progress bar with four color tiers (success 0–59 %, info 60–79, warning 80–99, danger 100+). Danger tier uses a pulsing diagonal-stripe fill for visual urgency without being obnoxious.
 *   **RunBar.razor** — Horizontal strip between Monaco and the dock. FPGA reference chip · time number input + scale select · secondary **Build** · primary **Run** with state machine (Idle → Building… → Pause/Stop → Resume → Run again) · overflow menu (Save · New file). Progress line animates under the bar while running.
 *   **StatusBar.razor** — Thin bottom bar. File info (unsaved dot · mono filename · Ln/Col · language chip) on the left; build status chip + resource % of selected FPGA + sim status chip on the right. Build/resource chips are clickable and jump to the matching dock tab.
+*   **BlockEditor.razor** — Blocks view-tab surface driven by the in-house `wwwroot/js/kmila-blocks.js` DOM engine (Blockly was retired 2026-05-28). Round-trips with `VhdlBlockBuilder` (VHDL → blocks) and `VhdlBlockEmitter` (blocks → VHDL) so text and blocks stay in sync.
+*   **ExecutionPlayer.razor** — Step-through animation player over an `ExecutionTimeline`. Reused across the Concepts exercises, opt-in Learn lessons, and (as `StepReplayPanel`) the editor's Step Replay tab.
+*   **StepReplayPanel.razor** — Step Replay editor view-tab. Subscribes to `ReplayState`, renders the `ExecutionPlayer` over the `ReplayBuilder` output, and owns the breakpoint list + live step-through controls.
+*   **RunsPanel.razor** — Runs dock-tab content: lists snapshots from `SimulationSnapshotStore` with re-run / compare / replay / delete affordances (see §10.2).
+*   **FlowDiagramViewer.razor** — Renders a control-flow diagram for the selected entity via `PlantUmlFlowEmitter`; shares the pan-zoom + `SignalCursorBus` cursor sync used by the schematic.
+*   **FsmAnimator.razor** — Animates a finite-state-machine view (`FsmAnimation` model) — highlights the active state and transitions as a live sim advances.
+*   **GateAnimator.razor** — Animates gate-level activity (`GateAnimation` model) over the synthesised netlist, pulsing gates as their inputs change.
+*   **QuizletPanel.razor** — Inline quiz widget used by the Concepts / Learn tracks to check understanding between content sections.
+*   **KmilaTooltip.razor** — Shared CSS-only hover/focus tooltip wrapper (RTL-aware, self-retranslating on `Traductor.StaticOnLangChanged`) used app-wide on icon buttons.
+*   **KmilaToastHost.razor** / **KmilaToastService** — App-level toast host + service for transient success/error notifications.
+*   **KmilaTextSizeSwitcher.razor** — Text-size (accessibility) picker, sibling to the theme + language switchers.
+*   **ProfileMenu.razor** — TopBar profile popover (GitHub sign-in via `GitHubLoginModal` / `GitHubAuth`, links to Privacy).
 *   **WaveformViewer.razor** — Inline-SVG digital waveform renderer. Each signal renders a step-function trace (std_logic) or diamond/value-label trace (vectors) into its own `<svg>` strip; the time ruler is a shared sticky-bottom row. **Native overflow scroll** on both axes (pan-zoom intentionally NOT attached here — the body is row-structured, not free-form like Schematic/Flow). Toolbar gives **Zoom-In / Zoom-Out / Reset** with `× 2` steps and a `[200, 2 400 000] px` range; **Reset = fit-to-width** via `kmilaWaveformFitWidth`. **Click any signal label** to hide that row; restored via a chip-bar above the body (hidden set also filters VCD + SVG + PNG exports). Sticky chrome: label column pinned left with a depth-shadow; ruler pinned bottom. JS-side **hover cursor** (`kmilaAttachWaveformHover`) draws a vertical guide + time chip following the mouse so the student can read off any transition's exact time without projecting down to the ruler. Supports a separate **compare mode** when given a list of `SimulationSnapshot`s — N traces overlaid per signal with palette colors. Full architectural narrative + diagrams in [`Documentacion/CHANGELOG_waveform_overhaul_2026-05-22.md`](../../Documentacion/CHANGELOG_waveform_overhaul_2026-05-22.md) and the WaveformViewer section in [`Documentacion/ARCHITECTURE.md`](../../Documentacion/ARCHITECTURE.md).
 
 #### Components — Visual Runtime (`Components/VisualRun/`)
@@ -474,6 +505,7 @@ The `Kmila.Shared` project contains the core logic, UI components, and data mode
 *   **LedArrayWidget.razor** — N-bit row of LEDs bound to a `std_logic_vector` port (or per-bit via the bit-slice UI). Per-bit ON / OFF readout based on `LatestSlicedValue`.
 *   **StepperWidget.razor** — 4-coil unipolar stepper graphic with rotor. Bound to four single-bit pins (`phaseA / phaseB / Ān / B̄n`); decodes the energized coils into rotor angle.
 *   **SevenSegmentWidget.razor** — 7-segment digit. **Raw mode**: 8 single-bit pins (a..g + dp), each lit by its own port value. **Decoded mode**: a single 4-bit `value` pin driven through `HexPatterns[]` lookup (digits 0–F).
+*   **Additional widgets** — the full palette (see `Services/VisualRun/KvizWidgetCatalog.cs`) also ships **MultiSwitchWidget** (bank of latching switches), **KeypadWidget** (matrix keypad), **LedMatrixWidget** / **RgbMatrixWidget** (3×3 mono / RGB LED matrices), **SevenSegmentBankWidget** (multi-digit 7-seg bank), **LcdWidget** (HD44780 character LCD), and **BuzzerWidget** (piezo buzzer). Each binds to design ports through the same slice-aware wiring path as the widgets above.
 
 #### Components — Visual Wiring
 *   **VisualWiringModal.razor** — Wiring overlay. Direction-filtered dropdowns (only IN-ports for input widgets, only OUT-ports for output widgets); per-widget pin set adapts to widget type (e.g., 7-seg mode-dependent). Multi-bit ports expand into per-bit options via `IsMultiBitPin` + `CompatibleOptions(pin)` — selecting `bus[3]` writes `name[3]` into the binding.
@@ -488,6 +520,13 @@ The `Kmila.Shared` project contains the core logic, UI components, and data mode
 *   **CreateFileModal.razor** — Create-file form.
 *   **MarkdownModal.razor** — Markdown preview triggered when **Build** runs against a `.md` file.
 *   **ProjectDetailsModal.razor** — Create-project form. Cleaner labeled inputs with a live sanitised-folder-name preview (the disk path that will hold the project).
+*   **FileDetailsModal.razor** — File-details / rename surface for a project file.
+*   **TemplateGalleryModal.razor** — Project-template gallery (`ProjectTemplateService` + `wwwroot/Templates/`: academic · counter · empty · fsm · library). Creating from a template scaffolds the project files.
+*   **ExportSchematicModal.razor** — Export the current schematic (SVG/PNG) via `SchematicExporter`.
+*   **ExportWaveformModal.razor** — Export the current waveform (SVG / PNG / VCD) via `WaveformExporter`.
+*   **ExportPracticeSessionModal.razor** — Export a graded practice session via `PracticeSessionExportService`.
+*   **GitHubLoginModal.razor** — GitHub sign-in dialog backed by `GitHubAuth` (used by the feedback path + profile menu).
+*   **VisualWiringModal.razor** — Widget-to-port wiring overlay for the Visual runtime (detailed under *Components — Visual Wiring* above; the file lives in `Modals/`).
 
 ```mermaid
 classDiagram
@@ -601,6 +640,34 @@ classDiagram
 *   **FeedbackHelper.cs** — Glue for the user-feedback flow: opens GitHub issue templates pre-filled with environment + recent log lines from `AppLogStore`.
 *   **GitHubAuth.cs** — Optional sign-in helper for the feedback path; used to attach an authenticated identity to issue submissions when the user opts in.
 *   **ConsoleToLoggerWriter.cs** — Redirects raw `Console.Out` writes (used by older parser/interpreter paths) into `ILogger<T>` so they end up in the Logs page alongside structured logs.
+*   **ReplayBuilder.cs / ReplayState.cs** — `ReplayBuilder` converts a completed `WaveformData` into an `ExecutionTimeline` (≤200 frames, cursor-cached evaluation) for the Step Replay tab. `ReplayState` (scoped) holds the current timeline, the line-breakpoint set, and the live `DeltaCycleEngine` attach/detach + per-delta active-line bookkeeping that drives live step-through in the schematic + editor gutter.
+*   **SimulationCoordinator.cs / TimelineRunner.cs** — `SimulationCoordinator` centralises build+run orchestration shared across surfaces (editor, practice grader); `TimelineRunner` advances a design over a timeline of stimulus for the animation/replay paths.
+*   **SchematicExporter.cs / SchematicSimplifier.cs** — `SchematicExporter` renders the synthesised `Netlist` to standalone SVG/PNG (used by `ExportSchematicModal`). `SchematicSimplifier` collapses/cleans the netlist (`Interpreter.Synthesis`) before layout so the schematic reads clearly.
+*   **PlantUmlFlowEmitter.cs** — Emits a control-flow diagram description for `FlowDiagramViewer`.
+*   **ConceptCatalog.cs / ConceptProgressStore.cs** — In-memory catalog of bundled concepts (read from `wwwroot/Concepts/`, 7 languages) + per-user completion flags (SQLite via prefixed `AppSettings` keys). Consumed by `Concepts` / `ConceptView` / `ConceptExerciseView`.
+*   **VhdlBlockBuilder.cs / VhdlBlockEmitter.cs / BlockProgram.cs** — The block-editor round-trip: `VhdlBlockBuilder` parses VHDL into the block model, `VhdlBlockEmitter` emits VHDL back from blocks, `BlockProgram` holds the pre-baked exercise block catalogs (byte-equivalent to the old Blockly workspace JSON).
+*   **ProjectTemplateService.cs** — Backs `TemplateGalleryModal`; scaffolds a new project from a `wwwroot/Templates/` template (academic · counter · empty · fsm · library).
+*   **TourCatalog.cs** — Catalog of in-app guided tours / onboarding steps.
+*   **GitHubAuth.cs** — GitHub sign-in helper (device/OAuth flow) backing `GitHubLoginModal`, `ProfileMenu`, and the feedback path.
+*   **LibraryCompilerFactory.cs** — Constructs + configures the `LibraryCompiler` (IEEE + user libraries, hash-keyed cache) for the current host, resolving user-library paths through `UserAssetStore`.
+*   **FileSystemBlobStore.cs** — Filesystem blob storage abstraction (compiled-library cache, exported artifacts) shared across MAUI / Web hosts.
+*   **KmilaToastService.cs** — Transient toast notifications surfaced through `KmilaToastHost`.
+
+**Practice grading services (`Services/Practice/`):**
+*   **PracticeCatalog.cs** — Loads practice exercises from the `wwwroot/Practice/` bundle (`manifest.json` + the `m1-from-zero` / `m2-fix-bug` / `m3-fill-gap` folders), exposing them to `Practice` / `PracticeView`.
+*   **PracticeEvaluator.cs** — The **in-process** auto-grader. For fill-gap it splices candidate code into the starter, builds the candidate VHDL (ephemeral `ProgramBuilder`), runs it against reference test cases (reference outputs built once from the solution and cached), compares selected output ports at sampled times, and returns a ranked verdict (BuildError > RuntimeError > WrongAnswer > Solved). *(Distinct from the sibling offline `PracticeValidator` authoring tool.)*
+*   **PracticeAttemptStore.cs** — Persists per-exercise attempt verdicts (SQLite via prefixed `AppSettings` keys) for status badges + history.
+*   **PracticeSessionExportService.cs** — Serialises a graded session for export via `ExportPracticeSessionModal`.
+*   **LineDiff.cs** — Line-level diff helper used by the fix-a-bug / fill-gap modalities and mismatch reporting.
+
+**Local simulation API services (`Services/Api/`):**
+*   **SimulationApiEndpoints.cs / SimulationApiHandlers.cs / SimulationApiModels.cs** — The shared `/api/v1` surface (`/health`, `/projects`, `/projects/{id}/files`, `/simulate`). `Endpoints` maps routes for the Web Minimal-API host; `Handlers` holds the host-agnostic bodies called from both Web and the MAUI `HttpListener` host; `Models` are the request/response DTOs.
+*   **HeadlessSimulator.cs** — Runs a build+simulate entirely off-UI for API callers (used by the SimulatorBench harness).
+*   **SandboxProjectStore.cs / SandboxJanitor.cs** — Ephemeral per-request project sandboxes for the API + a background janitor that reaps stale ones.
+*   **LocalApiTokenProvider.cs / ILocalApiHost.cs** — Bearer-token issuance/validation for the local API and the host abstraction implemented by `Kmila.Web` (Kestrel) and `Kmila/Services/EmbeddedApiHost.cs` (`HttpListener` on native heads).
+
+**Export services (`Services/Export/`):**
+*   **IFileExportService.cs** — Host-agnostic file-save abstraction (browser download vs native save dialog) used by the schematic / waveform / practice-session exporters.
 
 **Visual Runtime services (`Services/VisualRun/`):**
 *   **VisualRunCoordinator.cs** — Drives `DeltaCycleEngine` one tick at a time on its own loop task; no engine fork. Between ticks drains `InputStateMap` into bound design input ports via `Variable.Value =`, which triggers `SignalAttributeHandler._activeFlags` and natural external-stimulus propagation. **Owns**: auto-clock (8-tick half-period default, skips ports listed in the `userDrivenPorts` ctor arg) · `CustomTickDelayMs` override · `TickBreakpoints` HashSet + `OnBreakpointHit` event + `_lastBreakTick` sentinel · `LatestSlicedValue(binding)` slice-aware port read · `EnqueueBounce(port, values)` chatter FIFO (drained one entry per tick) · async `WaitForStopAsync` for clean Stop-render. Read the seam paragraph in `Documentacion/VISUAL_MODE.md` before changing anything here — `DeltaCycleEngine` is intentionally untouched.
@@ -609,6 +676,7 @@ classDiagram
 *   **KvizDoc.cs / KvizSerializer.cs** — Schema v1 JSON sidecar (`*.kviz`) sitting next to the matching `.vhd`. Holds the widget list (id · type · position · port bindings · config). The Projects gallery seeds these for the 4 catalog examples.
 *   **VisualSpeed.cs** — Speed enum (Half / Normal / Fast / Free) + `FromSliderIndex(int)` / `ToSliderIndex()` mapping. `CustomTickDelayMs` on the coordinator overrides this when non-null.
 *   **SliceHelper.cs** — Binding-string parser. `Parse("bus[7:0]") → (portName: "bus", BitSlice(7, 0))`. `Extract(fullValue, slice)` returns the substring of a `std_logic_vector` after MSB-first indexing. Used everywhere a widget reads a multi-bit port.
+*   **KvizWidgetCatalog.cs** — Metadata for every placeable widget type (pin set, default config, palette group). The `WidgetPalette` + `VisualWiringModal` read it to know each widget's pins and direction constraints.
 
 **UI state services (shared across components — avoid component → component wiring):**
 *   **SidebarState.cs** — Drives the custom sidebar: `IsCollapsed` (desktop rail mode) + `IsMobileOpen` (off-canvas drawer). TopBar hamburger toggles the drawer, sidebar subscribes for re-render.
@@ -637,6 +705,16 @@ classDiagram
 *   **FPGAsIO.cs**: FPGA I/O specifications (User I/O, Banks, Standards)
 *   **AppSettings.cs**: Key-value pairs for application settings stored in SQLite (language preferences, theme, etc.)
 *   **KmilaConfiguration.cs**: Simulation configuration model for .k-config files (FPGA settings, time configuration, port moments)
+*   **WaveformData.cs**: Serialisable waveform (per-signal traces + time bounds) produced by `WaveformData.FromSignalHistory`; the payload persisted inside a `SimulationSnapshot` and rendered by `WaveformViewer`
+*   **SimulationSnapshot.cs**: A persisted past run (project · entity · port count · duration · inline `WaveformData` JSON) backing the Runs tab + Compare
+*   **ExecutionTimeline.cs**: Frame-based timeline (`ExecutionTimelineDoc`) that `ReplayBuilder` emits and `ExecutionPlayer` / `StepReplayPanel` animate
+*   **Concept.cs / ConceptExercise.cs**: Concepts-track content model + its block-based exercise definition
+*   **Lesson.cs**: Learn-track lesson model (Markdown body, optional `inlinePlayer` timeline, sample VHDL)
+*   **FsmAnimation.cs / GateAnimation.cs**: Animation models driving `FsmAnimator` / `GateAnimator`
+*   **EditorSession.cs / EditorPaneState.cs**: Persisted per-project editor session + split-pane layout (backing `EditorSessionStore`)
+*   **Schematic/GateDocumentation.cs**: Per-gate documentation metadata for the schematic viewer (glyphs in `Components/Schematic/GateGlyphs.cs`)
+*   **SchematicColourPalette.cs / SchematicExportRequest.cs / WaveformExportRequest.cs**: Schematic colour theming + the export-request DTOs for the schematic / waveform export modals
+*   **Practice/** — `PracticeModels.cs` (exercise · test case · verdict · modality enum), `PracticeDbEntities.cs` (persisted attempt rows), `PracticeSessionExportRequest.cs` (session-export DTO)
 ```mermaid
 graph TD
     subgraph "UI Layer"
@@ -911,23 +989,49 @@ The application uses GitHub Actions for continuous integration and deployment:
 
 ### Kmila.Shared
 ├── Components/
+│   ├── BlockEditor.razor
 │   ├── Breadcrumbs.razor
 │   ├── ConfigurationsPill.razor
 │   ├── EditorDock.razor
+│   ├── EditorTabStrip.razor
+│   ├── EnhancedRangeSlider.razor
 │   ├── EntityResourceUsage.razor
 │   ├── EntityView.razor
+│   ├── ExecutionPlayer.razor
 │   ├── FilesCard.razor
+│   ├── FlowDiagramViewer.razor
 │   ├── FPGASimpleView.razor
+│   ├── FsmAnimator.razor
+│   ├── GateAnimator.razor
+│   ├── KmilaTextSizeSwitcher.razor
 │   ├── KmilaThemeSwitcher.razor
+│   ├── KmilaToastHost.razor
+│   ├── KmilaTooltip.razor
 │   ├── LanguageChanger.razor
 │   ├── OutputPanel.razor
 │   ├── PortMomentInput.razor
 │   ├── PortsPanel.razor
+│   ├── ProfileMenu.razor
+│   ├── QuizletPanel.razor
 │   ├── ResourceMetricBox.razor
 │   ├── ResourceProgressBar.razor
 │   ├── RunBar.razor
+│   ├── RunsPanel.razor
+│   ├── SchematicViewer.razor
 │   ├── StatusBar.razor
-│   └── WaveformViewer.razor
+│   ├── StepReplayPanel.razor
+│   ├── WaveformViewer.razor
+│   ├── Schematic/
+│   │   └── GateGlyphs.cs
+│   └── VisualRun/
+│       ├── ButtonWidget.razor        BuzzerWidget.razor
+│       ├── KeypadWidget.razor        LcdWidget.razor
+│       ├── LedArrayWidget.razor      LedMatrixWidget.razor
+│       ├── LedWidget.razor           MultiSwitchWidget.razor
+│       ├── RgbMatrixWidget.razor     SevenSegmentBankWidget.razor
+│       ├── SevenSegmentWidget.razor  StepperWidget.razor
+│       ├── SwitchWidget.razor        VisualCanvas.razor
+│       ├── VisualPanel.razor         WidgetPalette.razor
 ├── Data/
 │   └── ApplicationDbContext.cs
 ├── Interfaces/
@@ -939,58 +1043,150 @@ The application uses GitHub Actions for continuous integration and deployment:
 │   └── TopBar.razor
 ├── Models/
 │   ├── AppSettings.cs
+│   ├── Concept.cs
+│   ├── ConceptExercise.cs
+│   ├── EditorPaneState.cs
+│   ├── EditorSession.cs
+│   ├── ExecutionTimeline.cs
+│   ├── FPGA.cs  FPGAResources.cs  FPGAClocking.cs  FPGAPower.cs  FPGAsIO.cs
+│   ├── FsmAnimation.cs
+│   ├── GateAnimation.cs
+│   ├── KmilaConfiguration.cs
+│   ├── Lesson.cs
+│   ├── PortMoment.cs
 │   ├── Project.cs
 │   ├── ProjectFile.cs
-│   ├── PortMoment.cs
+│   ├── SchematicColourPalette.cs
+│   ├── SchematicExportRequest.cs
+│   ├── SelectedFPGA.cs
+│   ├── SimulationSnapshot.cs
 │   ├── TimeScale.cs
 │   ├── ToastMessages.cs
-│   ├── SelectedFPGA.cs
-│   ├── FPGA.cs
-│   ├── FPGAResources.cs
-│   ├── FPGAClocking.cs
-│   ├── FPGAPower.cs
-│   ├── FPGAsIO.cs
-│   └── KmilaConfiguration.cs
+│   ├── WaveformData.cs
+│   ├── WaveformExportRequest.cs
+│   ├── Practice/
+│   │   ├── PracticeModels.cs
+│   │   ├── PracticeDbEntities.cs
+│   │   └── PracticeSessionExportRequest.cs
+│   └── Schematic/
+│       └── GateDocumentation.cs
 ├── Pages/
-│   ├── Editor.razor
+│   ├── Concepts.razor
+│   ├── ConceptView.razor
+│   ├── ConceptExerciseView.razor
+│   ├── Editor.razor  (+ Editor.razor.css)
 │   ├── Home.razor
+│   ├── Learn.razor
+│   ├── LessonView.razor
 │   ├── Logs.razor
-│   ├── ProjectsView.razor
-│   └── Settings.razor
+│   ├── Practice.razor
+│   ├── PracticeView.razor
+│   ├── Privacy.razor
+│   ├── ProjectsView.razor  (+ ProjectsView.CapstoneCalc.cs)
+│   ├── Settings.razor
+│   └── Visual.razor
 ├── Repositories/
 │   ├── Projects.cs
 │   ├── ProjectFiles.cs
 │   └── JSONFileReader.cs
 ├── Services/
 │   ├── AppLogStore.cs
+│   ├── AutoErrorReporter.cs
+│   ├── BlockProgram.cs
 │   ├── BuildLog.cs
+│   ├── ConceptCatalog.cs
+│   ├── ConceptProgressStore.cs
 │   ├── ConfigurationService.cs
+│   ├── ConsoleToLoggerWriter.cs
 │   ├── EditorDockState.cs
+│   ├── EditorSessionStore.cs
+│   ├── FeedbackHelper.cs
+│   ├── FileSystemBlobStore.cs
+│   ├── GitHubAuth.cs
 │   ├── IFormFactor.cs
 │   ├── InMemoryLoggerProvider.cs
+│   ├── ISimEndNotifier.cs        (WebSimEndNotifier.cs)
+│   ├── KmilaToastService.cs
+│   ├── LessonCatalog.cs
+│   ├── LessonProgressStore.cs
+│   ├── LibraryCompilerFactory.cs
+│   ├── MarkdownRenderer.cs
+│   ├── PlantUmlFlowEmitter.cs
 │   ├── ProgramBuilder.cs
+│   ├── ProjectBundleService.cs
+│   ├── ProjectTemplateService.cs
+│   ├── RecentProjectsTracker.cs
+│   ├── ReplayBuilder.cs          ReplayState.cs
+│   ├── SchematicExporter.cs      SchematicSimplifier.cs
 │   ├── SidebarState.cs
+│   ├── SignalCursorBus.cs
+│   ├── SimulationCoordinator.cs
 │   ├── SimulationParameters.cs
-│   └── Traductor.cs
+│   ├── SimulationSnapshotStore.cs
+│   ├── StimulusBuilder.cs
+│   ├── TimelineRunner.cs
+│   ├── TourCatalog.cs
+│   ├── Traductor.cs
+│   ├── UserAssetStore.cs
+│   ├── VhdlBlockBuilder.cs       VhdlBlockEmitter.cs
+│   ├── WaveformExporter.cs
+│   ├── Api/                      (headless /api/v1 surface)
+│   │   ├── HeadlessSimulator.cs
+│   │   ├── ILocalApiHost.cs
+│   │   ├── LocalApiTokenProvider.cs
+│   │   ├── SandboxJanitor.cs     SandboxProjectStore.cs
+│   │   ├── SimulationApiEndpoints.cs
+│   │   ├── SimulationApiHandlers.cs
+│   │   └── SimulationApiModels.cs
+│   ├── Export/
+│   │   └── IFileExportService.cs
+│   ├── Practice/                 (in-process auto-grader)
+│   │   ├── PracticeCatalog.cs
+│   │   ├── PracticeEvaluator.cs
+│   │   ├── PracticeAttemptStore.cs
+│   │   ├── PracticeSessionExportService.cs
+│   │   └── LineDiff.cs
+│   └── VisualRun/
+│       ├── VisualRunCoordinator.cs
+│       ├── InputStateMap.cs
+│       ├── FrameRing.cs
+│       ├── KvizDoc.cs
+│       ├── KvizWidgetCatalog.cs
+│       ├── SliceHelper.cs
+│       └── VisualSpeed.cs
 ├── Modals/
 │   ├── ConfigurationModal.razor
 │   ├── CreateFileModal.razor
+│   ├── ExportPracticeSessionModal.razor
+│   ├── ExportSchematicModal.razor
+│   ├── ExportWaveformModal.razor
+│   ├── FileDetailsModal.razor
+│   ├── GitHubLoginModal.razor
 │   ├── MarkdownModal.razor
-│   └── ProjectDetailsModal.razor
+│   ├── ProjectDetailsModal.razor
+│   ├── TemplateGalleryModal.razor
+│   └── VisualWiringModal.razor
+├── Assets/
+│   └── CapstoneCalc/*.vhd        (embedded example, loaded via manifest resource)
 └── wwwroot/
+    ├── api-docs/index.html       (vendored Swagger UI shim)
+    ├── openapi/v1.json           (committed /api/v1 OpenAPI snapshot)
     ├── css/
-    │   ├── tokens.css       (design tokens: palette, spacing, typography)
-    │   └── pages.css        (non-scoped page + component styles)
+    │   ├── tokens.css            (design tokens: palette, spacing, typography)
+    │   └── pages.css             (non-scoped page + component styles)
     ├── js/
-    │   ├── vhdl.js          (Monaco Monarch tokenizer + 6 providers)
-    │   └── vhdl-data/       (per-language keyword/IEEE docs, 7 files)
+    │   ├── vhdl.js               (Monaco Monarch tokenizer + 6 providers)
+    │   ├── kmila-blocks.js       (in-house block-editor DOM engine)
+    │   ├── kmila-blocks-vhdl.js  (VHDL block definitions)
+    │   └── vhdl-data/            (per-language keyword/IEEE docs, 7 files)
+    ├── Concepts/                 (concept content: en/es/fr/de/ch/jp/ar + exercises + manifest.json)
+    ├── Learn/                    (lesson content per language + manifest.json)
+    ├── Practice/                 (m1-from-zero / m2-fix-bug / m3-fill-gap + manifest.json)
+    ├── Templates/                (academic · counter · empty · fsm · library + manifest.json)
+    ├── Devices/                  (34 FPGA device JSON specs)
     └── Dictionaries/
-        ├── en.json (English)
-        ├── es.json (Spanish)
-        ├── fr.json (French)
-        ├── de.json (German)
-        ├── ch.json (Chinese)
-        ├── jp.json (Japanese)
+        ├── en.json (English)   es.json (Spanish)   fr.json (French)
+        ├── de.json (German)    ch.json (Chinese)   jp.json (Japanese)
         └── ar.json (Arabic)
 ```
 
@@ -1130,6 +1326,22 @@ We welcome contributions to Kmila-9s! Please check our GitHub repository for con
 Kmila-9s is released as free and open-source software. Please refer to the LICENSE file in the repository for specific licensing terms.
 
 ## 19. Changelog
+
+### Version 1.25.0 (2026-08-03)
+
+#### Documentation sync with the v1.25.0 codebase
+
+Documentation-only pass — no source changes. The README had drifted from the shipping code (last structurally stamped v1.19.0). This revision brings the structural sections back into agreement with the `v1.25.0` branch of `Kmila.Shared`. No feature history is fabricated for the intermediate versions; the subsystems below were verified against source and are now documented:
+
+*   **§4 External Dependencies** rewritten to match the real `Kmila.Shared.csproj` `ProjectReference`s — **Debugger · Interpreter · LibraryCompiler** (with **Parser** + **TimeMachine** transitive) — and to add **Interpreter.Synthesis** (schematic/netlist backend) and **LibraryCompiler**.
+*   **§3 Key Features** gained bullets for the Concepts track, Practice auto-grading, the Block Editor VHDL round-trip, Step Replay & Runs, the Schematic/Flow/Waveform viewers + exporters, and the local `/api/v1` headless-simulation API + Swagger.
+*   **§10.1** now documents the shipping Pages (Learn · LessonView · Concepts · ConceptView · ConceptExerciseView · Practice · PracticeView · Visual · Privacy), Components (BlockEditor · ExecutionPlayer · StepReplayPanel · RunsPanel · FlowDiagramViewer · FsmAnimator · GateAnimator · QuizletPanel · KmilaTooltip/Toast/TextSize · ProfileMenu · the full `Components/VisualRun/` widget set), and all 11 Modals (export modals · TemplateGalleryModal · GitHubLoginModal · VisualWiringModal · FileDetailsModal · …).
+*   **§10.2** now documents the missing Services and their subfolders — `Services/Practice/` (PracticeCatalog · PracticeEvaluator · PracticeAttemptStore · PracticeSessionExportService · LineDiff), `Services/Api/` (the `/api/v1` surface + `HeadlessSimulator` + sandbox store/janitor), `Services/Export/`, `Services/VisualRun/` (KvizWidgetCatalog) — plus ReplayBuilder/ReplayState · SimulationCoordinator · TimelineRunner · SchematicExporter/Simplifier · PlantUmlFlowEmitter · ConceptCatalog/ConceptProgressStore · VhdlBlockBuilder/VhdlBlockEmitter/BlockProgram · ProjectTemplateService · TourCatalog · GitHubAuth · LibraryCompilerFactory · FileSystemBlobStore · KmilaToastService. Models gained Concept · ConceptExercise · ExecutionTimeline · SimulationSnapshot · WaveformData · Lesson · Fsm/GateAnimation · EditorSession/PaneState · the `Schematic*` set and `Models/Practice/*`.
+*   **§15 Project Structure** tree fully refreshed against the current directory listing.
+*   Note: `PracticeValidator` is a **separate** sibling authoring/validation tool; the shipping grader is the in-process `Services/Practice/PracticeEvaluator`.
+*   Header stamped **1.25.0 / August 3, 2026**.
+
+---
 
 ### Version 1.14.1 (2026-05-01)
 

@@ -537,6 +537,38 @@
     border-radius: var(--radius-md);
 }
 
+/* On phones the wrap onto a second line for one straggler chip (F-070 "Expert"
+   on Learn EN, F-073 "Fill the gap" on Practice EN, F-032 style) is ugly and
+   costs vertical space that's already scarce. Switch to a single-row scroll
+   like the text-size row in Settings (F-032). The `.catalog-filters__row`
+   parent's mask-image fade already signals scrollability on both LTR and
+   RTL, so the affordance is present. Real-device audit 2026-08-05 (F-070 R9). */
+@media (max-width: 480px) {
+    .kmila-slot-segmented {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+    }
+    .kmila-slot-segmented::-webkit-scrollbar { display: none; }
+}
+
+/* F-055 (RTL segmented row) — the DOM-first button (`All` / `الكل`)
+   must render rightmost under `dir="rtl"` so R→L reading order matches
+   DOM order. Real-device audit 2026-08-05 tried candidate (a) explicit
+   `direction: rtl` and candidate (d) `direction: ltr` +
+   `flex-direction: row-reverse` — BOTH were confirmed no-ops on the
+   Xiaomi 13T Pro (Android 15 WebView) with the visible chip order
+   unchanged from the pre-fix baseline. Something in the ancestor chain
+   (possibly `.catalog-filters__row { overflow-x: auto }`, possibly
+   Chromium's flex-item placement under `<html dir="rtl">` on this
+   specific WebView build) is anchoring DOM-0 to the physical left AND
+   reversing DOM 1..N — a pattern no single flex property produces.
+   Left unstyled until DevTools remote-inspect (chrome://inspect on
+   desktop) can reveal the actual computed direction and identify what
+   is anchoring DOM-0. Shipping either candidate as-is risks LTR
+   regressions on other viewport widths for no RTL benefit. */
+
 /* Inline-toolbar / page-header-tools divider — a slim vertical rule that
    separates one button cluster from another inside a single toolbar row.
    Also doubles for the WaveformViewer toolbar (zoom/breakpoint vs exports). */

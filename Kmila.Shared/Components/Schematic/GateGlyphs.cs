@@ -87,6 +87,18 @@ public static class GateGlyphs
         // fall back to the generic "component" tag rather than the
         // verbose enum name.
         CellKind.BLACKBOX_COMPONENT => "component",
+        // Signal-attribute cells emitted by the DeferredAttribute walker
+        // (pass 12). Label uses the VHDL attribute-tick syntax so the
+        // student reads the cell as the same construct they wrote.
+        CellKind.LAST_VALUE => "'last",
+        CellKind.STABLE     => "'stable",
+        CellKind.EDGE_DETECT => "edge",
+        CellKind.TO_INTEGER  => "→int",
+        CellKind.TO_VECTOR   => "→vec",
+        CellKind.RESIZE      => "resize",
+        CellKind.ROM_LOOKUP  => "rom",
+        CellKind.RAM_READ    => "ram",
+        CellKind.RAM_WRITE   => "ram_wr",
         _ => kind.ToString().ToLowerInvariant(),
     };
 

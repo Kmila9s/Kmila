@@ -2,7 +2,9 @@
 
   <PropertyGroup>
     <TargetFrameworks>net9.0-android35.0;net9.0-ios;net9.0-maccatalyst</TargetFrameworks>
-    <!--<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net9.0-windows10.0.19041.0</TargetFrameworks>-->
+    <!-- Windows head, conditional so non-Windows machines still build. Phase B
+         enables it so the embedded Kestrel host has WinUI parity. -->
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net9.0-windows10.0.19041.0</TargetFrameworks>
     <!-- Uncomment to also build the tizen app. You will need to install tizen by following this: https://github.com/Samsung/Tizen.NET -->
     <!-- <TargetFrameworks>$(TargetFrameworks);net9.0-tizen</TargetFrameworks> -->
 
@@ -22,6 +24,12 @@
     <Nullable>enable</Nullable>
     <NoWarn>$(NoWarn);CS1587;CS1591;CS1570;CS1573;CS1574;CS1998;CS8602;CS8604;CS8625;CS8892;CS0219;CS0618;CS4014;NETSDK1206</NoWarn>
 
+    <!-- Tier 5.2 Phase B — the MAUI head unconditionally gets the embedded
+         HttpListener /api/v1 host (iOS refuses at runtime). The same define
+         is set on Kmila.Shared's MAUI TFMs so #if guards in shared files
+         (Settings.razor, ILocalApiHost-adjacent code) fire consistently. -->
+    <DefineConstants>$(DefineConstants);KMILA_MAUI_API</DefineConstants>
+
     <!-- Display name -->
     <ApplicationTitle>Kmila</ApplicationTitle>
 
@@ -38,9 +46,9 @@
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">15.0</SupportedOSPlatformVersion>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion>
-    <!--<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
     <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
-    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'tizen'">6.5</SupportedOSPlatformVersion>-->
+    <!--<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'tizen'">6.5</SupportedOSPlatformVersion>-->
   </PropertyGroup>
 
   <!-- Android-specific packaging for Google Play's 16 KB page-size requirement
@@ -125,6 +133,15 @@
          exercise editor breaks offline. The Web build picks these up
          automatically via the RCL static-web-assets pipeline. -->
     <MauiAsset Include="..\Kmila.Shared\wwwroot\lib\**\*" LogicalName="lib\%(RecursiveDir)%(Filename)%(Extension)" />
+
+    <!-- Tier 5.2 Phase B follow-up — vendored Swagger UI + OpenAPI JSON
+         snapshot. EmbeddedApiHost.HandleAsync serves /api-docs (the HTML
+         shim), /openapi/v1.json (the committed spec), and the swagger-ui
+         assets from FileSystem.OpenAppPackageFileAsync. Regenerate the
+         JSON with `curl http://localhost:5297/openapi/v1.json` after any
+         /api/v1 handler-signature change. -->
+    <MauiAsset Include="..\Kmila.Shared\wwwroot\api-docs\**\*" LogicalName="api-docs\%(RecursiveDir)%(Filename)%(Extension)" />
+    <MauiAsset Include="..\Kmila.Shared\wwwroot\openapi\**\*" LogicalName="openapi\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

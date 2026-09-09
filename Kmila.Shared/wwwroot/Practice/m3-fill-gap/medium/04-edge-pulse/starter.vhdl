@@ -27,7 +27,9 @@ begin
     end process;
 
     -- BEGIN_EDIT
-    -- TODO: emit a one-cycle pulse on the rising edge of d
-    pulse <= '0';
+    -- TODO: emit a one-cycle pulse on the rising edge of d.
+    -- (Common first-attempt stub — just passes d through — doesn't
+    -- produce a pulse; students must combine d_curr and d_prev.)
+    pulse <= d;
     -- END_EDIT
 end architecture behavioral;

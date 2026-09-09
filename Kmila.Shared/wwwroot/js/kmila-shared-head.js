@@ -244,6 +244,11 @@
         if (!dockEl) return;
         var startHeight = dockEl.getBoundingClientRect().height;
         var moved = false;
+        // Tracked so onUp can snap based on where the user *wanted* the dock
+        // to end up, not where it currently sits. On mobile the CSS pins
+        // .kmila-dock to `height: var(--dock-h) !important` (snap-class
+        // driven), so getBoundingClientRect never reflects mid-drag intent.
+        var lastNext = startHeight;
         function onMove(ev) {
             ev.preventDefault();
             var delta = startY - ev.clientY;
@@ -255,26 +260,28 @@
                     Math.round(startHeight + delta)
                 )
             );
+            lastNext = next;
             dotnetRef.invokeMethodAsync("OnGrabberMove", next);
         }
         function onUp() {
             window.removeEventListener("pointermove", onMove);
             window.removeEventListener("pointerup", onUp);
             window.removeEventListener("pointercancel", onUp);
-            // Snap to closest preset on phones.
+            // Snap to closest preset on phones. Use lastNext (dragged intent)
+            // not the rect height — see the lastNext comment above.
             if (window.matchMedia("(max-width: 768px)").matches && moved) {
-                var h = dockEl.getBoundingClientRect().height;
                 var vh = window.innerHeight;
                 var snap =
-                    h < vh * 0.25
+                    lastNext < vh * 0.34
                         ? "peek"
-                        : h < vh * 0.66
+                        : lastNext < vh * 0.69
                             ? "half"
                             : "full";
                 if (window.kmilaSetDockSnap) window.kmilaSetDockSnap(snap);
             }
             dotnetRef.invokeMethodAsync("OnGrabberUp").catch(function () {});
-            dotnetRef.dispose();
+            // Ref lifetime is owned by EditorDock.razor (_selfRef, disposed in
+            // Dispose()). Disposing here breaks every drag after the first.
         }
         window.addEventListener("pointermove", onMove, { passive: false });
         window.addEventListener("pointerup", onUp);
@@ -613,4 +620,238 @@
     document.addEventListener("focusin", function (e) {
         _kmilaTooltipAnchorSync(e.target);
     });
+
+    // -------------------------------------------------------------------------
+    // NAV-1 (2026-07-24) — Android hardware back key handler.
+    //
+    // MainActivity.OnBackPressed calls this function via
+    // WebView.EvaluateJavascript. Returning `true` consumes the back
+    // press; `false` lets MainActivity finish the activity (exit app).
+    //
+    // Priority order for "close the topmost open thing":
+    //   1. Any visible modal (BlazorBootstrap `.modal.show` OR custom
+    //      `.kviz-wiring-modal` / `.examples-gallery-modal` etc.):
+    //      click its close/done button if we can find one; else dispatch
+    //      Escape at the modal so any component listening closes.
+    //   2. Any `<details open>` popover in the top bar / profile menu.
+    //   3. Any Bootstrap dropdown (`.dropdown-menu.show`).
+    //   4. Browser history has entries → `window.history.back()`.
+    //   5. Nothing left → return false (MainActivity exits).
+    //
+    // Only wired on MAUI (MainActivity is the only caller); web builds
+    // never invoke this — the hardware back key doesn't exist there.
+    // -------------------------------------------------------------------------
+
+    function _kmilaModalTakesSpace(el) {
+        // `.offsetParent !== null` is spec-null for `position: fixed` elements,
+        // which is what every BB Modal is — that broke the earlier visibility
+        // gate (F-086). Use the rect instead: any element with a non-zero box
+        // is on-screen for our purposes.
+        if (!el) return false;
+        var r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+    }
+
+    function _kmilaVisibleModal() {
+        // BB Modal wraps content in `.modal.show` (or `.modal.fade.show`).
+        var bb = document.querySelector(".modal.show, .modal.fade.show");
+        if (_kmilaModalTakesSpace(bb)) return bb;
+        // Custom modals — VisualWiringModal + ExamplesGallery — mount their
+        // .modal element only while open, so any visible one qualifies.
+        var custom = document.querySelector(
+            ".kviz-wiring-modal, .examples-gallery-modal, .kmila-template-modal"
+        );
+        if (_kmilaModalTakesSpace(custom)) return custom;
+        return null;
+    }
+
+    function _kmilaCloseModal(modal) {
+        // Try any close-button marker in a language-agnostic order. F-085:
+        // the previous `[aria-label="Close"|"Cerrar"]` fallback missed the
+        // localised aria-label rendered by `@Traductor.T("COMMON_CLOSE")` in
+        // AR/DE/FR/CH/JP. `[data-kmila-modal-close]` is a stable marker put
+        // on custom-modal close buttons for exactly this reason.
+        var btn = modal.querySelector(
+            '[data-bs-dismiss="modal"], [data-testid="visual-wiring-done"], [data-kmila-modal-close], .kmila-modal__close'
+        );
+        if (btn) { try { btn.click(); return true; } catch (e) { /* fall through */ } }
+        // Fallback — dispatch Escape at the modal. BB Modal + most
+        // components listen for keydown Escape. Custom Blazor modals that
+        // don't listen for Escape should carry `[data-kmila-modal-close]`
+        // (see above) so this branch stays a last resort.
+        try {
+            var evt = new KeyboardEvent("keydown", {
+                key: "Escape", code: "Escape", keyCode: 27, which: 27,
+                bubbles: true, cancelable: true
+            });
+            modal.dispatchEvent(evt);
+            return true;
+        } catch (e) { return false; }
+    }
+
+    window.kmilaHandleAndroidBack = function () {
+        try {
+            // 1) Modal (visible OVER fullscreen viewer or standalone).
+            var modal = _kmilaVisibleModal();
+            if (modal && _kmilaCloseModal(modal)) return true;
+
+            // 1.5) Fullscreen SchematicViewer / FlowDiagramViewer (Z10).
+            //      Click the same toggle button the user's own toolbar
+            //      exposes so Blazor state stays in sync (a raw
+            //      classList.remove would leave `_isFullscreen == true`
+            //      and the next user toggle would misbehave).
+            var fs = document.querySelector(
+                ".schematic-viewer.is-fullscreen, .flow-diagram.is-fullscreen"
+            );
+            if (fs) {
+                var toggle = fs.querySelector("[data-kmila-fullscreen-toggle]");
+                if (toggle) { try { toggle.click(); return true; } catch (e) { /* fall through */ } }
+                fs.classList.remove("is-fullscreen");
+                return true;
+            }
+
+            // 2) Any open <details> popover (ProfileMenu, FPGA picker,
+            //    file-menu burger, etc. — all use <details><summary>).
+            var openDetails = document.querySelector("details[open]");
+            if (openDetails) {
+                openDetails.removeAttribute("open");
+                return true;
+            }
+
+            // 3) Bootstrap dropdown.
+            var dropdown = document.querySelector(".dropdown-menu.show");
+            if (dropdown) {
+                var trigger = dropdown.closest(".dropdown")?.querySelector('[data-bs-toggle="dropdown"]');
+                if (trigger) { try { trigger.click(); return true; } catch (e) { /* fall through */ } }
+                dropdown.classList.remove("show");
+                return true;
+            }
+
+            // 4) Router history — pop one entry back through Blazor's
+            //    NavigationManager (which listens to popstate).
+            if (window.history && window.history.length > 1) {
+                window.history.back();
+                return true;
+            }
+
+            // 5) Nothing to do — let the activity finish.
+            return false;
+        } catch (e) {
+            // On any handler error, don't trap the user in the app —
+            // let the OS default fire.
+            return false;
+        }
+    };
+
+
+    // -------------------------------------------------------------------------
+    // Z12) visualViewport sync — publish keyboard-aware viewport metrics.
+    //
+    // Neither `100vh` nor `100dvh` shrink when a soft keyboard opens — both
+    // are keyboard-INCLUSIVE flavors of "layout viewport". Only
+    // `window.visualViewport.height` reflects the shrinkage, and CSS has no
+    // native way to read it. So this section listens to visualViewport
+    // resize/scroll events and mirrors two hooks onto <html> that CSS can
+    // gate off:
+    //   • CSS var  `--kmila-viewport-h` — the visible viewport height in px
+    //   • attribute `data-kmila-kbd="open"` — set when visible < layout by ≥
+    //     150 px (Android URL-bar collapse is 60-80 px, which stays below
+    //     the threshold; real IMEs consume 35-55 % of viewport so always
+    //     cross it).
+    //
+    // Any CSS rule that needs to respect the keyboard cap should use these,
+    // e.g. `max-height: min(85dvh, var(--kmila-viewport-h, 100dvh) - 32px)`
+    // or `html[data-kmila-kbd="open"] .kmila-dock { display: none }`.
+    //
+    // Fallback path: browsers without visualViewport (very old WebKit) use
+    // `resize` + `orientationchange` writing innerHeight directly, so the
+    // CSS var still tracks the layout viewport at minimum.
+    // -------------------------------------------------------------------------
+    window.__kmilaViewportSync = function () {
+        try {
+            var doc = document.documentElement;
+            var vv = window.visualViewport;
+            var winH = window.innerHeight || doc.clientHeight;
+            var vpH = vv ? vv.height : winH;
+            doc.style.setProperty("--kmila-viewport-h", vpH + "px");
+            if (winH - vpH > 150) {
+                doc.setAttribute("data-kmila-kbd", "open");
+            } else {
+                doc.removeAttribute("data-kmila-kbd");
+            }
+        } catch (_) { /* silently no-op; layout still works without the hook */ }
+    };
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", window.__kmilaViewportSync, { passive: true });
+        window.visualViewport.addEventListener("scroll", window.__kmilaViewportSync, { passive: true });
+    } else {
+        window.addEventListener("resize", window.__kmilaViewportSync, { passive: true });
+        window.addEventListener("orientationchange", window.__kmilaViewportSync, { passive: true });
+    }
+    window.__kmilaViewportSync();
+
+
+    // -------------------------------------------------------------------------
+    // Z13) Mirror `.kmila-shell[dir]` onto <html>[dir].
+    //
+    // MainLayout.razor:41 writes `dir="rtl"` onto `.kmila-shell` when
+    // Traductor.IsRtl is true (i.e. current language is Arabic). Bootstrap's
+    // bundled JS however keys off `document.documentElement.dir` (see the
+    // vendored `bootstrap.bundle.min.js` around `p=()=>"rtl"===document.documentElement.dir`)
+    // — without a bridge, Bootstrap's own RTL branch NEVER activates: its
+    // utility classes (.ms-*, .me-*, dropdown chevrons, popover placement,
+    // form-control padding, close-button alignment) all stay LTR even when
+    // the Kmila descendants inside `.kmila-shell` correctly flip. Bubbling
+    // the attribute one node up unlocks the vendored library's ~100 built-in
+    // RTL adjustments at no CSS cost.
+    //
+    // Implementation: a single document-wide subtree observer filtered to
+    // `dir` attribute mutations. This survives Blazor's SSR → interactive
+    // rehydration (the shell node gets replaced between phases, so a direct
+    // observer attached to the SSR node would leak to a detached element).
+    // The callback checks target.matches(".kmila-shell") and short-circuits
+    // otherwise. Idempotent: same-value writes are guarded.
+    // -------------------------------------------------------------------------
+    // F-083 (R9 2026-08-05, CDP-discovered): the SSR `<html lang="en">` in
+    // `Kmila/wwwroot/index.html` stays "en" for every language because there's
+    // no bridge from Traductor.Lang to the document element. Screen readers,
+    // browser Translate, Chrome's built-in spell-check, and hyphenation all
+    // key off `<html>[lang]` — being wrong on Arabic content is a real
+    // accessibility regression. Piggyback on the existing dir mirror.
+    var __kmilaMirrorShellDir = function () {
+        var shell = document.querySelector(".kmila-shell");
+        if (!shell) return;
+        var d = shell.getAttribute("dir") || "ltr";
+        if (document.documentElement.getAttribute("dir") !== d) {
+            document.documentElement.setAttribute("dir", d);
+        }
+        var l = shell.getAttribute("lang");
+        if (l && document.documentElement.getAttribute("lang") !== l) {
+            document.documentElement.setAttribute("lang", l);
+        }
+    };
+    var __kmilaStartDirObserver = function () {
+        new MutationObserver(function (muts) {
+            for (var i = 0; i < muts.length; i++) {
+                var t = muts[i].target;
+                // childList mutations bubble as target=parent; attribute
+                // mutations bubble as target=changed-element. Either can
+                // signal a shell dir/lang change (shell mounted OR shell's
+                // own attribute flipped), so we just re-query and mirror.
+                if (t && (t.classList && t.classList.contains("kmila-shell")
+                          || muts[i].type === "childList")) {
+                    __kmilaMirrorShellDir();
+                    return;
+                }
+            }
+        }).observe(document.documentElement, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ["dir", "lang"]
+        });
+        __kmilaMirrorShellDir();
+    };
+    if (document.body) __kmilaStartDirObserver();
+    else document.addEventListener("DOMContentLoaded", __kmilaStartDirObserver, { once: true });
 })();

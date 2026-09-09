@@ -1,4 +1,4 @@
-/* Kmila Visual Runtime — canvas recording v1 (§6 Item 1).
+/* Kmila Visual Runtime — canvas recording (§6 Item 1).
  *
  * Records the running Visual canvas as a webm video. Each frame is
  * painted onto an offscreen <canvas> by `kmilaCanvasRender` (defined in
@@ -7,9 +7,14 @@
  * captures that offscreen canvas via captureStream(fps) and emits a
  * downloadable webm blob on stop.
  *
- * v1 is single-view (canvas only) with a 2-minute hard cap. v2 will add
- * a split view (canvas + Monaco line highlight) — bigger design tracked
- * in Documentacion/HANDOFF_visual_canvas_*.md.
+ * v1 (2026-06-…) is single-view (canvas only) with a 2-minute hard cap.
+ * v2 (2026-07-28) adds an optional runbar overlay strip — a synchronized
+ * timeline / speed / breakpoint band drawn under the canvas so the video
+ * shows both the widget output AND the timing context. Wired via
+ * `opts.withRunbar: true`; renders using 2D primitives that read DOM
+ * state from `.visual-page__scrub-slider`, `.visual-page__tick-readout`,
+ * `.visual-page__speed-label`, `.visual-page__bp-list` each frame. No
+ * html2canvas dependency — the runbar shape is bespoke to Visual mode.
  *
  * Public API on window:
  *   kmilaCanvasRecordStart(selector, opts) → {ok, mime, sessionId, reason?}
@@ -18,7 +23,8 @@
  *
  * opts = { fps=20, hardCapSeconds=120,
  *          codecPreference=['video/webm;codecs=vp9','video/webm'],
- *          filename='kmila-canvas.webm' }
+ *          filename='kmila-canvas.webm',
+ *          withRunbar=false, runbarHeight=80 }
  */
 (function () {
     function downloadBlob(blob, filename) {
@@ -35,6 +41,80 @@
     // Module-level singleton — only one recording at a time.
     let session = null;
     let nextSessionId = 1;
+
+    // Reads the runbar's live DOM state each frame. Never throws — a
+    // missing selector just yields a default so the overlay paints
+    // something sensible even mid-teardown or before the runbar mounts.
+    function snapshotRunbar() {
+        const q = (sel) => document.querySelector(sel);
+        const scrub = q('.visual-page__scrub-slider');
+        const scrubPct = scrub && scrub.value ? Math.max(0, Math.min(100, +scrub.value)) : 0;
+        const tick = q('.visual-page__tick-readout');
+        const tickText = tick ? tick.textContent.trim() : '';
+        const speed = q('.visual-page__speed-label');
+        const speedText = speed ? speed.textContent.trim() : '';
+        const bps = [...document.querySelectorAll('.visual-page__bp-chip')]
+            .map(el => {
+                const t = el.textContent.trim();
+                const m = t.match(/([\d.]+)/);
+                return m ? parseFloat(m[1]) : NaN;
+            })
+            .filter(v => !isNaN(v));
+        return { scrubPct, tickText, speedText, bps };
+    }
+
+    // Paints a compact runbar band across the bottom `bandH` pixels of the
+    // offscreen canvas. Uses only 2D primitives (rects, text, lines) —
+    // deliberately does NOT try to mirror the runbar's actual React-y layout,
+    // since the recorded video is a documentary artifact, not a screenshot.
+    function paintRunbar(cvs, bandH, snap) {
+        const ctx = cvs.getContext('2d');
+        const y0 = cvs.height - bandH;
+        const w = cvs.width;
+        // Band background — half-transparent scrim so the canvas above bleeds
+        // through slightly, giving a floating-hud feel rather than a stark cut.
+        ctx.save();
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+        ctx.fillRect(0, y0, w, bandH);
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(0, y0 + 0.5); ctx.lineTo(w, y0 + 0.5); ctx.stroke();
+
+        // Progress bar row.
+        const pad = 16;
+        const trackY = y0 + Math.floor(bandH * 0.38);
+        const trackH = 8;
+        const trackW = w - pad * 2;
+        // Track base.
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.25)';
+        ctx.fillRect(pad, trackY, trackW, trackH);
+        // Fill.
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.9)';
+        const fillW = Math.round(trackW * (snap.scrubPct / 100));
+        ctx.fillRect(pad, trackY, fillW, trackH);
+        // Breakpoint tick marks along the same track.
+        ctx.fillStyle = 'rgba(248, 113, 113, 0.9)';
+        const maxBp = snap.bps.length ? Math.max(...snap.bps) : 0;
+        if (maxBp > 0) {
+            for (const bp of snap.bps) {
+                const x = pad + Math.round(trackW * Math.min(1, bp / maxBp));
+                ctx.fillRect(x - 1, trackY - 3, 3, trackH + 6);
+            }
+        }
+
+        // Labels row (below the track).
+        ctx.fillStyle = 'rgba(226, 232, 240, 0.95)';
+        ctx.font = '13px system-ui, -apple-system, "Segoe UI", sans-serif';
+        ctx.textBaseline = 'top';
+        const labelY = trackY + trackH + 8;
+        if (snap.tickText)  ctx.fillText(snap.tickText,  pad, labelY);
+        if (snap.speedText) {
+            ctx.textAlign = 'right';
+            ctx.fillText(snap.speedText, w - pad, labelY);
+            ctx.textAlign = 'left';
+        }
+        ctx.restore();
+    }
 
     function pickMime(preference) {
         const list = Array.isArray(preference) && preference.length
@@ -64,12 +144,17 @@
         const mime = pickMime(opts.codecPreference);
         if (!mime) return { ok: false, reason: 'no-supported-codec' };
 
+        const withRunbar = !!opts.withRunbar;
+        const runbarH = withRunbar ? Math.max(40, opts.runbarHeight || 80) : 0;
         const w = root.offsetWidth || 800;
         const h = root.offsetHeight || 600;
         const cvs = document.createElement('canvas');
-        cvs.width = w; cvs.height = h;
+        cvs.width = w; cvs.height = h + runbarH;
         // Prime the surface so MediaRecorder gets a first frame immediately.
+        // Renderer paints on the top-of-canvas subregion; the runbar band
+        // covers the bottom `runbarH` pixels drawn separately.
         window.kmilaCanvasRender(root, cvs);
+        if (withRunbar) paintRunbar(cvs, runbarH, snapshotRunbar());
 
         const stream = cvs.captureStream(fps);
         const chunks = [];
@@ -84,12 +169,17 @@
         let capTimer = 0;
 
         // Frame pump: rAF driven, throttles at target fps. kmilaCanvasRender
-        // is synchronous — no promise queue, no inflight bookkeeping.
+        // is synchronous — no promise queue, no inflight bookkeeping. The
+        // runbar overlay repaints alongside the main canvas each tick so
+        // its progress/labels track the recording in real time.
         function pump(now) {
             if (stopping) return;
             if (now - lastDraw >= 1000 / fps) {
                 lastDraw = now;
-                try { window.kmilaCanvasRender(root, cvs); }
+                try {
+                    window.kmilaCanvasRender(root, cvs);
+                    if (withRunbar) paintRunbar(cvs, runbarH, snapshotRunbar());
+                }
                 catch (e) { /* skip frame */ }
             }
             rafId = requestAnimationFrame(pump);

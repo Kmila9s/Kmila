@@ -12,13 +12,15 @@ end entity reg_async_as_sync;
 
 architecture behavioral of reg_async_as_sync is
 begin
-    -- BUG: reset missing from sensitivity list — the reset becomes synchronous
-    process(clk)
+    -- BUG: the register captures NOT d instead of d. Every clock edge
+    -- writes the inverted input, so q trails d inverted rather than
+    -- following it.
+    process(clk, reset)
     begin
         if reset = '1' then
             q <= '0';
         elsif rising_edge(clk) then
-            q <= d;
+            q <= not d;
         end if;
     end process;
 end architecture behavioral;

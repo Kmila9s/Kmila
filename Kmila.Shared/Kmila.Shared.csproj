@@ -63,9 +63,11 @@
     <ProjectReference Include="../../../LibraryCompiler/LibraryCompiler.csproj" />
   </ItemGroup>
 
-  <!-- Web-specific settings (net9.0 only) -->
+  <!-- Web-specific settings (net9.0 only). KMILA_HAS_ASPNETCORE is the
+       unifying guard used by shared /api/v1 code so the same #if switches
+       on for both Kmila.Web and the MAUI-embedded Kestrel host (Phase B). -->
   <PropertyGroup Condition="'$(TargetFramework)' == 'net9.0'">
-    <DefineConstants>$(DefineConstants);ASPNETCORE</DefineConstants>
+    <DefineConstants>$(DefineConstants);ASPNETCORE;KMILA_HAS_ASPNETCORE</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
@@ -73,7 +75,17 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
-  <!-- MAUI-specific packages (every native head: android/ios/maccatalyst). -->
+  <!-- MAUI-specific packages (every native head: android/ios/maccatalyst/windows).
+       Phase B: an in-process HTTP host serving /api/v1 (see
+       Kmila/Services/EmbeddedApiHost.cs) is built on System.Net.HttpListener
+       from the BCL, NOT on Kestrel — Microsoft.AspNetCore.App has no runtime
+       pack for maccatalyst/ios/android RIDs. The shared endpoint bodies live
+       in Kmila.Shared/Services/Api/SimulationApiHandlers.cs and are called
+       from both Kmila.Web's Minimal-API map and the HttpListener dispatcher. -->
+  <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) != ''">
+    <DefineConstants>$(DefineConstants);KMILA_MAUI_API</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) != ''">
     <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />

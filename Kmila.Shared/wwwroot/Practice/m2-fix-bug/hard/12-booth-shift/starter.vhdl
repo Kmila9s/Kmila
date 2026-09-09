@@ -20,12 +20,13 @@ begin
         if reset = '1' then
             acc <= (others => '0');
         elsif rising_edge(clk) then
-            -- BUG: uses LOGICAL right-shift (zero-fill) instead of ARITHMETIC
-            -- right-shift (sign-fill). Negative accumulator values lose the sign bit.
+            -- BUG: the shift step is missing. Every add-cycle accumulates
+            -- `a` into `acc` without dividing by two, so the product grows
+            -- unbounded instead of following Booth's algorithm.
             if b(0) = '1' then
-                acc <= signed(shift_right(unsigned(acc + signed(resize(signed(a), 16))), 1));
+                acc <= acc + signed(resize(signed(a), 16));
             else
-                acc <= signed(shift_right(unsigned(acc), 1));
+                acc <= acc;
             end if;
         end if;
     end process;

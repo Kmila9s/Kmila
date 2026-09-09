@@ -97,6 +97,45 @@ public class AppSettings
     public const string KEY_LIVE_REPLAY_DURING_RUN = "KMILA_LIVE_REPLAY_DURING_RUN";
 
     /// <summary>
+    /// Tier 5.2 Phase B — opt-in switch that boots the embedded Kestrel host
+    /// serving <c>/api/v1</c> inside the MAUI app process. When "true", the
+    /// MAUI startup hydration (see MauiProgram.cs) resolves EmbeddedApiHost
+    /// and calls StartAsync with <see cref="KEY_LOCAL_API_PORT"/> and
+    /// <see cref="KEY_LOCAL_API_BIND_LAN"/>. Default OFF — the surface is
+    /// unauthenticated dev-parity with Kmila.Web, so the user opts in.
+    /// </summary>
+    public const string KEY_LOCAL_API_ENABLED = "KMILA_LOCAL_API_ENABLED";
+
+    /// <summary>
+    /// Preferred TCP port for the embedded local API. Stored as an int
+    /// string (default "5298" — matches SimulatorBench's fallback for
+    /// zero-config bench parity). "0" tells Kestrel to auto-pick an
+    /// ephemeral port; the effective URL is then read from
+    /// <c>IServerAddressesFeature</c> and surfaced in Settings.
+    /// </summary>
+    public const string KEY_LOCAL_API_PORT = "KMILA_LOCAL_API_PORT";
+
+    /// <summary>
+    /// When "true", the embedded local API binds <c>IPAddress.Any</c>
+    /// instead of loopback so other devices on the LAN can hit it (useful
+    /// for physical-device bench runs). Default OFF; Settings shows a red
+    /// warning banner when enabled — the surface is unauthenticated when
+    /// <see cref="KEY_LOCAL_API_TOKEN"/> is empty.
+    /// </summary>
+    public const string KEY_LOCAL_API_BIND_LAN = "KMILA_LOCAL_API_BIND_LAN";
+
+    /// <summary>
+    /// Optional bearer token gating every <c>/api/v1</c> request. When
+    /// non-empty, callers must present <c>Authorization: Bearer &lt;token&gt;</c>
+    /// (or <c>X-Api-Key: &lt;token&gt;</c>) or receive 401; <c>/health</c> and
+    /// the static Swagger UI assets stay exempt. Empty string / missing =
+    /// wide-open (dev-parity default). Read by both hosts via
+    /// <c>LocalApiTokenProvider</c> so Settings can regenerate without a
+    /// host restart.
+    /// </summary>
+    public const string KEY_LOCAL_API_TOKEN = "KMILA_LOCAL_API_TOKEN";
+
+    /// <summary>
     /// Visual-mode ring buffer size in ticks. The infinite-run coordinator
     /// keeps the last N frames so the user can scrub backward; older entries
     /// evict. Stored as an int string ("2000"); parse failures fall back to

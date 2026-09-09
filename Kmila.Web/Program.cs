@@ -95,35 +95,9 @@ public class Program
         // shipped by the LibraryCompiler module) returns null so the
         // module's own embedded-resource fallback takes over.
         builder.Services.AddSingleton<LibraryCompiler.Services.LibraryCompiler>(provider =>
-        {
-            var userAssets = provider.GetRequiredService<UserAssetStore>();
-            var blobLogger = provider.GetService<ILogger<FileSystemBlobStore>>();
-            var blobStore  = new FileSystemBlobStore(userAssets.LibraryCacheDir, blobLogger);
-
-            return new LibraryCompiler.Services.LibraryCompiler(
-                new LibraryCompiler.Services.LibraryCompilerOptions(
-                    OpenLibrarySource: (key, ct) =>
-                    {
-                        // SourceKey may carry a #package=X fragment when one
-                        // physical .vhd declares several packages. Trim to
-                        // just that package's bytes so each compiled artifact
-                        // hashes deterministically and survives the addition
-                        // / removal of unrelated packages in the same file.
-                        var (path, package) = UserAssetStore.ParseLibrarySourceKey(key);
-                        if (!string.IsNullOrEmpty(path) && Path.IsPathRooted(path) && File.Exists(path))
-                        {
-                            var bytes = UserAssetStore.ReadPackageBytes(path, package);
-                            if (bytes != null) return Task.FromResult<Stream?>(new MemoryStream(bytes));
-                        }
-                        // Embedded-resource key for IEEE builtins, or unknown
-                        // path — fall through; the LibraryBuilder's embedded
-                        // resource fallback handles the IEEE case.
-                        return Task.FromResult<Stream?>(null);
-                    },
-                    CacheStore:        blobStore,
-                    AdditionalSources: userAssets.ListUserLibrarySources(),
-                    Policy:            LibraryCompiler.Services.LibraryBuildPolicy.AlwaysPersistent));
-        });
+            LibraryCompilerFactory.Create(
+                provider.GetRequiredService<UserAssetStore>(),
+                provider.GetService<ILogger<FileSystemBlobStore>>()));
 
         // ProgramBuilder handles compiling/building FPGA programs from user projects
         builder.Services.AddSingleton<ProgramBuilder>();
@@ -155,6 +129,11 @@ public class Program
         // a circuit ends, Dispose unsubscribes so the singleton doesn't leak
         // references to dead Sim instances. Eagerly resolved by MainLayout.
         builder.Services.AddScoped<SimulationCoordinator>();
+
+        // Registry of live VisualRunCoordinator instances by project id. Scoped
+        // to match SimulationParameters so external surfaces (NavMenu, ProjectsView)
+        // resolve the same registry as the VisualPanel that registered.
+        builder.Services.AddScoped<Kmila.Shared.Services.VisualRun.VisualRunRegistry>();
 
         // Sim-end notifier — browser Notification API on Web via JS interop.
         // Permission requested lazily on first fire so the prompt has clear
@@ -461,6 +440,20 @@ public class Program
         // other automation. See Documentacion/HANDOFF_simulator_bench_api.md.
         builder.Services.AddSimulationApi();
 
+        // .NET 9 built-in OpenAPI — publishes /openapi/v1.json describing the
+        // /api/v1 surface so external tooling (SimulatorBench, curl, generated
+        // clients) can auto-discover endpoints and payload shapes.
+        //
+        // A committed snapshot lives at Kmila.Shared/wwwroot/openapi/v1.json;
+        // that's what the vendored Swagger UI shim reads (via the relative
+        // path ../openapi/v1.json from /_content/Kmila.Shared/api-docs/), and
+        // it's the copy the MAUI EmbeddedApiHost serves so both hosts show
+        // identical docs. Regenerate the snapshot after any handler-signature
+        // change with:
+        //   curl http://localhost:5297/openapi/v1.json \
+        //     > Kmila.Shared/wwwroot/openapi/v1.json
+        builder.Services.AddOpenApi();
+
         var app = builder.Build();
 
         // Apply the saved library-build mode (Settings → Build mode) to the
@@ -479,6 +472,14 @@ public class Program
                 var raw      = await db.GetSettingAsync(AppSettings.KEY_LIBRARY_BUILD_MODE);
                 var policy   = LibraryBuildModeExtensions.ParseToken(raw);
                 compiler.Orchestrator.Policy = LibraryBuildModeExtensions.ToPolicy(policy);
+
+                // Tier 5.2 Phase B follow-up — hydrate the /api/v1 bearer
+                // token so external callers (SimulatorBench, curl) find the
+                // same auth posture Settings shows. Empty = no gate.
+                var token = await db.GetSettingAsync(AppSettings.KEY_LOCAL_API_TOKEN);
+                app.Services
+                   .GetRequiredService<Kmila.Shared.Services.Api.LocalApiTokenProvider>()
+                   .Set(token);
             }
             catch
             {
@@ -525,8 +526,10 @@ public class Program
 
         app.UseHttpsRedirection();
 
-        app.UseStaticFiles();
         app.UseAntiforgery();
+
+        // .NET 9 fingerprinted pipeline — serves _content/{Rcl}/** from the build-time manifest.
+        app.MapStaticAssets();
 
         // Map Razor components with interactive server-side rendering
         // and include the shared component library (Kmila.Shared)
@@ -536,6 +539,19 @@ public class Program
 
         // Mount /api/v1 endpoints for headless simulation (bench harness).
         app.MapSimulationApi();
+
+        // Publish /openapi/v1.json — machine-readable API surface (see
+        // AddOpenApi wire above).
+        app.MapOpenApi();
+
+        // Tier 5.2 Phase B follow-up — friendly root-mounted URL for the
+        // vendored Swagger UI. The actual shim lives at
+        // /_content/Kmila.Shared/api-docs/ (RCL static-web-asset path) and
+        // uses relative URLs, so redirecting is enough — no need to also
+        // proxy the assets. The MAUI EmbeddedApiHost serves the same shim
+        // at /api-docs directly; this route just brings the Web host to
+        // path parity with what a developer types after `dotnet run`.
+        app.MapGet("/api-docs", () => Results.Redirect("/_content/Kmila.Shared/api-docs/index.html", permanent: false));
 
         app.Run();
     }

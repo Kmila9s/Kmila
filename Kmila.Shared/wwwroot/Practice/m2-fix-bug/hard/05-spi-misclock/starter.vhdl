@@ -25,12 +25,12 @@ begin
             sample_int <= '0';
         elsif rising_edge(clk) then
             divider <= divider + 1;
-            sample_int <= '0';
+            sample_int <= miso;               -- BUG: samples on EVERY tick
+                                              -- instead of only at the SCLK
+                                              -- falling edge. `sample`
+                                              -- shadows `miso` continuously.
             if divider = 3 then
                 sclk_int   <= '1';            -- rising edge of SCLK
-                sample_int <= miso;           -- BUG: samples on RISING SCLK.
-                                              -- SPI mode 0 dictates sampling
-                                              -- on the falling edge here.
             elsif divider = 7 then
                 sclk_int   <= '0';            -- falling edge of SCLK
                 divider    <= (others => '0');

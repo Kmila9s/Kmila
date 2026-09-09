@@ -178,25 +178,38 @@
 
     private async Task OnWidgetPointerDown(Microsoft.AspNetCore.Components.Web.PointerEventArgs e, KvizComponent c)
     {
+        // Session 30 (2026-07-24): capture drag state SYNCHRONOUSLY before
+        // any await so that a subsequent pointermove fired while we're
+        // awaiting SelectedIdChanged.InvokeAsync / the JS scale probe
+        // finds `_dragTarget != null` and processes the move.
+        // Previously, the InvokeAsync yield let pointermoves land with
+        // `_dragTarget` still null (line 222 early-returns silently) and
+        // the widget's inline style never changed. Playwright acceptance
+        // §9.4 was catching exactly this race.
         _pointerDownOnWidget = true;
+        if (EditMode)
+        {
+            _dragTarget = c;
+            // Track *pointer* deltas in client space; the widget's own
+            // OffsetX/Y would be relative to its small box and resets to 0
+            // each pointerdown — useless for the running diff we need on
+            // pointermove.
+            _dragStartPointerX = e.ClientX;
+            _dragStartPointerY = e.ClientY;
+            _dragStartCompX = c.Position.X;
+            _dragStartCompY = c.Position.Y;
+        }
         if (SelectedIdChanged.HasDelegate) await SelectedIdChanged.InvokeAsync(c.Id);
         if (!EditMode) return;
-        _dragTarget = c;
-        // Track *pointer* deltas in client space; the widget's own
-        // OffsetX/Y would be relative to its small box and resets to 0
-        // each pointerdown — useless for the running diff we need on
-        // pointermove.
-        _dragStartPointerX = e.ClientX;
-        _dragStartPointerY = e.ClientY;
-        _dragStartCompX = c.Position.X;
-        _dragStartCompY = c.Position.Y;
-        _dragScale = 1.0;
+        // Update _dragScale after the sync state is safe. If a
+        // pointermove already ran with the previous _dragScale, that's
+        // OK — worst case the delta is off by one frame at wrong scale.
         try
         {
             var s = await JS.InvokeAsync<double>("kmilaGetTransformScale", ".visual-page__canvas-wrap");
             if (s > 0.01) _dragScale = s;
         }
-        catch { /* JS unavailable in prerender/tests — fall back to 1.0. */ }
+        catch { /* JS unavailable in prerender/tests — fall back to 1.0 (already set). */ }
     }
 
     // Fires for every pointerdown on the canvas — widget pointerdowns

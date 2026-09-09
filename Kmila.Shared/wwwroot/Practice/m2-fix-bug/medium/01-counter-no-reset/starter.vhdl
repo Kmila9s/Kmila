@@ -13,11 +13,13 @@ end entity counter_noreset;
 architecture behavioral of counter_noreset is
     signal count : unsigned(3 downto 0) := (others => '0');
 begin
-    -- BUG: sensitivity list omits reset, so reset acts only on the next clock
-    process(clk)
+    -- BUG: the reset branch clears to all-ones instead of zero, so the
+    -- counter starts at 15 and wraps to 0 on the next tick instead of the
+    -- expected 0 → 1 → 2 sequence.
+    process(clk, reset)
     begin
         if reset = '1' then
-            count <= (others => '0');
+            count <= (others => '1');
         elsif rising_edge(clk) then
             count <= count + 1;
         end if;

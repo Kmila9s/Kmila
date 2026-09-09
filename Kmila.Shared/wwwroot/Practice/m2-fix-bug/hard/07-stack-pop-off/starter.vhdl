@@ -27,12 +27,13 @@ begin
             elsif pop = '1' and push = '0' and count > 0 then
                 count <= count - 1;
             end if;
-            -- BUG: empty is registered using the OLD count value,
-            -- so it lags one cycle behind the actual stack level.
+            -- BUG: empty is asserted whenever the stack is NON-empty
+            -- (inverted logic). The consumer sees empty='0' at reset and
+            -- empty='1' once the first push lands.
             if count = 0 then
-                empty_reg <= '1';
-            else
                 empty_reg <= '0';
+            else
+                empty_reg <= '1';
             end if;
         end if;
     end process;

@@ -550,14 +550,27 @@ else if (Data != null && Data.Signals.Count > 0)
         // and reset zoom + scroll so the user opens on the natural
         // "everything fits" view. The live-merge path mutates the same
         // instance so this branch doesn't fire on every progress tick.
+        //
+        // Session 30 (2026-07-24) — SimulationCoordinator reattach: when
+        // Editor rehydrates from a live engine mid-run, Data can become a
+        // NEW reference for the SAME conceptual sim (Editor.razor's
+        // HydrateWaveformFromLiveEngine constructs a fresh WaveformData
+        // each fire). Preserve zoom/scroll in that case — only reset when
+        // the incoming trace is shorter than what we already had (fresh
+        // sim / snapshot switch).
         if (!ReferenceEquals(_lastData, Data))
         {
+            int prevLabels = _lastData?.TimeLabels?.Count ?? 0;
+            int nextLabels = Data?.TimeLabels?.Count ?? 0;
             _lastData = Data;
-            _pxPerNs = 0;        // recomputed on next render via EnsureInitialZoom
-            _scrollLeftPx = 0;
-            _liveWindowNs = DefaultLiveWindowNs;
-            // No DOM scrollTo here — first render will set up fresh content
-            // width and the browser's scrollLeft snaps to 0 by itself.
+            if (nextLabels < prevLabels || nextLabels == 0)
+            {
+                _pxPerNs = 0;        // recomputed on next render via EnsureInitialZoom
+                _scrollLeftPx = 0;
+                _liveWindowNs = DefaultLiveWindowNs;
+                // No DOM scrollTo here — first render will set up fresh content
+                // width and the browser's scrollLeft snaps to 0 by itself.
+            }
         }
 
         if (Snapshots != null && Snapshots.Count >= 2)

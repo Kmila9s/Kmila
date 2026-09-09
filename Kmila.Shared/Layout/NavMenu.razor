@@ -22,6 +22,7 @@
 @inject Kmila.Shared.Services.ConceptCatalog ConceptCatalog
 @inject Kmila.Shared.Services.SimulationParameters Sim
 @inject Kmila.Shared.Services.ProgramBuilder Builder
+@inject Kmila.Shared.Services.VisualRun.VisualRunRegistry VisualRegistry
 @inject Kmila.Shared.Services.Practice.PracticeCatalog PracticeCatalog
 @inject Kmila.Shared.Services.Practice.PracticeAttemptStore PracticeAttempts
 
@@ -135,10 +136,20 @@
                     {
                         var href = $"/editor/{project.Id}";
                         var isRunning = Sim.RunningProjectId == project.Id;
-                        var isPaused  = isRunning && Sim.State == SimState.Paused;
-                        var pct       = (int)Math.Round(Sim.Progress);
+                        var isVisualMode = isRunning && Sim.RunningMode == Kmila.Shared.Services.SimMode.Visual;
+                        Kmila.Shared.Services.VisualRun.VisualRunCoordinator? visualCoord = null;
+                        if (isVisualMode) VisualRegistry.TryGet(project.Id, out visualCoord);
+                        var isPaused = isRunning && (isVisualMode
+                            ? (visualCoord?.IsPaused ?? false)
+                            : Sim.State == SimState.Paused);
+                        var pct = (int)Math.Round(Sim.Progress);
+                        var tooltipStatus = isPaused
+                            ? Traductor.T("SIDEBAR_PROJECT_PAUSED")
+                            : Traductor.T("SIDEBAR_PROJECT_RUNNING");
+                        var tooltipMode = isVisualMode ? $" ({Traductor.T("SIM_MODE_VISUAL")})" : "";
+                        var tooltipPct = isVisualMode ? "" : $" {pct}%";
                         <div class="kmila-nav-item kmila-nav-item--project @ActiveClass(href, exact: true) @(isRunning ? "kmila-nav-item--running" : "")"
-                             data-tooltip="@(isRunning ? $"{project.Name} — {(isPaused ? Traductor.T("SIDEBAR_PROJECT_PAUSED") : Traductor.T("SIDEBAR_PROJECT_RUNNING"))} {pct}%" : project.Name)">
+                             data-tooltip="@(isRunning ? $"{project.Name} — {tooltipStatus}{tooltipMode}{tooltipPct}" : project.Name)">
                             <a href="@href" class="kmila-nav-item__main"
                                @onclick="OnNavClicked"
                                aria-label="@string.Format(Traductor.T("NAV_OPEN_PROJECT"), project.Name)">
@@ -147,8 +158,15 @@
                                 <span class="kmila-nav-item__label">@project.Name</span>
                                 @if (isRunning)
                                 {
-                                    <span class="kmila-nav-item__progress-text">@pct%</span>
-                                    <span class="kmila-nav-item__pulse" title="@Traductor.T("SIDEBAR_PROJECT_RUNNING")" aria-hidden="true"></span>
+                                    if (isVisualMode)
+                                    {
+                                        <span class="kmila-nav-item__mode-chip">@Traductor.T("SIM_MODE_VISUAL")</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="kmila-nav-item__progress-text">@pct%</span>
+                                    }
+                                    <span class="kmila-nav-item__pulse" title="@tooltipStatus" aria-hidden="true"></span>
                                 }
                             </a>
                             @if (isRunning)
@@ -185,9 +203,12 @@
                                         </button>
                                     </KmilaTooltip>
                                 </span>
-                                <div class="kmila-nav-item__progress" role="progressbar" aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100">
-                                    <div class="kmila-nav-item__progress-fill" style="width: @pct%;"></div>
-                                </div>
+                                @if (!isVisualMode)
+                                {
+                                    <div class="kmila-nav-item__progress" role="progressbar" aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100">
+                                        <div class="kmila-nav-item__progress-fill" style="width: @pct%;"></div>
+                                    </div>
+                                }
                             }
                             else
                             {
@@ -238,6 +259,18 @@
                 <span class="kmila-nav-item__indicator"></span>
                 <Icon Name="IconName.JournalText" Class="kmila-nav-item__icon" />
                 <span class="kmila-nav-item__label">@Traductor.T("NAV_LOGS")</span>
+            </a>
+            @* Privacy: F-075 — every other top-level route is reachable from
+               the drawer, but /privacy was only linked from the shell footer.
+               Same ShieldLock icon as the Settings → Privacy card CTA so the
+               visual identity is consistent across surfaces. *@
+            <a href="/privacy"
+               class="kmila-nav-item @ActiveClass("/privacy", exact: true)"
+               @onclick="OnNavClicked"
+               data-tooltip="@Traductor.T("NAV_PRIVACY")">
+                <span class="kmila-nav-item__indicator"></span>
+                <Icon Name="IconName.ShieldLock" Class="kmila-nav-item__icon" />
+                <span class="kmila-nav-item__label">@Traductor.T("NAV_PRIVACY")</span>
             </a>
         </div>
     </nav>
@@ -404,6 +437,13 @@
     /// </summary>
     private void OnPauseSimulation()
     {
+        if (Sim.RunningMode == Kmila.Shared.Services.SimMode.Visual)
+        {
+            var pid = Sim.RunningProjectId;
+            if (pid.HasValue && VisualRegistry.TryGet(pid.Value, out var coord) && coord is { IsPaused: false })
+                coord.Pause();
+            return;
+        }
         if (Sim.State != SimState.Running) return;
         Builder.PauseTimer();
         Sim.SetState(SimState.Paused);
@@ -412,19 +452,35 @@
     /// <summary>Resumes a paused simulation from the sidebar.</summary>
     private void OnResumeSimulation()
     {
+        if (Sim.RunningMode == Kmila.Shared.Services.SimMode.Visual)
+        {
+            var pid = Sim.RunningProjectId;
+            if (pid.HasValue && VisualRegistry.TryGet(pid.Value, out var coord) && coord is { IsPaused: true })
+                coord.Resume();
+            return;
+        }
         if (Sim.State != SimState.Paused) return;
         Builder.ContinueTimer();
         Sim.SetState(SimState.Running);
     }
 
     /// <summary>
-    /// Stops the active simulation from the sidebar. Mirrors
-    /// <c>Editor.OnStopSimulation</c>: stops the timer, transitions to
-    /// Complete, zeros progress, and clears the RunningProjectId so the
-    /// row drops back to its idle layout.
+    /// Stops the active simulation from the sidebar. Branches on
+    /// <see cref="SimulationParameters.RunningMode"/>: signal runs go through
+    /// the ProgramBuilder timer, visual runs cancel the
+    /// <see cref="VisualRunCoordinator"/> resolved from
+    /// <see cref="VisualRunRegistry"/>. In the visual case, the panel's
+    /// OnStopped callback handles Sim.EndRun + Registry.Unregister.
     /// </summary>
     private void OnStopSimulation()
     {
+        if (Sim.RunningMode == Kmila.Shared.Services.SimMode.Visual)
+        {
+            var pid = Sim.RunningProjectId;
+            if (pid.HasValue && VisualRegistry.TryGet(pid.Value, out var coord) && coord != null)
+                coord.Stop();
+            return;
+        }
         if (Sim.State != SimState.Running && Sim.State != SimState.Paused) return;
         Builder.StopTimer();
         Sim.SetState(SimState.Complete);

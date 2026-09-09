@@ -26,6 +26,18 @@ public enum SimState
 }
 
 /// <summary>
+/// Which simulation engine owns the currently-running "background" sim. Signal-only
+/// runs (ProgramBuilder + SimulationCoordinator) keep the delta-cycle engine ticking
+/// after the user leaves the Editor by design; Visual runs (VisualRunCoordinator) do
+/// not, and their pause/stop plumbing routes through <see cref="VisualRun.VisualRunRegistry"/>.
+/// </summary>
+public enum SimMode
+{
+    Signal,
+    Visual
+}
+
+/// <summary>
 /// Shared state for the Run bar, Ports panel, and Output panel on the Editor
 /// page. Replaces the assorted local fields that used to live inside the old
 /// SimulationParametersModal.
@@ -115,13 +127,23 @@ public class SimulationParameters
     public int? RunningProjectId { get; private set; }
 
     /// <summary>
+    /// Which engine owns the current run — <see cref="SimMode.Signal"/> for the
+    /// ProgramBuilder/DeltaCycleEngine path (background-persistent), <see cref="SimMode.Visual"/>
+    /// for VisualRunCoordinator (paused when its tab is hidden, stopped on project change).
+    /// The sidebar / project-card badges use this to render a mode chip and to route
+    /// external Pause/Resume/Stop through the correct engine.
+    /// </summary>
+    public SimMode RunningMode { get; private set; } = SimMode.Signal;
+
+    /// <summary>
     /// Starts a run "session" — records which project owns the sim and
     /// fires <see cref="OnChange"/> so reactive UI (sidebar pulse, Run-bar
     /// state machine) picks it up.
     /// </summary>
-    public void BeginRun(int projectId)
+    public void BeginRun(int projectId, SimMode mode = SimMode.Signal)
     {
         RunningProjectId = projectId;
+        RunningMode = mode;
         OnChange?.Invoke();
     }
 
@@ -130,6 +152,7 @@ public class SimulationParameters
     {
         if (RunningProjectId == null) return;
         RunningProjectId = null;
+        RunningMode = SimMode.Signal;
         OnChange?.Invoke();
     }
 

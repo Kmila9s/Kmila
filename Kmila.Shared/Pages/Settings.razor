@@ -11,6 +11,7 @@
 @using Kmila.Shared.Services
 @using Kmila.Shared.Repositories
 @using Kmila.Shared.Models
+@inject IServiceProvider Services
 @inject UserAssetStore UserAssets
 @inject LessonProgressStore LearnProgress
 @inject ProjectBundleService Bundles
@@ -765,6 +766,163 @@
             </div>
         </article>
 
+        @* --- Local API (Tier 5.2 Phase B) ---
+           Opt-in Kestrel serving /api/v1 inside the MAUI app process.
+           Card is only rendered when the shared ILocalApiHost is
+           registered (MAUI heads); Kmila.Web already exposes /api/v1
+           natively so it doesn't need the toggle. *@
+        @if (LocalApi is not null)
+        {
+        <article class="settings-card">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--accent">
+                    <Icon Name="IconName.Broadcast" />
+                </span>
+                <div class="settings-card__head-text">
+                    <h2>Local API</h2>
+                    <p class="settings-card__sub">Serve <code>/api/v1</code> from this app so SimulatorBench or curl can drive it.</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                <div class="settings-row">
+                    <div class="settings-row__label">
+                        <strong>Enable local API</strong>
+                        <small>Starts a Kestrel host on 127.0.0.1 (or LAN, see below).</small>
+                    </div>
+                    <div class="settings-row__control">
+                        <label class="form-check form-switch mb-0">
+                            <input type="checkbox"
+                                   class="form-check-input"
+                                   role="switch"
+                                   disabled="@(!LocalApi.IsPlatformSupported)"
+                                   checked="@_localApiEnabled"
+                                   @onchange="OnLocalApiEnabledChanged" />
+                        </label>
+                    </div>
+                </div>
+                @if (!LocalApi.IsPlatformSupported)
+                {
+                    <p class="settings-card__hint settings-card__hint--warn">
+                        <Icon Name="IconName.ExclamationTriangleFill" />
+                        <span>Not available on iOS in this release.</span>
+                    </p>
+                }
+
+                <div class="settings-row">
+                    <div class="settings-row__label">
+                        <strong>Port</strong>
+                        <small>Default 5298 matches SimulatorBench's fallback. Use 0 to let the OS pick.</small>
+                    </div>
+                    <div class="settings-row__control">
+                        <input type="number"
+                               class="form-control form-control-sm"
+                               style="max-width: 8em;"
+                               min="0" max="65535" step="1"
+                               value="@_localApiPort"
+                               @onchange="OnLocalApiPortChanged" />
+                    </div>
+                </div>
+
+                <div class="settings-row">
+                    <div class="settings-row__label">
+                        <strong>Bind on LAN (advanced)</strong>
+                        <small>Binds 0.0.0.0 so other devices on your network can reach the API. Loopback is safer.</small>
+                    </div>
+                    <div class="settings-row__control">
+                        <label class="form-check form-switch mb-0">
+                            <input type="checkbox"
+                                   class="form-check-input"
+                                   role="switch"
+                                   checked="@_localApiBindLan"
+                                   @onchange="OnLocalApiBindLanChanged" />
+                        </label>
+                    </div>
+                </div>
+                @if (_localApiBindLan && string.IsNullOrEmpty(_localApiToken))
+                {
+                    <p class="settings-card__hint settings-card__hint--warn">
+                        <Icon Name="IconName.ExclamationTriangleFill" />
+                        <span>Anyone on your local network can hit this port. Set an auth token below to gate access.</span>
+                    </p>
+                }
+
+                @* --- Bearer token (Phase B follow-up) ---
+                   Empty = wide-open (dev-parity default). Non-empty =
+                   every /api/v1 request must present Authorization: Bearer
+                   or X-Api-Key; /health stays exempt so external reachability
+                   probes still work. *@
+                @if (LocalApiTokens is not null)
+                {
+                    <div class="settings-row">
+                        <div class="settings-row__label">
+                            <strong>Auth token</strong>
+                            <small>Optional bearer token. Empty = unauthenticated (dev default).</small>
+                        </div>
+                        <div class="settings-row__control" style="display:flex; gap:.5rem; flex-wrap:wrap; align-items:center;">
+                            <input type="text"
+                                   class="form-control form-control-sm font-monospace"
+                                   style="min-width:16em; max-width:24em;"
+                                   readonly="readonly"
+                                   placeholder="none — endpoints are open"
+                                   value="@_localApiToken" />
+                            <button type="button"
+                                    class="kmila-btn kmila-btn--ghost kmila-btn--sm"
+                                    @onclick="OnGenerateLocalApiTokenAsync">
+                                <Icon Name="IconName.ArrowRepeat" />
+                                <span>@(string.IsNullOrEmpty(_localApiToken) ? "Generate" : "Regenerate")</span>
+                            </button>
+                            @if (!string.IsNullOrEmpty(_localApiToken))
+                            {
+                                <button type="button"
+                                        class="kmila-btn kmila-btn--ghost kmila-btn--sm"
+                                        @onclick="OnCopyLocalApiTokenAsync">
+                                    <Icon Name="IconName.Clipboard" />
+                                    <span>Copy</span>
+                                </button>
+                                <button type="button"
+                                        class="kmila-btn kmila-btn--ghost kmila-btn--sm"
+                                        @onclick="OnClearLocalApiTokenAsync">
+                                    <Icon Name="IconName.Trash" />
+                                    <span>Clear</span>
+                                </button>
+                            }
+                        </div>
+                    </div>
+                }
+
+                @if (_localApiEnabled && LocalApi.BoundUrl is { } url)
+                {
+                    <div class="settings-row">
+                        <div class="settings-row__label">
+                            <strong>URL</strong>
+                            <small>Point SimulatorBench (<code>--api</code> or <code>KMILA_API</code>) here.</small>
+                        </div>
+                        <div class="settings-row__control" style="display:flex; gap:.5rem; flex-wrap:wrap;">
+                            <input type="text"
+                                   class="form-control form-control-sm"
+                                   style="min-width:16em; max-width:24em;"
+                                   readonly="readonly"
+                                   value="@url.ToString()" />
+                            <button type="button"
+                                    class="kmila-btn kmila-btn--ghost kmila-btn--sm"
+                                    @onclick="() => CopyLocalApiUrlAsync(url.ToString())">
+                                <Icon Name="IconName.Clipboard" />
+                                <span>Copy</span>
+                            </button>
+                        </div>
+                    </div>
+                }
+                @if (!string.IsNullOrEmpty(_localApiError))
+                {
+                    <p class="settings-card__hint settings-card__hint--warn">
+                        <Icon Name="IconName.ExclamationTriangleFill" />
+                        <span>@_localApiError</span>
+                    </p>
+                }
+            </div>
+        </article>
+        }
+
         @* --- Feedback / Issue reporting ---
             Tier 1: copy diagnostics to clipboard (offline, no auth).
             Tier 2: open a pre-filled GitHub issue URL (new tab, no auth).
@@ -865,6 +1023,29 @@
     /// </summary>
     private EditorSyncMode _editorSyncMode = EditorSyncMode.Auto;
 
+    // ─── Tier 5.2 Phase B — Local API host toggle ────────────────
+    // ILocalApiHost is only registered by the MAUI head; on Kmila.Web
+    // this stays null and the Settings card is hidden (that host serves
+    // /api/v1 natively). Resolved lazily via IServiceProvider so
+    // Settings.razor compiles clean into both hosts.
+    private Kmila.Shared.Services.Api.ILocalApiHost? LocalApi
+        => Services.GetService(typeof(Kmila.Shared.Services.Api.ILocalApiHost))
+           as Kmila.Shared.Services.Api.ILocalApiHost;
+
+    // Cross-host bearer-token holder — registered by both Kmila.Web
+    // (via AddSimulationApi's TryAddSingleton) and the MAUI head. Kept
+    // lazy so the null-check in the card renders the token row only when
+    // the provider actually exists.
+    private Kmila.Shared.Services.Api.LocalApiTokenProvider? LocalApiTokens
+        => Services.GetService(typeof(Kmila.Shared.Services.Api.LocalApiTokenProvider))
+           as Kmila.Shared.Services.Api.LocalApiTokenProvider;
+
+    private bool   _localApiEnabled;
+    private string _localApiPort   = "5298";
+    private bool   _localApiBindLan;
+    private string _localApiError  = string.Empty;
+    private string _localApiToken  = string.Empty;
+
     /// <summary>Projects available to export — loaded alongside user assets.</summary>
     private List<Kmila.Shared.Models.Project> _projects = new();
     private int _exportProjectId;
@@ -930,6 +1111,15 @@
         _ = GitHubAuth.RestoreAsync();
         var autoRaw = await DbContext.GetSettingAsync(AutoReportSettingKey);
         _autoReportEnabled = string.Equals(autoRaw, "true", StringComparison.OrdinalIgnoreCase);
+
+        // Tier 5.2 Phase B — hydrate the local-API triple. Only meaningful
+        // when the ILocalApiHost is present (MAUI heads); reading is
+        // harmless on Kmila.Web because the card is hidden anyway.
+        _localApiEnabled = (await DbContext.GetSettingAsync(AppSettings.KEY_LOCAL_API_ENABLED)) == "true";
+        var apiPortRaw   = await DbContext.GetSettingAsync(AppSettings.KEY_LOCAL_API_PORT);
+        if (!string.IsNullOrWhiteSpace(apiPortRaw)) _localApiPort = apiPortRaw;
+        _localApiBindLan = (await DbContext.GetSettingAsync(AppSettings.KEY_LOCAL_API_BIND_LAN)) == "true";
+        _localApiToken   = await DbContext.GetSettingAsync(AppSettings.KEY_LOCAL_API_TOKEN) ?? string.Empty;
     }
 
     /// <summary>
@@ -976,6 +1166,191 @@
             AppSettings.KEY_LIVE_REPLAY_DURING_RUN,
             _liveReplayDuringRun ? "true" : "false");
         StateHasChanged();
+    }
+
+    /// <summary>
+    /// Tier 5.2 Phase B — flip the embedded Kestrel host on/off and persist
+    /// the choice. Errors (port in use, bind refused) surface in
+    /// <c>_localApiError</c>; the switch state stays synced with what
+    /// actually happened rather than what the user tried.
+    /// </summary>
+    private async Task OnLocalApiEnabledChanged(ChangeEventArgs e)
+    {
+        bool wanted = e.Value is bool b ? b : false;
+        _localApiError = string.Empty;
+
+        if (LocalApi is null || !LocalApi.IsPlatformSupported)
+        {
+            _localApiEnabled = false;
+            return;
+        }
+
+        try
+        {
+            if (wanted)
+            {
+                int port = int.TryParse(_localApiPort, out var p) ? p : 5298;
+                bool lan = _localApiBindLan;
+#if ANDROID
+                // Rev 2 (2026-08-01) — Android 13 (API 33) made
+                // POST_NOTIFICATIONS a runtime permission. Without it, the
+                // foreground service's ongoing notification is silently
+                // suppressed and the user has no visible confirmation the
+                // host is up. Ask before we start; on denial, still start
+                // (service degrades to headless-foreground) but explain in
+                // _localApiError so the Settings card can show why.
+                var permStatus = await Microsoft.Maui.ApplicationModel.Permissions
+                    .CheckStatusAsync<Microsoft.Maui.ApplicationModel.Permissions.PostNotifications>();
+                if (permStatus != Microsoft.Maui.ApplicationModel.PermissionStatus.Granted)
+                {
+                    permStatus = await Microsoft.Maui.ApplicationModel.Permissions
+                        .RequestAsync<Microsoft.Maui.ApplicationModel.Permissions.PostNotifications>();
+                }
+                if (permStatus != Microsoft.Maui.ApplicationModel.PermissionStatus.Granted)
+                {
+                    _localApiError = "Notifications permission denied — the local API is still running, but Android won't show the ongoing status notification.";
+                }
+#endif
+                await LocalApi.StartAsync(port, lan, CancellationToken.None);
+            }
+            else
+            {
+                await LocalApi.StopAsync(CancellationToken.None);
+            }
+            _localApiEnabled = wanted && LocalApi.IsRunning;
+        }
+        catch (Exception ex)
+        {
+            _localApiError   = ex.Message;
+            _localApiEnabled = LocalApi.IsRunning;
+        }
+
+        await DbContext.SetSettingAsync(
+            AppSettings.KEY_LOCAL_API_ENABLED,
+            _localApiEnabled ? "true" : "false");
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Persist the port choice; if the host is currently running, cycle it
+    /// so the new port takes effect immediately.
+    /// </summary>
+    private async Task OnLocalApiPortChanged(ChangeEventArgs e)
+    {
+        _localApiPort = e.Value?.ToString() ?? "5298";
+        await DbContext.SetSettingAsync(AppSettings.KEY_LOCAL_API_PORT, _localApiPort);
+        if (LocalApi is { IsRunning: true })
+        {
+            _localApiError = string.Empty;
+            try
+            {
+                await LocalApi.StopAsync(CancellationToken.None);
+                int port = int.TryParse(_localApiPort, out var p) ? p : 5298;
+                await LocalApi.StartAsync(port, _localApiBindLan, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _localApiError   = ex.Message;
+                _localApiEnabled = LocalApi.IsRunning;
+            }
+        }
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Persist the LAN opt-in; cycles the host if currently running so the
+    /// new bind address takes effect without a second toggle click.
+    /// </summary>
+    private async Task OnLocalApiBindLanChanged(ChangeEventArgs e)
+    {
+        _localApiBindLan = e.Value is bool b ? b : false;
+        await DbContext.SetSettingAsync(
+            AppSettings.KEY_LOCAL_API_BIND_LAN,
+            _localApiBindLan ? "true" : "false");
+        if (LocalApi is { IsRunning: true })
+        {
+            _localApiError = string.Empty;
+            try
+            {
+                await LocalApi.StopAsync(CancellationToken.None);
+                int port = int.TryParse(_localApiPort, out var p) ? p : 5298;
+                await LocalApi.StartAsync(port, _localApiBindLan, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _localApiError   = ex.Message;
+                _localApiEnabled = LocalApi.IsRunning;
+            }
+        }
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Tier 5.2 Phase B follow-up — generate a fresh URL-safe bearer token
+    /// (32 random bytes → base64url), push it to both the AppSettings row
+    /// and the in-memory <c>LocalApiTokenProvider</c> so the change takes
+    /// effect immediately without cycling the host.
+    /// </summary>
+    private async Task OnGenerateLocalApiTokenAsync()
+    {
+        var bytes = new byte[32];
+        System.Security.Cryptography.RandomNumberGenerator.Fill(bytes);
+        _localApiToken = Convert.ToBase64String(bytes)
+            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+        await DbContext.SetSettingAsync(AppSettings.KEY_LOCAL_API_TOKEN, _localApiToken);
+        LocalApiTokens?.Set(_localApiToken);
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Disable auth — writes empty string to AppSettings and clears the
+    /// provider so the host stops requiring credentials on the next request.
+    /// </summary>
+    private async Task OnClearLocalApiTokenAsync()
+    {
+        _localApiToken = string.Empty;
+        await DbContext.SetSettingAsync(AppSettings.KEY_LOCAL_API_TOKEN, string.Empty);
+        LocalApiTokens?.Set(null);
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Copy the token to the clipboard via MAUI's Clipboard where
+    /// available. Web-side this is a no-op (the button is only visible
+    /// when LocalApiTokens is registered, which is true in both hosts,
+    /// but MAUI is where clipboard access is available offline).
+    /// </summary>
+    private async Task OnCopyLocalApiTokenAsync()
+    {
+        if (string.IsNullOrEmpty(_localApiToken)) return;
+        try
+        {
+#if KMILA_MAUI_API
+            await Microsoft.Maui.ApplicationModel.DataTransfer.Clipboard.Default.SetTextAsync(_localApiToken);
+#else
+            await Task.CompletedTask;
+#endif
+        }
+        catch { /* best-effort */ }
+    }
+
+    /// <summary>
+    /// Copy the bound URL to the clipboard using MAUI's Clipboard where
+    /// available; on Kmila.Web this code path is unreachable because the
+    /// card is only rendered when ILocalApiHost is registered.
+    /// </summary>
+    private async Task CopyLocalApiUrlAsync(string url)
+    {
+        try
+        {
+#if KMILA_MAUI_API
+            await Microsoft.Maui.ApplicationModel.DataTransfer.Clipboard.Default.SetTextAsync(url);
+#else
+            await Task.CompletedTask;
+#endif
+        }
+        catch { /* best-effort */ }
     }
 
     /// <summary>

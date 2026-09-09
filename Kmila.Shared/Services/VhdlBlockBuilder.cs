@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
+using Interpreter.Models;
 
 namespace Kmila.Shared.Services;
 
@@ -1526,6 +1527,128 @@ public class VhdlBlockBuilder
         RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
 
     /// <summary>
+    /// Phase 3 roundtrip follow-up (Session 27+, 2026-07-23): recompute
+    /// the decls/body boundary for a matched `process ... end process ;`
+    /// span. <see cref="ProcessRe"/>'s non-greedy <c>(?&lt;decls&gt;.*?)</c>
+    /// matches the FIRST <c>begin</c> in the span — which, when the
+    /// process declares a nested procedure/function, is the subprogram
+    /// body's <c>begin</c>, not the process's own. That splits the
+    /// declaration in half, sending the header to <c>raw_decl</c> and
+    /// spraying the procedure body + closer <c>end procedure;</c> into
+    /// <c>&lt;body&gt;</c>, producing raw_seq tiles.
+    ///
+    /// Walker rule: track a stack of open-subprogram names. Push on
+    /// <c>procedure|function NAME</c>. Pop on <c>end procedure</c>,
+    /// <c>end function</c>, or <c>end NAME</c> where NAME matches the
+    /// top of the stack. Other <c>end X</c> tokens (<c>end if</c>,
+    /// <c>end case</c>, <c>end loop</c>, <c>end record</c>,
+    /// <c>end block</c>) always live at depth ≥ 1 and are ignored. The
+    /// first <c>begin</c> at depth 0 is the process's own begin.
+    ///
+    /// Returns <c>true</c> on find with <paramref name="pos"/> set to the
+    /// scan offset of the depth-0 <c>begin</c> keyword. Returns
+    /// <c>false</c> if the walker never finds one (malformed input);
+    /// callers fall back to the regex split so behaviour never
+    /// hard-regresses vs. pre-fix. Skips quoted string literals via a
+    /// simple parity toggle — the walker looks for keyword tokens, not
+    /// nested constructs, so char-literal / attribute edge cases are
+    /// acceptable defensive gaps.
+    /// </summary>
+    private static bool TryFindDepth0Begin(string scan, int start, int end, out int pos)
+    {
+        var stack = new Stack<string>();
+        int i = start;
+        bool inString = false;
+        while (i < end)
+        {
+            char c = scan[i];
+            if (c == '"') { inString = !inString; i++; continue; }
+            if (inString) { i++; continue; }
+            if (!(char.IsLetter(c) || c == '_')) { i++; continue; }
+
+            int wordStart = i;
+            while (i < end && (char.IsLetterOrDigit(scan[i]) || scan[i] == '_')) i++;
+            var lw = scan.Substring(wordStart, i - wordStart).ToLowerInvariant();
+
+            if (lw == "procedure" || lw == "function")
+            {
+                while (i < end && char.IsWhiteSpace(scan[i])) i++;
+                if (i < end && (char.IsLetter(scan[i]) || scan[i] == '_'))
+                {
+                    int nameStart = i;
+                    while (i < end && (char.IsLetterOrDigit(scan[i]) || scan[i] == '_')) i++;
+                    stack.Push(scan.Substring(nameStart, i - nameStart));
+                }
+                continue;
+            }
+            if (lw == "end")
+            {
+                while (i < end && char.IsWhiteSpace(scan[i])) i++;
+                if (i < end && (char.IsLetter(scan[i]) || scan[i] == '_'))
+                {
+                    int nextStart = i;
+                    while (i < end && (char.IsLetterOrDigit(scan[i]) || scan[i] == '_')) i++;
+                    var next = scan.Substring(nextStart, i - nextStart);
+                    var lnext = next.ToLowerInvariant();
+                    if (stack.Count > 0)
+                    {
+                        if (lnext == "procedure" || lnext == "function")
+                            stack.Pop();
+                        else if (string.Equals(next, stack.Peek(), StringComparison.OrdinalIgnoreCase))
+                            stack.Pop();
+                        // else: end if/case/loop/record/block inside body — ignore.
+                    }
+                }
+                continue;
+            }
+            if (lw == "begin" && stack.Count == 0)
+            {
+                pos = wordStart;
+                return true;
+            }
+        }
+        pos = -1;
+        return false;
+    }
+
+    /// <summary>
+    /// Phase 3 roundtrip follow-up: computes the correct decls/body
+    /// slices for a matched <see cref="ProcessRe"/>. Uses
+    /// <see cref="TryFindDepth0Begin"/> to locate the process's own
+    /// <c>begin</c> even when the process declares nested subprograms;
+    /// falls back to the regex-provided split on any walker miss.
+    /// Output slices are indexed into <paramref name="scan"/> and mirror
+    /// slices into <paramref name="original"/> at the same positions
+    /// (scan and original share a common character grid — <c>scan</c>
+    /// is <c>original</c> with comments blanked to spaces).
+    /// </summary>
+    private static void ResolveProcessDeclsBody(
+        Match m, string scan, string original,
+        out string declsScan, out string declsOriginal,
+        out string bodyScan,  out string bodyOriginal)
+    {
+        int declsStart = m.Groups["decls"].Index;
+        int bodyEnd = m.Groups["body"].Index + m.Groups["body"].Length;
+        if (TryFindDepth0Begin(scan, declsStart, bodyEnd, out int beginPos))
+        {
+            int declsLen = beginPos - declsStart;
+            int bodyStart = beginPos + "begin".Length;
+            int bodyLen = bodyEnd - bodyStart;
+            declsScan     = scan.Substring(declsStart, declsLen);
+            declsOriginal = original.Substring(declsStart, declsLen);
+            bodyScan      = scan.Substring(bodyStart, bodyLen);
+            bodyOriginal  = original.Substring(bodyStart, bodyLen);
+        }
+        else
+        {
+            declsScan     = m.Groups["decls"].Value;
+            declsOriginal = original.Substring(m.Groups["decls"].Index, m.Groups["decls"].Length);
+            bodyScan      = m.Groups["body"].Value;
+            bodyOriginal  = original.Substring(m.Groups["body"].Index, m.Groups["body"].Length);
+        }
+    }
+
+    /// <summary>
     /// Concurrent signal assignment — same shape as the sequential one but
     /// lives outside a process. Pattern requires the cursor to be at the
     /// start of the assignment (we anchor with \G in the caller's loop).
@@ -1536,8 +1659,12 @@ public class VhdlBlockBuilder
     /// for for-generate bodies to parse cleanly instead of degrading to
     /// raw_concurrent.
     /// </remarks>
+    // Pass 18 (2026-07-30): use OperationsRegex.BalancedIndexSuffix so
+    // nested-paren LHS like `mem(to_integer(unsigned(addr))) <= din;`
+    // no longer degrades to raw_concurrent (was silently dropped by the
+    // `[^()]*` guard). See Interpreter/Models/Constansts.cs.
     private static readonly Regex AssignConcurrentRe = new(
-        @"\G\s*(?<target>\w+(?:\s*\([^)]*\))?)\s*<=\s*(?<value>[^;]+?)\s*;",
+        @"\G\s*(?<target>\w+" + OperationsRegex.BalancedIndexSuffix + @")\s*<=\s*(?<value>[^;]+?)\s*;",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private Dictionary<string, object?>? ParseConcurrentBody(string scan, string original)
@@ -1595,21 +1722,20 @@ public class VhdlBlockBuilder
                     // 2026-07-19 Phase 20 — declarative part between
                     // `process[(sens)][is]` and `begin`. Empty when the
                     // process has no local decls (pre-P20 shape).
-                    var declsRegion = m.Groups["decls"].Value;
+                    // Phase 3 roundtrip follow-up (2026-07-23): the
+                    // decls/body split now walks the region with a
+                    // subprogram-depth-aware scanner so nested procedure
+                    // declarations don't poison the split at their body's
+                    // `begin`.
+                    ResolveProcessDeclsBody(m, scan, original,
+                        out var declsRegion, out var declsOriginal,
+                        out var bodyRegion,  out var bodyOriginal);
                     if (!string.IsNullOrWhiteSpace(declsRegion))
                     {
-                        int dStart = m.Groups["decls"].Index;
-                        int dLen   = m.Groups["decls"].Length;
-                        var declsHead = ParseDeclarations(
-                            declsRegion,
-                            original.Substring(dStart, dLen));
+                        var declsHead = ParseDeclarations(declsRegion, declsOriginal);
                         if (declsHead != null) AddInput(p, "DECLS", declsHead);
                     }
-                    int innerStart = m.Groups["body"].Index;
-                    int innerLen   = m.Groups["body"].Length;
-                    var pBody = ParseSequentialBody(
-                        m.Groups["body"].Value,
-                        original.Substring(innerStart, innerLen));
+                    var pBody = ParseSequentialBody(bodyRegion, bodyOriginal);
                     if (pBody != null) AddInput(p, "BODY", pBody);
                     head = ChainAppend(head, p);
                     i = m.Index + m.Length;
@@ -1798,14 +1924,19 @@ public class VhdlBlockBuilder
 
     // 2026-07-19 Phase 5: target widened to accept indexed/sliced LHS
     // (`q(i) <= r(i);` inside process bodies).
+    // Pass 18 (2026-07-30): swap `[^()]*` for the shared balanced-paren
+    // fragment to accept nested calls in the LHS index.
     private static readonly Regex AssignSeqRe = new(
-        @"\G\s*(?<target>\w+(?:\s*\([^)]*\))?)\s*<=\s*(?<value>[^;]+?)\s*;",
+        @"\G\s*(?<target>\w+" + OperationsRegex.BalancedIndexSuffix + @")\s*<=\s*(?<value>[^;]+?)\s*;",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     // 2026-07-19 Phase 7 — variable assignment `v := expr;` (distinct
     // from signal assign `<=`). Matches the same target shape.
+    // Pass 18 (2026-07-30): shared balanced-paren fragment; fences the
+    // process-local `mem(to_integer(unsigned(addr))) := din;` shape
+    // planned for pass 19.
     private static readonly Regex VariableAssignSeqRe = new(
-        @"\G\s*(?<target>\w+(?:\s*\([^)]*\))?)\s*:=\s*(?<value>[^;]+?)\s*;",
+        @"\G\s*(?<target>\w+" + OperationsRegex.BalancedIndexSuffix + @")\s*:=\s*(?<value>[^;]+?)\s*;",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private Dictionary<string, object?>? ParseSequentialBody(string scan, string original)
@@ -2496,21 +2627,17 @@ public class VhdlBlockBuilder
             AddField(proc, "LABEL", label);
             AddField(proc, "SENS", m.Groups["sens"].Value.Trim());
             // 2026-07-19 Phase 20 — declarative part inside labeled process.
-            var declsRegion = m.Groups["decls"].Value;
+            // Phase 3 roundtrip follow-up (2026-07-23): subprogram-depth-
+            // aware decls/body split — see ResolveProcessDeclsBody.
+            ResolveProcessDeclsBody(m, scan, original,
+                out var declsRegion, out var declsOriginal,
+                out var bodyRegion,  out var bodyOriginal);
             if (!string.IsNullOrWhiteSpace(declsRegion))
             {
-                int dStart = m.Groups["decls"].Index;
-                int dLen   = m.Groups["decls"].Length;
-                var declsHead = ParseDeclarations(
-                    declsRegion,
-                    original.Substring(dStart, dLen));
+                var declsHead = ParseDeclarations(declsRegion, declsOriginal);
                 if (declsHead != null) AddInput(proc, "DECLS", declsHead);
             }
-            int innerStart = m.Groups["body"].Index;
-            int innerLen   = m.Groups["body"].Length;
-            var pBody = ParseSequentialBody(
-                m.Groups["body"].Value,
-                original.Substring(innerStart, innerLen));
+            var pBody = ParseSequentialBody(bodyRegion, bodyOriginal);
             if (pBody != null) AddInput(proc, "BODY", pBody);
             block = proc;
             return (m.Index + m.Length) - start;
@@ -3266,14 +3393,18 @@ public class VhdlBlockBuilder
     private static readonly Regex TimeLiteralRe = new(
         @"^\s*(?<n>[0-9][0-9_]*(?:\.[0-9_]+)?)\s+(?<u>fs|ps|ns|us|ms|sec|min|hr)\s*$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    // Pass 21 (2026-07-30): swap `[^)]+` for BalancedExpression so
+    // `rising_edge(clk_bus(0))` (edge on a bit-slice or converter) parses
+    // as EDGE_DETECT instead of falling through to raw_expr.
     private static readonly Regex RisingEdgeRe = new(
-        @"^\s*rising_edge\s*\(\s*(?<sig>[^)]+)\s*\)\s*$",
+        @"^\s*rising_edge\s*\(\s*(?<sig>" + OperationsRegex.BalancedExpression + @")\s*\)\s*$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
     // F-7 fix (2026-06-28): falling_edge is a one-regex clone — students
     // doing async-reset designs hit this constantly and the raw_expr
     // fallback was opaque pedagogically.
+    // Pass 21 (2026-07-30): balanced-paren too.
     private static readonly Regex FallingEdgeRe = new(
-        @"^\s*falling_edge\s*\(\s*(?<sig>[^)]+)\s*\)\s*$",
+        @"^\s*falling_edge\s*\(\s*(?<sig>" + OperationsRegex.BalancedExpression + @")\s*\)\s*$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex NotPrefixRe = new(
         @"^\s*not\b\s*(?<rest>.+)$",
@@ -3293,6 +3424,85 @@ public class VhdlBlockBuilder
     private static readonly Regex SliceRe = new(
         @"^\s*(?<sig>[a-zA-Z_][a-zA-Z_0-9]*)\s*\(\s*(?<hi>[^()]+?)\s+(?<dir>downto|to)\s+(?<lo>[^()]+?)\s*\)\s*$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>
+    /// Pass 21 (2026-07-30): manual balanced-paren scan for slice shapes
+    /// with nested-paren hi/lo — <c>sig(to_integer(x) downto 0)</c>,
+    /// <c>state(unsigned(n) - 1 downto 0)</c>, etc. Runs after the
+    /// fast-path <see cref="SliceRe"/>; the two regexes-cannot-be-one
+    /// because we need to split on top-level (depth-0) <c>downto</c>/<c>to</c>
+    /// after tracking balanced parens through hi. Returns false if the
+    /// shape doesn't parse as a slice — caller falls through to index /
+    /// call / raw fallbacks.
+    /// </summary>
+    private static bool TryExtractSliceWithBalancedParens(string s,
+        out string sig, out string hi, out string lo, out string dir)
+    {
+        sig = string.Empty; hi = string.Empty; lo = string.Empty; dir = string.Empty;
+        int i = 0;
+        while (i < s.Length && char.IsWhiteSpace(s[i])) i++;
+        int nameStart = i;
+        if (i >= s.Length || !(char.IsLetter(s[i]) || s[i] == '_')) return false;
+        while (i < s.Length && (char.IsLetterOrDigit(s[i]) || s[i] == '_')) i++;
+        int nameEnd = i;
+        if (nameEnd == nameStart) return false;
+        var name = s.Substring(nameStart, nameEnd - nameStart);
+        while (i < s.Length && char.IsWhiteSpace(s[i])) i++;
+        if (i >= s.Length || s[i] != '(') return false;
+        int openParen = i;
+        // Find matching close paren.
+        int depth = 0;
+        int close = -1;
+        for (int j = i; j < s.Length; j++)
+        {
+            if (s[j] == '(') depth++;
+            else if (s[j] == ')')
+            {
+                depth--;
+                if (depth == 0) { close = j; break; }
+            }
+        }
+        if (close < 0) return false;
+        // Interior must be the whole tail (after possible whitespace).
+        int t = close + 1;
+        while (t < s.Length && char.IsWhiteSpace(s[t])) t++;
+        if (t != s.Length) return false;
+        // Scan interior for top-level `downto` / `to`.
+        string interior = s.Substring(openParen + 1, close - openParen - 1);
+        int splitStart = -1, splitEnd = -1;
+        string dirWord = string.Empty;
+        int scanDepth = 0;
+        for (int k = 0; k < interior.Length; k++)
+        {
+            char c = interior[k];
+            if (c == '(') scanDepth++;
+            else if (c == ')') scanDepth--;
+            else if (scanDepth == 0 && (c == 'd' || c == 't' || c == 'D' || c == 'T'))
+            {
+                // whitespace-bounded keyword.
+                bool leftBound = k == 0 || char.IsWhiteSpace(interior[k - 1]);
+                if (!leftBound) continue;
+                if (k + 6 <= interior.Length &&
+                    interior.Substring(k, 6).Equals("downto", StringComparison.OrdinalIgnoreCase) &&
+                    (k + 6 == interior.Length || char.IsWhiteSpace(interior[k + 6])))
+                {
+                    splitStart = k; splitEnd = k + 6; dirWord = "downto"; break;
+                }
+                if (k + 2 <= interior.Length &&
+                    interior.Substring(k, 2).Equals("to", StringComparison.OrdinalIgnoreCase) &&
+                    (k + 2 == interior.Length || char.IsWhiteSpace(interior[k + 2])))
+                {
+                    splitStart = k; splitEnd = k + 2; dirWord = "to"; break;
+                }
+            }
+        }
+        if (splitStart < 0) return false;
+        var hiRaw = interior.Substring(0, splitStart).Trim();
+        var loRaw = interior.Substring(splitEnd).Trim();
+        if (hiRaw.Length == 0 || loRaw.Length == 0) return false;
+        sig = name; hi = hiRaw; lo = loRaw; dir = dirWord.ToLowerInvariant();
+        return true;
+    }
     // 2026-07-19 Phase 20 — `idx` excludes commas so multi-arg function
     // calls (`to_unsigned(4, abcd'length)`, `resize(x, 8)`) fall through
     // to CallHeadRe. Pre-P20 the comma-permissive form was catching them
@@ -3620,6 +3830,10 @@ public class VhdlBlockBuilder
         // F-10 (2026-07-05): vector slice `sig(3 downto 0)` — recognize
         // before the scalar index case so `(3 downto 0)` isn't misread as
         // an index expression.
+        // Pass 21 (2026-07-30): fast-path via SliceRe covers the common
+        // (parenless hi/lo) case; the balanced-paren-aware manual scan
+        // below catches nested-paren shapes like
+        // `sig(to_integer(x) downto 0)`.
         var slice = SliceRe.Match(s);
         if (slice.Success)
         {
@@ -3628,6 +3842,15 @@ public class VhdlBlockBuilder
             AddField(b, "DIR", slice.Groups["dir"].Value.ToLowerInvariant());
             AddInput(b, "HI", BuildExpression(slice.Groups["hi"].Value));
             AddInput(b, "LO", BuildExpression(slice.Groups["lo"].Value));
+            return b;
+        }
+        if (TryExtractSliceWithBalancedParens(s, out var sliceSig, out var sliceHi, out var sliceLo, out var sliceDir))
+        {
+            var b = MkBlock("kmila_vhdl_slice");
+            AddField(b, "SIG", sliceSig);
+            AddField(b, "DIR", sliceDir);
+            AddInput(b, "HI", BuildExpression(sliceHi));
+            AddInput(b, "LO", BuildExpression(sliceLo));
             return b;
         }
 

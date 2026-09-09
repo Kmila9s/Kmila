@@ -20,6 +20,12 @@ html {
     font-size: calc(16px * var(--user-text-scale, 1));
     color-scheme: light dark;
     transition: font-size var(--duration-base, 180ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1));
+    /* Prevent horizontal document scroll. Panels and strips inside the app
+       manage their own overflow-x: auto/scroll regions; nothing should ever
+       leak past the viewport edge and let a horizontal swipe pan the entire
+       page. Without this, an over-panned canvas or an oversize widget can
+       expose empty space on one side (reported on Android WebView, MAUI). */
+    overflow-x: hidden;
 }
 
 body {
@@ -33,6 +39,7 @@ body {
     text-rendering: optimizeLegibility;
     transition: background-color var(--duration-base) var(--ease-standard),
                 color var(--duration-base) var(--ease-standard);
+    overflow-x: hidden;
 }
 
 /* Bootstrap 5.3 already themes most things off data-bs-theme. Map our tokens

@@ -1,23 +1,38 @@
-#if ASPNETCORE
+#if KMILA_HAS_ASPNETCORE
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 
 namespace Kmila.Shared.Services.Api;
 
 // Minimal-API endpoint group for the headless simulation surface. Mounted
-// by Kmila.Web's Program.cs (and Phase B's MAUI embedded Kestrel) via
-// `app.MapSimulationApi()`. Localhost-only by host configuration.
+// by Kmila.Web's Program.cs via `app.MapSimulationApi()`. The endpoint
+// bodies delegate to SimulationApiHandlers so the MAUI-embedded HttpListener
+// host (Kmila/Services/EmbeddedApiHost.cs) can call the same code paths
+// without duplicating the logic. Localhost-only by host configuration.
 public static class SimulationApiEndpoints
 {
-    public const string BasePath = "/api/v1";
+    // BasePath moved to SimulationApiHandlers (target-agnostic) so the MAUI
+    // HttpListener host can reach it. Kept here as a re-export for backwards
+    // compatibility.
+    public const string BasePath = SimulationApiHandlers.BasePath;
 
     public static IServiceCollection AddSimulationApi(this IServiceCollection services)
     {
-        services.AddSingleton<SandboxProjectStore>();
-        services.AddSingleton<HeadlessSimulator>();
+        // TryAdd so a caller that pre-registered a configured SandboxProjectStore
+        // (e.g. EmbeddedApiHost in the MAUI head, which needs a
+        // FileSystem.AppDataDirectory-rooted store) wins over the default.
+        services.TryAddSingleton<SandboxProjectStore>();
+        services.TryAddSingleton<HeadlessSimulator>();
+        // Cross-host bearer-token holder for the /api/v1 auth filter.
+        // TryAdd so MauiProgram can pre-register with a hydrated token.
+        services.TryAddSingleton<LocalApiTokenProvider>();
+        // Background GC — reaps expired sandboxes + on-disk orphans left by
+        // past process crashes. See SandboxJanitor for the TTL policy.
+        services.AddHostedService<SandboxJanitor>();
         return services;
     }
 
@@ -25,76 +40,55 @@ public static class SimulationApiEndpoints
     {
         var group = app.MapGroup(BasePath).WithTags("SimulationApi");
 
-        group.MapGet("/health", () => Results.Ok(new
+        // Tier 5.2 Phase B follow-up — bearer-token gate. Empty token in
+        // the provider means "auth disabled" (dev-parity default). /health
+        // stays exempt so external tooling can probe reachability without
+        // knowing the secret.
+        group.AddEndpointFilter(async (ctx, next) =>
         {
-            status     = "ok",
-            version    = "1",
-            startedUtc = DateTime.UtcNow,
-        }));
+            var provider = ctx.HttpContext.RequestServices.GetRequiredService<LocalApiTokenProvider>();
+            var expected = provider.Current;
+            if (string.IsNullOrEmpty(expected)) return await next(ctx);
+
+            var path = ctx.HttpContext.Request.Path.Value ?? string.Empty;
+            if (string.Equals(path, BasePath + "/health", StringComparison.Ordinal))
+                return await next(ctx);
+
+            var headers  = ctx.HttpContext.Request.Headers;
+            var verdict  = SimulationApiHandlers.CheckAuth(
+                expected,
+                name => headers.TryGetValue(name, out var v) ? v.ToString() : null);
+            if (verdict is not null) return ToResult(verdict);
+
+            return await next(ctx);
+        });
+
+        group.MapGet("/health", () => ToResult(SimulationApiHandlers.Health()));
 
         group.MapPost("/projects", (CreateProjectRequest? req, SandboxProjectStore store) =>
-        {
-            req ??= new CreateProjectRequest();
-            var p = store.Create(req.Name, req.Retain);
-            return Results.Ok(new CreateProjectResponse { ProjectId = p.Id, SandboxPath = p.Path });
-        });
+            ToResult(SimulationApiHandlers.CreateProject(req, store)));
 
         group.MapPost("/projects/{id}/files", (string id, WriteFileRequest body, SandboxProjectStore store) =>
-        {
-            var project = store.Get(id);
-            if (project == null) return Results.NotFound(new ApiError { Error = "project_not_found" });
-            try
-            {
-                string full = project.WriteFile(body.Name, body.Content ?? string.Empty);
-                long bytes = new FileInfo(full).Length;
-                return Results.Ok(new WriteFileResponse { Name = body.Name, Path = full, Bytes = bytes });
-            }
-            catch (ArgumentException ex)
-            {
-                return Results.BadRequest(new ApiError { Error = "invalid_file_name", Detail = ex.Message });
-            }
-        });
+            ToResult(SimulationApiHandlers.WriteFile(id, body, store)));
 
         group.MapGet("/projects/{id}/files/{*name}", (string id, string name, SandboxProjectStore store) =>
-        {
-            var project = store.Get(id);
-            if (project == null) return Results.NotFound(new ApiError { Error = "project_not_found" });
-            var content = project.ReadFile(name);
-            if (content == null) return Results.NotFound(new ApiError { Error = "file_not_found" });
-            return Results.Text(content, "text/plain");
-        });
+            ToResult(SimulationApiHandlers.ReadFile(id, name, store)));
 
         group.MapDelete("/projects/{id}", (string id, SandboxProjectStore store) =>
-        {
-            return store.Delete(id)
-                ? Results.NoContent()
-                : Results.NotFound(new ApiError { Error = "project_not_found" });
-        });
+            ToResult(SimulationApiHandlers.DeleteProject(id, store)));
 
         group.MapPost("/simulate", async (SimulateRequest req, HeadlessSimulator sim, ILoggerFactory lf) =>
-        {
-            var log = lf.CreateLogger("SimulationApi");
-            try
-            {
-                var result = await sim.RunAsync(req);
-                return Results.Ok(result);
-            }
-            catch (ArgumentException ex)
-            {
-                return Results.BadRequest(new ApiError { Error = "bad_request", Detail = ex.Message });
-            }
-            catch (InvalidOperationException ex)
-            {
-                return Results.UnprocessableEntity(new ApiError { Error = "sim_unprocessable", Detail = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                log.LogError(ex, "[SimulationApi] simulate failed");
-                return Results.Problem(title: "sim_failed", detail: ex.Message, statusCode: 500);
-            }
-        });
+            ToResult(await SimulationApiHandlers.SimulateAsync(req, sim, lf.CreateLogger("SimulationApi"))));
 
         return app;
     }
+
+    // Bridge the transport-neutral ApiResponse into a Minimal-API IResult.
+    // Kept trivial — the endpoint bodies produce the final status/content/body,
+    // this only marshals them into ASP.NET Core's pipeline.
+    private static IResult ToResult(ApiResponse r) =>
+        r.StatusCode == 204
+            ? Results.NoContent()
+            : Results.Content(r.Body, r.ContentType, System.Text.Encoding.UTF8, r.StatusCode);
 }
 #endif

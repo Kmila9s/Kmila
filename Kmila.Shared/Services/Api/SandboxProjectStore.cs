@@ -6,14 +6,19 @@ namespace Kmila.Shared.Services.Api;
 // ~/.kmila/api-sandbox/<run-id>/ — outside ProjectsService so bench runs
 // don't pollute the user's real project list. Threadsafe enough for the
 // API: per-project file writes serialize through the per-instance lock.
+//
+// Phase B: the parameterless default is what Kmila.Web has always used;
+// the MAUI-embedded host (EmbeddedApiHost) instead passes an explicit
+// rootOverride under FileSystem.AppDataDirectory so sandboxes land in
+// the app's writable data dir instead of the user profile.
 public sealed class SandboxProjectStore
 {
     private readonly ConcurrentDictionary<string, SandboxProject> _projects = new();
     private readonly string _root;
 
-    public SandboxProjectStore()
+    public SandboxProjectStore(string? rootOverride = null)
     {
-        _root = Path.Combine(
+        _root = rootOverride ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             ".kmila", "api-sandbox");
         Directory.CreateDirectory(_root);
@@ -39,6 +44,49 @@ public sealed class SandboxProjectStore
         try { if (Directory.Exists(proj.Path)) Directory.Delete(proj.Path, recursive: true); }
         catch { /* best-effort cleanup; the API caller already considers this gone */ }
         return true;
+    }
+
+    // Sweep in-memory projects: delete any Retain=false project older than
+    // `ttl` and any Retain=true project older than `retainedTtl` (an absolute
+    // upper bound so retained-but-forgotten projects don't leak forever).
+    // Returns the number of projects reaped.
+    public int SweepInMemory(TimeSpan ttl, TimeSpan retainedTtl)
+    {
+        var now = DateTime.UtcNow;
+        int reaped = 0;
+        foreach (var (id, proj) in _projects)
+        {
+            var age = now - proj.CreatedAt;
+            bool expired = proj.Retain ? age > retainedTtl : age > ttl;
+            if (expired && Delete(id)) reaped++;
+        }
+        return reaped;
+    }
+
+    // Sweep on-disk directories that are NOT tracked in `_projects` and whose
+    // mtime is older than `ttl`. Catches orphans left by past process crashes
+    // (in-memory state is lost on restart; the dict does not rehydrate from
+    // disk on startup, so pre-restart dirs are unreachable via the API).
+    // Returns the number of orphan directories deleted.
+    public int SweepDiskOrphans(TimeSpan ttl)
+    {
+        int reaped = 0;
+        if (!Directory.Exists(_root)) return 0;
+        var cutoff = DateTime.UtcNow - ttl;
+        foreach (var dir in Directory.EnumerateDirectories(_root))
+        {
+            string id = Path.GetFileName(dir);
+            if (_projects.ContainsKey(id)) continue; // still live in-memory
+            try
+            {
+                var mtime = Directory.GetLastWriteTimeUtc(dir);
+                if (mtime > cutoff) continue;
+                Directory.Delete(dir, recursive: true);
+                reaped++;
+            }
+            catch { /* best-effort; skip on any IO issue */ }
+        }
+        return reaped;
     }
 }
 
