@@ -21,6 +21,21 @@
     <SingleProject>true</SingleProject>
     <ImplicitUsings>enable</ImplicitUsings>
     <EnableDefaultCssItems>false</EnableDefaultCssItems>
+
+    <!-- Ship static web assets UNCOMPRESSED in the MAUI bundle.
+         With compression on (the .NET 6+ default) the SDK emits RCL assets
+         under _content/ ONLY as precompressed .gz/.br siblings with no plain
+         copy. The Mac Catalyst BlazorWebView asset resolver looks up the exact
+         plain filename and does NOT decompress/content-negotiate the .gz/.br,
+         so those requests return the framework stub
+           "There is no content at _content/Kmila.Shared/lib/…"
+         (HTTP 200, text/plain). That silently broke Bootstrap CSS, Bootstrap
+         Icons (icons) + its woff2, and JetBrains Mono on Mac Catalyst only —
+         iOS/Android/Web resolvers handle the compressed variants, Mac Catalyst
+         does not. Disabling compression forces plain files to ship, which the
+         resolver finds. Scoped to this MAUI head; Kmila.Web keeps compression. -->
+    <CompressionEnabled>false</CompressionEnabled>
+
     <Nullable>enable</Nullable>
     <NoWarn>$(NoWarn);CS1587;CS1591;CS1570;CS1573;CS1574;CS1998;CS8602;CS8604;CS8625;CS8892;CS0219;CS0618;CS4014;NETSDK1206</NoWarn>
 
@@ -65,6 +80,16 @@
     <!-- 64-bit ABIs only — 16 KB pages don't exist on 32-bit Android, and
          Play no longer requires armeabi-v7a / x86 for new submissions. -->
     <RuntimeIdentifiers>android-arm64;android-x64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <!-- Mac Catalyst: apply Platforms/MacCatalyst/Entitlements.plist to the
+       codesign step. MAUI does NOT pick up an entitlements file by filename
+       convention (unlike Info.plist), so without this the app ships sandboxed
+       and every export (IFileExportService) lands in the invisible per-app
+       container instead of ~/Documents/Kmila — i.e. "download never works".
+       The plist disables the sandbox on purpose (see its own comment). -->
+  <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">
+    <CodesignEntitlements>Platforms/MacCatalyst/Entitlements.plist</CodesignEntitlements>
   </PropertyGroup>
 
   <ItemGroup>
@@ -128,11 +153,22 @@
          FileSystem.OpenAppPackageFileAsync. -->
     <MauiAsset Include="..\Kmila.Shared\wwwroot\Templates\**\*" LogicalName="Templates\%(RecursiveDir)%(Filename)%(Extension)" />
 
-    <!-- Self-hosted JS libraries (currently: Blockly for /concepts/exercise/*).
-         Without this glob the MAUI bundle won't ship blockly.min.js and the
-         exercise editor breaks offline. The Web build picks these up
-         automatically via the RCL static-web-assets pipeline. -->
-    <MauiAsset Include="..\Kmila.Shared\wwwroot\lib\**\*" LogicalName="lib\%(RecursiveDir)%(Filename)%(Extension)" />
+    <!-- Vendored Swagger UI, read at runtime by EmbeddedApiHost via
+         FileSystem.OpenAppPackageFileAsync("lib/swagger-ui/..."). This is the
+         ONLY part of lib/ that needs the MauiAsset (app-package) path.
+
+         Do NOT broaden this back to `lib\**\*`. That blanket glob double-
+         declared every lib asset as BOTH an RCL static web asset AND a
+         MauiAsset; MAUI's ConvertStaticWebAssetsToMauiAssets then moves the
+         plain copy to the top-level `lib/` (not web-served) and leaves
+         _content/Kmila.Shared/lib/ with only the precompressed .gz/.br. The
+         Mac Catalyst BlazorWebView resolver can't serve those, so Bootstrap,
+         Bootstrap Icons (+woff2) and JetBrains Mono 404'd there — broken icons
+         and unstyled links, Mac-Catalyst-only. Narrowed to swagger-ui so the
+         rest of lib/ ships as normal web-served RCL assets (plain copies, like
+         css/). The original glob predates the switch off Blockly (now removed
+         entirely; replaced by kmila-blocks.js) so nothing else here needs it. -->
+    <MauiAsset Include="..\Kmila.Shared\wwwroot\lib\swagger-ui\**\*" LogicalName="lib\swagger-ui\%(RecursiveDir)%(Filename)%(Extension)" />
 
     <!-- Tier 5.2 Phase B follow-up — vendored Swagger UI + OpenAPI JSON
          snapshot. EmbeddedApiHost.HandleAsync serves /api-docs (the HTML

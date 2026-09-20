@@ -81,11 +81,14 @@ public sealed class MauiFileExportService : IFileExportService
     ///   <item><b>iOS</b>: the app sandbox Documents folder. Combined with
     ///   <c>UIFileSharingEnabled</c> + <c>LSSupportsOpeningDocumentsInPlace</c>
     ///   in Info.plist, this surfaces as "On My iPhone → Kmila" in Files.app.</item>
-    ///   <item><b>macCatalyst</b>: the user's real <c>~/Documents</c>. With the
-    ///   sandbox entitlement set to false (see MacCatalyst/Entitlements.plist)
-    ///   we'd normally rely on <c>SpecialFolder.MyDocuments</c>, but Foundation
-    ///   on Catalyst still redirects that path to the per-app container in
-    ///   some build configurations — we read <c>HOME</c> directly to be sure.</item>
+    ///   <item><b>macCatalyst</b>: the user's real <c>~/Documents</c>. The app
+    ///   ships with the sandbox disabled (MacCatalyst/Entitlements.plist, wired
+    ///   into the csproj via <c>CodesignEntitlements</c>). Even so, <c>HOME</c>
+    ///   and <c>SpecialFolder.MyDocuments</c> can still resolve to the per-app
+    ///   container; deriving the home from the login user name
+    ///   (<c>/Users/&lt;user&gt;</c>) is immune to that redirection, so we try
+    ///   that first and only accept a path that isn't inside a sandbox
+    ///   container.</item>
     ///   <item><b>Windows</b>: the user profile's Documents folder via
     ///   <c>SpecialFolder.MyDocuments</c>.</item>
     /// </list>
@@ -93,18 +96,29 @@ public sealed class MauiFileExportService : IFileExportService
     private static string? ResolveDocumentsRoot()
     {
 #if MACCATALYST
-        var home = Environment.GetEnvironmentVariable("HOME");
-        if (!string.IsNullOrEmpty(home))
+        // Ordered candidates for the *real* (Finder-visible) home. The login
+        // name maps to /Users/<user> on macOS regardless of sandbox/container
+        // redirection; HOME is the fallback when it doesn't.
+        foreach (var home in RealHomeCandidates())
         {
-            var candidate = Path.Combine(home, "Documents");
-            if (Directory.Exists(candidate)) return candidate;
-            // Home exists, Documents may not on a fresh install — Directory
-            // .CreateDirectory below will materialize it.
-            return candidate;
+            if (string.IsNullOrEmpty(home)) continue;
+            // Skip a per-app container path — writing there "succeeds" but the
+            // user never sees the file in Finder (the original bug).
+            if (home.Contains("/Library/Containers/", StringComparison.Ordinal)) continue;
+            return Path.Combine(home, "Documents");
         }
 #endif
         return System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyDocuments);
     }
+
+#if MACCATALYST
+    private static System.Collections.Generic.IEnumerable<string?> RealHomeCandidates()
+    {
+        var user = Environment.UserName;
+        if (!string.IsNullOrEmpty(user)) yield return "/Users/" + user;
+        yield return Environment.GetEnvironmentVariable("HOME");
+    }
+#endif
 
 #if ANDROID
     private FileExportResult WriteAndroid(ExportCategory category, string fileName, string mime, byte[] bytes)
