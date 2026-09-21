@@ -60,15 +60,15 @@
             <div class="visual-page__runbar-row">
                 <label class="visual-page__runbar-cell">
                     <small>@Traductor.T("VISUAL_SPEED")</small>
-                    <input type="range" min="0" max="3" step="1"
+                    <input type="range" min="0" max="@VisualSpeedScale.SliderMax" step="1"
                            class="visual-page__speed-slider"
-                           value="@((int)_speedIndex)"
+                           value="@_speedPos"
                            @oninput="OnSpeedSliderInput" />
                     <span class="visual-page__speed-label">@SpeedLabel</span>
                 </label>
                 <label class="visual-page__runbar-cell">
                     <small>@Traductor.T("VISUAL_MS_PER_TICK")</small>
-                    <input type="number" min="0" max="2000" step="1"
+                    <input type="number" min="0" max="@VisualSpeedScale.SlowestMs" step="1"
                            class="kmila-input visual-page__delay-input"
                            placeholder="@Traductor.T("VISUAL_DELAY_AUTO")"
                            value="@(_customDelayMs?.ToString() ?? "")"
@@ -332,6 +332,17 @@
                                 <option value="dec">@Traductor.T("VISUAL_SEVEN_SEG_MODE_DEC")</option>
                             </select>
                         </label>
+                        @if (SevenSegMode(sel) == "raw")
+                        {
+                            <label>@Traductor.T("VISUAL_PROP_POLARITY")
+                                <select class="kmila-input"
+                                        value="@SevenSegPolarity(sel)"
+                                        @onchange="@(e => OnSevenSegPolarityChange(sel, e))">
+                                    <option value="cathode">@Traductor.T("VISUAL_SEVEN_SEG_POLARITY_CATHODE")</option>
+                                    <option value="anode">@Traductor.T("VISUAL_SEVEN_SEG_POLARITY_ANODE")</option>
+                                </select>
+                            </label>
+                        }
                         <label>@Traductor.T("VISUAL_PROP_COLOR")
                             <select class="kmila-input"
                                     value="@LedColor(sel)"
@@ -351,6 +362,52 @@
                                    value="@SevenSegBankDigits(sel)"
                                    @onchange="@(e => OnSevenSegBankDigitsChange(sel, e))" />
                         </label>
+                        <label>@Traductor.T("VISUAL_PROP_MODE")
+                            <select class="kmila-input"
+                                    value="@SevenSegBankMode(sel)"
+                                    @onchange="@(e => OnSevenSegBankModeChange(sel, e))">
+                                <option value="raw">@Traductor.T("VISUAL_SEVEN_SEG_MODE_RAW")</option>
+                                <option value="hex">@Traductor.T("VISUAL_SEVEN_SEG_MODE_HEX")</option>
+                                <option value="dec">@Traductor.T("VISUAL_SEVEN_SEG_MODE_DEC")</option>
+                                <option value="mux">@Traductor.T("VISUAL_SEVEN_SEG_MODE_MUX")</option>
+                            </select>
+                        </label>
+                        @if (SevenSegBankMode(sel) == "mux")
+                        {
+                            <label>@Traductor.T("VISUAL_PROP_WIRING")
+                                <select class="kmila-input"
+                                        value="@SevenSegBankWiring(sel)"
+                                        @onchange="@(e => OnSevenSegBankWiringChange(sel, e))">
+                                    <option value="packed">@Traductor.T("VISUAL_SEVEN_SEG_WIRING_PACKED")</option>
+                                    <option value="explicit">@Traductor.T("VISUAL_SEVEN_SEG_WIRING_EXPLICIT")</option>
+                                </select>
+                            </label>
+                            <label>@Traductor.T("VISUAL_PROP_SELECT_LEVEL")
+                                <select class="kmila-input"
+                                        value="@(SevenSegBankSelectActiveLow(sel) ? "low" : "high")"
+                                        @onchange="@(e => OnSevenSegBankSelectLevelChange(sel, e))">
+                                    <option value="low">@Traductor.T("VISUAL_SEVEN_SEG_SELECT_ACTIVE_LOW")</option>
+                                    <option value="high">@Traductor.T("VISUAL_SEVEN_SEG_SELECT_ACTIVE_HIGH")</option>
+                                </select>
+                            </label>
+                            <label class="kmila-check">
+                                <input type="checkbox"
+                                       checked="@SevenSegBankPersistence(sel)"
+                                       @onchange="@(e => OnSevenSegBankPersistenceChange(sel, e))" />
+                                @Traductor.T("VISUAL_PROP_PERSISTENCE")
+                            </label>
+                        }
+                        @if (SevenSegBankMode(sel) == "raw" || SevenSegBankMode(sel) == "mux")
+                        {
+                            <label>@Traductor.T("VISUAL_PROP_POLARITY")
+                                <select class="kmila-input"
+                                        value="@SevenSegBankPolarity(sel)"
+                                        @onchange="@(e => OnSevenSegBankPolarityChange(sel, e))">
+                                    <option value="cathode">@Traductor.T("VISUAL_SEVEN_SEG_POLARITY_CATHODE")</option>
+                                    <option value="anode">@Traductor.T("VISUAL_SEVEN_SEG_POLARITY_ANODE")</option>
+                                </select>
+                            </label>
+                        }
                         <label>@Traductor.T("VISUAL_PROP_COLOR")
                             <select class="kmila-input"
                                     value="@LedColor(sel)"
@@ -626,8 +683,13 @@
     private string _savedSnapshot = "";
     private const int UndoCap = 50;
 
+    // Playback pacing. The continuous slider drives `_customDelayMs` (the real
+    // per-tick delay in ms; 0 = Free) as the single source of truth; `_speedPos`
+    // is its slider position. The legacy `_speedIndex`/`VisualSpeed` enum is kept
+    // only to map old `.kviz` DefaultSpeed strings on load.
     private VisualSpeed _speedIndex = VisualSpeed.Normal;
-    private int? _customDelayMs;
+    private int? _customDelayMs = VisualSpeed.Normal.TickDelayMs();
+    private int _speedPos = VisualSpeedScale.SliderFromDelay(VisualSpeed.Normal.TickDelayMs());
     private int _settingsRingBuffer;
     private ulong _scrubTick;
     private string _bpInput = string.Empty;
@@ -640,9 +702,7 @@
     // pin-to-port routing at a glance.
     private bool _showWires;
 
-    private string SpeedLabel => _customDelayMs.HasValue
-        ? $"{_customDelayMs.Value} ms"
-        : _speedIndex.DisplayLabel();
+    private string SpeedLabel => VisualSpeedScale.DelayLabel(_customDelayMs, Traductor.T("VISUAL_SPEED_FREE"));
 
     private const string KvizExt = ".kviz";
 
@@ -1210,6 +1270,9 @@
                 {
                     _coord.Pause();
                     _autoPausedByTabHide = true;
+                    // Hidden tab keeps the AudioContext alive, so silence the
+                    // buzzers now instead of droning in the background.
+                    try { await JS.InvokeVoidAsync("kmilaAudio.stopAll"); } catch { }
                 }
             }
             else if (_autoPausedByTabHide)
@@ -1236,9 +1299,10 @@
 
     private void OnSpeedSliderInput(ChangeEventArgs e)
     {
-        if (!int.TryParse(e.Value?.ToString(), out var idx)) idx = 1;
-        _speedIndex = VisualSpeedExtensions.FromSliderIndex(idx);
-        if (_coord != null) _coord.Speed = _speedIndex;
+        if (!int.TryParse(e.Value?.ToString(), out var pos)) pos = _speedPos;
+        _speedPos = Math.Clamp(pos, 0, VisualSpeedScale.SliderMax);
+        _customDelayMs = VisualSpeedScale.DelayFromSlider(_speedPos); // 0 = Free
+        ApplySpeedToCoordAndDoc();
     }
 
     private void OnCustomDelayChange(ChangeEventArgs e)
@@ -1246,13 +1310,45 @@
         var s = e.Value?.ToString();
         if (string.IsNullOrWhiteSpace(s))
         {
-            _customDelayMs = null;
+            // Blank = fastest (Free), matching the slider's far-right end.
+            _customDelayMs = 0;
         }
-        else if (int.TryParse(s, out var d) && d >= 0 && d <= 2000)
+        else if (int.TryParse(s, out var d) && d >= 0 && d <= VisualSpeedScale.SlowestMs)
         {
             _customDelayMs = d;
         }
+        // Keep the slider position in sync with the exact value the user typed.
+        _speedPos = VisualSpeedScale.SliderFromDelay(_customDelayMs ?? 0);
+        ApplySpeedToCoordAndDoc();
+    }
+
+    // Push the current playback speed to the live coordinator and record it on
+    // the doc so it persists on the next Save. Recomputes the dirty flag
+    // WITHOUT touching the undo stack — a speed change is a lightweight setting,
+    // not a canvas edit, so it shouldn't flood undo history on every drag step.
+    private void ApplySpeedToCoordAndDoc()
+    {
         if (_coord != null) _coord.CustomTickDelayMs = _customDelayMs;
+        _doc.Settings.DefaultTickDelayMs = _customDelayMs;
+        _lastSnapshot = KvizSerializer.Serialize(_doc);
+        _dirty = (_lastSnapshot != _savedSnapshot);
+    }
+
+    // Seed the slider/box from the loaded doc's persisted speed. Prefers the
+    // numeric DefaultTickDelayMs; falls back to the legacy DefaultSpeed enum
+    // name for older sidecars; defaults to Normal. Read-only — does not mutate
+    // the doc, so loading an old file that lacks the key stays non-dirty.
+    private void ApplySpeedFromSettings()
+    {
+        int delay;
+        if (_doc.Settings.DefaultTickDelayMs is { } d)
+            delay = Math.Clamp(d, 0, VisualSpeedScale.SlowestMs);
+        else if (Enum.TryParse<VisualSpeed>(_doc.Settings.DefaultSpeed, out var legacy))
+            delay = legacy.TickDelayMs();
+        else
+            delay = VisualSpeed.Normal.TickDelayMs();
+        _customDelayMs = delay;
+        _speedPos = VisualSpeedScale.SliderFromDelay(delay);
     }
 
     private void TogglePause()
@@ -1354,6 +1450,7 @@
                 _doc = FreshDoc();
                 _lastSnapshot = _savedSnapshot = KvizSerializer.Serialize(_doc);
             }
+            ApplySpeedFromSettings();
             _undo.Clear();
             _redo.Clear();
 
@@ -1567,6 +1664,9 @@
         var coord = _coord;
         if (coord == null) return;
         coord.Stop();
+        // Silence any buzzer immediately — the sim has halted, so no more
+        // frames will arrive to switch tones off on their own.
+        try { await JS.InvokeVoidAsync("kmilaAudio.stopAll"); } catch { }
         StopRepaintTicker();
         try
         {
@@ -2051,6 +2151,15 @@
         SetCfg(c, "mode", v);
     }
 
+    private static string SevenSegPolarity(KvizComponent c) => c.Config.GetString("polarity", "cathode");
+
+    private void OnSevenSegPolarityChange(KvizComponent c, ChangeEventArgs e)
+    {
+        var v = e.Value?.ToString();
+        if (v != "cathode" && v != "anode") v = "cathode";
+        SetCfg(c, "polarity", v);
+    }
+
     private static int SevenSegBankDigits(KvizComponent c) => Math.Clamp(c.Config.GetInt("digits", 4), 2, 8);
 
     private void OnSevenSegBankDigitsChange(KvizComponent c, ChangeEventArgs e)
@@ -2059,8 +2168,56 @@
         {
             n = Math.Clamp(n, 2, 8);
             c.Config["digits"] = System.Text.Json.JsonSerializer.SerializeToElement(n);
+            // In mux+explicit wiring the digit count drives the an{d} pin set;
+            // a shrink leaves orphan an{d} bindings — Sanitize prunes them.
+            KvizWidgetCatalog.Sanitize(_doc);
             MarkDirty();
         }
+    }
+
+    private static string SevenSegBankMode(KvizComponent c) => c.Config.GetString("mode", "raw");
+
+    private void OnSevenSegBankModeChange(KvizComponent c, ChangeEventArgs e)
+    {
+        var v = e.Value?.ToString();
+        if (v != "raw" && v != "hex" && v != "dec" && v != "mux") v = "raw";
+        // raw/hex/dec share the single `value` port, but "mux" swaps the pin
+        // surface entirely (seg/sel or a..g + an{d}). Set the mode first, then
+        // let Sanitize drop any binding that no longer matches PinsOf.
+        c.Config.Put("mode", v);
+        KvizWidgetCatalog.Sanitize(_doc);
+        MarkDirty();
+    }
+
+    private static string SevenSegBankWiring(KvizComponent c) =>
+        c.Config.GetString("wiring", "packed") == "explicit" ? "explicit" : "packed";
+
+    private void OnSevenSegBankWiringChange(KvizComponent c, ChangeEventArgs e)
+    {
+        var v = e.Value?.ToString() == "explicit" ? "explicit" : "packed";
+        // Wiring swaps the mux pin surface (packed seg/sel ↔ explicit a..g/an{d}).
+        c.Config.Put("wiring", v);
+        KvizWidgetCatalog.Sanitize(_doc);
+        MarkDirty();
+    }
+
+    private static bool SevenSegBankSelectActiveLow(KvizComponent c) => c.Config.GetBool("selectActiveLow", true);
+
+    private void OnSevenSegBankSelectLevelChange(KvizComponent c, ChangeEventArgs e)
+        => SetCfgBool(c, "selectActiveLow", (e.Value?.ToString() ?? "low") != "high");
+
+    private static bool SevenSegBankPersistence(KvizComponent c) => c.Config.GetBool("persistence", true);
+
+    private void OnSevenSegBankPersistenceChange(KvizComponent c, ChangeEventArgs e)
+        => SetCfgBool(c, "persistence", e.Value is bool b && b);
+
+    private static string SevenSegBankPolarity(KvizComponent c) => c.Config.GetString("polarity", "cathode");
+
+    private void OnSevenSegBankPolarityChange(KvizComponent c, ChangeEventArgs e)
+    {
+        var v = e.Value?.ToString();
+        if (v != "cathode" && v != "anode") v = "cathode";
+        SetCfg(c, "polarity", v);
     }
 
     private static int StepperStepsPerRev(KvizComponent c) => c.Config.GetInt("stepsPerRev", 200);
@@ -2286,6 +2443,12 @@
     }
 
     private void SetCfg(KvizComponent c, string key, string value)
+    {
+        c.Config.Put(key, value);
+        MarkDirty();
+    }
+
+    private void SetCfgBool(KvizComponent c, string key, bool value)
     {
         c.Config.Put(key, value);
         MarkDirty();

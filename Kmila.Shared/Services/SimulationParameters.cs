@@ -68,11 +68,50 @@ public class SimulationParameters
     /// <summary>True when <see cref="ClockOverrideMhz"/> diverges from the FPGA default.</summary>
     public bool ClockIsCustom { get; private set; }
 
+    /// <summary>
+    /// Run mode chosen in the Run bar. <c>true</c> = Fast: the event-driven
+    /// <c>FastSimulationRunner</c> (skips idle ticks) with live visuals off — a
+    /// progress bar during the run, the full waveform built once at the end.
+    /// <c>false</c> = Visual (default): the reference <c>SimulationRunner</c> with
+    /// the live-updating waveform + step/breakpoint replay. Both produce the same
+    /// final waveform; Fast is for seconds-scale runs where the live redraw is the
+    /// bottleneck. Session state — see <see cref="SetFastMode"/>.
+    /// </summary>
+    public bool FastMode { get; private set; }
+
     /// <summary>Coarse state of the pipeline; drives Run-bar button rendering.</summary>
     public SimState State { get; private set; } = SimState.Idle;
 
     /// <summary>0..100 — only meaningful while <see cref="State"/> is Running.</summary>
     public double Progress { get; private set; } = 0;
+
+    /// <summary>
+    /// Estimated wall-clock seconds remaining for the running sim, or <c>null</c>
+    /// when not yet estimable (the run just started, &lt;1% done) or not running.
+    /// Derived from the observed progress rate in <see cref="SetProgress"/> —
+    /// no upfront model, so it self-calibrates within the first moments of a run.
+    /// In Fast mode the estimate is rougher because progress jumps over idle
+    /// ticks, but it still converges as the run proceeds.
+    /// </summary>
+    public double? RemainingSeconds { get; private set; }
+
+    /// <summary>Active wall-clock seconds since the run began (excludes paused time), or null when idle.</summary>
+    public double? ElapsedSeconds
+    {
+        get
+        {
+            if (_runStartUtc is not { } start || State is not (SimState.Running or SimState.Paused))
+                return null;
+            var paused = _pausedTotal + (_pauseStartUtc is { } ps ? DateTime.UtcNow - ps : TimeSpan.Zero);
+            return Math.Max(0, (DateTime.UtcNow - start - paused).TotalSeconds);
+        }
+    }
+
+    // Run-timing for the ETA. Paused time is accumulated so it doesn't inflate
+    // the rate estimate (see SetState / SetProgress).
+    private DateTime? _runStartUtc;
+    private DateTime? _pauseStartUtc;
+    private TimeSpan _pausedTotal;
 
     /// <summary>
     /// Port-moment configurations keyed by port name. Populated by
@@ -144,6 +183,11 @@ public class SimulationParameters
     {
         RunningProjectId = projectId;
         RunningMode = mode;
+        // Start the ETA clock fresh.
+        _runStartUtc = DateTime.UtcNow;
+        _pauseStartUtc = null;
+        _pausedTotal = TimeSpan.Zero;
+        RemainingSeconds = null;
         OnChange?.Invoke();
     }
 
@@ -153,6 +197,9 @@ public class SimulationParameters
         if (RunningProjectId == null) return;
         RunningProjectId = null;
         RunningMode = SimMode.Signal;
+        RemainingSeconds = null;
+        _runStartUtc = null;
+        _pauseStartUtc = null;
         OnChange?.Invoke();
     }
 
@@ -304,11 +351,29 @@ public class SimulationParameters
             ? ClockOverrideMhz.Value
             : Math.Max(1, fpgaDefault);
 
+    /// <summary>Sets the Fast/Visual run mode. Not a config-dirtying change.</summary>
+    /// <param name="fast"><c>true</c> for Fast (headless + full waveform at end), <c>false</c> for Visual.</param>
+    public void SetFastMode(bool fast)
+    {
+        if (FastMode == fast) return;
+        FastMode = fast;
+        OnChange?.Invoke();
+    }
+
     /// <summary>Transitions the run state machine. Does not mark dirty.</summary>
     /// <param name="state">New simulation state (Idle/Building/Running/Paused/Done/Error).</param>
     public void SetState(SimState state)
     {
         if (State == state) return;
+        // Pause accounting for the ETA: freeze the clock while paused so the
+        // pause gap doesn't deflate the observed progress rate on resume.
+        if (state == SimState.Paused && State == SimState.Running)
+            _pauseStartUtc = DateTime.UtcNow;
+        else if (state == SimState.Running && State == SimState.Paused && _pauseStartUtc is { } ps)
+        {
+            _pausedTotal += DateTime.UtcNow - ps;
+            _pauseStartUtc = null;
+        }
         State = state;
         OnChange?.Invoke();
     }
@@ -321,7 +386,30 @@ public class SimulationParameters
     public void SetProgress(double progress)
     {
         Progress = Math.Clamp(progress, 0, 100);
+        UpdateEta();
         OnChange?.Invoke();
+    }
+
+    /// <summary>
+    /// Re-estimates <see cref="RemainingSeconds"/> from the observed rate:
+    /// remaining = activeElapsed × (100 − p) / p. Uses the whole-run average
+    /// (not an instantaneous rate) so it stays stable and self-corrects; needs
+    /// a little signal first (≥1% done, ≥0.3 s in) to avoid wild early numbers.
+    /// </summary>
+    private void UpdateEta()
+    {
+        if (_runStartUtc is not { } start || State != SimState.Running)
+            return; // keep prior value; Begin/End reset it
+        if (Progress >= 100) { RemainingSeconds = 0; return; }
+
+        double activeElapsed = (DateTime.UtcNow - start - _pausedTotal).TotalSeconds;
+        if (Progress < 1.0 || activeElapsed < 0.3)
+        {
+            RemainingSeconds = null; // not estimable yet — UI shows "calculating…"
+            return;
+        }
+        double ratePerSec = Progress / activeElapsed;
+        RemainingSeconds = ratePerSec > 0 ? (100.0 - Progress) / ratePerSec : (double?)null;
     }
 
     /// <summary>

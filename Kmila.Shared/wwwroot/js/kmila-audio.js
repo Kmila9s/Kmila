@@ -11,7 +11,11 @@
 //   window.kmilaAudio.setTone(id, hz, gain)  — start / retune the oscillator
 //                                              for widget `id`. `hz > 0` and
 //                                              `gain > 0` required.
-//   window.kmilaAudio.stop(id)               — stop + release nodes for `id`.
+//   window.kmilaAudio.stop(id)               — silence voice `id` (ramp to 0).
+//   window.kmilaAudio.stopAll()              — silence every voice at once.
+//                                              Called when the sim stops or
+//                                              the tab is hidden so no buzzer
+//                                              keeps droning after the run.
 //   window.kmilaAudio.isReady()              — true iff the context is
 //                                              running (unlock succeeded).
 //
@@ -105,6 +109,13 @@
       } catch (e) { /* nothing */ }
       // Leave the oscillator running with silent gain; disposing on
       // every stop would churn AudioNodes when the design pulses.
+    },
+
+    // Silence every allocated voice — the run-lifecycle safety net so a
+    // stopped/backgrounded sim can't leave a buzzer sounding. Voices stay
+    // allocated (silent gain); the next setTone re-arms them cheaply.
+    stopAll() {
+      voices.forEach((_v, id) => this.stop(id));
     },
 
     dispose(id) {

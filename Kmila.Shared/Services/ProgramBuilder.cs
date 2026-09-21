@@ -89,8 +89,10 @@ public class ProgramBuilder : IDisposable
     public int LastTickResNs { get; private set; } = TimeMachine.Models.TimeClock.NS_PER_TICK;
     // Legacy timer for step-by-step simulation (TimeMachine path)
     private TimeMachine.Repositories.Timer _timeMachine = new();
-    // SimulationRunner for fast full-simulation execution
-    private SimulationRunner? _simulationRunner;
+    // Active run driver: SimulationRunner (Visual mode) or FastSimulationRunner
+    // (Fast mode). Both implement ISimulationRunner and produce identical
+    // waveforms — see RunSimulationAsync's fastRun branch.
+    private ISimulationRunner? _simulationRunner;
     // Cancellation token source for cooperative cancellation of async operations
     private readonly CancellationTokenSource _cts = new();
 
@@ -290,7 +292,8 @@ public class ProgramBuilder : IDisposable
         List<PortMomentConfiguration>? portMoments,
         TimeSpan duration,
         int systemClockMhz = 50,
-        int tickResNs = TimeMachine.Models.TimeClock.NS_PER_TICK)
+        int tickResNs = TimeMachine.Models.TimeClock.NS_PER_TICK,
+        bool fastRun = false)
     {
         // Get first entity with architecture
         var entity = Parser.Entities.FirstOrDefault(e => e.Architecture != null);
@@ -338,9 +341,13 @@ public class ProgramBuilder : IDisposable
             Console.WriteLine($"[Sim.Diag] failed: {diagEx.Message}");
         }
 
-        // Dispose previous runner if any
+        // Dispose previous runner if any. Fast mode swaps in the event-driven
+        // FastSimulationRunner (skips idle ticks); Visual mode keeps the
+        // reference SimulationRunner (live-updating tick-by-tick).
         _simulationRunner?.Dispose();
-        _simulationRunner = new SimulationRunner();
+        _simulationRunner = fastRun
+            ? new FastSimulationRunner()
+            : new SimulationRunner();
 
         // Live-update timer: periodically pushes the running SignalHistory
         // out via OnSimulationProgressUpdate so the UI can grow the waveform
@@ -381,6 +388,13 @@ public class ProgramBuilder : IDisposable
         // Interlocked guard drops timer fires that arrive while a previous
         // merge is still inflight on the consumer — keeps slow listeners
         // from queueing redundant work.
+        //
+        // Fast mode SKIPS this timer entirely: no per-200ms history merge / SVG
+        // re-render (the "reduced visual effects" half of Fast mode). The cheap
+        // OnProgressChanged→OnProgressAdvanced percent above still fires for a
+        // progress bar, and the full waveform is built once at the end from
+        // OnSimulationCompleted → Editor.OnSimulationDataReady.
+        if (!fastRun)
         progressTimer = new System.Threading.Timer(_ =>
         {
             if (Interlocked.Exchange(ref liveTickInflight, 1) == 1) return;
@@ -409,6 +423,8 @@ public class ProgramBuilder : IDisposable
             }
         }, null, ProgressUpdateIntervalMs, ProgressUpdateIntervalMs);
 
+        var perfSw = System.Diagnostics.Stopwatch.StartNew();
+        int gen2Start = GC.CollectionCount(2);
         try
         {
             // Run on current async context (caller should be on background/UI thread)
@@ -416,6 +432,29 @@ public class ProgramBuilder : IDisposable
         }
         finally
         {
+            // Perf diagnostic (surfaces in /logs). For a FAST run, visitedTicks
+            // vs totalTicks shows how much idle time was skipped: a ratio near
+            // 100% means the design has activity almost every tick (e.g. a clock
+            // at the tick resolution — a 50 MHz clock toggles every 10 ns tick),
+            // so there is nothing to skip and Fast's only gain is dropping the
+            // live-UI overhead. A small ratio means Fast is paying off.
+            perfSw.Stop();
+            var visited = _simulationRunner is Interpreter.Services.FastSimulationRunner fsr
+                ? fsr.VisitedTicks : (int?)null;
+            var pct = visited.HasValue && config != null && config.TotalTicks > 0
+                ? $" visitedTicks={visited} ({100.0 * visited.Value / config.TotalTicks:F1}% of ticks ran)"
+                : string.Empty;
+            // Memory signal: a long run that balloons the (uncapped) SignalHistory
+            // triggers gen2 GCs — and, under memory pressure, a MacCatalyst WebView
+            // reload — which reads as the UI "fully refreshing / crashing" every few
+            // seconds. samples = total recorded transitions (the thing that grows).
+            var samples = _simulationRunner?.Engine?.History?.TotalSamples ?? 0;
+            var heapMb = GC.GetTotalMemory(false) / (1024 * 1024);
+            var gen2 = GC.CollectionCount(2) - gen2Start;
+            Console.WriteLine($"[Sim.Perf] mode={(fastRun ? "FAST" : "VISUAL")} " +
+                $"elapsed={perfSw.ElapsedMilliseconds}ms totalTicks={config?.TotalTicks}{pct} " +
+                $"samples={samples} heapMB={heapMb} gen2GCs={gen2}");
+
             // Belt-and-braces: if RunAsync threw before OnSimulationEnded
             // fired, the timer would otherwise leak.
             progressTimer?.Dispose();

@@ -311,6 +311,16 @@ else
                     </g>
                 }
 
+                @* Constant chips. In the clean modes, passthrough buffers are
+                   elided, so a literal that used to sit behind a BUF now feeds
+                   its consumer directly on a producer-less wire. Draw the value
+                   as a small pill at the consuming pin so the input isn't left
+                   visually dangling. Naive keeps the literal BUF instead. *@
+                @if (_mode != ViewMode.Naive)
+                {
+                    @((MarkupString)BuildConstChips())
+                }
+
                 @* Ports — clicking one traces the whole signal path. *@
                 @foreach (var port in _layout.Netlist.Ports)
                 {
@@ -454,6 +464,10 @@ else
     }
     private double _zoom = 1.0;
     private LaidOutNetlist? _layout;
+    // The literal netlist straight from synthesis. Cached so toggling
+    // between Naive (literal) and the clean modes only re-lays-out rather
+    // than re-synthesising. Null when synthesis failed / no entity.
+    private Netlist? _rawNetlist;
     private Interpreter.Services.Entity? _lastEntity;
 
     /// <summary>Lookup tables built once per layout — kept here rather
@@ -629,9 +643,8 @@ else
             // straight to render without paying the synthesis cost.
             try
             {
-                var netlist = Synthesizer.Synthesize(Entity);
-                _layout = LayeredLayout.Layout(netlist);
-                BuildLookups();
+                _rawNetlist = Synthesizer.Synthesize(Entity);
+                RebuildDisplayLayout();
                 RegenerateColours(reseed: true);
                 ClearSelection();
                 _synthesisError = null;
@@ -644,6 +657,7 @@ else
                 // BlazorWebView the failure pinned the "Reload window"
                 // bar app-wide. Contain it here, log it, and let the user
                 // keep using the rest of the editor.
+                _rawNetlist = null;
                 _layout = null;
                 _synthesisError = $"{ex.GetType().Name}: {ex.Message}";
                 Logger.LogError(ex,
@@ -652,6 +666,23 @@ else
             }
             _lastEntity = Entity;
         }
+    }
+
+    /// <summary>
+    /// (Re)computes <see cref="_layout"/> from the cached raw netlist. Naive
+    /// mode lays out the literal netlist (every buffer/constant shown); the
+    /// other modes lay out the simplified display netlist (passthrough
+    /// buffers elided, constants carried as wire chips). Display-only — the
+    /// simulation netlist is never involved.
+    /// </summary>
+    private void RebuildDisplayLayout()
+    {
+        if (_rawNetlist == null) { _layout = null; return; }
+        var display = _mode == ViewMode.Naive
+            ? _rawNetlist
+            : SchematicSimplifier.SimplifyNetlist(_rawNetlist);
+        _layout = LayeredLayout.Layout(display);
+        BuildLookups();
     }
 
     private void BuildLookups()
@@ -675,7 +706,18 @@ else
 
     private void SetMode(ViewMode m)
     {
+        // Crossing the Naive boundary swaps the literal netlist for the
+        // simplified one (or back), so the layout and the cell set change
+        // and must be rebuilt. Toggling between the two clean modes
+        // (Synthesis/Debug) reuses the same layout.
+        bool netlistChanges = (_mode == ViewMode.Naive) != (m == ViewMode.Naive);
         _mode = m;
+        if (netlistChanges && _rawNetlist != null)
+        {
+            RebuildDisplayLayout();
+            RegenerateColours(reseed: false);
+            ClearSelection(); // cell ids differ between the two netlists
+        }
         // TrackActiveLines stays on independent of mode — live-step pulses
         // are useful in Synthesis/Naive too (set in OnInitialized).
         RefreshActiveStepCache();
@@ -1190,6 +1232,12 @@ else
         "ToWidth"   => Traductor.T("SCHEMATIC_ATTR_TO_WIDTH"),
         "Cast"      => Traductor.T("SCHEMATIC_ATTR_CAST"),
         "Reason"    => Traductor.T("SCHEMATIC_ATTR_REASON"),
+        // Attributes attached by SchematicSimplifier's case-collapse pass to
+        // the ROM/N-way-MUX boxes it produces. No dictionary key yet — a
+        // readable literal is fine until they're localized.
+        "sel"       => "selector",
+        "rom"       => "lookup",
+        "choices"   => "cases",
         _           => key,
     };
 
@@ -1388,18 +1436,9 @@ else
             var sig = Waveform.Signals.FirstOrDefault(s => s.Name.Equals(net.Name, StringComparison.OrdinalIgnoreCase));
             if (sig != null)
             {
-                long cursorNs = (long)Cursor.CursorTick * Math.Max(1, Waveform.TimescaleNs);
-                int idx = -1;
-                for (int i = 0; i < sig.Transitions.Count; i++)
-                {
-                    if (sig.Transitions[i].TimeNs > cursorNs) break;
-                    idx = i;
-                }
-                if (idx >= 0)
-                {
-                    var v = sig.Transitions[idx].Value;
-                    if (v.HasValue) return v.Value >= 0.5 ? "#10b981" : "#64748b";
-                }
+                // Shared value-at-cursor lookup (binary search, last-write-wins).
+                var (v, _) = Waveform.ValueAt(sig, Cursor.CursorTick);
+                if (v.HasValue) return v.Value >= 0.5 ? "#10b981" : "#64748b";
                 return "#f59e0b";
             }
         }
@@ -1543,6 +1582,49 @@ else
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Small literal pills for constant inputs. In the clean modes a constant
+    /// that used to be driven through a BUF now feeds its consumer directly on
+    /// a producer-less wire (see <see cref="SchematicSimplifier.SimplifyNetlist"/>);
+    /// this draws its value at the consuming pin so the input reads clearly
+    /// instead of looking unconnected.
+    /// </summary>
+    private string BuildConstChips()
+    {
+        if (_layout == null) return "";
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        var sb = new System.Text.StringBuilder();
+        foreach (var c in _layout.Netlist.Cells)
+        {
+            if (IsCellHidden(c.Id)) continue;
+            foreach (var pin in c.Inputs)
+            {
+                var net = _netById.GetValueOrDefault(pin.NetId);
+                if (net?.ConstValue == null) continue;
+                if (_producerOfNet.ContainsKey(pin.NetId)) continue; // real driver → drawn as a wire
+                if (!_layout.PinPositions.TryGetValue((c.Id, pin.Name), out var pos)) continue;
+
+                string val = net.ConstValue!;
+                double h = 18;
+                double w = Math.Max(22, val.Length * 7.2 + 10);
+                double x = pos.X - 8 - w;   // right edge sits 8px left of the pin
+                double y = pos.Y - h / 2;
+                sb.Append($"<line x1=\"{(x + w).ToString("0.##", ci)}\" y1=\"{pos.Y.ToString("0.##", ci)}\" ")
+                  .Append($"x2=\"{pos.X.ToString("0.##", ci)}\" y2=\"{pos.Y.ToString("0.##", ci)}\" ")
+                  .Append("stroke=\"#94a3b8\" stroke-width=\"1.5\" />");
+                sb.Append($"<rect x=\"{x.ToString("0.##", ci)}\" y=\"{y.ToString("0.##", ci)}\" ")
+                  .Append($"width=\"{w.ToString("0.##", ci)}\" height=\"{h.ToString("0.##", ci)}\" rx=\"4\" ")
+                  .Append("fill=\"#cbd5e1\" stroke=\"#64748b\" stroke-width=\"1\" />");
+                sb.Append($"<text x=\"{(x + w / 2).ToString("0.##", ci)}\" y=\"{(pos.Y + 4).ToString("0.##", ci)}\" ")
+                  .Append("text-anchor=\"middle\" font-size=\"11\" font-family=\"ui-monospace, Menlo, monospace\" ")
+                  .Append("fill=\"#0f172a\">")
+                  .Append(System.Net.WebUtility.HtmlEncode(val))
+                  .Append("</text>");
+            }
+        }
+        return sb.ToString();
+    }
+
     private string BuildDebugValues()
     {
         if (_layout == null || Waveform == null) return "";
@@ -1554,12 +1636,10 @@ else
             if (!_netById.TryGetValue(wire.NetId, out var net) || wire.Points.Count == 0) continue;
             var sig = Waveform.Signals.FirstOrDefault(s => s.Name.Equals(net.Name, StringComparison.OrdinalIgnoreCase));
             if (sig == null) continue;
-            int idx = -1;
-            for (int i = 0; i < sig.Transitions.Count; i++)
-            {
-                if (sig.Transitions[i].TimeNs > cursorNs) break;
-                idx = i;
-            }
+            // Shared binary-search lookup (last-write-wins). idx < 0 means the
+            // signal has no sample at or before the cursor → skip; a sample with
+            // a null value still renders "X".
+            int idx = sig.IndexAtOrBefore(cursorNs);
             if (idx < 0) continue;
             var t = sig.Transitions[idx];
             string val = !string.IsNullOrEmpty(t.Label) ? t.Label!

@@ -141,6 +141,23 @@
                 </KmilaTooltip>
             }
         </div>
+
+        @* Run mode toggle: Fast (event-driven runner, live visuals off — a
+           progress bar during the run, full waveform at the end) vs Visual
+           (live-updating waveform + step/breakpoints). Fast is for seconds-scale
+           sims where the live redraw is the bottleneck; both give the same
+           final waveform. *@
+        <KmilaTooltip TextKey="@(Sim.FastMode ? "RUNBAR_MODE_FAST_TIP" : "RUNBAR_MODE_VISUAL_TIP")">
+            <button type="button"
+                    class="run-bar__mode @(Sim.FastMode ? "run-bar__mode--fast" : "")"
+                    disabled="@IsBusy"
+                    @onclick="ToggleFastMode"
+                    aria-pressed="@Sim.FastMode"
+                    aria-label="@Traductor.T(Sim.FastMode ? "RUNBAR_MODE_FAST" : "RUNBAR_MODE_VISUAL")">
+                <Icon Name="@(Sim.FastMode ? IconName.LightningChargeFill : IconName.Activity)" />
+                <span class="run-bar__mode-label">@Traductor.T(Sim.FastMode ? "RUNBAR_MODE_FAST" : "RUNBAR_MODE_VISUAL")</span>
+            </button>
+        </KmilaTooltip>
       </div>@* end .run-bar__config *@
 
       @* Backdrop closes the popover when the user taps outside on phones.
@@ -317,6 +334,25 @@
             <span class="run-bar__progress-fill"
                   style="width: @Sim.Progress.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)%;"></span>
         </div>
+        @* Percent + live time estimate. RemainingSeconds is null until the run
+           has enough signal to estimate ("calculating…"). *@
+        <div class="run-bar__progress-meta">
+            <span class="run-bar__progress-pct">@Sim.Progress.ToString("F0")%</span>
+            <span class="run-bar__progress-eta">
+                @if (Sim.State == SimState.Paused)
+                {
+                    @Traductor.T("RUNBAR_ETA_PAUSED")
+                }
+                else if (Sim.RemainingSeconds is { } rem)
+                {
+                    @($"{FormatDuration(rem)} {Traductor.T("RUNBAR_ETA_REMAINING")}")
+                }
+                else
+                {
+                    @Traductor.T("RUNBAR_ETA_CALCULATING")
+                }
+            </span>
+        </div>
     }
 </div>
 
@@ -456,6 +492,21 @@
 
     private void ResetClock()
         => Sim.SetClockOverride(null, FpgaDefaultClockMhz);
+
+    // Flip Fast ↔ Visual. Read at run start by Editor.OnRunRequested to pick
+    // the runner and whether to skip the live waveform + replay attach.
+    private void ToggleFastMode()
+        => Sim.SetFastMode(!Sim.FastMode);
+
+    // Compact human duration for the run ETA: "<1s", "5s", "1m 20s", "1h 3m".
+    private static string FormatDuration(double seconds)
+    {
+        if (seconds < 1) return "<1s";
+        var ts = TimeSpan.FromSeconds(Math.Round(seconds));
+        if (ts.TotalHours >= 1) return $"{(int)ts.TotalHours}h {ts.Minutes}m";
+        if (ts.TotalMinutes >= 1) return $"{ts.Minutes}m {ts.Seconds}s";
+        return $"{ts.Seconds}s";
+    }
 
     private async Task OnBuildClickAsync()
     {

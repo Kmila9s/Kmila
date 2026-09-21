@@ -25,6 +25,7 @@
 @inject Microsoft.Extensions.Logging.ILogger<Kmila.Shared.Components.WaveformViewer> Logger
 @inject Microsoft.JSInterop.IJSRuntime JS
 @inject Kmila.Shared.Services.ReplayState Replay
+@inject Kmila.Shared.Services.SignalCursorBus Cursor
 @implements IDisposable
 
 @if (_compareTracks != null && _compareTracks.Count >= 2)
@@ -130,12 +131,16 @@
                              @onclick="() => ToggleHidden(signalName)"
                              role="button"
                              title="@Traductor.T("WAVEFORM_HIDE_SIGNAL")">
-                            <span class="waveform-signal-chip waveform-signal-chip--@first.PortType.ToLowerInvariant()">@first.PortType</span>
-                            <span class="waveform-signal-name">@first.Name</span>
-                            @if (first.BitWidth > 1)
-                            {
-                                <span class="waveform-signal-width">[@first.BitWidth]</span>
-                            }
+                            @* label-main wrapper mirrors single mode so the name
+                               gets ellipsis containment + the chip divider. *@
+                            <span class="waveform-row__label-main">
+                                <span class="waveform-signal-chip waveform-signal-chip--@first.PortType.ToLowerInvariant()">@first.PortType</span>
+                                <span class="waveform-signal-name" title="@first.Name">@first.Name</span>
+                                @if (first.BitWidth > 1)
+                                {
+                                    <span class="waveform-signal-width">[@first.BitWidth]</span>
+                                }
+                            </span>
                             <Icon Name="IconName.EyeSlash" class="waveform-row__label-eye" />
                         </div>
                         <div class="waveform-row__track" style="width: @(trackWidthPx)px;">
@@ -289,25 +294,85 @@ else if (Data != null && Data.Signals.Count > 0)
                     if (_hiddenSignals.Contains(signal.Name)) continue;
                     var color  = GetSignalColor(signal);
                     var signalName = signal.Name;
+                    var valueMode = IsValueMode(signal);
+                    var isVector = signal.BitWidth > 1;
+                    var expanded = isVector && _expandedVectors.Contains(signalName);
                     <div class="waveform-row">
-                        <div class="waveform-row__label waveform-row__label--clickable"
-                             @onclick="() => ToggleHidden(signalName)"
-                             role="button"
-                             title="@Traductor.T("WAVEFORM_HIDE_SIGNAL")">
-                            <span class="waveform-signal-chip waveform-signal-chip--@signal.PortType.ToLowerInvariant()">@signal.PortType</span>
-                            <span class="waveform-signal-name">@signal.Name</span>
-                            @if (signal.BitWidth > 1)
+                        <div class="waveform-row__label">
+                            @if (isVector)
                             {
-                                <span class="waveform-signal-width">[@signal.BitWidth]</span>
+                                @* Expand/collapse the bus into one std_logic wave
+                                   per bit. stopPropagation so it doesn't also hide. *@
+                                <button type="button" class="waveform-row__expand-toggle"
+                                        @onclick="() => ToggleExpand(signalName)"
+                                        @onclick:stopPropagation="true"
+                                        aria-expanded="@expanded"
+                                        title="@Traductor.T(expanded ? "WAVEFORM_COLLAPSE_BITS" : "WAVEFORM_EXPAND_BITS")">
+                                    @(expanded ? "▾" : "▸")
+                                </button>
                             }
-                            <Icon Name="IconName.EyeSlash" class="waveform-row__label-eye" />
+                            else
+                            {
+                                <span class="waveform-row__expand-spacer" aria-hidden="true"></span>
+                            }
+                            <span class="waveform-row__label-main waveform-row__label--clickable"
+                                  @onclick="() => ToggleHidden(signalName)"
+                                  role="button"
+                                  title="@Traductor.T("WAVEFORM_HIDE_SIGNAL")">
+                                <span class="waveform-signal-chip waveform-signal-chip--@signal.PortType.ToLowerInvariant()">@signal.PortType</span>
+                                <span class="waveform-signal-name" title="@signal.Name">@signal.Name</span>
+                                @if (signal.BitWidth > 1)
+                                {
+                                    <span class="waveform-signal-width">[@signal.BitWidth]</span>
+                                }
+                            </span>
+                            @* Value-at-cursor readout (non-destructive column) *@
+                            <span class="waveform-signal-value" style="color:@color" title="@Traductor.T("WAVEFORM_VALUE_AT_CURSOR")">@FormatCursorValue(signal)</span>
+                            @* Per-signal waveform↔value toggle *@
+                            <button type="button" class="waveform-row__mode-toggle"
+                                    @onclick="() => ToggleValueMode(signalName)"
+                                    @onclick:stopPropagation="true"
+                                    title="@Traductor.T(valueMode ? "WAVEFORM_SHOW_AS_WAVE" : "WAVEFORM_SHOW_AS_VALUE")">
+                                @(valueMode ? "∿" : "#")
+                            </button>
                         </div>
                         <div class="waveform-row__track" style="width: @(contentWidthPx)px;">
-                            <div class="waveform-row__track-view" style="width: @(visibleTrackPx)px;">
-                                @((MarkupString)BuildTraceSvg(signal, visibleTrackPx, color, viewStartNs, viewEndNs))
+                            <div class="waveform-row__track-view @(valueMode ? "waveform-row__value-track" : "")" style="width: @(visibleTrackPx)px;">
+                                @if (valueMode)
+                                {
+                                    <span class="waveform-value-readout" style="color:@color">@FormatCursorValue(signal)</span>
+                                }
+                                else
+                                {
+                                    @((MarkupString)TraceSvgCached(signal, visibleTrackPx, color, viewStartNs, viewEndNs))
+                                }
                             </div>
                         </div>
                     </div>
+                    @* Expanded bus → one std_logic wave per bit (MSB on top).
+                       Derived, display-only; the parent bus row above is
+                       unchanged. See BitSignalsFor / WaveformTransition.Bits. *@
+                    @if (expanded)
+                    {
+                        var bits = BitSignalsFor(signal);
+                        for (int b = 0; b < bits.Length; b++)
+                        {
+                            var bitSig = bits[b];
+                            var bitLabel = $"{signalName}[{signal.BitWidth - 1 - b}]";
+                            <div class="waveform-row waveform-row--bit">
+                                <div class="waveform-row__label">
+                                    <span class="waveform-row__expand-spacer" aria-hidden="true"></span>
+                                    <span class="waveform-row__bit-name" title="@bitLabel">@bitLabel</span>
+                                    <span class="waveform-signal-value" style="color:@color">@FormatBitCursorValue(bitSig)</span>
+                                </div>
+                                <div class="waveform-row__track" style="width: @(contentWidthPx)px;">
+                                    <div class="waveform-row__track-view" style="width: @(visibleTrackPx)px;">
+                                        @((MarkupString)BitTraceSvgCached(signal, b, visibleTrackPx, color, viewStartNs, viewEndNs))
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    }
                 }
 
                 @* Shared time ruler — last row. UX-N-014 follow-up: clickable
@@ -474,14 +539,186 @@ else if (Data != null && Data.Signals.Count > 0)
     private int _windowId = -1;
     private DotNetObjectReference<WaveformViewer>? _windowDotNetRef;
 
+    // ─── Trace-SVG memoisation ───────────────────────────────────────────
+    // BuildTraceSvg is the render hot path. A trace only changes when the
+    // visible window (start/end/width), the zoom, the colour, or the signal's
+    // transition count changes. Cursor moves (the value column) change NONE of
+    // those, so without a cache every hover would rebuild every row's SVG on
+    // the single-threaded Blazor circuit — re-introducing the freeze. Keyed by
+    // signal name; value is the last inputs + rendered string.
+    private readonly Dictionary<string, (long Start, long End, int Width, int Count, string Color, string Svg)> _traceCache = new();
+
+    private string TraceSvgCached(WaveformSignal signal, int widthPx, string color, long viewStartNs, long viewEndNs)
+    {
+        if (_traceCache.TryGetValue(signal.Name, out var e) &&
+            e.Start == viewStartNs && e.End == viewEndNs && e.Width == widthPx &&
+            e.Count == signal.Transitions.Count && e.Color == color)
+        {
+            return e.Svg;
+        }
+        var svg = BuildTraceSvg(signal, widthPx, color, viewStartNs, viewEndNs);
+        _traceCache[signal.Name] = (viewStartNs, viewEndNs, widthPx, signal.Transitions.Count, color, svg);
+        return svg;
+    }
+
+    // ─── std_logic_vector bit expansion ──────────────────────────────────
+    // A bus row can be expanded (chevron in its label) into one std_logic wave
+    // per bit. The per-bit series is DERIVED for display from the raw bit
+    // string kept on each transition (WaveformTransition.Bits) — which
+    // preserves the U/Z/X states the aggregated numeric Value collapses away.
+    // Purely visual: nothing here touches the simulation data, the value/label
+    // columns, or the VCD/CSV export. Parent bus rows render exactly as before;
+    // the child rows are drawn by reusing the std_logic branch of BuildTraceSvg
+    // on lightweight synthesized signals.
+    private readonly HashSet<string> _expandedVectors = new(StringComparer.Ordinal);
+
+    private void ToggleExpand(string name)
+    {
+        if (!_expandedVectors.Add(name)) _expandedVectors.Remove(name);
+    }
+
+    // Synthesized per-bit signals, cached by parent name and rebuilt only when
+    // the parent's transition count changes (live append / snapshot reload).
+    // Index 0 = the MSB (string is stored MSB-first); the VHDL bit number for
+    // display is BitWidth-1-pos (downto convention).
+    private readonly Dictionary<string, (int Count, WaveformSignal[] Bits)> _bitSignalCache = new();
+
+    private WaveformSignal[] BitSignalsFor(WaveformSignal parent)
+    {
+        if (_bitSignalCache.TryGetValue(parent.Name, out var e) && e.Count == parent.Transitions.Count)
+            return e.Bits;
+
+        int width = Math.Max(1, parent.BitWidth);
+        var result = new WaveformSignal[width];
+        for (int pos = 0; pos < width; pos++)
+        {
+            var trans = new List<WaveformTransition>(parent.Transitions.Count);
+            double? prev = double.NaN; // sentinel → first sample always emits
+            foreach (var t in parent.Transitions)
+            {
+                double? v = null;
+                var bitsStr = t.Bits;
+                if (bitsStr != null && pos < bitsStr.Length)
+                {
+                    char c = bitsStr[pos];
+                    v = c == '1' ? 1.0 : c == '0' ? 0.0 : (double?)null; // U/Z/X → unknown
+                }
+                // Keep only real changes so the step-function list stays compact.
+                if (!Equals(v, prev))
+                {
+                    trans.Add(new WaveformTransition(t.TimeNs, v, null));
+                    prev = v;
+                }
+            }
+            result[pos] = new WaveformSignal
+            {
+                Name = parent.Name,
+                DataType = "std_logic",
+                BitWidth = 1,
+                PortType = parent.PortType,
+                Transitions = trans
+            };
+        }
+        _bitSignalCache[parent.Name] = (parent.Transitions.Count, result);
+        return result;
+    }
+
+    // Mirrors TraceSvgCached but keyed per (parent, bit) so bit rows never
+    // collide in the cache with each other or with the parent bus trace.
+    private readonly Dictionary<string, (long Start, long End, int Width, int Count, string Color, string Svg)> _bitTraceCache = new();
+
+    private string BitTraceSvgCached(WaveformSignal parent, int pos, int widthPx, string color, long viewStartNs, long viewEndNs)
+    {
+        var bitSig = BitSignalsFor(parent)[pos];
+        string key = parent.Name + "#" + pos;
+        if (_bitTraceCache.TryGetValue(key, out var e) &&
+            e.Start == viewStartNs && e.End == viewEndNs && e.Width == widthPx &&
+            e.Count == bitSig.Transitions.Count && e.Color == color)
+        {
+            return e.Svg;
+        }
+        var svg = BuildTraceSvg(bitSig, widthPx, color, viewStartNs, viewEndNs);
+        _bitTraceCache[key] = (viewStartNs, viewEndNs, widthPx, bitSig.Transitions.Count, color, svg);
+        return svg;
+    }
+
+    // Bit's value at the shared cursor (1/0, or X for U/Z/X/undefined).
+    private string FormatBitCursorValue(WaveformSignal bitSig)
+    {
+        if (Data == null) return "—";
+        var (val, _) = Data.ValueAt(bitSig, Cursor.CursorTick);
+        if (val.HasValue) return val.Value >= 0.5 ? "1" : "0";
+        return "X";
+    }
+
+    // ─── Per-signal value/waveform mode ──────────────────────────────────
+    // The "value column" shows every signal's value at the cursor (non-
+    // destructive). Additionally each row can collapse to a value-only track
+    // via the per-row toggle. Numeric signals (integer / multi-bit bus) default
+    // to value-only since a stepped bus is usually read as a number; std_logic
+    // defaults to the waveform. _valueModeOverride records explicit user flips.
+    private readonly Dictionary<string, bool> _valueModeOverride = new();
+
+    private bool IsValueMode(WaveformSignal s)
+        => _valueModeOverride.TryGetValue(s.Name, out var v) ? v : (s.DataType != "std_logic");
+
+    private void ToggleValueMode(string name)
+    {
+        var sig = Data?.Signals.FirstOrDefault(s => s.Name == name);
+        bool current = sig != null && IsValueMode(sig);
+        _valueModeOverride[name] = !current;
+    }
+
+    /// <summary>
+    /// Formats a signal's value at the current cursor for the value column /
+    /// value-only track. Mirrors SchematicViewer's Debug readout: the
+    /// pre-formatted bus label (hex) when present, else 1/0 for std_logic, else
+    /// "X" when the signal has no defined value at the cursor yet.
+    /// </summary>
+    private string FormatCursorValue(WaveformSignal signal)
+    {
+        if (Data == null) return "—";
+        var (val, label) = Data.ValueAt(signal, Cursor.CursorTick);
+        if (!string.IsNullOrEmpty(label)) return label!;
+        if (val.HasValue) return val.Value >= 0.5 ? "1" : "0";
+        return "X";
+    }
+
+    protected override void OnInitialized()
+    {
+        // React when the cursor moves — whether from this viewer's own hover
+        // (via OnCursorHover) or from the schematic clicking a wire. Only the
+        // value column re-reads; the SVG traces are memoised so this stays cheap.
+        Cursor.OnChange += OnCursorChanged;
+    }
+
+    private void OnCursorChanged() => InvokeAsync(StateHasChanged);
+
+    /// <summary>
+    /// JS hover callback: the pointer is over the chart at <paramref name="ns"/>
+    /// nanoseconds. Convert to an absolute tick and publish it on the shared
+    /// cursor bus so the value column (and the schematic) read every signal's
+    /// value at that instant. Throttled on the JS side; a no-op when the tick
+    /// is unchanged (SignalCursorBus.SetCursorTick dedups).
+    /// </summary>
+    [JSInvokable]
+    public void OnCursorHover(double ns)
+    {
+        int scale = Math.Max(1, Data?.TimescaleNs ?? 1);
+        if (ns < 0) ns = 0;
+        Cursor.SetCursorTick((ulong)(ns / scale));
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (_hoverId <= 0)
         {
             try
             {
+                // Pass a .NET ref so the hover doubles as the value cursor.
+                _windowDotNetRef ??= DotNetObjectReference.Create(this);
                 _hoverId = await JS.InvokeAsync<int>("kmilaAttachWaveformHover",
-                    ".waveform-viewer__body");
+                    ".waveform-viewer__body", _windowDotNetRef);
             }
             catch { /* prerender / no JS — hover indicator just doesn't render */ }
         }
@@ -531,6 +768,7 @@ else if (Data != null && Data.Signals.Count > 0)
 
     public void Dispose()
     {
+        Cursor.OnChange -= OnCursorChanged;
         if (_hoverId > 0)
         {
             try { _ = JS.InvokeVoidAsync("kmilaDetachWaveformHover", _hoverId).AsTask(); }
@@ -856,27 +1094,20 @@ else if (Data != null && Data.Signals.Count > 0)
 
         double X(long ns) => (double)(ns - viewStartNs) / spanNs * widthPx;
 
-        // Find the index of the first transition strictly inside the window
-        // and remember the last transition at or before viewStartNs — that
-        // one fixes the entry-level so a partially-clipped signal starts
-        // at its real value rather than at whatever the first in-window
-        // transition happens to be.
-        int firstInside = signal.Transitions.Count;
-        WaveformTransition entry = signal.Transitions[0];
-        bool haveEntry = false;
-        for (int i = 0; i < signal.Transitions.Count; i++)
-        {
-            var t = signal.Transitions[i];
-            if (t.TimeNs <= viewStartNs)
-            {
-                entry = t;
-                haveEntry = true;
-                continue;
-            }
-            firstInside = i;
-            break;
-        }
-        if (!haveEntry) entry = signal.Transitions[0];
+        // Windowed + decimated data for this viewport. GetWindow binary-searches
+        // the visible range and returns at most ~widthPx points (one per pixel
+        // column, min/max preserved), plus the entry level (last transition at or
+        // before viewStartNs) so a partially-clipped signal starts at its real
+        // value. This bounds render cost by pixel width instead of history length
+        // and replaces the former O(N) scan-from-0 (and the per-render
+        // Transitions.ToArray()/IndexOf) that stalled long runs. Visual only —
+        // the underlying transition data is untouched.
+        var window = signal.GetWindow(viewStartNs, viewEndNs, widthPx);
+        var pts = window.Points;
+        bool haveEntry = window.HaveEntry;
+        WaveformTransition entry = haveEntry
+            ? window.Entry
+            : (signal.Transitions.Count > 0 ? signal.Transitions[0] : default);
 
         if (signal.DataType == "std_logic")
         {
@@ -903,10 +1134,9 @@ else if (Data != null && Data.Signals.Count > 0)
             var target  = onDashed ? dashed : solid;
             target.Append($"M 0 {curY:0.##} ");
 
-            for (int i = firstInside; i < signal.Transitions.Count; i++)
+            for (int i = 0; i < pts.Count; i++)
             {
-                var t  = signal.Transitions[i];
-                if (t.TimeNs > viewEndNs) break;
+                var t  = pts[i];
                 double tx = X(t.TimeNs);
                 bool nextDashed = !t.Value.HasValue;
                 double nextY    = LevelY(t.Value);
@@ -948,10 +1178,9 @@ else if (Data != null && Data.Signals.Count > 0)
             // each plateau. Mirrors the way GTKWave renders bus signals.
             var d = new System.Text.StringBuilder();
             d.Append($"M 0 {ValMid:0.##} ");
-            for (int i = firstInside; i < signal.Transitions.Count; i++)
+            for (int i = 0; i < pts.Count; i++)
             {
-                var t = signal.Transitions[i];
-                if (t.TimeNs > viewEndNs) break;
+                var t = pts[i];
                 double tx = X(t.TimeNs);
                 // A pinch at every transition (triangle marker).
                 d.Append($"L {tx - 3:0.##} {ValMid:0.##} ");
@@ -964,23 +1193,28 @@ else if (Data != null && Data.Signals.Count > 0)
             // Value text in each plateau (skip if the plateau is too narrow
             // to fit legibly — SVG text doesn't clip cleanly without extra
             // clip paths, and a label wider than its plateau just looks wrong).
-            // Use the entry-level transition's label for the leading slice
-            // when its plateau extends into the window.
-            int plateauStart = haveEntry ? Array.IndexOf(signal.Transitions.ToArray(), entry) : firstInside;
-            if (plateauStart < 0) plateauStart = firstInside;
-            for (int i = plateauStart; i < signal.Transitions.Count; i++)
+            // The leading slice (left edge → first in-window point) uses the
+            // entry-level label; each subsequent point labels its own plateau.
+            static string LabelText(double midX, string label) =>
+                $"<text x=\"{midX:0.##}\" y=\"{20 + 4:0.##}\" text-anchor=\"middle\" font-size=\"10\" font-family=\"ui-monospace, Menlo, monospace\" fill=\"var(--text-strong)\">{System.Net.WebUtility.HtmlEncode(label)}</text>";
+
+            if (haveEntry && !string.IsNullOrEmpty(entry.Label))
             {
-                var t = signal.Transitions[i];
-                if (t.TimeNs > viewEndNs) break;
+                double txLead = 0;
+                double nextLead = pts.Count > 0 ? X(pts[0].TimeNs) : widthPx;
+                if (nextLead - txLead >= 24)
+                    sb.Append(LabelText((txLead + nextLead) / 2.0, entry.Label!));
+            }
+            for (int i = 0; i < pts.Count; i++)
+            {
+                var t = pts[i];
                 if (string.IsNullOrEmpty(t.Label)) continue;
-                double tx = i < firstInside ? 0 : X(t.TimeNs);
-                double nextX = i + 1 < signal.Transitions.Count && signal.Transitions[i + 1].TimeNs <= viewEndNs
-                    ? X(signal.Transitions[i + 1].TimeNs)
-                    : widthPx;
+                double tx = X(t.TimeNs);
+                double nextX = (i + 1 < pts.Count) ? X(pts[i + 1].TimeNs) : widthPx;
                 double midX = (tx + nextX) / 2.0;
                 if (nextX - tx < 24) continue; // too narrow
 
-                sb.Append($"<text x=\"{midX:0.##}\" y=\"{ValMid + 4:0.##}\" text-anchor=\"middle\" font-size=\"10\" font-family=\"ui-monospace, Menlo, monospace\" fill=\"var(--text-strong)\">{System.Net.WebUtility.HtmlEncode(t.Label)}</text>");
+                sb.Append(LabelText(midX, t.Label!));
             }
         }
 

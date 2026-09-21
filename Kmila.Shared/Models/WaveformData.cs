@@ -40,6 +40,17 @@ public class WaveformData
     private readonly Dictionary<Variable, int> _liveWatermarks = new();
 
     /// <summary>
+    /// Name → signal index for O(1) lookup during the live <see cref="MergeFrom"/>
+    /// path. Built lazily from <see cref="Signals"/> on first merge and kept in
+    /// sync as new signals are discovered mid-run. Replaces the previous
+    /// per-signal <c>Signals.FirstOrDefault(s =&gt; s.Name == name)</c> scan, which
+    /// was O(signals²) every 200 ms tick and a contributor to the live-render
+    /// stall on designs with many signals. Purely a visualization optimisation —
+    /// the merged data is identical.
+    /// </summary>
+    private Dictionary<string, WaveformSignal>? _byName;
+
+    /// <summary>
     /// Nanoseconds per tick (timescale).
     /// </summary>
     public int TimescaleNs { get; init; }
@@ -131,11 +142,18 @@ public class WaveformData
         bool appendedAny = false;
         long maxTimeMoment = 0;
 
+        // Lazily build the name→signal index from whatever is already in
+        // Signals (e.g. after a snapshot reload), then keep it in sync below.
+        if (_byName == null)
+        {
+            _byName = new Dictionary<string, WaveformSignal>(Signals.Count);
+            foreach (var s in Signals) _byName[s.Name] = s;
+        }
+
         foreach (var signal in trackedSignals)
         {
             var name = signal.Name;
-            var sig = Signals.FirstOrDefault(s => s.Name == name);
-            if (sig == null)
+            if (!_byName.TryGetValue(name, out var sig))
             {
                 sig = new WaveformSignal
                 {
@@ -145,6 +163,7 @@ public class WaveformData
                     PortType = signal.IsPort ? signal.PortType.ToString() : "INTERNAL"
                 };
                 Signals.Add(sig);
+                _byName[name] = sig;
                 addedSignal = true;
             }
 
@@ -161,11 +180,14 @@ public class WaveformData
                 string? lbl = (sig.DataType != "std_logic" && value != null)
                     ? FormatDisplayLabel(value, sig.DataType, sig.BitWidth)
                     : null;
+                // Display-only per-bit string for buses — see the static path in
+                // FromSignalHistory and WaveformTransition.Bits. Not exported.
+                string? bits = sig.DataType == "std_logic_vector" ? value?.ToString() : null;
 
                 // Same-tick collapse: deltas inside one tick → keep last.
                 if (transitions.Count > 0 && transitions[^1].TimeNs == ns)
                 {
-                    transitions[^1] = new WaveformTransition(ns, val, lbl);
+                    transitions[^1] = new WaveformTransition(ns, val, lbl, 0, bits);
                     localAppended = true;
                     return;
                 }
@@ -175,7 +197,7 @@ public class WaveformData
                 {
                     return;
                 }
-                transitions.Add(new WaveformTransition(ns, val, lbl));
+                transitions.Add(new WaveformTransition(ns, val, lbl, 0, bits));
                 localAppended = true;
             });
             _liveWatermarks[signal] = newCount;
@@ -270,6 +292,10 @@ public class WaveformData
                 string? lbl = (dataType != "std_logic" && entry.Value != null)
                     ? FormatDisplayLabel(entry.Value, dataType, bitWidth)
                     : null;
+                // Display-only: keep the raw per-bit string for buses so the
+                // viewer can expand into per-bit waves (preserving U/Z/X). Not
+                // read by any export path — see WaveformTransition.Bits.
+                string? bits = dataType == "std_logic_vector" ? entry.Value?.ToString() : null;
                 int srcLine = entry.SourceLine;
 
                 if (lastTick == tick && transitions.Count > 0)
@@ -278,7 +304,7 @@ public class WaveformData
                     // value (matches the previous tick→value dictionary's
                     // last-write-wins semantics). The source line from the
                     // winning (last) delta wins too.
-                    transitions[^1] = new WaveformTransition(ns, val, lbl, srcLine);
+                    transitions[^1] = new WaveformTransition(ns, val, lbl, srcLine, bits);
                     prevVal = val;
                     prevLbl = lbl;
                     continue;
@@ -292,7 +318,7 @@ public class WaveformData
                     continue;
                 }
 
-                transitions.Add(new WaveformTransition(ns, val, lbl, srcLine));
+                transitions.Add(new WaveformTransition(ns, val, lbl, srcLine, bits));
                 lastTick = tick;
                 prevVal = val;
                 prevLbl = lbl;
@@ -315,6 +341,17 @@ public class WaveformData
             TimescaleNs = timescaleNs
         };
     }
+
+    /// <summary>
+    /// Resolves a signal's value at an absolute simulation <paramref name="tick"/>
+    /// using last-write-wins step semantics (the nearest transition at or before
+    /// the cursor). Shared by the schematic's Debug-mode wire colouring and the
+    /// waveform viewer's value column so both read values identically. Returns
+    /// the numeric value and the pre-formatted label (hex/decimal for buses),
+    /// both <c>null</c> when the signal has no sample yet at that time.
+    /// </summary>
+    public (double? Value, string? Label) ValueAt(WaveformSignal signal, ulong tick)
+        => signal.ValueAtNs((long)tick * Math.Max(1, TimescaleNs));
 
     /// <summary>
     /// Determines the sort order for a signal based on its port type.
@@ -501,15 +538,143 @@ public class WaveformSignal
     /// Raw transitions in (time-ns, numeric-value) form — one entry per real
     /// change in the signal's history, with no downsampling. This is what
     /// the SVG waveform renderer plots: a step function from one transition
-    /// to the next.
+    /// to the next. Always ordered ascending by <see cref="WaveformTransition.TimeNs"/>,
+    /// which the binary-search helpers below rely on.
     /// </summary>
     public List<WaveformTransition> Transitions { get; init; } = new();
+
+    /// <summary>
+    /// Index of the last transition whose <see cref="WaveformTransition.TimeNs"/>
+    /// is at or before <paramref name="ns"/>, or -1 when none exists (the cursor
+    /// sits before the first transition). O(log N) binary search — replaces the
+    /// O(N) linear scans the viewer/schematic did from index 0 on every render.
+    /// </summary>
+    public int IndexAtOrBefore(long ns)
+    {
+        var t = Transitions;
+        int lo = 0, hi = t.Count - 1, res = -1;
+        while (lo <= hi)
+        {
+            int mid = lo + ((hi - lo) >> 1);
+            if (t[mid].TimeNs <= ns) { res = mid; lo = mid + 1; }
+            else hi = mid - 1;
+        }
+        return res;
+    }
+
+    /// <summary>
+    /// Value + formatted label at absolute time <paramref name="ns"/> using
+    /// last-write-wins step semantics (nearest sample at or before). Returns
+    /// (null, null) when the signal has no sample yet at that time.
+    /// </summary>
+    public (double? Value, string? Label) ValueAtNs(long ns)
+    {
+        int idx = IndexAtOrBefore(ns);
+        if (idx < 0) return (null, null);
+        var t = Transitions[idx];
+        return (t.Value, t.Label);
+    }
+
+    /// <summary>
+    /// Returns only the transitions needed to draw the [<paramref name="startNs"/>,
+    /// <paramref name="endNs"/>] window, decimated to roughly one point per pixel
+    /// (<paramref name="maxPoints"/> ≈ visible pixel width). The window carries the
+    /// entry level (last transition at or before the left edge) so a clipped signal
+    /// starts at its real value. This bounds render cost by the viewport width
+    /// instead of the total history length — the essence of the windowed viewer.
+    ///
+    /// Decimation preserves the first and last transition of every pixel bucket
+    /// plus the bucket's min- and max-valued samples, so narrow pulses (e.g. a fast
+    /// clock at zoomed-out scales) still show up as activity rather than vanishing.
+    /// Purely visual: the underlying <see cref="Transitions"/> data is never mutated.
+    /// </summary>
+    public WaveformWindow GetWindow(long startNs, long endNs, int maxPoints)
+    {
+        var t = Transitions;
+        if (t.Count == 0)
+            return new WaveformWindow(default, false, Array.Empty<WaveformTransition>());
+
+        int entryIdx = IndexAtOrBefore(startNs);
+        bool haveEntry = entryIdx >= 0;
+        WaveformTransition entry = haveEntry ? t[entryIdx] : t[0];
+
+        int first = entryIdx + 1;                 // first transition strictly after startNs
+        int last = IndexAtOrBefore(endNs);        // last transition at or before endNs
+        if (last < first)
+            return new WaveformWindow(entry, haveEntry, Array.Empty<WaveformTransition>());
+
+        int count = last - first + 1;
+        if (maxPoints <= 0 || count <= maxPoints)
+        {
+            var slice = new List<WaveformTransition>(count);
+            for (int i = first; i <= last; i++) slice.Add(t[i]);
+            return new WaveformWindow(entry, haveEntry, slice);
+        }
+
+        // Bucket the visible span into ~maxPoints columns and keep at most four
+        // representative samples per bucket (first, min, max, last).
+        long span = endNs - startNs;
+        if (span <= 0) span = 1;
+        int buckets = Math.Max(1, maxPoints);
+        var result = new List<WaveformTransition>(Math.Min(count, buckets * 4));
+        int lastIdx = first - 1;
+        void Emit(int idx) { if (idx > lastIdx) { result.Add(t[idx]); lastIdx = idx; } }
+
+        int i2 = first;
+        for (int b = 0; b < buckets && i2 <= last; b++)
+        {
+            long bucketEnd = startNs + (long)((double)(b + 1) / buckets * span);
+            int bStart = i2;
+            int bEnd = -1;
+            int minIdx = -1, maxIdx = -1;
+            while (i2 <= last && t[i2].TimeNs <= bucketEnd)
+            {
+                bEnd = i2;
+                double? v = t[i2].Value;
+                if (v.HasValue)
+                {
+                    if (minIdx < 0 || v.Value < (t[minIdx].Value ?? double.MaxValue)) minIdx = i2;
+                    if (maxIdx < 0 || v.Value > (t[maxIdx].Value ?? double.MinValue)) maxIdx = i2;
+                }
+                i2++;
+            }
+            if (bEnd < 0) continue; // empty bucket
+            Emit(bStart);
+            if (minIdx >= 0 && maxIdx >= 0)
+            {
+                Emit(Math.Min(minIdx, maxIdx));
+                Emit(Math.Max(minIdx, maxIdx));
+            }
+            Emit(bEnd);
+        }
+        return new WaveformWindow(entry, haveEntry, result);
+    }
 }
+
+/// <summary>
+/// A decimated slice of a signal's transitions for one viewport window, as
+/// produced by <see cref="WaveformSignal.GetWindow"/>. <see cref="Entry"/> is
+/// the level at the left edge (valid only when <see cref="HaveEntry"/> is true);
+/// <see cref="Points"/> are the in-window transitions to draw, time-ascending.
+/// </summary>
+public readonly record struct WaveformWindow(
+    WaveformTransition Entry,
+    bool HaveEntry,
+    IReadOnlyList<WaveformTransition> Points);
 
 /// <summary>
 /// A single step-function transition: at <see cref="TimeNs"/> the signal
 /// becomes <see cref="Value"/>. For multi-bit signals we also carry the
 /// human-readable formatted label (hex / decimal) so the SVG can stamp it
 /// inside the plateau.
+/// <para>
+/// <see cref="Bits"/> is a display-only mirror of the raw per-bit string
+/// ("0","1","U","Z","X",..., MSB-first), populated only for
+/// <c>std_logic_vector</c> signals (<c>null</c> for std_logic / integer).
+/// It lets the viewer expand a bus into one wave per bit while preserving the
+/// undefined states (U/Z/X) that the aggregated <see cref="Value"/> collapses
+/// away. It is storage for visualization, not simulation state: nothing in the
+/// value/label/export path reads it, so the VCD/CSV output is unaffected.
+/// </para>
 /// </summary>
-public readonly record struct WaveformTransition(long TimeNs, double? Value, string? Label, int SourceLine = 0);
+public readonly record struct WaveformTransition(long TimeNs, double? Value, string? Label, int SourceLine = 0, string? Bits = null);

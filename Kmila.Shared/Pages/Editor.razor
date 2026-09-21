@@ -636,6 +636,12 @@
     /// </summary>
     private void OnEngineReadyForLiveReplay(Interpreter.Services.DeltaCycleEngine engine)
     {
+        // Fast mode is headless-by-design: no per-delta live replay, so
+        // breakpoints / step / active-line tracking are off during a Fast run
+        // (Pause/Stop still work — they route through the runner, not here).
+        // The full waveform is still built at the end in OnSimulationDataReady.
+        if (Sim.FastMode) return;
+
         // Attach SYNCHRONOUSLY with the saved file content so the engine's
         // OnFrameEmitted subscription is in place before the first delta
         // fires. The async Monaco.GetValue() path raced against the
@@ -1878,7 +1884,8 @@
             {
                 await Builder.RunSimulationAsync(ports, duration,
                     systemClockMhz: effectiveClockMhz,
-                    tickResNs: tickResNs);
+                    tickResNs: tickResNs,
+                    fastRun: Sim.FastMode);
             }
             catch (Exception ex)
             {

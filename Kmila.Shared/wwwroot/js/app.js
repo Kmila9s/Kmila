@@ -1155,11 +1155,21 @@ window.downloadFile = function (fileName, content) {
         return Math.round(ns) + ' ns';
     }
 
-    function attach(bodySel) {
+    function attach(bodySel, dotNetRef) {
         const body = (typeof bodySel === 'string')
             ? document.querySelector(bodySel) : bodySel;
         if (!body) return -1;
         if (body.__kmilaHoverId) detach(body.__kmilaHoverId);
+
+        // Cursor publishing: when a dotNetRef is supplied, the hover doubles as
+        // the value cursor — it pushes the time under the pointer back to
+        // .NET (WaveformViewer.OnCursorHover) so the value column can read each
+        // signal's value at that instant. Throttled to ~60ms so a fast mouse
+        // doesn't flood the Blazor circuit; only the cheap value chips
+        // re-render server-side (the SVG traces are memoised).
+        let lastPublishMs = 0;
+        let lastPublishedNs = -1;
+        const PUBLISH_THROTTLE_MS = 60;
 
         // Coarse-pointer (touch-primary) devices have no hover state — the
         // overlay is invisible to them and the per-event geometry math was
@@ -1237,6 +1247,18 @@ window.downloadFile = function (fileName, content) {
             chip.style.left    = chipLeft + 'px';
             chip.style.top     = (scrollT + 4) + 'px';
             chip.style.display = 'block';
+
+            // Publish the cursor time to .NET (throttled) so the value column
+            // tracks the pointer. Guarded on both time-delta and elapsed ms so
+            // a stationary pointer during scroll doesn't re-publish.
+            if (dotNetRef) {
+                const now = (performance && performance.now) ? performance.now() : Date.now();
+                if (now - lastPublishMs >= PUBLISH_THROTTLE_MS && Math.round(t) !== lastPublishedNs) {
+                    lastPublishMs = now;
+                    lastPublishedNs = Math.round(t);
+                    try { dotNetRef.invokeMethodAsync('OnCursorHover', t); } catch (_) {}
+                }
+            }
         }
 
         function schedule() {

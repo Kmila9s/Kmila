@@ -43,7 +43,13 @@ public sealed class KvizPosition
 public sealed class KvizSettings
 {
     public int RingBufferTicks { get; set; } = 2000;
+    // Legacy: enum member name (Half/Normal/Fast/Free). Kept for back-compat —
+    // older sidecars only carry this. Superseded by DefaultTickDelayMs.
     public string DefaultSpeed { get; set; } = "Normal";
+    // Playback pacing in ms/tick (0 = Free). Nullable + WhenWritingNull so old
+    // sidecars that lack the key deserialize to null and fall back to
+    // DefaultSpeed. This is the source of truth once written.
+    public int? DefaultTickDelayMs { get; set; }
 }
 
 public static class KvizSerializer

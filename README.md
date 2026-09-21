@@ -5,10 +5,13 @@
 **Author:** Ulrich Tamayo Daniel
 **Email:** dulricht1700@alumno.ipn.mx
 **Email 2:** danielulrichtamayo@gmail.com
-**Version:** 1.25.0
-**Last Updated:** August 11, 2026
+**Version:** 1.26.0
+**Last Updated:** September 17, 2026
 
 > **Recent changelog highlights** (full details in [`Documentacion/`](../../Documentacion/)):
+> - **2026-09-17 Docker web self-hosting** — `Dockerfile` + `docker-compose.yml` + `.dockerignore` at the repo root run `App/Kmila/Kmila.Web` (Blazor Server) in a container on any Docker host, no local .NET needed. Multi-stage `sdk:9.0`→`aspnet:9.0`, net9.0-only build (**no MAUI workload** — the transitive libs multi-target the MAUI heads, so the build forces `-p:TargetFrameworks=net9.0 -f net9.0`), non-root, SQLite + user assets persisted in a `kmila-data` volume at `/data`, healthcheck + `restart: unless-stopped`. Verified end-to-end (HTTP 200, DB in the volume, healthy, data intact across restart). See **§14** + `Documentacion/CHANGELOG.md`.
+> - **2026-09-17 Logic-schematic redesign (display-only)** — group-aware **swimlane** layout (`LayeredLayout.cs`) + a pre-layout `SchematicSimplifier.SimplifyNetlist` (passthrough-buffer elision, constants as wire chips, `case` → single `ROM_LOOKUP`/N-way-`MUX` collapse) take the `Contador_9999` clean view from **104 → 34 cells** with **zero** overlapping group boxes; MUX trapezoid + ROM memory-block glyphs. Naive stays byte-for-byte literal and simulation output is unchanged (`Synthesizer` untouched). See `Documentacion/CHANGELOG.md`.
+> - **2026-09-17 Mac Catalyst export fix** — schematic/report exports now land in a visible `~/Documents/Kmila/…` instead of the invisible per-app sandbox container: wired `Platforms/MacCatalyst/Entitlements.plist` into `Kmila.csproj` (`<CodesignEntitlements>`) + hardened `MauiFileExportService.ResolveDocumentsRoot()`. Confirmed the signed `.app` now embeds `app-sandbox=false`. See `Documentacion/CHANGELOG.md`.
 > - **2026-08-11 Visual-sim background prevention + toolbar polish** — Visual simulations no longer keep ticking when hidden. New `SimMode { Signal, Visual }` enum + `RunningMode` property on `SimulationParameters`, new DI service `Kmila.Shared/Services/VisualRun/VisualRunRegistry.cs` (scoped Web / singleton MAUI), new `[Parameter] bool IsActiveTab` on `VisualPanel` that auto-pauses the coord on tab-switch and stops it on project-switch (with `_autoPausedByTabHide` guarding so a user Pause survives tab flips). `OnStopped` captures per-run pid + coord locals so a fast Stop→Run→new-project sequence can't have an old loop task clear the new run's state. NavMenu / ProjectsView inject the registry, distinguish visual runs via a "Visual" mode chip, and route their Pause/Resume/Stop buttons through `Registry.TryGet` when `Sim.RunningMode == SimMode.Visual`. Seven new dictionary keys (`SIM_MODE_VISUAL`). Phone-verified on device 2eec4397 via CDP: tab-switch pause (125→18→122 ticks/2s windows), manual-pause preservation (0 tick advance across hide/show), editor-unmount full stop, sidebar Stop terminates coord, mode chip renders. **Toolbar polish surfaced during verification**: Unicode emoji prefixes (`⏸`, `▶`, `●`) replaced with Bootstrap-icon components — see `memory/feedback_no_ui_emojis`. Global `html, body { overflow-x: hidden }` closes the "slide" issue where a diagonal pan-zoom gesture on the canvas made `document.body.scrollWidth` exceed viewport and let the browser pan the whole document sideways. Mobile toolbar CTA (`Ejecutar` / `Detener`) is now `position: sticky; inset-inline-start: 0` with a solid background so the primary action stays visible while trailing buttons scroll; `> span` labels hide via CSS on `≤640.98 px` (Wire/Save/Clear-changes retrofitted with icons; Save gets an `.is-dirty::after` pseudo-dot to preserve state feedback). See `Documentacion/CHANGELOG.md` + memories `project_visual_run_bg_prevent_2026-08-11`, `feedback_no_ui_emojis`, `project_maui_fast_deploy_trap_2026-08-11`.
 > - **2026-07-20 Ring 5 A3-A7 unblocked + user-fn reactivity CLOSED** — Parked interpreter bug from 2026-07-05 closed. New `Interpreter/Models/DeferredUserFunction.cs` wrapper defers user-declared VHDL function calls to `Operation.Execute` / `ScheduledOperation.Execute` per fire, re-parsing arg expressions against live signal state. Four wiring sites: `Operation.cs::ParseUserDefinedFunctionCall`, `Operation.cs::Execute`, `ScheduledOperation.cs::Execute`, `ShuntingYard.cs` allowlist. Two SimulatorBench fences shipped: `139-lfsr-through-fn` (single-arg) + `140-multiarg-userfn` (two-arg — mirrors capstone `q_mul`/`q_div` shape). Ring 5's A3 (MUL) / A4 (DIV) / A5 (POW) / A6 (POW) / A7 (LN) cases previously flagged "USR-FN GAP" now compute live per clock. **SimulatorBench source 123/123 + --roundtrip 123/123**. See `Documentacion/CHANGELOG.md` + memory `project_user_fn_reactivity_gap`.
 > - **2026-07-20 Block editor 1:1 audit + Phases 19/20/21/22/23/23a — SHIPPED, AUDIT COMPLETE** — Corpus **1218 → 36 raws (−97.0 %)**, byte-idem **226/226** (100 %), 133/133 xUnit, Playwright 10/10, SimulatorBench source + --roundtrip both **123/123** (full semantic parity). Silent-loss diagnostics now line-marked in Monaco under owner `"kmila-vhdl-emit"`. Toolbox palette categorized into 6 sections (Top-level/Declarations/Concurrent/Sequential/Expressions/Comments) via real `categoryToolbox`. New block families in schema: `component_decl` / `procedure_decl` / `function_decl` / `param` / `procedure_call` (Phase 19). Byte-idem 6-failure gap closed by `FindArchitectureBegin` walker + `SkipString` in scope walkers + `EntityRe` `\k<name>` backreference. `--roundtrip` gap closed by `NeedsParensForBinop` (mixed and/or preservation) + `JsonSerializerOptions.MaxDepth = 512` (33-arm case JSON depth crash). See `Documentacion/HANDOFF_block_editor_1to1_2026-07-19.md`.
@@ -311,6 +314,11 @@ graph TD
 ```
 
 ### 8.4 Base app diagram
+
+> **Note:** This diagram is CodeViz-generated. Node labels were originally stamped with the
+> absolute path of the machine that generated them (`…`); they
+> have been normalized to **repo-relative paths** so they are portable across checkouts.
+
 ```mermaid
 graph TD
 
@@ -320,81 +328,81 @@ graph TD
     monaco_editor["Monaco Editor<br>/https://microsoft.github.io/monaco-editor/"]
     sqlite_db["SQLite Database<br>/https://www.sqlite.org/"]
     blazor_bootstrap["BlazorBootstrap Components<br>/https://blazorbootstrap.com/"]
-    subgraph kmila_system_boundary["Kmila-9s System<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila"]
-        subgraph kmila_maui_app["Kmila (MAUI App)<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila"]
-            maui_main_page["MainPage<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila/MainPage.xaml.cs"]
-            maui_form_factor_service["FormFactor Service<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila/Services/FormFactor.cs"]
+    subgraph kmila_system_boundary["Kmila-9s System<br>App/Kmila"]
+        subgraph kmila_maui_app["Kmila (MAUI App)<br>App/Kmila/Kmila"]
+            maui_main_page["MainPage<br>App/Kmila/Kmila/MainPage.xaml.cs"]
+            maui_form_factor_service["FormFactor Service<br>App/Kmila/Kmila/Services/FormFactor.cs"]
             %% Edges at this level (grouped by source)
-            maui_main_page["MainPage<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila/MainPage.xaml.cs"] -->|"Uses"| maui_form_factor_service["FormFactor Service<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila/Services/FormFactor.cs"]
+            maui_main_page["MainPage<br>App/Kmila/Kmila/MainPage.xaml.cs"] -->|"Uses"| maui_form_factor_service["FormFactor Service<br>App/Kmila/Kmila/Services/FormFactor.cs"]
         end
-        subgraph kmila_web_app["Kmila.Web (Blazor App)<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Web"]
-            web_app_root["App.razor<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Web/Components/App.razor"]
-            web_form_factor_service["FormFactor Service<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Web/Services/FormFactor.cs"]
+        subgraph kmila_web_app["Kmila.Web (Blazor App)<br>App/Kmila/Kmila.Web"]
+            web_app_root["App.razor<br>App/Kmila/Kmila.Web/Components/App.razor"]
+            web_form_factor_service["FormFactor Service<br>App/Kmila/Kmila.Web/Services/FormFactor.cs"]
             %% Edges at this level (grouped by source)
-            web_app_root["App.razor<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Web/Components/App.razor"] -->|"Uses"| web_form_factor_service["FormFactor Service<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Web/Services/FormFactor.cs"]
+            web_app_root["App.razor<br>App/Kmila/Kmila.Web/Components/App.razor"] -->|"Uses"| web_form_factor_service["FormFactor Service<br>App/Kmila/Kmila.Web/Services/FormFactor.cs"]
         end
-        subgraph kmila_shared_lib["Kmila.Shared (Shared Core)<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared"]
-            vhdl_parser["VHDL Parser Module<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
-            vhdl_interpreter["VHDL Interpreter Module<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
-            debugger_module["Debugger Module<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
-            time_machine_module["TimeMachine Module<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
-            temporal_input_manager["Temporal Input Manager Module<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
-            program_builder_service["ProgramBuilder Service<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
-            projects_repo["Projects Repository<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Repositories/Projects.cs"]
-            project_files_repo["ProjectFiles Repository<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Repositories/ProjectFiles.cs"]
-            application_db_context["ApplicationDbContext<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Data/ApplicationDbContext.cs"]
-            models["Data Models<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Models"]
-            editor_page["Editor Page<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Pages/Editor.razor"]
-            projects_view_page["Projects View Page<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Pages/ProjectsView.razor"]
-            home_page["Home Page<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Pages/Home.razor"]
-            create_file_modal["Create File Modal<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Modals/CreateFileModal.razor"]
-            project_details_modal["Project Details Modal<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Modals/ProjectDetailsModal.razor"]
-            nav_menu["NavMenu<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Layout/NavMenu.razor"]
-            main_layout["MainLayout<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Layout/MainLayout.razor"]
+        subgraph kmila_shared_lib["Kmila.Shared (Shared Core)<br>App/Kmila/Kmila.Shared"]
+            vhdl_parser["VHDL Parser Module<br>App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
+            vhdl_interpreter["VHDL Interpreter Module<br>App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
+            debugger_module["Debugger Module<br>App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
+            time_machine_module["TimeMachine Module<br>App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
+            temporal_input_manager["Temporal Input Manager Module<br>App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
+            program_builder_service["ProgramBuilder Service<br>App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
+            projects_repo["Projects Repository<br>App/Kmila/Kmila.Shared/Repositories/Projects.cs"]
+            project_files_repo["ProjectFiles Repository<br>App/Kmila/Kmila.Shared/Repositories/ProjectFiles.cs"]
+            application_db_context["ApplicationDbContext<br>App/Kmila/Kmila.Shared/Data/ApplicationDbContext.cs"]
+            models["Data Models<br>App/Kmila/Kmila.Shared/Models"]
+            editor_page["Editor Page<br>App/Kmila/Kmila.Shared/Pages/Editor.razor"]
+            projects_view_page["Projects View Page<br>App/Kmila/Kmila.Shared/Pages/ProjectsView.razor"]
+            home_page["Home Page<br>App/Kmila/Kmila.Shared/Pages/Home.razor"]
+            create_file_modal["Create File Modal<br>App/Kmila/Kmila.Shared/Modals/CreateFileModal.razor"]
+            project_details_modal["Project Details Modal<br>App/Kmila/Kmila.Shared/Modals/ProjectDetailsModal.razor"]
+            nav_menu["NavMenu<br>App/Kmila/Kmila.Shared/Layout/NavMenu.razor"]
+            main_layout["MainLayout<br>App/Kmila/Kmila.Shared/Layout/MainLayout.razor"]
             %% Edges at this level (grouped by source)
-            editor_page["Editor Page<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Pages/Editor.razor"] -->|"Uses"| program_builder_service["ProgramBuilder Service<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
-            editor_page["Editor Page<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Pages/Editor.razor"] -->|"Uses"| projects_repo["Projects Repository<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Repositories/Projects.cs"]
-            editor_page["Editor Page<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Pages/Editor.razor"] -->|"Uses"| project_files_repo["ProjectFiles Repository<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Repositories/ProjectFiles.cs"]
-            editor_page["Editor Page<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Pages/Editor.razor"] -->|"Opens"| create_file_modal["Create File Modal<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Modals/CreateFileModal.razor"]
-            projects_view_page["Projects View Page<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Pages/ProjectsView.razor"] -->|"Uses"| projects_repo["Projects Repository<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Repositories/Projects.cs"]
-            projects_view_page["Projects View Page<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Pages/ProjectsView.razor"] -->|"Opens"| project_details_modal["Project Details Modal<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Modals/ProjectDetailsModal.razor"]
-            program_builder_service["ProgramBuilder Service<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"] -->|"Uses"| vhdl_parser["VHDL Parser Module<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
-            program_builder_service["ProgramBuilder Service<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"] -->|"Uses"| vhdl_interpreter["VHDL Interpreter Module<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
-            program_builder_service["ProgramBuilder Service<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"] -->|"Uses"| debugger_module["Debugger Module<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
-            program_builder_service["ProgramBuilder Service<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"] -->|"Uses"| time_machine_module["TimeMachine Module<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
-            program_builder_service["ProgramBuilder Service<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"] -->|"Uses"| temporal_input_manager["Temporal Input Manager Module<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
-            vhdl_interpreter["VHDL Interpreter Module<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"] -->|"Updates"| time_machine_module["TimeMachine Module<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
-            debugger_module["Debugger Module<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"] -->|"Uses"| vhdl_parser["VHDL Parser Module<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
-            debugger_module["Debugger Module<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"] -->|"Uses"| vhdl_interpreter["VHDL Interpreter Module<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
-            debugger_module["Debugger Module<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"] -->|"Uses"| time_machine_module["TimeMachine Module<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
-            projects_repo["Projects Repository<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Repositories/Projects.cs"] -->|"Uses"| application_db_context["ApplicationDbContext<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Data/ApplicationDbContext.cs"]
-            project_files_repo["ProjectFiles Repository<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Repositories/ProjectFiles.cs"] -->|"Uses"| application_db_context["ApplicationDbContext<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Data/ApplicationDbContext.cs"]
-            application_db_context["ApplicationDbContext<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Data/ApplicationDbContext.cs"] -->|"Manages"| models["Data Models<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Models"]
+            editor_page["Editor Page<br>App/Kmila/Kmila.Shared/Pages/Editor.razor"] -->|"Uses"| program_builder_service["ProgramBuilder Service<br>App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
+            editor_page["Editor Page<br>App/Kmila/Kmila.Shared/Pages/Editor.razor"] -->|"Uses"| projects_repo["Projects Repository<br>App/Kmila/Kmila.Shared/Repositories/Projects.cs"]
+            editor_page["Editor Page<br>App/Kmila/Kmila.Shared/Pages/Editor.razor"] -->|"Uses"| project_files_repo["ProjectFiles Repository<br>App/Kmila/Kmila.Shared/Repositories/ProjectFiles.cs"]
+            editor_page["Editor Page<br>App/Kmila/Kmila.Shared/Pages/Editor.razor"] -->|"Opens"| create_file_modal["Create File Modal<br>App/Kmila/Kmila.Shared/Modals/CreateFileModal.razor"]
+            projects_view_page["Projects View Page<br>App/Kmila/Kmila.Shared/Pages/ProjectsView.razor"] -->|"Uses"| projects_repo["Projects Repository<br>App/Kmila/Kmila.Shared/Repositories/Projects.cs"]
+            projects_view_page["Projects View Page<br>App/Kmila/Kmila.Shared/Pages/ProjectsView.razor"] -->|"Opens"| project_details_modal["Project Details Modal<br>App/Kmila/Kmila.Shared/Modals/ProjectDetailsModal.razor"]
+            program_builder_service["ProgramBuilder Service<br>App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"] -->|"Uses"| vhdl_parser["VHDL Parser Module<br>App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
+            program_builder_service["ProgramBuilder Service<br>App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"] -->|"Uses"| vhdl_interpreter["VHDL Interpreter Module<br>App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
+            program_builder_service["ProgramBuilder Service<br>App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"] -->|"Uses"| debugger_module["Debugger Module<br>App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
+            program_builder_service["ProgramBuilder Service<br>App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"] -->|"Uses"| time_machine_module["TimeMachine Module<br>App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
+            program_builder_service["ProgramBuilder Service<br>App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"] -->|"Uses"| temporal_input_manager["Temporal Input Manager Module<br>App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
+            vhdl_interpreter["VHDL Interpreter Module<br>App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"] -->|"Updates"| time_machine_module["TimeMachine Module<br>App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
+            debugger_module["Debugger Module<br>App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"] -->|"Uses"| vhdl_parser["VHDL Parser Module<br>App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
+            debugger_module["Debugger Module<br>App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"] -->|"Uses"| vhdl_interpreter["VHDL Interpreter Module<br>App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
+            debugger_module["Debugger Module<br>App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"] -->|"Uses"| time_machine_module["TimeMachine Module<br>App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"]
+            projects_repo["Projects Repository<br>App/Kmila/Kmila.Shared/Repositories/Projects.cs"] -->|"Uses"| application_db_context["ApplicationDbContext<br>App/Kmila/Kmila.Shared/Data/ApplicationDbContext.cs"]
+            project_files_repo["ProjectFiles Repository<br>App/Kmila/Kmila.Shared/Repositories/ProjectFiles.cs"] -->|"Uses"| application_db_context["ApplicationDbContext<br>App/Kmila/Kmila.Shared/Data/ApplicationDbContext.cs"]
+            application_db_context["ApplicationDbContext<br>App/Kmila/Kmila.Shared/Data/ApplicationDbContext.cs"] -->|"Manages"| models["Data Models<br>App/Kmila/Kmila.Shared/Models"]
         end
         %% Edges at this level (grouped by source)
-        maui_main_page["MainPage<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila/MainPage.xaml.cs"] -->|"Hosts"| editor_page["Editor Page<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Pages/Editor.razor"]
-        maui_main_page["MainPage<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila/MainPage.xaml.cs"] -->|"Hosts"| projects_view_page["Projects View Page<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Pages/ProjectsView.razor"]
-        maui_main_page["MainPage<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila/MainPage.xaml.cs"] -->|"Hosts"| home_page["Home Page<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Pages/Home.razor"]
-        maui_main_page["MainPage<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila/MainPage.xaml.cs"] -->|"Hosts"| nav_menu["NavMenu<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Layout/NavMenu.razor"]
-        maui_main_page["MainPage<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila/MainPage.xaml.cs"] -->|"Hosts"| main_layout["MainLayout<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Layout/MainLayout.razor"]
-        web_app_root["App.razor<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Web/Components/App.razor"] -->|"Hosts"| editor_page["Editor Page<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Pages/Editor.razor"]
-        web_app_root["App.razor<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Web/Components/App.razor"] -->|"Hosts"| projects_view_page["Projects View Page<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Pages/ProjectsView.razor"]
-        web_app_root["App.razor<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Web/Components/App.razor"] -->|"Hosts"| home_page["Home Page<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Pages/Home.razor"]
-        web_app_root["App.razor<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Web/Components/App.razor"] -->|"Hosts"| nav_menu["NavMenu<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Layout/NavMenu.razor"]
-        web_app_root["App.razor<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Web/Components/App.razor"] -->|"Hosts"| main_layout["MainLayout<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Layout/MainLayout.razor"]
+        maui_main_page["MainPage<br>App/Kmila/Kmila/MainPage.xaml.cs"] -->|"Hosts"| editor_page["Editor Page<br>App/Kmila/Kmila.Shared/Pages/Editor.razor"]
+        maui_main_page["MainPage<br>App/Kmila/Kmila/MainPage.xaml.cs"] -->|"Hosts"| projects_view_page["Projects View Page<br>App/Kmila/Kmila.Shared/Pages/ProjectsView.razor"]
+        maui_main_page["MainPage<br>App/Kmila/Kmila/MainPage.xaml.cs"] -->|"Hosts"| home_page["Home Page<br>App/Kmila/Kmila.Shared/Pages/Home.razor"]
+        maui_main_page["MainPage<br>App/Kmila/Kmila/MainPage.xaml.cs"] -->|"Hosts"| nav_menu["NavMenu<br>App/Kmila/Kmila.Shared/Layout/NavMenu.razor"]
+        maui_main_page["MainPage<br>App/Kmila/Kmila/MainPage.xaml.cs"] -->|"Hosts"| main_layout["MainLayout<br>App/Kmila/Kmila.Shared/Layout/MainLayout.razor"]
+        web_app_root["App.razor<br>App/Kmila/Kmila.Web/Components/App.razor"] -->|"Hosts"| editor_page["Editor Page<br>App/Kmila/Kmila.Shared/Pages/Editor.razor"]
+        web_app_root["App.razor<br>App/Kmila/Kmila.Web/Components/App.razor"] -->|"Hosts"| projects_view_page["Projects View Page<br>App/Kmila/Kmila.Shared/Pages/ProjectsView.razor"]
+        web_app_root["App.razor<br>App/Kmila/Kmila.Web/Components/App.razor"] -->|"Hosts"| home_page["Home Page<br>App/Kmila/Kmila.Shared/Pages/Home.razor"]
+        web_app_root["App.razor<br>App/Kmila/Kmila.Web/Components/App.razor"] -->|"Hosts"| nav_menu["NavMenu<br>App/Kmila/Kmila.Shared/Layout/NavMenu.razor"]
+        web_app_root["App.razor<br>App/Kmila/Kmila.Web/Components/App.razor"] -->|"Hosts"| main_layout["MainLayout<br>App/Kmila/Kmila.Shared/Layout/MainLayout.razor"]
     end
     %% Edges at this level (grouped by source)
-    user["Student/User<br>[External]"] -->|"Interacts with"| maui_main_page["MainPage<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila/MainPage.xaml.cs"]
-    user["Student/User<br>[External]"] -->|"Interacts with"| web_app_root["App.razor<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Web/Components/App.razor"]
-    editor_page["Editor Page<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Pages/Editor.razor"] -->|"Embeds | JavaScript Interop"| monaco_editor["Monaco Editor<br>/https://microsoft.github.io/monaco-editor/"]
-    editor_page["Editor Page<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Pages/Editor.razor"] -->|"Uses"| blazor_bootstrap["BlazorBootstrap Components<br>/https://blazorbootstrap.com/"]
-    projects_view_page["Projects View Page<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Pages/ProjectsView.razor"] -->|"Uses"| blazor_bootstrap["BlazorBootstrap Components<br>/https://blazorbootstrap.com/"]
-    vhdl_parser["VHDL Parser Module<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"] -->|"Reads | VHDL Files"| file_system["File System<br>[External]"]
-    application_db_context["ApplicationDbContext<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Shared/Data/ApplicationDbContext.cs"] -->|"Connects to"| sqlite_db["SQLite Database<br>/https://www.sqlite.org/"]
-    kmila_maui_app["Kmila (MAUI App)<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila"] -->|"Runs On"| operating_system["Operating System<br>[External]"]
-    kmila_maui_app["Kmila (MAUI App)<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila"] -->|"Accesses"| file_system["File System<br>[External]"]
-    kmila_web_app["Kmila.Web (Blazor App)<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Web"] -->|"Runs On"| operating_system["Operating System<br>[External]"]
-    kmila_web_app["Kmila.Web (Blazor App)<br>/mnt/ssd1tb/Codigos/Kmila-9s/App/Kmila/Kmila.Web"] -->|"Accesses"| file_system["File System<br>[External]"]
+    user["Student/User<br>[External]"] -->|"Interacts with"| maui_main_page["MainPage<br>App/Kmila/Kmila/MainPage.xaml.cs"]
+    user["Student/User<br>[External]"] -->|"Interacts with"| web_app_root["App.razor<br>App/Kmila/Kmila.Web/Components/App.razor"]
+    editor_page["Editor Page<br>App/Kmila/Kmila.Shared/Pages/Editor.razor"] -->|"Embeds | JavaScript Interop"| monaco_editor["Monaco Editor<br>/https://microsoft.github.io/monaco-editor/"]
+    editor_page["Editor Page<br>App/Kmila/Kmila.Shared/Pages/Editor.razor"] -->|"Uses"| blazor_bootstrap["BlazorBootstrap Components<br>/https://blazorbootstrap.com/"]
+    projects_view_page["Projects View Page<br>App/Kmila/Kmila.Shared/Pages/ProjectsView.razor"] -->|"Uses"| blazor_bootstrap["BlazorBootstrap Components<br>/https://blazorbootstrap.com/"]
+    vhdl_parser["VHDL Parser Module<br>App/Kmila/Kmila.Shared/Services/ProgramBuilder.cs"] -->|"Reads | VHDL Files"| file_system["File System<br>[External]"]
+    application_db_context["ApplicationDbContext<br>App/Kmila/Kmila.Shared/Data/ApplicationDbContext.cs"] -->|"Connects to"| sqlite_db["SQLite Database<br>/https://www.sqlite.org/"]
+    kmila_maui_app["Kmila (MAUI App)<br>App/Kmila/Kmila"] -->|"Runs On"| operating_system["Operating System<br>[External]"]
+    kmila_maui_app["Kmila (MAUI App)<br>App/Kmila/Kmila"] -->|"Accesses"| file_system["File System<br>[External]"]
+    kmila_web_app["Kmila.Web (Blazor App)<br>App/Kmila/Kmila.Web"] -->|"Runs On"| operating_system["Operating System<br>[External]"]
+    kmila_web_app["Kmila.Web (Blazor App)<br>App/Kmila/Kmila.Web"] -->|"Accesses"| file_system["File System<br>[External]"]
 
 ```
 ---
@@ -984,6 +992,27 @@ The application uses GitHub Actions for continuous integration and deployment:
     *   Web Hosting (Linux/Browser)
     *   GitHub Releases (Direct downloads)
 
+### Docker / Self-Hosting (Web)
+
+The web version (`App/Kmila/Kmila.Web`, Blazor Server) ships with a container setup so it runs on **any host that runs Docker** — no local .NET install, no distro-specific dependency hunting. The files live at the repository root: `Dockerfile`, `docker-compose.yml`, `.dockerignore`.
+
+**Quick start** (from the repo root):
+
+```bash
+docker compose up -d          # build (first run) + start in the background
+# open http://localhost:8080
+docker compose logs -f        # follow logs
+docker compose down           # stop (the kmila-data volume is kept)
+```
+
+**Persistence.** All state — the SQLite database, imported FPGA/dictionary/library packs, the compiled-library cache and the data-protection keys — lives in the named **`kmila-data`** volume mounted at `/data` (the container runs as a non-root user with `HOME=/data`). It survives restarts, rebuilds and `docker compose down`. Wipe everything with `docker compose down -v`.
+
+**Build details.** Multi-stage image: `dotnet/sdk:9.0` restores + publishes `Kmila.Web.csproj` (never the `.sln`), `dotnet/aspnet:9.0` serves it on `:8080`. `Kmila.Shared` and the transitive libraries multi-target the MAUI heads, so the build forces `-p:TargetFrameworks=net9.0 -f net9.0` to collapse the graph to `net9.0` — **no MAUI workload is required** (which also means `ios`/`maccatalyst`, un-buildable on Linux, are never touched). Build straight from source with `docker build -t kmila-web .`.
+
+**Behind HTTPS.** Kmila.Web is Blazor Server and needs a persistent WebSocket (SignalR) connection, so any reverse proxy in front of it **must allow WebSocket upgrades**. Terminate TLS at the proxy (a commented Caddy service is included in `docker-compose.yml`), keep `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`, and drop the public `8080:8080` mapping so only the proxy is exposed.
+
+> Verified 2026-09-17 (Docker 29.x, linux/arm64): clean build with no MAUI workload, HTTP 200 serving the Blazor shell, `kmila.db` created under the volume, healthcheck green, and data intact across a `down`/`up` restart. Image ≈ 571 MB.
+
 ## 15. Project Structure
 ```markdown
 
@@ -1326,6 +1355,29 @@ We welcome contributions to Kmila-9s! Please check our GitHub repository for con
 Kmila-9s is released as free and open-source software. Please refer to the LICENSE file in the repository for specific licensing terms.
 
 ## 19. Changelog
+
+### Version 1.26.0 (2026-09-17)
+
+#### Docker web self-hosting (new)
+
+*   New `Dockerfile`, `docker-compose.yml` and `.dockerignore` at the repo root containerize the Blazor Server web head (`App/Kmila/Kmila.Web`). Multi-stage `dotnet/sdk:9.0` → `dotnet/aspnet:9.0`, publishing the `.csproj` (not the `.sln`), listening on `:8080`.
+*   **No MAUI workload:** `Kmila.Shared` + the transitive libs multi-target `net9.0-android/ios/maccatalyst`; the build forces the global MSBuild properties `-p:TargetFrameworks=net9.0 -f net9.0` so only `net9.0` is restored/built (the `ios`/`maccatalyst` TFMs can't even be restored on Linux).
+*   **Persistence:** runs as a non-root user with `HOME=/data`; the SQLite DB, user-asset packs, library cache and data-protection keys all live in the named `kmila-data` volume at `/data`. The `ENTRYPOINT` pre-creates `$XDG_CONFIG_HOME` because `Environment.GetFolderPath(ApplicationData)` verifies existence and would otherwise return `""` on a fresh volume (sending the DB to a read-only relative path).
+*   Healthcheck (`curl /`) + `restart: unless-stopped`; a commented Caddy reverse-proxy snippet documents the WebSocket/TLS requirement for Blazor Server. See §14.
+
+#### Logic-schematic redesign (display-only)
+
+*   **Group-aware swimlane layout** (`Interpreter/Synthesis/Layout/LayeredLayout.cs`, `groupAware` param + `BandGap`): cells sharing a `Cell.SourceLine` are kept in one contiguous horizontal band, so the viewer's translucent group tints stop overlapping (`Contador_9999`: 51 → **0** overlapping box pairs). Fixes every mode, Naive included.
+*   **`SchematicSimplifier.SimplifyNetlist`** (pre-layout, produces a *display* netlist — `Synthesizer.Synthesize` output is untouched): passthrough-BUF elision + constant propagation (literals render as small wire **chips**), then `CollapseCaseCascades` fuses a common-selector `case`'s `EQ` column + `MUX` chain into **one** `ROM_LOOKUP` (all-constant branches — the BCD→7-seg decoder + `anodos`) or an N-way `MUX` (signal branches — the digit select). Counter `if/elsif` logic is left intact. `Contador_9999` clean view: **104 → 34 cells**.
+*   **Glyphs** (`Components/Schematic/GateGlyphs.cs`): MUX drawn as the textbook trapezoid (incl. the N-way one), `ROM_LOOKUP` as a memory block with an address divider.
+*   **Naive stays byte-for-byte literal** and **simulation output is unchanged** — the schematic netlist is display-only (the Simulator has zero references to `Interpreter.Synthesis`).
+
+#### Mac Catalyst export fix
+
+*   Schematic/report exports were written to the invisible per-app sandbox container. Root cause: `Platforms/MacCatalyst/Entitlements.plist` (declaring `app-sandbox=false`) was never applied. Fix: added `<CodesignEntitlements>` in a maccatalyst `PropertyGroup` in `App/Kmila/Kmila/Kmila.csproj`, and hardened `MauiFileExportService.ResolveDocumentsRoot()` to target `/Users/<UserName>` and reject `/Library/Containers/` paths. Verified the signed `.app` now embeds `app-sandbox=false`. Fixes every export feature (all share `IFileExportService`).
+*   Header stamped **1.26.0 / September 17, 2026**.
+
+---
 
 ### Version 1.25.0 (2026-08-03)
 

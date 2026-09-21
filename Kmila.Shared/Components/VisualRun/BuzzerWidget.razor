@@ -22,6 +22,13 @@
     gesture; the buzzer eagerly calls setTone anyway, and the next
     user-gestured button/switch press unlocks the context so the tone
     resumes on the next tick.
+
+    Run-state gating: the tone is only emitted while the coordinator is
+    actively ticking (see CoordinatorActive). When the sim is stopped or
+    paused — including the auto-pause on tab-switch — the port values freeze
+    at their last state, so this gate is what turns the oscillator off (the
+    next render pushes silence). VisualPanel also calls kmilaAudio.stopAll()
+    on stop / tab-hide as an immediate belt-and-suspenders silence.
 *@
 
 <div class="kviz-widget kviz-buzzer kviz-buzzer--mode-@Mode @(EditMode ? "kviz-buzzer--edit" : "") @(IsActive ? "kviz-buzzer--active" : "") @(Selected ? "kviz-widget--selected" : "")"
@@ -55,11 +62,19 @@
 
     [CascadingParameter(Name = "FrameVersion")] public int FrameVersion { get; set; }
 
-    // Tracks the last (freq, enable) tuple pushed to JS so we don't
+    // Tracks the last (freq, active) tuple pushed to JS so we don't
     // spam the audio node on identical repaints. Reset in Dispose.
     private int _lastFreqPushed = -1;
-    private bool _lastEnablePushed;
+    private bool _lastActivePushed;
     private bool _voiceAllocated;
+
+    // The buzzer is only audible/visibly ringing while the coordinator is
+    // actively ticking. When the run is stopped or paused (including the
+    // auto-pause on tab-switch) the port values FREEZE at their last state —
+    // often enable='1', freq>0 — so without this gate the tone would keep
+    // droning after the sim halts. Gating IsActive on the run state makes the
+    // next render (StopRun/Pause both trigger one) push silence.
+    private bool CoordinatorActive => Coordinator is { IsRunning: true, IsPaused: false };
 
     private string Mode => Comp.Config.GetString("mode", "freq") == "signal" ? "signal" : "freq";
 
@@ -103,7 +118,7 @@
         }
     }
 
-    private bool IsActive => EnableHigh && (Mode == "signal" || FreqHz > 0);
+    private bool IsActive => CoordinatorActive && EnableHigh && (Mode == "signal" || FreqHz > 0);
 
     private string FreqLabel => Mode == "signal"
         ? (EnableHigh ? "on" : "off")
@@ -127,18 +142,20 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // Push the current (freq, enable) state to the audio subsystem.
-        // Only actually invoke JS when something changed since last push
-        // so we don't hammer JS interop on every frame.
+        // Push the current (freq, active) state to the audio subsystem.
+        // `active` folds in the run state (via IsActive), so when the sim is
+        // stopped/paused the tone is switched off on the very next render even
+        // though the frozen port values still read "enabled". Only invoke JS
+        // when something changed so we don't hammer interop every frame.
         int hz = FreqHz;
-        bool en = EnableHigh;
-        bool changed = firstRender || hz != _lastFreqPushed || en != _lastEnablePushed;
+        bool active = Mode == "freq" && IsActive; // freq-mode audio only
+        bool changed = firstRender || hz != _lastFreqPushed || active != _lastActivePushed;
         if (!changed) return;
         _lastFreqPushed = hz;
-        _lastEnablePushed = en;
+        _lastActivePushed = active;
         try
         {
-            if (Mode == "freq" && en && hz > 0)
+            if (active)
             {
                 await JS.InvokeVoidAsync("kmilaAudio.setTone", Comp.Id, hz, 0.10);
                 _voiceAllocated = true;

@@ -4,19 +4,55 @@
 @*
     Multi-digit 7-segment bank (Ring 5, 2026-07-14).
 
-    A single-value composite for designs that emit a concatenated segment
-    bus like calc_top's `seg_bus : std_logic_vector(4*7-1 downto 0)`. One
-    widget replaces N sliced SevenSegmentWidget instances.
+    A single-value composite for designs that emit a concatenated bus like
+    calc_top's `seg_bus : std_logic_vector(4*7-1 downto 0)`. One widget
+    replaces N sliced SevenSegmentWidget instances.
 
-    Pin surface: a single `value` In pin whose expected width is
-    `digits * 7`. Bit layout is MSB-first: leftmost 7 bits drive the
-    leftmost digit (digit N-1), rightmost 7 bits drive digit 0. Within
-    each 7-bit slice, MSB = segment a, LSB = segment g (matching
-    seg7_driver.vhd's active-high abcdefg encoding).
+    Pin surface: a single `value` In pin. Bit layout is always MSB-first —
+    the leftmost bits drive the leftmost digit (digit N-1), the rightmost
+    bits drive digit 0.
+
+    The `mode` config key mirrors the single-digit widget, plus a multiplexed
+    mode:
+      • "raw" (default) — `value` is a packed segment bus of width
+                          `digits * 7`. Within each 7-bit slice MSB = segment
+                          a, LSB = segment g (seg7_driver.vhd's abcdefg
+                          encoding). The `polarity` key chooses how each bit
+                          is read (see below).
+      • "hex"           — `value` is a packed nibble bus of width `digits * 4`;
+                          each 4-bit slice is decoded 0..F internally.
+      • "dec"           — same as hex but blanks any nibble > 9.
+      • "mux"           — a real MULTIPLEXED display: all digits share one set
+                          of segment lines (a..g) and each digit has its own
+                          common / digit-select (anode/cathode) line that the
+                          design strobes one at a time. Because at simulation
+                          speed only one digit's select is active per tick, the
+                          widget latches each digit's last pattern seen while
+                          its select was enabled (persistence of vision) by
+                          scanning recent frames from the coordinator's ring.
+
+    Mux wiring (`wiring` config, mux only):
+      • "packed" (default) — two vectors: `seg` (7-bit, MSB = a) + `sel`
+                             (digits-bit; MSB-first so bit for the leftmost
+                             digit N-1 is char 0).
+      • "explicit"         — individual pins: `a..g` + `an0..an{digits-1}`,
+                             each separately bindable.
 
     Config keys:
-      • digits (int, default 4, clamp 2..8)
-      • color  (string, default red — same palette as the single-digit widget)
+      • digits          (int,    default 4, clamp 2..8)
+      • color           (string, default red)
+      • mode            (string, default "raw": raw | hex | dec | mux)
+      • polarity        (string, default "cathode": cathode = active-high,
+                         segment on when bit = 1; anode = active-low, segment on
+                         when bit = 0. Applies to raw + mux segment lines;
+                         decoded modes light the decoded pattern regardless.)
+      • wiring          (string, mux only, default "packed": packed | explicit)
+      • selectActiveLow (bool,   mux only, default true: a digit is enabled when
+                         its select line reads '0' — the common `an` board
+                         convention; false = active-high.)
+      • persistence     (bool,   mux only, default true: latch each digit across
+                         frames; false = show only the instantaneously-selected
+                         digit, i.e. the raw strobe.)
 *@
 
 <div class="kviz-widget kviz-7seg-bank @(EditMode ? "kviz-7seg-bank--edit" : "") @(Selected ? "kviz-widget--selected" : "")"
@@ -55,7 +91,22 @@
 
     private int Digits => Math.Clamp(Comp.Config.GetInt("digits", 4), 2, 8);
 
-    private int BusWidth => Digits * 7;
+    private string Mode => Comp.Config.GetString("mode", "raw");
+
+    // Mux-only knobs.
+    private string Wiring => Comp.Config.GetString("wiring", "packed") == "explicit" ? "explicit" : "packed";
+    private bool SelectActiveLow => Comp.Config.GetBool("selectActiveLow", true);
+    private bool Persistence => Comp.Config.GetBool("persistence", true);
+
+    // Common anode = active-low drive: a raw segment line lights the segment
+    // when it reads '0'. Common cathode (default) is active-high.
+    private bool CommonAnode => Comp.Config.GetString("polarity", "cathode") == "anode";
+
+    // Raw mode packs 7 segment bits per digit; decoded modes pack a 4-bit
+    // nibble per digit.
+    private int BitsPerDigit => Mode == "raw" ? 7 : 4;
+
+    private int BusWidth => Digits * BitsPerDigit;
 
     private string ColorVar => Comp.Config.GetString("color", "red") switch
     {
@@ -70,48 +121,218 @@
     {
         get
         {
+            if (Mode == "mux")
+            {
+                // Show a compact summary of the mux pin surface.
+                if (Wiring == "packed")
+                {
+                    string seg = Comp.Bindings.GetValueOrDefault("seg") ?? "";
+                    string sel = Comp.Bindings.GetValueOrDefault("sel") ?? "";
+                    if (string.IsNullOrEmpty(seg) && string.IsNullOrEmpty(sel)) return "(unwired)";
+                    return $"seg={(string.IsNullOrEmpty(seg) ? "—" : seg)} sel={(string.IsNullOrEmpty(sel) ? "—" : sel)}";
+                }
+                int wired = 0, total = 7 + Digits;
+                foreach (var pin in new[] { "a", "b", "c", "d", "e", "f", "g" })
+                    if (!string.IsNullOrEmpty(Comp.Bindings.GetValueOrDefault(pin))) wired++;
+                for (int d = 0; d < Digits; d++)
+                    if (!string.IsNullOrEmpty(Comp.Bindings.GetValueOrDefault($"an{d}"))) wired++;
+                return $"{wired}/{total} wired";
+            }
             if (Comp.Bindings.TryGetValue("value", out var p) && !string.IsNullOrEmpty(p))
                 return p;
             return "(unwired)";
         }
     }
 
-    // Read the packed `value` bus and pick the 7-bit slice for the given
-    // digit index (0 = rightmost). Returns "0000000" (all off) when the
-    // port is unwired, malformed, or too short.
-    private string SliceForDigit(int digit)
+    // Read the packed `value` bus and pick the BitsPerDigit-wide slice for the
+    // given digit index (0 = rightmost). Returns null when the port is unwired
+    // or empty so callers can blank the display (rather than treating "all
+    // zero" as data, which common-anode would otherwise light up).
+    private string? SliceForDigit(int digit)
     {
-        if (Coordinator == null) return new string('0', 7);
+        if (Coordinator == null) return null;
         if (!Comp.Bindings.TryGetValue("value", out var port) || string.IsNullOrEmpty(port))
-            return new string('0', 7);
+            return null;
         var raw = Coordinator.LatestSlicedValue(port);
-        if (string.IsNullOrEmpty(raw)) return new string('0', 7);
+        if (string.IsNullOrEmpty(raw)) return null;
+        int width = BitsPerDigit;
         // Ensure a canonical length so slicing math holds even on short reads.
         string padded = raw.Length >= BusWidth ? raw : raw.PadLeft(BusWidth, '0');
-        // MSB-first layout: string[0..6] = digit (Digits-1), string[7..13] = digit (Digits-2), ...
-        int offset = (Digits - 1 - digit) * 7;
-        if (offset < 0 || offset + 7 > padded.Length) return new string('0', 7);
-        return padded.Substring(offset, 7);
+        // MSB-first layout: the leftmost slice is digit (Digits-1).
+        int offset = (Digits - 1 - digit) * width;
+        if (offset < 0 || offset + width > padded.Length) return null;
+        return padded.Substring(offset, width);
     }
 
-    // Segment lit-check. `segment` is one of a..g; the slice is MSB-first
-    // abcdefg so segment a = slice[0], g = slice[6].
+    private static int SegIndex(char segment) => segment switch
+    {
+        'a' => 0, 'b' => 1, 'c' => 2, 'd' => 3, 'e' => 4, 'f' => 5, 'g' => 6, _ => -1,
+    };
+
+    // Segment lit-check. `segment` is one of a..g. An unwired port blanks the
+    // whole display in every mode/polarity.
     private bool SegOn(int digit, char segment)
     {
-        var slice = SliceForDigit(digit);
-        int idx = segment switch
+        if (Mode == "mux")
         {
-            'a' => 0,
-            'b' => 1,
-            'c' => 2,
-            'd' => 3,
-            'e' => 4,
-            'f' => 5,
-            'g' => 6,
-            _   => -1,
-        };
-        if (idx < 0 || idx >= slice.Length) return false;
-        return slice[idx] == '1';
+            var patterns = MuxPatterns();
+            string? pat = (digit >= 0 && digit < patterns.Length) ? patterns[digit] : null;
+            if (pat == null) return false; // not selected / unwired → blank
+            int mi = SegIndex(segment);
+            if (mi < 0 || mi >= pat.Length) return false;
+            bool bit = pat[mi] == '1';
+            return CommonAnode ? !bit : bit; // segment polarity applied at render
+        }
+
+        var slice = SliceForDigit(digit);
+        if (slice == null) return false; // unwired → blank
+
+        if (Mode == "raw")
+        {
+            // Slice is MSB-first abcdefg → segment a = slice[0], g = slice[6].
+            int idx = SegIndex(segment);
+            if (idx < 0 || idx >= slice.Length) return false;
+            bool bit = slice[idx] == '1';
+            // Common anode is active-low: invert the read bit.
+            return CommonAnode ? !bit : bit;
+        }
+
+        // Decoded modes: the widget chooses which segments glow, so polarity
+        // is irrelevant. Blank on out-of-range / U/X/Z.
+        int decoded = SevenSegPatterns.DecodeNibble(slice, Mode);
+        if (decoded < 0) return false;
+        return SevenSegPatterns.SegmentLit(SevenSegPatterns.HexPatterns[decoded & 0xF], segment);
+    }
+
+    // ---- Multiplexed mode -------------------------------------------------
+
+    // Per-render memo of each digit's latched raw segment bits (7 chars,
+    // MSB=a; null = blank). Recomputed once per frame / config change; reused
+    // across the 7×N SegOn calls of a single render. The instance survives
+    // across frames (VisualCanvas renders widgets without @key), so the memo
+    // and its key persist.
+    private int _muxKeyFv = -1;
+    private int _muxKeySig;
+    private string?[]? _muxCache;
+
+    private string?[] MuxPatterns()
+    {
+        int sig = System.HashCode.Combine(Wiring, Persistence, SelectActiveLow, Digits);
+        if (_muxCache != null && _muxKeyFv == FrameVersion && _muxKeySig == sig)
+            return _muxCache;
+        _muxCache = ComputeMuxPatterns();
+        _muxKeyFv = FrameVersion;
+        _muxKeySig = sig;
+        return _muxCache;
+    }
+
+    private string?[] ComputeMuxPatterns()
+    {
+        var result = new string?[Digits]; // null = blank; else 7 raw bits (MSB=a)
+        if (Coordinator == null) return result;
+
+        if (!Persistence)
+        {
+            // Instantaneous: only the currently-selected digit(s) light.
+            var seg = SegBits(ReadLatest);
+            if (seg != null)
+                for (int d = 0; d < Digits; d++)
+                    if (SelEnabled(ReadLatest, d)) result[d] = seg;
+            return result;
+        }
+
+        // Persistence of vision: walk recent frames newest→oldest and latch,
+        // per digit, the segment bits from the most recent frame in which that
+        // digit's select was enabled.
+        var frames = Coordinator.Frames;
+        long count = frames.Count;
+        if (count == 0) return result;
+        ulong newest = frames.NewestTick;
+        ulong oldest = frames.OldestTick;
+        int cap = (int)Math.Min(count, 512);
+        int remaining = Digits;
+        int examined = 0;
+        for (ulong k = 0; remaining > 0 && examined < cap && k <= newest; k++)
+        {
+            ulong tick = newest - k;
+            if (tick < oldest) break;
+            var fo = frames.TryGetByTick(tick);
+            if (fo == null) continue; // gap → skip
+            examined++;
+            var f = fo.Value;
+            string Reader(string pin) => ReadFromFrame(f, pin);
+            var seg = SegBits(Reader);
+            if (seg == null) continue; // no segment data this frame
+            for (int d = 0; d < Digits; d++)
+            {
+                if (result[d] != null) continue; // already latched
+                if (SelEnabled(Reader, d)) { result[d] = seg; remaining--; }
+            }
+        }
+        return result;
+    }
+
+    // Read a widget pin's bound value from the coordinator's latest live tick.
+    private string ReadLatest(string pin)
+    {
+        if (Coordinator == null) return "";
+        if (!Comp.Bindings.TryGetValue(pin, out var binding) || string.IsNullOrEmpty(binding))
+            return "";
+        return Coordinator.LatestSlicedValue(binding);
+    }
+
+    // Read a widget pin's bound value from a specific historical frame,
+    // honoring any slice spec in the binding (same semantics as
+    // Coordinator.LatestSlicedValue, but against a stored snapshot).
+    private string ReadFromFrame(VisualFrame f, string pin)
+    {
+        if (!Comp.Bindings.TryGetValue(pin, out var binding) || string.IsNullOrEmpty(binding))
+            return "";
+        var (name, slice) = SliceHelper.Parse(binding);
+        if (string.IsNullOrEmpty(name) || !f.PortValues.TryGetValue(name, out var full) || string.IsNullOrEmpty(full))
+            return "";
+        return SliceHelper.Extract(full, slice);
+    }
+
+    // The shared segment bits (7 chars, MSB=a) for the current frame via
+    // `read`. Returns null when no segment source is wired/present.
+    private string? SegBits(Func<string, string> read)
+    {
+        if (Wiring == "packed")
+        {
+            string seg = read("seg");
+            if (string.IsNullOrEmpty(seg)) return null;
+            return seg.Length >= 7 ? seg.Substring(0, 7) : seg.PadLeft(7, '0');
+        }
+        var chars = new char[7];
+        bool any = false;
+        foreach (var s in new[] { 'a', 'b', 'c', 'd', 'e', 'f', 'g' })
+        {
+            string v = read(s.ToString());
+            if (!string.IsNullOrEmpty(v)) { chars[SegIndex(s)] = v[^1]; any = true; }
+            else chars[SegIndex(s)] = '0';
+        }
+        return any ? new string(chars) : null;
+    }
+
+    // Whether digit `d`'s common/select line is enabled for the current frame
+    // via `read`. Unwired → disabled (blank).
+    private bool SelEnabled(Func<string, string> read, int d)
+    {
+        char want = SelectActiveLow ? '0' : '1';
+        if (Wiring == "explicit")
+        {
+            string v = read($"an{d}");
+            if (string.IsNullOrEmpty(v)) return false;
+            return v[^1] == want;
+        }
+        string sel = read("sel");
+        if (string.IsNullOrEmpty(sel)) return false;
+        string padded = sel.Length >= Digits ? sel : sel.PadLeft(Digits, '0');
+        // MSB-first: char 0 = leftmost digit (N-1); digit d sits at (N-1-d).
+        int idx = Digits - 1 - d;
+        if (idx < 0 || idx >= padded.Length) return false;
+        return padded[idx] == want;
     }
 
     private async Task HandlePointerDown(Microsoft.AspNetCore.Components.Web.PointerEventArgs e)

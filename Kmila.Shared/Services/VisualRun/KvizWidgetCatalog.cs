@@ -41,7 +41,10 @@ public static class KvizWidgetCatalog
             new KvizPin("phaseBn", PinDir.In),
         },
         "seven-seg"    => SevenSegPins(c.Config.GetString("mode", "raw")),
-        "seven-seg-bank" => new[] { new KvizPin("value", PinDir.In) },
+        "seven-seg-bank" => SevenSegBankPins(
+                                c.Config.GetString("mode", "raw"),
+                                c.Config.GetString("wiring", "packed"),
+                                c.Config.GetInt("digits", 4)),
         "multi-switch" => MultiSwitchPins(
                               c.Config.GetString("mode", "per-bit"),
                               c.Config.GetInt("count", 4)),
@@ -218,6 +221,39 @@ public static class KvizWidgetCatalog
             textPins.Add(new KvizPin($"line{r}", PinDir.In));
         textPins.Add(new KvizPin("backlight", PinDir.In));
         return textPins;
+    }
+
+    // 7-segment bank pin surface. Three "independent" decode modes keep the
+    // original single packed `value` bus (one dedicated slice per digit); the
+    // "mux" mode models a real multiplexed display — shared segment lines +
+    // one per-digit common/select (anode/cathode) line. In mux, the `wiring`
+    // config picks how those lines are exposed:
+    //   • "packed"   — two vectors: `seg` (7-bit, MSB=a) + `sel` (digits-bit,
+    //                  MSB-first so char 0 = leftmost digit N-1). Compact.
+    //   • "explicit" — individual pins: `a..g` + `an0..an{digits-1}`, each
+    //                  separately bindable (verbose but precise).
+    // All pins are In (the design drives both segments and selects).
+    private static IEnumerable<KvizPin> SevenSegBankPins(string mode, string wiring, int digits)
+    {
+        if (mode != "mux")
+            return new[] { new KvizPin("value", PinDir.In) };
+
+        var n = Math.Clamp(digits, 2, 8);
+        if (wiring == "explicit")
+        {
+            var pins = new List<KvizPin>(7 + n);
+            foreach (var seg in new[] { "a", "b", "c", "d", "e", "f", "g" })
+                pins.Add(new KvizPin(seg, PinDir.In));
+            for (int d = 0; d < n; d++)
+                pins.Add(new KvizPin($"an{d}", PinDir.In));
+            return pins;
+        }
+        // packed
+        return new[]
+        {
+            new KvizPin("seg", PinDir.In),
+            new KvizPin("sel", PinDir.In),
+        };
     }
 
     // Widgets are usually purely-input or purely-output, but the keypad

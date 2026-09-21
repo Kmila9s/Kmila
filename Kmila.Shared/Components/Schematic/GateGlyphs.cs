@@ -52,6 +52,14 @@ public static class GateGlyphs
             "M 58 25 L 70 25",
         },
         CellKind.BUF => new[] { "M 5 5 L 60 25 L 5 45 Z" },
+        // MUX — the textbook trapezoid (wide input edge, narrow output
+        // edge). Applies to 2:1 muxes and the N-way muxes the case-collapse
+        // pass emits, so every selector reads as a mux at a glance.
+        CellKind.MUX => new[] { "M 8 5 L 60 19 L 60 31 L 8 45 Z" },
+        // ROM_LOOKUP — a memory block: the generic rectangle plus a divider
+        // near the address (left) edge, the common lookup-table convention,
+        // so the collapsed decoders stand apart from ordinary modules.
+        CellKind.ROM_LOOKUP => new[] { "M 2 5 L 68 5 L 68 45 L 2 45 Z", "M 15 5 L 15 45" },
         // Rectangular blocks for everything else — opaque modules, kept
         // visually distinct from gate-shaped primitives so the user can
         // see at a glance "this is not a single gate".

@@ -1727,6 +1727,15 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    /* Establish an inline-size container so every .settings-row can decide,
+       via the @container (max-width: 520px) rule below, whether to sit
+       label-beside-control or stack them. Cards park at ~360-370px in the
+       2/3-up grid — well under 520px — so without this the query never fires
+       and the 320px control column crushes the label to one-word-per-line.
+       min-width:0 lets a long unbreakable localized word wrap instead of
+       bumping the card past its grid track. */
+    container-type: inline-size;
+    min-width: 0;
 }
 
 /* When any <details> popover inside the card is open (currently the
@@ -1738,21 +1747,11 @@
    overflow guard the base rule provides is only needed when the card is
    idle — once details[open] is set, the popover is the priority. */
 .settings-card:has(details[open]) {
+    /* Lift the overflow clip so an open popover (LanguageChanger's 7-language
+       list) can extend below the card boundary instead of being cut off.
+       container-type / min-width now live on the base .settings-card rule
+       so the row stacking query fires for every card, not only open ones. */
     overflow: visible;
-    /* Container query target. Lets each card decide row stacking based
-       on its OWN width — the surrounding grid puts cards at ~360 px on
-       2-up desktop, where viewport-based media queries can't tell us
-       things are cramped because the viewport itself is wide. */
-    container-type: inline-size;
-    /* Force the card to participate in grid track sizing without its
-       content driving a higher floor. Without this, a single long
-       unbreakable word in any localized string (German compound nouns,
-       URLs, untranslated technical terms, etc.) bumps the card's
-       min-content above the 360 px grid track and the auto-fill grid
-       collapses to a single column. Combined with overflow: hidden
-       above, content that doesn't fit wraps or clips instead of
-       breaking the parent layout. */
-    min-width: 0;
 }
 
 .settings-card__head {
@@ -5215,6 +5214,23 @@
     background-color: var(--kmila-accent);
     transition: width var(--duration-base) var(--ease-standard);
 }
+
+/* Percent + live time-remaining estimate under the progress line. */
+.run-bar__progress-meta {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: 2px var(--space-3);
+    font-size: var(--fs-2xs);
+    color: var(--text-muted);
+}
+.run-bar__progress-pct {
+    font-family: var(--font-mono);
+    font-weight: var(--fw-semibold);
+    color: var(--text-strong);
+}
+.run-bar__progress-eta { font-variant-numeric: tabular-nums; }
 
 .run-bar--running .run-bar__progress-fill {
     background: linear-gradient(
@@ -8989,6 +9005,118 @@
 .waveform-row__label--clickable:hover .waveform-row__label-eye { opacity: 0.7; }
 .waveform-row__label--clickable:hover { background-color: var(--surface-2); }
 
+/* Value column + per-signal waveform/value toggle (backlog: numeric signals as
+   values). The 160px label column now packs: [main: chip+name+width] on the
+   left (grows, truncates), then the value-at-cursor readout and the toggle
+   pinned right. nowrap keeps every row exactly one line tall so the track SVGs
+   and the ruler stay aligned. */
+.waveform-row__label { flex-wrap: nowrap; overflow: hidden; }
+.waveform-row__label-main {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+}
+.waveform-row__label-main .waveform-signal-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.waveform-signal-value {
+    flex: 0 0 auto;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    max-width: 66px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.waveform-row__mode-toggle {
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    line-height: 1;
+    font-size: 12px;
+    cursor: pointer;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    color: var(--text-muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.waveform-row__mode-toggle:hover { color: var(--text-strong); background: var(--surface-3); }
+
+/* Value-only track: a large monospace readout replaces the SVG for the row. */
+.waveform-row__value-track {
+    display: flex;
+    align-items: center;
+    height: 40px;
+    padding-left: var(--space-2);
+}
+.waveform-value-readout {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+/* Direction pill ↔ name separation. Previously the uppercase direction chip
+   sat 4px from the mono name, so a name containing "in"/"out"/"internal" read
+   as part of the type. A slim divider + breathing room to the LEFT of the name
+   makes the pill unambiguously the type. Applies to both single and compare
+   mode (both now wrap chip+name+width in .waveform-row__label-main). */
+.waveform-row__label-main .waveform-signal-chip { margin-right: var(--space-1); }
+.waveform-row__label-main .waveform-signal-name {
+    padding-left: var(--space-2);
+    border-left: 1px solid var(--border-default);
+}
+
+/* Vector expand/collapse chevron (bus → per-bit waves). Sits as the first item
+   in the label; a same-width spacer keeps non-vector rows' chips aligned. */
+.waveform-row__expand-toggle {
+    flex: 0 0 auto;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    line-height: 1;
+    font-size: 10px;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+}
+.waveform-row__expand-toggle:hover { color: var(--text-strong); background: var(--surface-2); }
+.waveform-row__expand-spacer { flex: 0 0 16px; width: 16px; }
+
+/* Expanded bit rows: one std_logic wave per bit, indented + muted under their
+   parent bus. A left inset rule signals the nesting; the label keeps the same
+   160px sticky width so every track SVG stays column-aligned with the parent. */
+.waveform-row--bit .waveform-row__label {
+    padding-left: var(--space-4);
+    box-shadow: inset 2px 0 0 var(--border-default);
+    background-color: var(--surface-0);
+}
+.waveform-row--bit .waveform-row__bit-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+}
+
 /* Toolbar-level chip-bar listing currently-hidden signals. Each chip restores
    a single signal on click; the trailing "Show all" button bulk-restores. The
    bar only renders when at least one signal is hidden, so it doesn't add
@@ -9457,6 +9585,33 @@
     cursor: pointer;
 }
 .run-bar__clock-reset:hover { background-color: var(--surface-2); color: var(--text-strong); }
+
+/* Run-mode toggle (Fast ↔ Visual). Mirrors the clock group's pill so it reads
+   as part of the config cluster; the Fast state gets an accent tint. */
+.run-bar__mode {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background-color: var(--surface-1);
+    color: var(--text-muted);
+    font-size: var(--fs-2xs);
+    font-weight: var(--fw-semibold);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.run-bar__mode:hover:not(:disabled) { background-color: var(--surface-2); color: var(--text-strong); }
+.run-bar__mode:disabled { opacity: 0.55; cursor: not-allowed; }
+.run-bar__mode--fast {
+    border-color: color-mix(in srgb, var(--kmila-accent) 45%, transparent);
+    background: color-mix(in srgb, var(--kmila-accent) 12%, transparent);
+    color: var(--kmila-accent);
+}
+.run-bar__mode-label { line-height: 1; }
 
 /* Customized clock: warning-tinted border + amber input text so the student
    notices they're off the FPGA's default. Hover tooltip explains the risk. */

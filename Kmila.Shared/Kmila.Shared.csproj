@@ -84,6 +84,22 @@
        from both Kmila.Web's Minimal-API map and the HttpListener dispatcher. -->
   <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) != ''">
     <DefineConstants>$(DefineConstants);KMILA_MAUI_API</DefineConstants>
+
+    <!-- Ship this RCL's static web assets UNCOMPRESSED on the native heads.
+         The compression pipeline (default on for net6+) emits _content/ assets
+         (Bootstrap, Bootstrap Icons + its woff2, JetBrains Mono, …) ONLY as
+         precompressed .gz/.br with no plain sibling. The Mac Catalyst
+         BlazorWebView asset resolver looks up the exact plain filename and does
+         NOT decompress/content-negotiate the .gz/.br, so every such request
+         returns the framework stub "There is no content at _content/…"
+         (HTTP 200, text/plain) — silently breaking icons + Bootstrap-styled
+         links/layout on Mac Catalyst only (iOS/Android/Web resolvers cope).
+         Disabling compression forces plain files to ship, which the resolver
+         finds. Scoped to the MAUI TFMs; the net9.0 target consumed by
+         Kmila.Web keeps compression. Must be set here on the RCL (not just the
+         app head) because these .gz/.br are generated in THIS project's build
+         (Kmila.Shared/obj/<tfm>/compressed). -->
+    <CompressionEnabled>false</CompressionEnabled>
   </PropertyGroup>
 
   <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) != ''">
