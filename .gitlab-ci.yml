@@ -1,19 +1,17 @@
 variables:
     GIT_DEPTH: "20"
-    ANDROID_SDK_ROOT: "$CI_PROJECT_DIR/.android-sdk"   # kept in-project so GitLab can cache it
-    # The Xamarin Android SDK installer reads the current username from the env;
-    # containers often have none, causing XAIAD7009 "UserName must have a valid value".
-    USER: "root"
+    ANDROID_SDK_ROOT: "$CI_PROJECT_DIR/.android-sdk"   # in-project so GitLab can cache it
+    ANDROID_HOME: "$CI_PROJECT_DIR/.android-sdk"
+    USER: "root"       # Xamarin installer / some tools read the username from env
     LOGNAME: "root"
 
 # Linux (non-Apple) build: Web + Android + Wasm.
-# iOS / MacCatalyst are NOT built here — they require a macOS runner (add a
-# separate job tagged [macos] for those).
+# iOS / MacCatalyst need a macOS runner (separate job, tagged [macos]).
 linux-build:
     stage: build
     image: mcr.microsoft.com/dotnet/sdk:9.0
     cache:
-        key: android-sdk-v1          # avoids re-downloading the Android SDK every run
+        key: android-sdk-v2          # bumped to drop the broken partial SDK from earlier runs
         paths:
             - .android-sdk/
     before_script:
@@ -26,17 +24,24 @@ linux-build:
               "http://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}:${CI_SERVER_PORT}/${CI_PROJECT_NAMESPACE}/$m.git" \
               "../../$m"
           done
-        # JDK 17 is required by .NET 9 Android and is not in the dotnet SDK image.
-        - apt-get update && apt-get install -y --no-install-recommends openjdk-17-jdk-headless
+        - apt-get update && apt-get install -y --no-install-recommends openjdk-17-jdk-headless unzip curl
         - export JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(which javac)")")")"
-        # Only the workloads Linux can actually build (NOT maui-ios/maccatalyst).
         - dotnet workload install maui-android wasm-tools --skip-manifest-update
+        # Install the Android SDK via Google's sdkmanager (Java-based -> runs on ARM;
+        # avoids the Xamarin InstallAndroidDependencies installer which lacks Mono.Unix on arm64).
+        - |
+          if [ ! -d "$ANDROID_SDK_ROOT/cmdline-tools/latest" ]; then
+            mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
+            curl -sL -o /tmp/cmt.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+            unzip -q /tmp/cmt.zip -d "$ANDROID_SDK_ROOT/cmdline-tools"
+            mv "$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools" "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+          fi
+        - yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" --licenses >/dev/null || true
+        - "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
     script:
-        # Download Android SDK platforms/build-tools + accept licenses (cached across runs).
-        - dotnet build Kmila/Kmila.csproj -t:InstallAndroidDependencies -f net9.0-android -p:AndroidSdkDirectory="$ANDROID_SDK_ROOT" -p:JavaSdkDirectory="$JAVA_HOME" -p:AcceptAndroidSdkLicenses=True -p:TargetFrameworks=net9.0-android
         # Web (net9.0)
         - dotnet build Kmila.Web/Kmila.Web.csproj -c Release -f net9.0
-        # Android head (force single TFM so it never tries ios/maccatalyst on Linux)
+        # Android head (SDK is now pre-installed; no auto-download)
         - dotnet build Kmila/Kmila.csproj -c Release -f net9.0-android -p:AndroidSdkDirectory="$ANDROID_SDK_ROOT" -p:JavaSdkDirectory="$JAVA_HOME" -p:TargetFrameworks=net9.0-android
-        # Wasm (net9.0, uses the wasm-tools workload)
+        # Wasm (net9.0)
         - dotnet build Kmila.Wasm/Kmila.Wasm.csproj -c Release -f net9.0
