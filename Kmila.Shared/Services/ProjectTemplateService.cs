@@ -169,9 +169,12 @@ public sealed class ProjectTemplateService
 #if WINDOWS || MACCATALYST || ANDROID || IOS
         basePath = Microsoft.Maui.Storage.FileSystem.AppDataDirectory;
 #else
-        basePath = Path.Combine(
-            System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData),
-            "KmilaData");
+        // Blazor WebAssembly persists under /kmila in MEMFS (see UserAssetStore).
+        basePath = OperatingSystem.IsBrowser()
+            ? "/kmila"
+            : Path.Combine(
+                System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData),
+                "KmilaData");
 #endif
 
         var ident  = SanitizeIdentifier(projectName);

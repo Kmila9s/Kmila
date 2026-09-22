@@ -694,6 +694,12 @@ public class UserAssetStore : IDisposable
     /// </summary>
     private void StartWatchers()
     {
+        // Blazor WebAssembly has no OS filesystem-change notifications;
+        // FileSystemWatcher throws PlatformNotSupportedException per folder.
+        // Skip quietly there (assets just don't auto-refresh) instead of
+        // logging three warnings on every boot. Other platforms unchanged.
+        if (OperatingSystem.IsBrowser()) return;
+
         foreach (var dir in new[] { UserDevicesDir, UserDictionariesDir, UserLibrariesDir })
         {
             try
@@ -753,6 +759,11 @@ public class UserAssetStore : IDisposable
 #if WINDOWS || MACCATALYST || ANDROID || IOS
         return Microsoft.Maui.Storage.FileSystem.AppDataDirectory;
 #else
+        // Blazor WebAssembly: no OS filesystem. Everything Kmila persists lives
+        // under /kmila in the in-memory (MEMFS) filesystem, which BrowserFsSync
+        // hydrates from / flushes to OPFS so it survives reloads. Runtime-gated
+        // so the server (Kmila.Web) path is byte-for-byte unchanged.
+        if (OperatingSystem.IsBrowser()) return "/kmila";
         return Path.Combine(
             System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData),
             "KmilaData");

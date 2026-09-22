@@ -1,0 +1,56 @@
+# Kmila — web version, self-hosting compose file.
+#
+#   docker compose up -d          # build (first run) + start, in the background
+#   open http://localhost:8080    # the app
+#   docker compose logs -f        # follow logs
+#   docker compose down           # stop (the kmila-data volume is kept)
+#
+# All persistent state (SQLite database, imported FPGA/dictionary/library
+# packs, compiled-library cache, data-protection keys) lives in the named
+# `kmila-data` volume at /data — it survives restarts, rebuilds and `down`.
+# Remove it explicitly with `docker compose down -v` to wipe all data.
+
+services:
+  kmila-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kmila-web:latest
+    container_name: kmila-web
+    ports:
+      - "8080:8080"          # host:container — change the host side to relocate
+    environment:
+      ASPNETCORE_URLS: "http://+:8080"
+      ASPNETCORE_ENVIRONMENT: "Production"
+      # Trust X-Forwarded-* from a reverse proxy (see the note at the bottom).
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      TZ: "UTC"
+    volumes:
+      - kmila-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+volumes:
+  kmila-data:
+
+# ── Putting it behind HTTPS ────────────────────────────────────────────────
+# Kmila.Web is Blazor Server: it needs a persistent WebSocket (SignalR)
+# connection, so any reverse proxy in front of it MUST allow WebSocket upgrades
+# and long-lived connections. Example with Caddy (automatic HTTPS) — drop this
+# service in and point `kmila.example.com` at your host:
+#
+#   caddy:
+#     image: caddy:2
+#     restart: unless-stopped
+#     ports: ["80:80", "443:443"]
+#     command: caddy reverse-proxy --from kmila.example.com --to kmila-web:8080
+#     depends_on: [kmila-web]
+#
+# (Caddy proxies WebSockets by default. With a proxy terminating TLS, keep
+# ASPNETCORE_FORWARDEDHEADERS_ENABLED=true so the app sees the real scheme/host,
+# and drop the "8080:8080" host port mapping above so only the proxy is public.)

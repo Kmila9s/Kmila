@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
-    <TargetFrameworks>net9.0;net9.0-android;net9.0-ios;net9.0-maccatalyst</TargetFrameworks>
+    <TargetFrameworks>net9.0;net9.0-android</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('osx'))">$(TargetFrameworks);net9.0-ios;net9.0-maccatalyst</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
@@ -14,6 +15,16 @@
     <NoWarn>$(NoWarn);CS1587;CS1591;CS1570;CS1573;CS1574;CS1998;CS8602;CS8604;CS8625;CS8892;CS0219;CS0618;CS4014;NETSDK1206;CA1416</NoWarn>
     <!-- MAUI is required for every native head (android/ios/maccatalyst); web (net9.0) opts out. -->
     <UseMaui Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) != ''">true</UseMaui>
+
+    <!-- KmilaWasm: the net9.0 flavor consumed by the Blazor WebAssembly head
+         (Kmila.Wasm). It drops the ASP.NET Core server framework (Kestrel/MVC/
+         SignalR-server) and the /api/v1 code, which have no browser-wasm
+         runtime. Auto-trips on the browser-wasm RID so a WASM publish/build
+         needs no extra flag; Kmila.Wasm.csproj also sets it explicitly and it
+         can be forced with -p:KmilaWasm=true. Kmila.Web / MAUI never set it, so
+         their builds are unchanged. Native SQLite (sqlite-net-pcl) is KEPT for
+         wasm — its browser-wasm e_sqlite3 links via WasmBuildNative. -->
+    <KmilaWasm Condition="'$(RuntimeIdentifier)' == 'browser-wasm'">true</KmilaWasm>
 
     <!-- See <Target Name="_KmilaSharedForceRclSwa"> below for the actual
          RCL-mode override. The MAUI SDK targets re-set
@@ -65,13 +76,23 @@
 
   <!-- Web-specific settings (net9.0 only). KMILA_HAS_ASPNETCORE is the
        unifying guard used by shared /api/v1 code so the same #if switches
-       on for both Kmila.Web and the MAUI-embedded Kestrel host (Phase B). -->
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net9.0'">
+       on for both Kmila.Web and the MAUI-embedded Kestrel host (Phase B).
+       Excluded from the KmilaWasm (browser) flavor — the /api/v1 server code
+       and the ASP.NET Core shared framework have no browser-wasm runtime. -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net9.0' and '$(KmilaWasm)' != 'true'">
     <DefineConstants>$(DefineConstants);ASPNETCORE;KMILA_HAS_ASPNETCORE</DefineConstants>
   </PropertyGroup>
 
+  <!-- Components.Web is a managed package that works in the browser too, and
+       the shared UI compiles against it (see _Imports.razor), so keep it for
+       every net9.0 flavor including wasm. -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
     <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="9.0.5" />
+  </ItemGroup>
+
+  <!-- The full ASP.NET Core shared framework (Kestrel/MVC/SignalR server) only
+       exists for server runtimes — never link it into the browser flavor. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net9.0' and '$(KmilaWasm)' != 'true'">
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 

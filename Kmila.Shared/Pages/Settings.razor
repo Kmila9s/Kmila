@@ -705,7 +705,7 @@
                             </button>
                         </div>
                     }
-                    else
+                    else if (_demo?.AllowGitHubLogin ?? true)
                     {
                         <div class="settings-card__actions">
                             <button type="button" class="kmila-btn kmila-btn--accent"
@@ -979,6 +979,11 @@
 </Modal>
 
 @code {
+    // Optional demo-capability gate — null on MAUI/Server (unregistered),
+    // present only on the WASM demo. Resolved via the already-injected
+    // IServiceProvider so an unregistered service returns null (no throw).
+    private IDemoCapabilities? _demo => Services.GetService(typeof(IDemoCapabilities)) as IDemoCapabilities;
+
     private List<string> _userFpgas = new();
     private List<string> _userLangs = new();
     private List<string> _userLibs  = new();
@@ -1620,7 +1625,7 @@
 #if WINDOWS || MACCATALYST || ANDROID || IOS
                 Microsoft.Maui.Storage.FileSystem.AppDataDirectory;
 #else
-                Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData), "KmilaData");
+                OperatingSystem.IsBrowser() ? "/kmila" : Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData), "KmilaData");
 #endif
 
             var project = await Bundles.ImportAsync(json, basePath);

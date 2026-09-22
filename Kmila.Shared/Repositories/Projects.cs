@@ -249,9 +249,12 @@ public class Projects : IRepository<Project>
 #if WINDOWS || MACCATALYST || ANDROID || IOS
             root = Microsoft.Maui.Storage.FileSystem.AppDataDirectory;
 #else
-            root = Path.Combine(
-                System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData),
-                "KmilaData");
+            // Blazor WebAssembly persists under /kmila in MEMFS (see UserAssetStore).
+            root = OperatingSystem.IsBrowser()
+                ? "/kmila"
+                : Path.Combine(
+                    System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData),
+                    "KmilaData");
 #endif
             var projectsRoot = Path.Combine(root, "Projects");
             var candidate = Path.Combine(projectsRoot, folder);

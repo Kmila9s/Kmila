@@ -28,6 +28,7 @@
 @implements IDisposable
 @inject SidebarState SidebarState
 @inject GitHubAuth GitHubAuth
+@inject IServiceProvider SP
 
 <details class="kmila-profile-menu">
     <summary class="kmila-profile-menu__summary"
@@ -248,7 +249,7 @@
                     </button>
                 </KmilaTooltip>
             }
-            else
+            else if (_demo?.AllowGitHubLogin ?? true)
             {
                 <KmilaTooltip TextKey="TOPBAR_SIGN_IN_GITHUB_TIP">
                     <button type="button"
@@ -301,6 +302,11 @@
     };
 
     private Modal _loginModal = new();
+
+    // Optional demo-capability gate. Null on the MAUI/Server heads (unregistered);
+    // only the WASM demo registers it. Resolved via IServiceProvider so an
+    // unregistered service returns null instead of throwing at injection.
+    private IDemoCapabilities? _demo => SP.GetService(typeof(IDemoCapabilities)) as IDemoCapabilities;
 
     protected override async Task OnInitializedAsync()
     {

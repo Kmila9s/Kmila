@@ -5,10 +5,11 @@
 **Author:** Ulrich Tamayo Daniel
 **Email:** dulricht1700@alumno.ipn.mx
 **Email 2:** danielulrichtamayo@gmail.com
-**Version:** 1.26.0
-**Last Updated:** September 17, 2026
+**Version:** 1.26.1
+**Last Updated:** September 21, 2026
 
 > **Recent changelog highlights** (full details in [`Documentacion/`](../../Documentacion/)):
+> - **2026-09-21 One-command build/install scripts** — `App/Kmila/build.sh` + `build.ps1` clone all 6 repos into a workspace, force `net9.0` (no MAUI workload), and build native (`dotnet publish`) or Docker; `App/Kmila/install.sh` installs the .NET 9 SDK (or Docker) on Linux and registers a `systemd` service on `:8080`. Container assets moved to `App/Kmila/deploy/`. Verified: native + docker builds on macOS, `install.sh` end-to-end on `ubuntu:24.04`. See §14 + `Documentacion/CHANGELOG.md`.
 > - **2026-09-17 Docker web self-hosting** — `Dockerfile` + `docker-compose.yml` + `.dockerignore` at the repo root run `App/Kmila/Kmila.Web` (Blazor Server) in a container on any Docker host, no local .NET needed. Multi-stage `sdk:9.0`→`aspnet:9.0`, net9.0-only build (**no MAUI workload** — the transitive libs multi-target the MAUI heads, so the build forces `-p:TargetFrameworks=net9.0 -f net9.0`), non-root, SQLite + user assets persisted in a `kmila-data` volume at `/data`, healthcheck + `restart: unless-stopped`. Verified end-to-end (HTTP 200, DB in the volume, healthy, data intact across restart). See **§14** + `Documentacion/CHANGELOG.md`.
 > - **2026-09-17 Logic-schematic redesign (display-only)** — group-aware **swimlane** layout (`LayeredLayout.cs`) + a pre-layout `SchematicSimplifier.SimplifyNetlist` (passthrough-buffer elision, constants as wire chips, `case` → single `ROM_LOOKUP`/N-way-`MUX` collapse) take the `Contador_9999` clean view from **104 → 34 cells** with **zero** overlapping group boxes; MUX trapezoid + ROM memory-block glyphs. Naive stays byte-for-byte literal and simulation output is unchanged (`Synthesizer` untouched). See `Documentacion/CHANGELOG.md`.
 > - **2026-09-17 Mac Catalyst export fix** — schematic/report exports now land in a visible `~/Documents/Kmila/…` instead of the invisible per-app sandbox container: wired `Platforms/MacCatalyst/Entitlements.plist` into `Kmila.csproj` (`<CodesignEntitlements>`) + hardened `MauiFileExportService.ResolveDocumentsRoot()`. Confirmed the signed `.app` now embeds `app-sandbox=false`. See `Documentacion/CHANGELOG.md`.
@@ -992,26 +993,142 @@ The application uses GitHub Actions for continuous integration and deployment:
     *   Web Hosting (Linux/Browser)
     *   GitHub Releases (Direct downloads)
 
-### Docker / Self-Hosting (Web)
+### Build & Self-Host (Web)
 
-The web version (`App/Kmila/Kmila.Web`, Blazor Server) ships with a container setup so it runs on **any host that runs Docker** — no local .NET install, no distro-specific dependency hunting. The files live at the repository root: `Dockerfile`, `docker-compose.yml`, `.dockerignore`.
+The web version is `App/Kmila/Kmila.Web` (Blazor Server, .NET 9). Kmila's code is split across **6 git
+repos** — `Kmila`, `Interpreter`, `Parser`, `Debugger`, `LibraryCompiler`, `TimeMachine` — so a single
+clone can't be built; they must sit side-by-side in one workspace (see [Manual](#option-b--manual)).
+You can build **the easy way** ([scripts](#option-a--one-command-scripts)) or **by hand**
+([manual](#option-b--manual)); both are below, plus a [config reference](#configuration--data) and
+[troubleshooting](#troubleshooting).
 
-**Quick start** (from the repo root):
+Two build methods everywhere: **native** (`dotnet publish` → run with the .NET runtime) or **Docker**
+(a container image). Pick native if you have/ want .NET on the host; Docker if you'd rather not.
+
+#### Prerequisites
+
+| For | Install |
+|---|---|
+| **git** (always) | `apt install git` · `dnf install git` · `brew install git` · [git-scm.com](https://git-scm.com) |
+| **Native build** | **.NET 9 SDK** — [dotnet.microsoft.com/download](https://dotnet.microsoft.com/download) · macOS `brew install dotnet-sdk` · Linux `curl -fsSL https://dot.net/v1/dotnet-install.sh \| bash -s -- --channel 9.0` (needs `libicu`) |
+| **Docker build** | **Docker + Compose** — [docs.docker.com/get-docker](https://docs.docker.com/get-docker/) · Linux `curl -fsSL https://get.docker.com \| sh` |
+
+**Repo source.** The default clone base is `https://github.com/Kmila9s/<repo>.git`. While those mirrors
+are private, point the tooling at another source with the `KMILA_REPO_BASE` env var — e.g. an SSH base
+`ssh://git@host:port/kmila-9s` (it's joined with `/<Repo>.git`).
+
+#### Option A — one-command scripts
+
+The scripts (in this directory) clone all 6 repos into a self-contained workspace
+(default `~/Downloads/kmila-build`), force `net9.0`, and build. Nothing else on your machine is touched.
 
 ```bash
-docker compose up -d          # build (first run) + start in the background
-# open http://localhost:8080
-docker compose logs -f        # follow logs
-docker compose down           # stop (the kmila-data volume is kept)
+# macOS / Linux / Windows (Git Bash or WSL)
+./build.sh                 # native: dotnet publish  (needs the .NET 9 SDK)
+./build.sh --docker        # build the Docker image   (needs Docker)
+./build.sh --native --run  # build, then start on http://localhost:8080
+# options: --workdir <dir>  --port <n>  --branch <b>   (env: KMILA_REPO_BASE)
+```
+```powershell
+# Windows (native PowerShell)
+./build.ps1                 # -Mode native (default) | -Mode docker ; -Run ; -WorkDir ; -Port
 ```
 
-**Persistence.** All state — the SQLite database, imported FPGA/dictionary/library packs, the compiled-library cache and the data-protection keys — lives in the named **`kmila-data`** volume mounted at `/data` (the container runs as a non-root user with `HOME=/data`). It survives restarts, rebuilds and `docker compose down`. Wipe everything with `docker compose down -v`.
+**Linux install as a service.** `install.sh` (run with `sudo`) detects the distro, installs the .NET 9
+SDK (or Docker for `--docker`), builds, and registers a **systemd** service on `:8080`:
 
-**Build details.** Multi-stage image: `dotnet/sdk:9.0` restores + publishes `Kmila.Web.csproj` (never the `.sln`), `dotnet/aspnet:9.0` serves it on `:8080`. `Kmila.Shared` and the transitive libraries multi-target the MAUI heads, so the build forces `-p:TargetFrameworks=net9.0 -f net9.0` to collapse the graph to `net9.0` — **no MAUI workload is required** (which also means `ios`/`maccatalyst`, un-buildable on Linux, are never touched). Build straight from source with `docker build -t kmila-web .`.
+```bash
+sudo ./install.sh                # native + systemd service (default)
+sudo ./install.sh --docker       # Docker container instead
+sudo ./install.sh --no-service   # install deps + build only
+# → http://<host>:8080 ; manage with: systemctl {status|restart|stop} kmila
+```
 
-**Behind HTTPS.** Kmila.Web is Blazor Server and needs a persistent WebSocket (SignalR) connection, so any reverse proxy in front of it **must allow WebSocket upgrades**. Terminate TLS at the proxy (a commented Caddy service is included in `docker-compose.yml`), keep `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`, and drop the public `8080:8080` mapping so only the proxy is exposed.
+#### Option B — manual
 
-> Verified 2026-09-17 (Docker 29.x, linux/arm64): clean build with no MAUI workload, HTTP 200 serving the Blazor shell, `kmila.db` created under the volume, healthcheck green, and data intact across a `down`/`up` restart. Image ≈ 571 MB.
+If you'd rather not use the scripts, here is exactly what they do.
+
+**1. Get the code — into the required layout.** Every project must sit at the workspace root, and the
+`Kmila` repo specifically at `App/Kmila` (its projects reference the siblings via `../../../<name>`):
+
+```bash
+mkdir kmila-build && cd kmila-build
+for r in Interpreter Parser Debugger LibraryCompiler TimeMachine; do
+  git clone https://github.com/Kmila9s/$r.git "$r"
+done
+git clone https://github.com/Kmila9s/Kmila.git App/Kmila
+```
+Resulting layout: `kmila-build/{Interpreter, Parser, Debugger, LibraryCompiler, TimeMachine, App/Kmila}`.
+
+**2a. Build & run — native.** The libraries multi-target the MAUI heads
+(`net9.0;net9.0-android;net9.0-ios;net9.0-maccatalyst`); forcing `net9.0` skips them so **no MAUI
+workload is required** (and `ios`/`maccatalyst` can't build off macOS anyway). Publish the **`.csproj`**,
+never a `.sln` (the sln pulls in the MAUI app head):
+
+```bash
+dotnet publish App/Kmila/Kmila.Web/Kmila.Web.csproj \
+  -c Release -f net9.0 -p:TargetFrameworks=net9.0 -o publish
+ASPNETCORE_URLS=http://+:8080 dotnet publish/Kmila.Web.dll   # → http://localhost:8080
+```
+
+**2b. Build & run — Docker.** The build context must be the workspace root (it holds `App/Kmila` + the
+siblings). Stage the recipe from `deploy/`, then build & run:
+
+```bash
+cp App/Kmila/deploy/Dockerfile App/Kmila/deploy/.dockerignore App/Kmila/deploy/docker-compose.yml .
+docker build -t kmila-web .
+docker compose up -d          # → http://localhost:8080  (logs: docker compose logs -f)
+docker compose down           # stop (data kept) ;  down -v to also wipe the volume
+```
+
+**3. Run as a systemd service (Linux, manual).** This is what `install.sh` automates after the native
+publish above:
+
+```bash
+sudo useradd --system --home-dir /var/lib/kmila --create-home --shell /usr/sbin/nologin kmila
+sudo mkdir -p /opt/kmila /var/lib/kmila/.config
+sudo cp -a publish/. /opt/kmila/
+sudo chown -R kmila:kmila /opt/kmila /var/lib/kmila
+sudo sed "s#__DOTNET__#$(command -v dotnet)#" App/Kmila/deploy/kmila.service \
+  | sudo tee /etc/systemd/system/kmila.service >/dev/null
+sudo systemctl daemon-reload && sudo systemctl enable --now kmila
+# logs: journalctl -u kmila -f
+```
+
+#### Configuration & data
+
+- **Port / binding:** `ASPNETCORE_URLS` (e.g. `http://+:8080`). Docker maps it via the compose `ports:`.
+- **Where data lives** (SQLite DB, imported FPGA/dictionary/library packs, compiled-library cache):
+  - **native:** under `SpecialFolder.ApplicationData/KmilaData` — Linux `~/.config/KmilaData`,
+    macOS `~/Library/Application Support/KmilaData`, Windows `%APPDATA%\KmilaData`; plus the API sandbox
+    at `~/.kmila`. Relocate by setting `HOME` / `XDG_CONFIG_HOME` (the systemd unit points them at
+    `/var/lib/kmila`).
+  - **Docker:** everything under the named **`kmila-data`** volume at `/data`. Survives restarts /
+    rebuilds / `down`; wipe with `docker compose down -v`.
+- **Behind HTTPS.** Blazor Server needs a persistent WebSocket (SignalR) connection, so any reverse
+  proxy **must allow WebSocket upgrades**. Terminate TLS at the proxy (a commented Caddy service is in
+  `deploy/docker-compose.yml`), set `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`, and drop the public
+  `8080:8080` mapping so only the proxy is exposed.
+- **Container internals:** `App/Kmila/deploy/` holds the multi-stage `Dockerfile`
+  (`dotnet/sdk:9.0` → `dotnet/aspnet:9.0`), `docker-compose.yml`, `.dockerignore`, and `kmila.service`.
+
+#### Troubleshooting
+
+- **`NETSDK1147 … workloads must be installed: android` (or ios/maccatalyst)** — you didn't force a
+  single framework. Add `-f net9.0 -p:TargetFrameworks=net9.0` to `dotnet publish` (the scripts +
+  Dockerfile already do). Never publish the `.sln`.
+- **Docker: `Access to the path '/app/KmilaData' is denied`** — `GetFolderPath(ApplicationData)`
+  returns empty until its dir exists; the `deploy/Dockerfile` entrypoint pre-creates `$XDG_CONFIG_HOME`.
+  Only relevant if you hand-roll your own image.
+- **Clone fails / asks for credentials** — the GitHub mirrors are private until published; use
+  `KMILA_REPO_BASE` to point at a source you can reach, or add credentials.
+- **Port already in use** — change `ASPNETCORE_URLS` / `--port` (native) or the compose `ports:` mapping.
+- **Blank page / disconnects behind a proxy** — the proxy is dropping WebSockets; enable WS upgrades and
+  `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`.
+
+> Verified 2026-09-21: `build.sh --native` (clone → publish → HTTP 200) and `--docker` (image build) on
+> macOS/arm64; `install.sh --native` end-to-end on a clean `ubuntu:24.04` container (apt + .NET 9 SDK via
+> `dotnet-install.sh` + publish). Docker image ≈ 571 MB.
 
 ## 15. Project Structure
 ```markdown
@@ -1355,6 +1472,17 @@ We welcome contributions to Kmila-9s! Please check our GitHub repository for con
 Kmila-9s is released as free and open-source software. Please refer to the LICENSE file in the repository for specific licensing terms.
 
 ## 19. Changelog
+
+### Version 1.26.1 (2026-09-21)
+
+#### One-command build & install scripts (new)
+
+*   **`App/Kmila/build.sh`** (macOS/Linux, + Windows Git Bash/WSL) and **`App/Kmila/build.ps1`** (native Windows) clone the 6 repos (`Kmila`, `Interpreter`, `Parser`, `Debugger`, `LibraryCompiler`, `TimeMachine`) into a self-contained workspace (default `~/Downloads/kmila-build`), force `net9.0` across the multi-targeted graph (`-p:TargetFrameworks=net9.0 -f net9.0`, so **no MAUI workload**), and build either `--native` (`dotnet publish`) or `--docker` (image). `--run` starts it on `:8080`. Clone source is `https://github.com/Kmila9s/<repo>.git`, overridable via `KMILA_REPO_BASE`.
+*   **`App/Kmila/install.sh`** (Linux, `sudo`) detects the package manager (apt/dnf/pacman/zypper), installs prerequisites — the **.NET 9 SDK** via `dotnet-install.sh` (+ `libicu`) for native, or Docker via `get.docker.com` for `--docker` — runs `build.sh`, and installs a **systemd** unit (`kmila.service`) running as a dedicated `kmila` user on `:8080` (`--no-service` to skip).
+*   Container assets consolidated into **`App/Kmila/deploy/`** (`Dockerfile`, `docker-compose.yml`, `.dockerignore`, `kmila.service`) — the single source of truth the scripts stage from.
+*   Verified: `build.sh --native` (clone → publish → HTTP 200) and `--docker` on macOS/arm64; `install.sh --native` end-to-end on a clean `ubuntu:24.04` container. Header stamped **1.26.1 / September 21, 2026**.
+
+---
 
 ### Version 1.26.0 (2026-09-17)
 

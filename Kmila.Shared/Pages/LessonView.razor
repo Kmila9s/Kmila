@@ -477,7 +477,7 @@
 #if WINDOWS || MACCATALYST || ANDROID || IOS
         return Microsoft.Maui.Storage.FileSystem.AppDataDirectory;
 #else
-        return Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData), "KmilaData");
+        return OperatingSystem.IsBrowser() ? "/kmila" : Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData), "KmilaData");
 #endif
     }
 

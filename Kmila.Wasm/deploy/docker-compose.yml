@@ -1,0 +1,19 @@
+# Kmila.Wasm public demo — static Blazor WebAssembly served by nginx.
+#
+# Build context is the repo root (the Dockerfile references sibling engine
+# projects), so run compose FROM the repo root:
+#
+#   docker compose -f App/Kmila/Kmila.Wasm/deploy/docker-compose.yml up -d --build
+#
+# No volumes, no backend: all state lives in each visitor's browser (IndexedDB).
+services:
+  kmila-wasm:
+    build:
+      context: ../../../..            # repo root
+      dockerfile: App/Kmila/Kmila.Wasm/deploy/Dockerfile
+    image: kmila-wasm:latest
+    ports:
+      - "8081:80"                     # http://localhost:8081  (8080 is taken by Kmila.Web)
+    restart: unless-stopped
+    # Behind a reverse proxy (Caddy/Traefik/nginx) just forward plain HTTP —
+    # unlike Kmila.Web (Blazor Server) this needs NO WebSocket upgrade.

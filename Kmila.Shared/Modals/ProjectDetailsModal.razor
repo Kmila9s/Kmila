@@ -117,7 +117,7 @@
 #if WINDOWS || MACCATALYST || ANDROID || IOS
             basePath = FileSystem.AppDataDirectory;
 #else
-            basePath = Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData), "KmilaData");
+            basePath = OperatingSystem.IsBrowser() ? "/kmila" : Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData), "KmilaData");
 #endif
             _project.BasePath = Path.Join(basePath, "Projects", SanitizedFolder);
 

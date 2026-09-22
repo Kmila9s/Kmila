@@ -1223,9 +1223,11 @@ end rtl;
 #if WINDOWS || MACCATALYST || ANDROID || IOS
             basePath = FileSystem.AppDataDirectory;
 #else
-            basePath = Path.Combine(
-                System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData),
-                "KmilaData");
+            basePath = OperatingSystem.IsBrowser()
+                ? "/kmila"   // Blazor WASM: MEMFS root (see UserAssetStore)
+                : Path.Combine(
+                    System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData),
+                    "KmilaData");
 #endif
 
             var baseName = Traductor.T(def.NameKey);

@@ -1,0 +1,25 @@
+variables:
+    GIT_DEPTH: "20"
+before_script:
+    - rm -rf ../Interpreter
+    - rm -rf ../LibraryCompiler
+    - rm -rf ../Debugger
+    - git clone --depth 20 "http://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}:8083/${CI_PROJECT_NAMESPACE}/Interpreter.git" ../Interpreter
+    - git clone --depth 20 "http://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}:8083/${CI_PROJECT_NAMESPACE}/LibraryCompiler.git" ../LibraryCompiler
+    - git clone --depth 20 "http://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}:8083/${CI_PROJECT_NAMESPACE}/Debugger.git" ../Debugger
+build-android:
+    stage: Build
+    image: mcr.microsoft.com/dotnet/sdk:9.0
+    script:
+        - dotnet workload install android-maui
+        - cd Kmila
+        - dotnet build -c Release -f net9.0-android
+build-web:
+    stage: Build
+    image:  mcr.microsoft.com/dotnet/sdk:9.0
+    script:
+        - cd Kmila.Web
+        - dotnet build -c Release -f net9.0
+        - cd ..
+        - cd Kmila.Wasm
+        - dotnet build -c Release -f net9.0
