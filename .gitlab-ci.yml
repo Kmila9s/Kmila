@@ -1,6 +1,10 @@
 variables:
     GIT_DEPTH: "20"
     ANDROID_SDK_ROOT: "$CI_PROJECT_DIR/.android-sdk"   # kept in-project so GitLab can cache it
+    # The Xamarin Android SDK installer reads the current username from the env;
+    # containers often have none, causing XAIAD7009 "UserName must have a valid value".
+    USER: "root"
+    LOGNAME: "root"
 
 # Linux (non-Apple) build: Web + Android + Wasm.
 # iOS / MacCatalyst are NOT built here — they require a macOS runner (add a
