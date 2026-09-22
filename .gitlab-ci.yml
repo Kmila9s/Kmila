@@ -1,20 +1,24 @@
 variables:
     GIT_DEPTH: "20"
-before_script:
-    - rm -rf ../Interpreter
-    - rm -rf ../LibraryCompiler
-    - rm -rf ../Debugger
-    - rm -rf ../TimeMachine
-    - rm -rf ../Parser
-    - git clone --depth 20 "http://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}:8083/${CI_PROJECT_NAMESPACE}/Interpreter.git" ../Interpreter
-    - git clone --depth 20 "http://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}:8083/${CI_PROJECT_NAMESPACE}/LibraryCompiler.git" ../LibraryCompiler
-    - git clone --depth 20 "http://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}:8083/${CI_PROJECT_NAMESPACE}/Debugger.git" ../Debugger
-    - git clone --depth 20 "http://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}:8083/${CI_PROJECT_NAMESPACE}/TimeMachine.git" ../TimeMachine
-    - git clone --depth 20 "http://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}:8083/${CI_PROJECT_NAMESPACE}/Parser.git" ../Parser
-build-test:
-    stage: test
-    image: mcr.microsoft.com/dotnet/sdk:9.0
+
+# FULL build of the whole solution, including the MAUI head
+# (net9.0-android / net9.0-ios / net9.0-maccatalyst) + Web + Wasm.
+# iOS & MacCatalyst require macOS + Xcode, so this runs on the tagged Mac runner.
+full-build:
+    stage: build
+    tags: [macos]          # register a macOS shell runner with this tag
+    before_script:
+        # The .sln references sibling repos via ..\..\<Module> — i.e. TWO levels
+        # above Kmila.sln. Clone them there so MSBuild resolves the paths.
+        - cd "$CI_PROJECT_DIR"
+        - |
+          for m in Interpreter LibraryCompiler Debugger TimeMachine Parser; do
+            rm -rf "../../$m"
+            git clone --depth 20 \
+              "http://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}:${CI_SERVER_PORT}/${CI_PROJECT_NAMESPACE}/$m.git" \
+              "../../$m"
+          done
     script:
-        - dotnet workload install maui-android
-        - dotnet workload install wasm-tools
-        - dotnet build
+        # installs whatever workloads the solution needs (maui + wasm-tools) on the Mac
+        - dotnet workload restore Kmila.sln
+        - dotnet build Kmila.sln -c Release
