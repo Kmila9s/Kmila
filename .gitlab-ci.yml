@@ -1,14 +1,19 @@
 variables:
     GIT_DEPTH: "20"
+    ANDROID_SDK_ROOT: "$CI_PROJECT_DIR/.android-sdk"   # kept in-project so GitLab can cache it
 
-# FULL build of the whole solution, including the MAUI head
-# (net9.0-android / net9.0-ios / net9.0-maccatalyst) + Web + Wasm.
-# iOS & MacCatalyst require macOS + Xcode, so this runs on the tagged Mac runner.
-full-build:
-    stage: build          # register a macOS shell runner with this tag
+# Linux (non-Apple) build: Web + Android + Wasm.
+# iOS / MacCatalyst are NOT built here — they require a macOS runner (add a
+# separate job tagged [macos] for those).
+linux-build:
+    stage: build
+    image: mcr.microsoft.com/dotnet/sdk:9.0
+    cache:
+        key: android-sdk-v1          # avoids re-downloading the Android SDK every run
+        paths:
+            - .android-sdk/
     before_script:
-        # The .sln references sibling repos via ..\..\<Module> — i.e. TWO levels
-        # above Kmila.sln. Clone them there so MSBuild resolves the paths.
+        # Sibling repos the .sln references via ..\..\<Module> (two levels above Kmila.sln).
         - cd "$CI_PROJECT_DIR"
         - |
           for m in Interpreter LibraryCompiler Debugger TimeMachine Parser; do
@@ -17,14 +22,17 @@ full-build:
               "http://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}:${CI_SERVER_PORT}/${CI_PROJECT_NAMESPACE}/$m.git" \
               "../../$m"
           done
+        # JDK 17 is required by .NET 9 Android and is not in the dotnet SDK image.
+        - apt-get update && apt-get install -y --no-install-recommends openjdk-17-jdk-headless
+        - export JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(which javac)")")")"
+        # Only the workloads Linux can actually build (NOT maui-ios/maccatalyst).
+        - dotnet workload install maui-android wasm-tools --skip-manifest-update
     script:
-        # installs whatever workloads the solution needs (maui + wasm-tools) on the Mac
-        - dotnet workload restore Kmila.sln
-        - cd Kmila.Web
-        - dotnet build -c Release -f net9.0
-        - cd ..
-        - cd Kmila
-        - dotnet build -c Release -f net9.0-android -p:TargetFrameworks=net9.0-android
-        - cd ..
-        - cd Kmila.Wasm
-        - dotnet build -c Release -f net9.0
+        # Download Android SDK platforms/build-tools + accept licenses (cached across runs).
+        - dotnet build Kmila/Kmila.csproj -t:InstallAndroidDependencies -f net9.0-android -p:AndroidSdkDirectory="$ANDROID_SDK_ROOT" -p:JavaSdkDirectory="$JAVA_HOME" -p:AcceptAndroidSdkLicenses=True -p:TargetFrameworks=net9.0-android
+        # Web (net9.0)
+        - dotnet build Kmila.Web/Kmila.Web.csproj -c Release -f net9.0
+        # Android head (force single TFM so it never tries ios/maccatalyst on Linux)
+        - dotnet build Kmila/Kmila.csproj -c Release -f net9.0-android -p:AndroidSdkDirectory="$ANDROID_SDK_ROOT" -p:JavaSdkDirectory="$JAVA_HOME" -p:TargetFrameworks=net9.0-android
+        # Wasm (net9.0, uses the wasm-tools workload)
+        - dotnet build Kmila.Wasm/Kmila.Wasm.csproj -c Release -f net9.0
