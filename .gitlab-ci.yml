@@ -32,6 +32,10 @@ web-wasm-build:
         TMPDIR: "$CI_PROJECT_DIR/.tmp"     # keep temp off the Pi's small /tmp tmpfs
     before_script:
         - mkdir -p "$TMPDIR"
+        # Blazor WASM native relink (e_sqlite3 -> wasm via Emscripten) needs python;
+        # the dotnet SDK image doesn't ship it. Provide `python` (not just python3).
+        - apt-get update && apt-get install -y --no-install-recommends python3
+        - ln -sf /usr/bin/python3 /usr/local/bin/python
         - !reference [.setup, before_script]
         - dotnet workload install maui-android wasm-tools
     script:

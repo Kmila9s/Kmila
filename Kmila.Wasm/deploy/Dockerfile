@@ -17,6 +17,12 @@ FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 # the AOT/trimmed, size-optimized assets a public demo wants.
 RUN dotnet workload install wasm-tools
 
+# The native wasm relink (e_sqlite3 -> wasm via Emscripten) invokes `python`,
+# which the dotnet SDK image doesn't ship. Provide it (as `python`, not just python3).
+RUN apt-get update && apt-get install -y --no-install-recommends python3 \
+    && ln -sf /usr/bin/python3 /usr/local/bin/python \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /src
 COPY . .
 
