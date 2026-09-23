@@ -15534,6 +15534,62 @@ body:has(.visual-page.is-fullscreen) .status-bar {
 }
 .ports-panel__testbench-info .bi { color: var(--accent, #f59e0b); }
 
+/* --- Source Control panel --- */
+.sc-panel { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-2); font-size: var(--fs-sm); }
+.sc-header {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+    padding-bottom: var(--space-2); border-bottom: 1px solid var(--border-subtle); flex-wrap: wrap;
+}
+.sc-header__repo { display: inline-flex; align-items: center; gap: var(--space-1, 4px); color: var(--text); text-decoration: none; font-weight: 600; }
+.sc-header__repo:hover { color: var(--accent, #f59e0b); }
+.sc-header__branch {
+    margin-inline-start: var(--space-1, 4px); padding: 0 .4rem; border-radius: 999px;
+    background: var(--surface-2); color: var(--text-muted); font-size: var(--fs-xs, .75rem); font-weight: 500;
+}
+.sc-header__auto { display: inline-flex; align-items: center; gap: var(--space-1, 4px); color: var(--text-muted); cursor: pointer; }
+.sc-toolbar { display: flex; flex-wrap: wrap; gap: var(--space-1, 4px); }
+.sc-toolbar .kmila-btn.is-active { border-color: var(--accent, #f59e0b); color: var(--accent, #f59e0b); }
+.sc-toolbar__unlink { margin-inline-start: auto; }
+.sc-busy { display: flex; align-items: center; gap: var(--space-2); color: var(--text-muted); padding: var(--space-2) 0; }
+.sc-commit { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-2) 0; }
+.sc-form { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-2); }
+.sc-form h4 { margin: 0; font-size: var(--fs-md); }
+.sc-form__row { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.sc-form__row .form-control { flex: 1 1 8rem; }
+.sc-form__branch { max-width: 8rem; }
+.sc-form__actions { display: flex; gap: var(--space-2); justify-content: flex-end; }
+.sc-form__check { display: inline-flex; align-items: center; gap: var(--space-1, 4px); }
+.sc-form__hint { margin: 0; font-size: var(--fs-xs, .75rem); color: var(--text-muted); }
+.sc-empty-line { padding: var(--space-2); }
+.sc-changes, .sc-history { display: flex; flex-direction: column; gap: 2px; }
+.sc-change-row, .sc-commit-row {
+    display: flex; align-items: center; gap: var(--space-2); width: 100%;
+    padding: .3rem var(--space-2); background: transparent; border: 0; border-radius: var(--radius);
+    color: var(--text); text-align: start; cursor: pointer; text-decoration: none;
+}
+.sc-change-row:hover, .sc-commit-row:hover { background: var(--surface-2); }
+.sc-change-row.is-selected { background: var(--surface-2); }
+.sc-change-row__path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-badge {
+    flex: 0 0 auto; width: 1.2rem; height: 1.2rem; display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 4px; font-weight: 700; font-size: var(--fs-xs, .75rem);
+}
+.sc-badge--added    { background: color-mix(in srgb, #22c55e 22%, transparent); color: #16a34a; }
+.sc-badge--modified { background: color-mix(in srgb, #f59e0b 22%, transparent); color: #d97706; }
+.sc-badge--deleted  { background: color-mix(in srgb, #ef4444 22%, transparent); color: #dc2626; }
+.sc-commit-row { flex-direction: column; align-items: flex-start; gap: 0; }
+.sc-commit-row__msg { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.sc-commit-row__meta { font-size: var(--fs-xs, .75rem); color: var(--text-muted); }
+.sc-diff {
+    margin-top: var(--space-2); border: 1px solid var(--border-subtle); border-radius: var(--radius);
+    overflow: auto; max-height: 40vh; font-family: var(--bs-font-monospace, monospace); font-size: var(--fs-xs, .78rem);
+}
+.sc-diff__line { padding: 0 var(--space-2); white-space: pre; }
+.sc-diff__line--add  { background: color-mix(in srgb, #22c55e 14%, transparent); }
+.sc-diff__line--del  { background: color-mix(in srgb, #ef4444 14%, transparent); }
+.sc-diff__line--hunk { color: var(--accent, #f59e0b); }
+.sc-diff__line--meta { color: var(--text-muted); }
+
 /* --- Satisfaction-survey invite (corner card) --- */
 .satisfaction-prompt {
     position: fixed;
