@@ -154,6 +154,26 @@ public class AppSettings
     /// </summary>
     public const string KEY_EDITOR_SYNC_MODE = "KMILA_EDITOR_SYNC_MODE";
 
+    /// <summary>
+    /// Satisfaction-form prompt: "never show again" flag. "true" once the user
+    /// dismisses the occasional survey invite permanently. No survey data is
+    /// ever sent by the app — the prompt only opens an external link.
+    /// </summary>
+    public const string KEY_SATISFACTION_DISMISSED = "KMILA_SATISFACTION_DISMISSED";
+
+    /// <summary>
+    /// Satisfaction-form prompt: "already answered" flag. "true" once the user
+    /// marks the survey as answered; the prompt then offers an "answer again"
+    /// action instead of the first-time copy.
+    /// </summary>
+    public const string KEY_SATISFACTION_ANSWERED = "KMILA_SATISFACTION_ANSWERED";
+
+    /// <summary>
+    /// Satisfaction-form prompt: last-shown timestamp (UTC ISO-8601). Used to
+    /// rate-limit the occasional invite so it never nags on consecutive visits.
+    /// </summary>
+    public const string KEY_SATISFACTION_LAST_SHOWN = "KMILA_SATISFACTION_LAST_SHOWN";
+
     #endregion
 }
 

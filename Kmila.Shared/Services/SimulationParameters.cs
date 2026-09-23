@@ -38,6 +38,19 @@ public enum SimMode
 }
 
 /// <summary>
+/// Where a run's stimulus comes from. <see cref="PortMoments"/> is the classic
+/// UI-authored timeline (auto-clock + per-port value events). <see cref="Testbench"/>
+/// (Workbench mode) drives the design from a user-written VHDL testbench that
+/// supplies its own clock/reset. The two are alternatives selected per run — the
+/// port-moment path is never removed.
+/// </summary>
+public enum StimulusSource
+{
+    PortMoments,
+    Testbench
+}
+
+/// <summary>
 /// Shared state for the Run bar, Ports panel, and Output panel on the Editor
 /// page. Replaces the assorted local fields that used to live inside the old
 /// SimulationParametersModal.
@@ -67,6 +80,21 @@ public class SimulationParameters
 
     /// <summary>True when <see cref="ClockOverrideMhz"/> diverges from the FPGA default.</summary>
     public bool ClockIsCustom { get; private set; }
+
+    /// <summary>
+    /// Stimulus source for the next run. Defaults to the classic port-moment
+    /// timeline; switching to <see cref="StimulusSource.Testbench"/> drives the
+    /// design from <see cref="TestbenchFile"/>. Per-project — the Editor loads
+    /// and persists it via the DB testbench marker.
+    /// </summary>
+    public StimulusSource StimulusMode { get; private set; } = StimulusSource.PortMoments;
+
+    /// <summary>
+    /// Project-relative path of the VHDL testbench used when
+    /// <see cref="StimulusMode"/> is <see cref="StimulusSource.Testbench"/>.
+    /// Null when none is chosen.
+    /// </summary>
+    public string? TestbenchFile { get; private set; }
 
     /// <summary>
     /// Run mode chosen in the Run bar. <c>true</c> = Fast: the event-driven
@@ -357,6 +385,23 @@ public class SimulationParameters
     {
         if (FastMode == fast) return;
         FastMode = fast;
+        OnChange?.Invoke();
+    }
+
+    /// <summary>Selects the stimulus source (port-moment timeline vs. VHDL testbench).</summary>
+    public void SetStimulusMode(StimulusSource mode)
+    {
+        if (StimulusMode == mode) return;
+        StimulusMode = mode;
+        OnChange?.Invoke();
+    }
+
+    /// <summary>Sets the project-relative testbench file for Workbench mode.</summary>
+    public void SetTestbenchFile(string? relativePath)
+    {
+        var v = string.IsNullOrWhiteSpace(relativePath) ? null : relativePath;
+        if (TestbenchFile == v) return;
+        TestbenchFile = v;
         OnChange?.Invoke();
     }
 

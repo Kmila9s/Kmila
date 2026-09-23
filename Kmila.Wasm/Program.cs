@@ -159,12 +159,16 @@ public static class Program
         builder.Services.AddScoped<RecentProjectsTracker>();
         builder.Services.AddScoped<SimulationSnapshotStore>();
         builder.Services.AddScoped<ProjectBundleService>();
+        builder.Services.AddScoped<UserSampleService>();
 
         // File export — browser anchor-download via JS interop.
         builder.Services.AddScoped<IFileExportService, WasmFileExportService>();
 
         builder.Services.AddScoped<EditorSessionStore>();
         builder.Services.AddScoped<GitHubAuth>();
+        builder.Services.AddScoped<Kmila.Shared.Services.VersionControl.GitHubRemote>();
+        builder.Services.AddScoped<Kmila.Shared.Services.VersionControl.IProjectVersionControl,
+            Kmila.Shared.Services.VersionControl.ProjectVersionControl>();
         builder.Services.AddScoped<AutoErrorReporter>();
 
         builder.Services.AddBlazorBootstrap();

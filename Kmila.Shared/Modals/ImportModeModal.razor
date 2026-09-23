@@ -1,0 +1,133 @@
+@implements IDisposable
+
+@* Import-mode chooser: raw project import vs. promote-to-sample. Hosted inside
+   a BlazorBootstrap <Modal> via ShowAsync<T>; the parent hides the modal on
+   either callback. Mirrors CreateFileModal's form conventions. *@
+<div class="import-mode-modal">
+    <p class="kmila-muted">@Traductor.T("IMPORT_MODE_INTRO")</p>
+
+    <div class="import-mode-options">
+        <label class="import-mode-option @(_asSample ? "" : "import-mode-option--active")">
+            <input type="radio" name="importMode" checked="@(!_asSample)"
+                   @onchange="() => _asSample = false" />
+            <Icon Name="IconName.FolderPlus" Class="import-mode-option__icon" />
+            <div class="import-mode-option__text">
+                <span class="import-mode-option__title">@Traductor.T("IMPORT_MODE_RAW")</span>
+                <span class="import-mode-option__desc">@Traductor.T("IMPORT_MODE_RAW_DESC")</span>
+            </div>
+        </label>
+
+        <label class="import-mode-option @(_asSample ? "import-mode-option--active" : "")">
+            <input type="radio" name="importMode" checked="@_asSample"
+                   @onchange="() => _asSample = true" />
+            <Icon Name="IconName.Stars" Class="import-mode-option__icon" />
+            <div class="import-mode-option__text">
+                <span class="import-mode-option__title">@Traductor.T("IMPORT_MODE_SAMPLE")</span>
+                <span class="import-mode-option__desc">@Traductor.T("IMPORT_MODE_SAMPLE_DESC")</span>
+            </div>
+        </label>
+    </div>
+
+    @if (_asSample)
+    {
+        <div class="import-mode-form">
+            <div class="form-floating mb-3">
+                <input type="text" class="form-control" id="importSampleTitle"
+                       placeholder="@Traductor.T("IMPORT_SAMPLE_TITLE_LABEL")"
+                       autocomplete="off" spellcheck="false" @bind="_title" />
+                <label for="importSampleTitle">@Traductor.T("IMPORT_SAMPLE_TITLE_LABEL")</label>
+            </div>
+
+            <div class="form-floating mb-3">
+                <select class="form-select" id="importSampleIcon" @bind="_icon">
+                    @foreach (var opt in _iconOptions)
+                    {
+                        <option value="@opt">@opt</option>
+                    }
+                </select>
+                <label for="importSampleIcon">@Traductor.T("IMPORT_SAMPLE_ICON_LABEL")</label>
+            </div>
+
+            <div class="import-mode-form__preview">
+                <Icon Name="@PreviewIcon" />
+                <span>@(_title is { Length: > 0 } ? _title : Traductor.T("IMPORT_SAMPLE_TITLE_LABEL"))</span>
+            </div>
+
+            <div class="form-floating">
+                <textarea class="form-control" id="importSampleDesc" style="height:5rem"
+                          placeholder="@Traductor.T("IMPORT_SAMPLE_DESC_LABEL")"
+                          @bind="_description"></textarea>
+                <label for="importSampleDesc">@Traductor.T("IMPORT_SAMPLE_DESC_LABEL")</label>
+            </div>
+        </div>
+    }
+
+    <div class="kmila-slot-modal-footer">
+        <button type="button" class="kmila-btn kmila-btn--ghost" @onclick="CancelAsync">
+            <span>@Traductor.T("COMMON_CANCEL")</span>
+        </button>
+        <button type="button" class="kmila-btn kmila-btn--success"
+                disabled="@(_asSample && string.IsNullOrWhiteSpace(_title))"
+                @onclick="ConfirmAsync">
+            <span>@Traductor.T("IMPORT_MODE_CONFIRM")</span>
+        </button>
+    </div>
+</div>
+
+@code {
+    /// <summary>Prefill for the sample title (typically the bundle's project name).</summary>
+    [Parameter] public string DefaultTitle { get; set; } = string.Empty;
+
+    /// <summary>Fires with the chosen mode + metadata when the user confirms.</summary>
+    [Parameter] public EventCallback<ImportModeResult> OnConfirm { get; set; }
+
+    /// <summary>Fires when the user cancels.</summary>
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private bool _asSample;
+    private string _title = string.Empty;
+    private string _icon = "Cpu";
+    private string _description = string.Empty;
+
+    // Curated set of BlazorBootstrap icon names verified to exist. Stored as
+    // strings so UserSample.Icon stays a plain string, resolved defensively.
+    private static readonly string[] _iconOptions =
+    {
+        "Cpu", "CpuFill", "Motherboard", "Memory", "Diagram3", "Diagram2",
+        "LightningChargeFill", "Clock", "Stopwatch", "GraphUp", "Calculator",
+        "Toggles", "Sliders", "Braces", "FileEarmarkCode", "Hash", "Speedometer2",
+        "Broadcast", "LightbulbFill", "Star", "Grid", "Display"
+    };
+
+    private IconName PreviewIcon
+        => Enum.TryParse<IconName>(_icon, ignoreCase: true, out var i) ? i : IconName.FileEarmarkCode;
+
+    protected override void OnInitialized()
+    {
+        Traductor.StaticOnLangChanged += OnLanguageChanged;
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (string.IsNullOrEmpty(_title) && !string.IsNullOrWhiteSpace(DefaultTitle))
+            _title = DefaultTitle;
+    }
+
+    private void OnLanguageChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Traductor.StaticOnLangChanged -= OnLanguageChanged;
+
+    private async Task ConfirmAsync()
+    {
+        var result = new ImportModeResult
+        {
+            AsSample = _asSample,
+            Title = _title.Trim(),
+            Icon = _icon,
+            Description = _description.Trim()
+        };
+        await OnConfirm.InvokeAsync(result);
+    }
+
+    private async Task CancelAsync() => await OnCancel.InvokeAsync();
+}

@@ -162,6 +162,15 @@
                                 <span>@Traductor.T("LOGS_REPORT_SHORT")</span>
                             </button>
                         </KmilaTooltip>
+                        <KmilaTooltip TextKey="LOGS_REPORT_KMILA">
+                            <button type="button"
+                                    class="logs-row__report kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                                    aria-label="@Traductor.T("LOGS_REPORT_KMILA")"
+                                    @onclick="() => ReportEntryToKmilaAsync(e)">
+                                <Icon Name="IconName.Globe" />
+                                <span>@Traductor.T("LOGS_REPORT_KMILA_SHORT")</span>
+                            </button>
+                        </KmilaTooltip>
                     }
                 </li>
             }
@@ -305,6 +314,36 @@
         {
             // Ghost-failing a log-report button is better than a toast —
             // if the browser blocked the popup the user will try again.
+        }
+    }
+
+    /// <summary>Per-entry variant that hands off to the Kmila website form
+    /// instead of GitHub. Browser-only handoff — the app sends nothing.</summary>
+    private async Task ReportEntryToKmilaAsync(AppLogEntry entry)
+    {
+        try
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"Level: {entry.Level}");
+            sb.AppendLine($"Category: {entry.Category}");
+            sb.AppendLine($"Timestamp: {entry.Timestamp:O}");
+            sb.AppendLine($"Message: {entry.Message}");
+            if (!string.IsNullOrEmpty(entry.Exception))
+            {
+                sb.AppendLine();
+                sb.AppendLine("Exception:");
+                sb.AppendLine(entry.Exception);
+            }
+
+            var body  = FeedbackHelper.BuildDiagnostics(Traductor.Lang ?? "en",
+                                                        logContext: sb.ToString());
+            var title = $"[{entry.Level}] {entry.Message}";
+            var url   = FeedbackHelper.BuildKmilaReportUrl(title, body);
+            await JS.InvokeVoidAsync("open", url, "_blank");
+        }
+        catch
+        {
+            // Same ghost-fail policy as the GitHub report button.
         }
     }
 

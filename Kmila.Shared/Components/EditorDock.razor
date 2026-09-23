@@ -112,6 +112,10 @@
                 @if (OutputContent != null) { @OutputContent }
                 else { @RenderEmpty(IconName.TerminalFill, "EDITOR_EMPTY_OUTPUT") }
                 break;
+            case EditorTab.SourceControl:
+                @if (SourceControlContent != null) { @SourceControlContent }
+                else { @RenderEmpty(IconName.Git, "EDITOR_EMPTY_SOURCE_CONTROL") }
+                break;
         }
     </div>
 </section>
@@ -127,11 +131,14 @@
     // in Editor.razor for the Step Replay surface's new home.
     [Parameter] public RenderFragment? FilesContent { get; set; }
     [Parameter] public RenderFragment? OutputContent { get; set; }
+    [Parameter] public RenderFragment? SourceControlContent { get; set; }
 
     /// <summary>Count shown as a pill next to the tab label (e.g. entity count).</summary>
     [Parameter] public int EntitiesCount { get; set; }
     [Parameter] public int FilesCount { get; set; }
     [Parameter] public int RunsCount { get; set; }
+    /// <summary>Changed-file count for the Source Control tab badge.</summary>
+    [Parameter] public int SourceControlCount { get; set; }
 
     /// <summary>Ready indicator (small dot) shown when count isn't useful but the tab has data.</summary>
     [Parameter] public bool WaveformsReady { get; set; }
@@ -148,7 +155,8 @@
         new TabDef(EditorTab.Waveforms, IconName.GraphUp,          "EDITOR_WAVEFORMS"),
         new TabDef(EditorTab.Runs,      IconName.ClockHistory,     "EDITOR_TAB_RUNS"),
         new TabDef(EditorTab.Files,     IconName.Folder2Open,      "EDITOR_FILES"),
-        new TabDef(EditorTab.Output,    IconName.TerminalFill,     "EDITOR_TAB_OUTPUT")
+        new TabDef(EditorTab.Output,    IconName.TerminalFill,     "EDITOR_TAB_OUTPUT"),
+        new TabDef(EditorTab.SourceControl, IconName.Git,          "EDITOR_TAB_SOURCE_CONTROL")
     };
 
     private const string TAB_KEY       = "kmila-dock-tab";
@@ -301,6 +309,7 @@
         EditorTab.Entities => EntitiesCount,
         EditorTab.Files    => FilesCount,
         EditorTab.Runs     => RunsCount,
+        EditorTab.SourceControl => SourceControlCount,
         _                  => 0
     };
 

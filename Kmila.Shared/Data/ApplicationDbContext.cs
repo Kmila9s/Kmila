@@ -109,6 +109,37 @@ public class ApplicationDbContext : SQLiteAsyncConnection
         {
             _logger.LogInformation(ex.Message);
         }
+        try
+        {
+            // User-authored samples — projects promoted to reusable gallery
+            // entries via "import as sample". Stored here (writable) alongside
+            // the built-in examples baked into the app.
+            var result = await CreateTableAsync<UserSample>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogInformation(ex.Message);
+        }
+        try
+        {
+            // Version control — per-project GitHub repo link (remote coords +
+            // last-synced head + auto-commit flag).
+            var result = await CreateTableAsync<Models.VersionControl.VcProjectLink>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogInformation(ex.Message);
+        }
+        try
+        {
+            // Version control — last-synced snapshot (one row per file) so
+            // status/diff work offline and push skips unchanged blobs.
+            var result = await CreateTableAsync<Models.VersionControl.VcSnapshotFile>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogInformation(ex.Message);
+        }
     }
     /// <summary>
     /// Gets the queryable collection of projects.
@@ -132,6 +163,12 @@ public class ApplicationDbContext : SQLiteAsyncConnection
     public AsyncTableQuery<PracticeAttemptTestResult> PracticeAttemptTestResults => Table<PracticeAttemptTestResult>();
     /// <summary>Gets the aggregate progress per exercise (status + counters).</summary>
     public AsyncTableQuery<PracticeProgress> PracticeProgress => Table<PracticeProgress>();
+    /// <summary>Gets the user-authored samples (imported projects promoted to gallery entries).</summary>
+    public AsyncTableQuery<UserSample> UserSamples => Table<UserSample>();
+    /// <summary>Gets the per-project version-control repo links.</summary>
+    public AsyncTableQuery<Models.VersionControl.VcProjectLink> VcProjectLinks => Table<Models.VersionControl.VcProjectLink>();
+    /// <summary>Gets the per-project last-synced snapshot files (VC mirror).</summary>
+    public AsyncTableQuery<Models.VersionControl.VcSnapshotFile> VcSnapshotFiles => Table<Models.VersionControl.VcSnapshotFile>();
 
     #region Settings Helper Methods
 
@@ -250,6 +287,41 @@ public class ApplicationDbContext : SQLiteAsyncConnection
     /// back to the active editor tab.</summary>
     public Task ClearProjectMainFileAsync(int projectId)
         => DeleteSettingAsync(MainFileKey(projectId));
+
+    #endregion
+
+    #region Project Testbench
+
+    /// <summary>
+    /// Settings key prefix for the per-project testbench entry point used by
+    /// Workbench mode. The full key is
+    /// <c>KMILA_PROJECT_TESTBENCH_{projectId}</c>; the value is the chosen
+    /// testbench file's project-relative path (<see cref="ProjectFile.RelativePath"/>).
+    /// Mirrors the entry-point marker so no schema migration is needed. The
+    /// port-moment stimulus path never reads this — it only drives the
+    /// (separate) VHDL-testbench run path.
+    /// </summary>
+    private const string TESTBENCH_KEY_PREFIX = "KMILA_PROJECT_TESTBENCH_";
+
+    private static string TestbenchKey(int projectId) => $"{TESTBENCH_KEY_PREFIX}{projectId}";
+
+    /// <summary>Reads the file chosen as the project's testbench for Workbench
+    /// mode. Null when none is set.</summary>
+    public async Task<string?> GetProjectTestbenchAsync(int projectId)
+    {
+        if (projectId <= 0) return null;
+        var path = await GetSettingAsync(TestbenchKey(projectId));
+        return string.IsNullOrWhiteSpace(path) ? null : path;
+    }
+
+    /// <summary>Persists <paramref name="relativePath"/> as the project's
+    /// testbench entry point. Overwrites any prior selection.</summary>
+    public Task SetProjectTestbenchAsync(int projectId, string relativePath)
+        => SetSettingAsync(TestbenchKey(projectId), relativePath);
+
+    /// <summary>Clears the project's testbench marker.</summary>
+    public Task ClearProjectTestbenchAsync(int projectId)
+        => DeleteSettingAsync(TestbenchKey(projectId));
 
     #endregion
 }

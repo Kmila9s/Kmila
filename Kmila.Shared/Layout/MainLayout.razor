@@ -75,6 +75,7 @@ else
     </div>
 }
 <KmilaToastHost />
+<SatisfactionPrompt @ref="_satisfactionPrompt" />
 <div id="blazor-error-ui" data-nosnippet>
     @Traductor.T("ERROR_UNHANDLED")
     <a href="." class="reload">@Traductor.T("COMMON_RELOAD")</a>
@@ -157,7 +158,19 @@ else
     {
         try { await TryFireTourForCurrentRouteAsync(); }
         catch { /* tour is non-essential */ }
+
+        // Occasional satisfaction-survey invite. Low per-navigation probability
+        // on top of the component's own 24h rate-limit + dismiss/answered flags,
+        // so it stays rare and never nags. Non-blocking corner card.
+        try
+        {
+            if (_satisfactionPrompt != null)
+                await _satisfactionPrompt.TryShowAsync(0.12);
+        }
+        catch { /* survey prompt is non-essential */ }
     }
+
+    private SatisfactionPrompt? _satisfactionPrompt;
 
     /// <summary>
     /// Resolves the current path to a <see cref="RouteTour"/>, checks the

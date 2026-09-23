@@ -1,0 +1,130 @@
+@implements IDisposable
+@inject ApplicationDbContext DbContext
+@inject IJSRuntime JS
+
+@*
+    Occasional satisfaction-survey invite. Mounted once app-wide in MainLayout,
+    which calls TryShowAsync() on route changes. Purely a link-out: the two
+    "answer" buttons open an external survey URL in the browser — the app never
+    sends any survey data itself, so the offline / no-telemetry stance holds.
+
+    State (SQLite AppSettings):
+      • dismissed  → never show again
+      • answered   → switch to "answer again" copy
+      • last-shown → rate-limit so it can't nag on consecutive visits
+*@
+@if (_visible)
+{
+    <div class="satisfaction-prompt" role="dialog" aria-modal="false"
+         aria-label="@Traductor.T("SATISFACTION_TITLE")">
+        <button type="button" class="satisfaction-prompt__close"
+                aria-label="@Traductor.T("COMMON_CLOSE")" @onclick="CloseLater">×</button>
+        <div class="satisfaction-prompt__icon"><Icon Name="IconName.ChatHeartFill" /></div>
+        <h3 class="satisfaction-prompt__title">@Traductor.T("SATISFACTION_TITLE")</h3>
+        <p class="satisfaction-prompt__body">
+            @(_answered ? Traductor.T("SATISFACTION_BODY_AGAIN") : Traductor.T("SATISFACTION_BODY"))
+        </p>
+        <div class="satisfaction-prompt__actions">
+            <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--sm"
+                    @onclick="() => AnswerAsync(FeedbackHelper.SatisfactionAnonymousUrl)">
+                <Icon Name="IconName.Incognito" />
+                <span>@Traductor.T("SATISFACTION_ANSWER_ANON")</span>
+            </button>
+            <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                    @onclick="() => AnswerAsync(FeedbackHelper.SatisfactionRegisteredUrl)">
+                <Icon Name="IconName.PersonFill" />
+                <span>@Traductor.T("SATISFACTION_ANSWER_USER")</span>
+            </button>
+        </div>
+        <div class="satisfaction-prompt__minor">
+            @if (!_answered)
+            {
+                <button type="button" class="satisfaction-prompt__link" @onclick="MarkAnsweredAsync">
+                    @Traductor.T("SATISFACTION_ALREADY")
+                </button>
+            }
+            <button type="button" class="satisfaction-prompt__link" @onclick="DismissForeverAsync">
+                @Traductor.T("SATISFACTION_DISMISS")
+            </button>
+        </div>
+    </div>
+}
+
+@code {
+    /// <summary>Minimum gap between showings, regardless of probability rolls.</summary>
+    private static readonly TimeSpan MinInterval = TimeSpan.FromHours(24);
+
+    private bool _visible;
+    private bool _answered;
+
+    protected override void OnInitialized()
+    {
+        Traductor.StaticOnLangChanged += OnLang;
+    }
+
+    private void OnLang() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Traductor.StaticOnLangChanged -= OnLang;
+
+    /// <summary>
+    /// Rolls the invite: no-op if permanently dismissed, already visible, or
+    /// shown within <see cref="MinInterval"/>; otherwise shows with probability
+    /// <paramref name="probability"/> (0..1). Safe to call on every navigation.
+    /// </summary>
+    public async Task TryShowAsync(double probability)
+    {
+        if (_visible) return;
+        try
+        {
+            var dismissed = await DbContext.GetSettingAsync(AppSettings.KEY_SATISFACTION_DISMISSED);
+            if (string.Equals(dismissed, "true", StringComparison.OrdinalIgnoreCase)) return;
+
+            var lastRaw = await DbContext.GetSettingAsync(AppSettings.KEY_SATISFACTION_LAST_SHOWN);
+            if (DateTime.TryParse(lastRaw, null,
+                    System.Globalization.DateTimeStyles.RoundtripKind, out var last)
+                && DateTime.UtcNow - last < MinInterval)
+                return;
+
+            if (Random.Shared.NextDouble() > probability) return;
+
+            var answered = await DbContext.GetSettingAsync(AppSettings.KEY_SATISFACTION_ANSWERED);
+            _answered = string.Equals(answered, "true", StringComparison.OrdinalIgnoreCase);
+
+            await DbContext.SetSettingAsync(AppSettings.KEY_SATISFACTION_LAST_SHOWN,
+                DateTime.UtcNow.ToString("O"));
+            _visible = true;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch
+        {
+            // Never let the survey prompt interfere with navigation.
+        }
+    }
+
+    private async Task AnswerAsync(string url)
+    {
+        try { await JS.InvokeVoidAsync("open", url, "_blank"); } catch { }
+        await MarkAnsweredAsync();
+    }
+
+    private async Task MarkAnsweredAsync()
+    {
+        try { await DbContext.SetSettingAsync(AppSettings.KEY_SATISFACTION_ANSWERED, "true"); } catch { }
+        _visible = false;
+        StateHasChanged();
+    }
+
+    private async Task DismissForeverAsync()
+    {
+        try { await DbContext.SetSettingAsync(AppSettings.KEY_SATISFACTION_DISMISSED, "true"); } catch { }
+        _visible = false;
+        StateHasChanged();
+    }
+
+    /// <summary>Close without changing any flag — the invite can reappear later.</summary>
+    private void CloseLater()
+    {
+        _visible = false;
+        StateHasChanged();
+    }
+}

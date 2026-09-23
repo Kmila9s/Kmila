@@ -13,8 +13,13 @@ namespace Kmila.Shared.Services;
 /// </summary>
 public class ProjectBundleService
 {
-    /// <summary>Bundle schema revision. Bumped on breaking changes.</summary>
-    public const int SchemaVersion = 1;
+    /// <summary>
+    /// Bundle schema revision. Bumped on breaking changes.
+    /// v2 adds <see cref="FileRecord.DirectoryPath"/> so a project's folder
+    /// structure survives an export/import round-trip. v1 bundles (no
+    /// DirectoryPath) still import — the field defaults to root.
+    /// </summary>
+    public const int SchemaVersion = 2;
 
     private readonly ApplicationDbContext _db;
     private readonly Projects _projects;
@@ -72,6 +77,7 @@ public class ProjectBundleService
             Files = files.Select(f => new FileRecord
             {
                 FileName = f.FileName,
+                DirectoryPath = f.DirectoryPath,
                 Content = f.Content
             }).ToList(),
             Configurations = configs,
@@ -135,6 +141,7 @@ public class ProjectBundleService
                 {
                     Project = project,
                     FileName = fileRec.FileName,
+                    DirectoryPath = fileRec.DirectoryPath ?? string.Empty,
                     Content = fileRec.Content ?? string.Empty
                 });
             }
@@ -192,10 +199,15 @@ public class ProjectBundleService
         public DateTime CreationTime { get; set; }
     }
 
-    /// <summary>One source file inside the bundle: filename plus full text content.</summary>
+    /// <summary>One source file inside the bundle: filename, sub-directory (v2+), plus full text content.</summary>
     public class FileRecord
     {
         public string FileName { get; set; } = string.Empty;
+        /// <summary>
+        /// Project-relative sub-directory (forward slashes), added in schema v2.
+        /// Absent in v1 bundles — deserializes to null, treated as project root.
+        /// </summary>
+        public string? DirectoryPath { get; set; }
         public string? Content { get; set; }
     }
 

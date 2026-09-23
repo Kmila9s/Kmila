@@ -4,6 +4,7 @@
 @inject Kmila.Shared.Services.SimulationParameters Sim
 @inject Kmila.Shared.Services.ProgramBuilder Builder
 @inject Kmila.Shared.Services.VisualRun.VisualRunRegistry VisualRegistry
+@inject Kmila.Shared.Services.UserSampleService UserSamples
 
 <PageTitle>@Traductor.T("NAV_PROJECTS")</PageTitle>
 
@@ -273,6 +274,40 @@
                         </button>
                     }
                 </div>
+
+                @* User-authored samples (import-as-sample). Rendered as a second
+                   section so they never shift the built-in grid. Each carries a
+                   delete affordance since, unlike the baked-in examples, they're
+                   user-managed rows. *@
+                @if (_userSamples.Count > 0)
+                {
+                    <h6 class="examples-gallery-subtitle">@Traductor.T("EXAMPLES_GALLERY_YOURS")</h6>
+                    <div class="examples-gallery-grid">
+                        @foreach (var s in _userSamples)
+                        {
+                            var localSample = s;
+                            <div class="examples-gallery-card examples-gallery-card--user"
+                                 data-user-sample-id="@localSample.Id">
+                                <button type="button"
+                                        class="examples-gallery-card__pick"
+                                        @onclick="() => PickUserSampleAsync(localSample)">
+                                    <Icon Name="@ResolveIcon(localSample.Icon)" Class="examples-gallery-card__icon" />
+                                    <div class="examples-gallery-card__body">
+                                        <h6 class="examples-gallery-card__title">@localSample.Title</h6>
+                                        <p class="examples-gallery-card__desc">@localSample.Description</p>
+                                    </div>
+                                </button>
+                                <button type="button"
+                                        class="kmila-btn-icon examples-gallery-card__delete"
+                                        title="@Traductor.T("COMMON_DELETE")"
+                                        aria-label="@Traductor.T("COMMON_DELETE")"
+                                        @onclick="() => DeleteUserSampleAsync(localSample)">
+                                    <Icon Name="IconName.Trash" />
+                                </button>
+                            </div>
+                        }
+                    </div>
+                }
             </div>
         </div>
     </div>
@@ -1151,6 +1186,10 @@ end rtl;
     private static readonly List<ExampleDef> _examples = new()
     {
         new ExampleDef("demo",       "EXAMPLE_DEMO_NAME",       "EXAMPLE_DEMO_DESC",       SAMPLE_MAIN_VHD,     SAMPLE_MAIN_KVIZ),
+        new ExampleDef("contador-9", "EXAMPLE_CONTADOR9_NAME",  "EXAMPLE_CONTADOR9_DESC",  CONTADOR9_VHD,       CONTADOR9_KVIZ,
+            MainFileName: "contador_9.vhd", ExtraFiles: Contador9ExtraFiles),
+        new ExampleDef("contador-9999","EXAMPLE_CONTADOR9999_NAME","EXAMPLE_CONTADOR9999_DESC",CONTADOR9999_VHD, CONTADOR9999_KVIZ,
+            MainFileName: "contador_9999.vhd", ExtraFiles: Contador9999ExtraFiles),
         new ExampleDef("counter",    "EXAMPLE_COUNTER_NAME",    "EXAMPLE_COUNTER_DESC",    COUNTER_CLOCK_VHD,   COUNTER_CLOCK_KVIZ),
         new ExampleDef("traffic",    "EXAMPLE_TRAFFIC_NAME",    "EXAMPLE_TRAFFIC_DESC",    TRAFFIC_LIGHT_VHD,   TRAFFIC_LIGHT_KVIZ),
         new ExampleDef("shift",      "EXAMPLE_SHIFT_NAME",      "EXAMPLE_SHIFT_DESC",      SHIFT_REGISTER_VHD,  SHIFT_REGISTER_KVIZ),
@@ -1172,14 +1211,35 @@ end rtl;
 
     private bool _examplesModalOpen;
 
-    /// <summary>Opens the example-gallery modal so the user can pick.</summary>
-    private void OpenExamplesGallery() => _examplesModalOpen = true;
+    /// <summary>User-authored samples (import-as-sample). Loaded lazily when the
+    /// gallery opens so the list reflects imports done in this session.</summary>
+    private List<UserSample> _userSamples = new();
+
+    /// <summary>Opens the example-gallery modal so the user can pick. Refreshes
+    /// the user-sample list first so newly imported samples show immediately.</summary>
+    private async Task OpenExamplesGallery()
+    {
+        _userSamples = await UserSamples.ListAsync();
+        _examplesModalOpen = true;
+    }
     private void CloseExamplesGallery() => _examplesModalOpen = false;
+
+    /// <summary>
+    /// Resolves a stored BlazorBootstrap icon-name string to an
+    /// <see cref="IconName"/>, falling back to a neutral glyph for unknown or
+    /// empty values — mirrors the defensive resolution used for built-ins.
+    /// </summary>
+    private static IconName ResolveIcon(string? name)
+        => Enum.TryParse<IconName>(name, ignoreCase: true, out var icon)
+            ? icon
+            : IconName.FileEarmarkCode;
 
     /// <summary>Maps a catalog example id to a Bootstrap-Icon glyph.</summary>
     private static IconName GetExampleIcon(string id) => id switch
     {
         "demo"      => IconName.CpuFill,
+        "contador-9"    => IconName.Stopwatch,
+        "contador-9999" => IconName.Speedometer2,
         "counter"   => IconName.Stopwatch,
         "traffic"   => IconName.Signpost2Fill,
         "shift"     => IconName.ArrowRightSquareFill,
@@ -1212,6 +1272,69 @@ end rtl;
         _examplesModalOpen = false;
         StateHasChanged();
         await CreateExampleAsync(def);
+    }
+
+    /// <summary>
+    /// Instantiates a project from a user-authored sample by re-importing its
+    /// stored bundle, then navigates to its editor — the same "jump into the
+    /// code" behaviour as the built-in examples.
+    /// </summary>
+    private async Task PickUserSampleAsync(UserSample sample)
+    {
+        _examplesModalOpen = false;
+        StateHasChanged();
+        try
+        {
+            var project = await UserSamples.CreateProjectFromSampleAsync(sample.Id, ResolveBasePath());
+            if (project == null)
+            {
+                ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                    Traductor.T("PROJECTS_SAMPLE_ERROR"), ToastType.Danger));
+                return;
+            }
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"),
+                Traductor.T("PROJECTS_SAMPLE_CREATED"), ToastType.Success));
+            NavigationManager.NavigateTo($"/editor/{project.Id}");
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+    }
+
+    /// <summary>Removes a user-authored sample from the gallery (does not touch
+    /// any project already created from it).</summary>
+    private async Task DeleteUserSampleAsync(UserSample sample)
+    {
+        var ok = await _removeProjectDialog.ShowAsync(
+            Traductor.T("EXAMPLES_SAMPLE_DELETE_TITLE"),
+            string.Format(Traductor.T("EXAMPLES_SAMPLE_DELETE_MSG"), sample.Title),
+            new ConfirmDialogOptions
+            {
+                YesButtonColor = ButtonColor.Danger,
+                YesButtonText = Traductor.T("COMMON_DELETE"),
+                NoButtonColor = ButtonColor.Secondary,
+                NoButtonText = Traductor.T("COMMON_CANCEL")
+            });
+        if (!ok) return;
+        await UserSamples.DeleteAsync(sample.Id);
+        _userSamples = await UserSamples.ListAsync();
+        StateHasChanged();
+    }
+
+    /// <summary>Platform-appropriate data directory root (matches
+    /// <see cref="CreateExampleAsync"/> and Settings bundle import).</summary>
+    private static string ResolveBasePath()
+    {
+#if WINDOWS || MACCATALYST || ANDROID || IOS
+        return FileSystem.AppDataDirectory;
+#else
+        return OperatingSystem.IsBrowser()
+            ? "/kmila"
+            : Path.Combine(
+                System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData),
+                "KmilaData");
+#endif
     }
 
     private async Task CreateExampleAsync(ExampleDef def)

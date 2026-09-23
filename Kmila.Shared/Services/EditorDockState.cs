@@ -14,7 +14,9 @@ public enum EditorTab
     Waveforms,
     Runs,
     Files,
-    Output
+    Output,
+    // Appended so older persisted values (0-7) still parse.
+    SourceControl
 }
 
 /// <summary>

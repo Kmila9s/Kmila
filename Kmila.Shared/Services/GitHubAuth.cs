@@ -41,8 +41,12 @@ public class GitHubAuth
         DefaultRequestHeaders = { { "User-Agent", "Kmila/0.1 (+https://github.com/Kmila9s/Kmila)" } }
     };
 
-    private const string TokenSettingKey    = "KMILA_GITHUB_TOKEN";
-    private const string ClientIdSettingKey = "KMILA_GITHUB_CLIENT_ID";
+    private const string TokenSettingKey        = "KMILA_GITHUB_TOKEN";
+    private const string ClientIdSettingKey     = "KMILA_GITHUB_CLIENT_ID";
+    // Opt-in: request the wider `repo` scope (private repos) instead of the
+    // default `public_repo`. Read at device-flow start; changing it only takes
+    // effect on the next sign-in (OAuth scope is fixed at authorization time).
+    private const string PrivateScopeSettingKey = "KMILA_GITHUB_PRIVATE_SCOPE";
 
     /// <summary>
     /// Effective OAuth App Client ID. Resolves from the SQLite settings
@@ -135,7 +139,7 @@ public class GitHubAuth
         req.Content = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["client_id"] = _clientId,
-            ["scope"]     = GitHubAuthConfig.Scope
+            ["scope"]     = await ResolveScopeAsync()
         });
         req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
@@ -299,6 +303,97 @@ public class GitHubAuth
         }
     }
 
+    /// <summary>True when the user has opted in to request the wider
+    /// <c>repo</c> scope (needed for private repositories).</summary>
+    public async Task<bool> GetPrivateScopeAsync()
+    {
+        try
+        {
+            var raw = await _db.GetSettingAsync(PrivateScopeSettingKey);
+            return string.Equals(raw, "true", StringComparison.OrdinalIgnoreCase);
+        }
+        catch { return false; }
+    }
+
+    /// <summary>Sets whether the next sign-in requests the <c>repo</c> scope
+    /// (private repos) instead of <c>public_repo</c>. Fires <see cref="OnChange"/>
+    /// so the Settings UI can prompt for re-consent.</summary>
+    public async Task SetPrivateScopeAsync(bool enabled)
+    {
+        await _db.SetSettingAsync(PrivateScopeSettingKey, enabled ? "true" : "false");
+        OnChange?.Invoke();
+    }
+
+    /// <summary>Resolves the OAuth scope to request at sign-in: <c>repo</c> when
+    /// the private-repo opt-in is on, else the default <c>public_repo</c>.</summary>
+    private async Task<string> ResolveScopeAsync()
+        => await GetPrivateScopeAsync() ? "repo" : GitHubAuthConfig.Scope;
+
+    /// <summary>
+    /// Sends an authenticated GitHub REST call using the stored token, mirroring
+    /// <see cref="SubmitIssueAsync"/>'s request shape (Bearer + vnd.github+json).
+    /// This is the single transport seam the version-control engine's
+    /// <c>GitHubRemote</c> uses — the token never leaves this class. On 401 the
+    /// token is cleared and <see cref="OnChange"/> fires (signed-out). Returns a
+    /// disposable result carrying the parsed JSON (may be null for 204/empty).
+    /// </summary>
+    internal async Task<GitHubApiResult> SendApiAsync(
+        HttpMethod method, string url, object? jsonBody = null, CancellationToken ct = default)
+    {
+        var token = await _db.GetSettingAsync(TokenSettingKey);
+        if (string.IsNullOrWhiteSpace(token))
+            return new GitHubApiResult { Ok = false, Error = "not-signed-in" };
+
+        using var req = new HttpRequestMessage(method, url);
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+        if (jsonBody != null) req.Content = JsonContent.Create(jsonBody);
+
+        try
+        {
+            using var res = await _http.SendAsync(req, ct);
+            var status = res.StatusCode;
+
+            if (status == System.Net.HttpStatusCode.Unauthorized)
+            {
+                await _db.DeleteSettingAsync(TokenSettingKey);
+                if (Account != null) { Account = null; OnChange?.Invoke(); }
+                return new GitHubApiResult { Ok = false, Status = status, Error = "unauthorized" };
+            }
+
+            bool rateLimited = status == System.Net.HttpStatusCode.Forbidden
+                && ((res.Headers.TryGetValues("X-RateLimit-Remaining", out var rem)
+                        && rem.FirstOrDefault() == "0")
+                    || res.Headers.Contains("Retry-After"));
+
+            JsonDocument? doc = null;
+            try
+            {
+                var stream = await res.Content.ReadAsStreamAsync(ct);
+                doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+            }
+            catch { /* empty (204) or non-JSON body — leave doc null */ }
+
+            if (!res.IsSuccessStatusCode)
+            {
+                string? err = null;
+                if (doc != null && doc.RootElement.ValueKind == JsonValueKind.Object
+                    && doc.RootElement.TryGetProperty("message", out var m))
+                    err = m.GetString();
+                _logger.LogWarning("[GitHubAuth] API {Method} {Url} -> {Status} {Err}",
+                    method, url, status, err);
+                return new GitHubApiResult { Ok = false, Status = status, Doc = doc, Error = err, RateLimited = rateLimited };
+            }
+
+            return new GitHubApiResult { Ok = true, Status = status, Doc = doc };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[GitHubAuth] API {Method} {Url} failed", method, url);
+            return new GitHubApiResult { Ok = false, Error = ex.Message };
+        }
+    }
+
     private async Task<GitHubAccount?> FetchAccountAsync(string token)
     {
         using var req = new HttpRequestMessage(HttpMethod.Get, "https://api.github.com/user");
@@ -360,6 +455,28 @@ public class GitHubAuth
 }
 
 /// <summary>
+/// Result of an authenticated GitHub REST call made via
+/// <see cref="GitHubAuth.SendApiAsync"/>. Owns the parsed response
+/// <see cref="Doc"/> — callers should <c>using</c> it (or call
+/// <see cref="Dispose"/>) to release the <see cref="JsonDocument"/>.
+/// </summary>
+internal sealed class GitHubApiResult : IDisposable
+{
+    /// <summary>True on a 2xx response.</summary>
+    public bool Ok { get; init; }
+    /// <summary>HTTP status code (default 0 when the request never left).</summary>
+    public System.Net.HttpStatusCode Status { get; init; }
+    /// <summary>Parsed JSON body, or null for empty/204/non-JSON responses.</summary>
+    public JsonDocument? Doc { get; init; }
+    /// <summary>Error message (GitHub's <c>message</c> field, or a local reason like "not-signed-in"/"unauthorized").</summary>
+    public string? Error { get; init; }
+    /// <summary>True when a 403 looks like a rate/secondary limit.</summary>
+    public bool RateLimited { get; init; }
+
+    public void Dispose() => Doc?.Dispose();
+}
+
+/// <summary>
 /// Build-time configuration for the GitHub OAuth integration. The
 /// values here are PUBLIC by design — Device Flow doesn't use a
 /// client secret, so embedding the Client ID in the shipped binary
@@ -388,9 +505,11 @@ public static class GitHubAuthConfig
     /// </summary>
     public const string DefaultClientId = "";
 
-    /// <summary>Token scopes requested. <c>public_repo</c> is enough
-    /// for issue submission against the public Kmila repo; bump to
-    /// <c>repo</c> only if you fork to a private one.</summary>
+    /// <summary>Default token scope requested at sign-in. <c>public_repo</c>
+    /// covers issue submission and version control against PUBLIC repos. The
+    /// user can opt in to the wider <c>repo</c> scope (private repos) via the
+    /// Settings toggle — see <see cref="GitHubAuth.SetPrivateScopeAsync"/> — which
+    /// overrides this at the next sign-in.</summary>
     public const string Scope = "public_repo";
 
     /// <summary>Owner of the issue-target repo.</summary>

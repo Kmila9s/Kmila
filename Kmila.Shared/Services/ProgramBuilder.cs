@@ -59,6 +59,14 @@ public class ProgramBuilder : IDisposable
     /// </summary>
     public event Action<SignalHistory>? OnSimulationProgressUpdate;
     /// <summary>
+    /// Fires for each VHDL <c>report</c> statement executed during a run.
+    /// Workbench (testbench) mode surfaces these in the Output panel so the
+    /// user can read a testbench's self-check messages; the port-moment path
+    /// simply has no subscriber. Forwarded from
+    /// <see cref="Interpreter.Services.ISimulationRunner.OnReport"/>.
+    /// </summary>
+    public event Action<string>? OnReport;
+    /// <summary>
     /// Tick rate (ms) for live waveform refreshes. 200 ms ≈ 5 Hz, which
     /// feels real-time without burning UI cycles on long sims; the merge
     /// is incremental so per-tick cost scales with new transitions, not
@@ -341,6 +349,20 @@ public class ProgramBuilder : IDisposable
             Console.WriteLine($"[Sim.Diag] failed: {diagEx.Message}");
         }
 
+        await RunConfigAsync(config, fastRun);
+    }
+
+    /// <summary>
+    /// Shared runner execution used by both the port-moment path
+    /// (<see cref="RunSimulationAsync"/>) and the Workbench testbench path
+    /// (<see cref="RunTestbenchAsync"/>): creates the runner (Fast/Visual),
+    /// wires progress / engine-ready / report / error / completion events,
+    /// runs the live-waveform timer, executes <paramref name="config"/>, and
+    /// emits perf diagnostics. Extracted verbatim so both entry points share
+    /// identical execution + eventing — the simulation behaviour is unchanged.
+    /// </summary>
+    private async Task RunConfigAsync(SimulationConfig config, bool fastRun)
+    {
         // Dispose previous runner if any. Fast mode swaps in the event-driven
         // FastSimulationRunner (skips idle ticks); Visual mode keeps the
         // reference SimulationRunner (live-updating tick-by-tick).
@@ -383,6 +405,8 @@ public class ProgramBuilder : IDisposable
             }
         };
         _simulationRunner.OnError += msg => OnBuildError?.Invoke("Simulation error", msg);
+        // Surface VHDL `report` output (testbench self-checks) to subscribers.
+        _simulationRunner.OnReport += msg => OnReport?.Invoke(msg);
 
         // Start the live-update timer just before the run kicks off. The
         // Interlocked guard drops timer fires that arrive while a previous
@@ -459,6 +483,115 @@ public class ProgramBuilder : IDisposable
             // fired, the timer would otherwise leak.
             progressTimer?.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Runs a VHDL testbench (Workbench mode). Unlike the port-moment path,
+    /// the testbench supplies its own clock/reset stimulus in VHDL, so no
+    /// UI-authored port moments are used. Mirrors the proven headless bench
+    /// path (<see cref="Api.HeadlessSimulator"/>): scan all project files,
+    /// elaborate the testbench entry point into a flat single-entity source,
+    /// parse it, and run it through the shared <see cref="RunConfigAsync"/>.
+    /// The design's simulation behaviour is untouched — this only changes
+    /// which entity is elaborated and that stimulus comes from VHDL.
+    /// </summary>
+    /// <param name="projectBasePath">Absolute project root (holds the .vhd files on disk).</param>
+    /// <param name="testbenchRelativePath">Project-relative path of the chosen testbench file.</param>
+    public async Task RunTestbenchAsync(
+        string projectBasePath,
+        string testbenchRelativePath,
+        TimeSpan duration,
+        int systemClockMhz = 50,
+        int tickResNs = TimeMachine.Models.TimeClock.NS_PER_TICK,
+        bool fastRun = false)
+    {
+        if (string.IsNullOrWhiteSpace(projectBasePath) || !Directory.Exists(projectBasePath))
+            throw new InvalidOperationException("Project directory not found for testbench run.");
+        if (string.IsNullOrWhiteSpace(testbenchRelativePath))
+            throw new InvalidOperationException("No testbench file selected.");
+
+        var tbPath = Path.Combine(
+            new[] { projectBasePath }
+                .Concat(testbenchRelativePath.Split('/', StringSplitOptions.RemoveEmptyEntries))
+                .ToArray());
+        if (!File.Exists(tbPath))
+            throw new InvalidOperationException($"Testbench file not found: {testbenchRelativePath}");
+
+        LastTickResNs = tickResNs > 0 ? tickResNs : TimeMachine.Models.TimeClock.NS_PER_TICK;
+
+        // Cross-file hygiene — mirror the headless bench path so a previous
+        // run's entities don't leak into this one.
+        EntityRegistry.Instance.Clear();
+        PackageRegistry.Instance.Clear();
+        FunctionRegistry.Instance.Clear();
+        global::Parser.Services.ParseProfile.Reset();
+
+        foreach (var f in Directory.EnumerateFiles(projectBasePath, "*.*", SearchOption.AllDirectories))
+        {
+            var ext = Path.GetExtension(f);
+            if (!ext.Equals(".vhd", StringComparison.OrdinalIgnoreCase) &&
+                !ext.Equals(".vhdl", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (Path.GetFileName(f).StartsWith("_elaborated_", StringComparison.OrdinalIgnoreCase))
+                continue;
+            try { EntityRegistry.Instance.ScanFile(f); } catch { /* keep scanning */ }
+            try { PackageSubtypeScanner.ScanFile(f); } catch { /* keep scanning */ }
+        }
+
+        // Resolve library `use` clauses across the project (same as a build).
+        await EnsureLibrariesCompiledForBuildAsync(tbPath, projectBasePath, _cts.Token)
+            .ConfigureAwait(false);
+
+        // Discover the testbench entity name from the chosen file so we don't
+        // rely on the filename matching the entity.
+        var probe = new Debugger.Repositories.Parser(tbPath);
+        probe.ParseFile();
+        var tbEntity = probe.Entities.FirstOrDefault(e => e.Architecture != null)
+            ?? probe.Entities.FirstOrDefault();
+        if (tbEntity == null)
+            throw new InvalidOperationException("The selected testbench has no entity with an architecture.");
+        var tbName = tbEntity.Name;
+
+        // Elaborate: inline any DUT instantiations into a flat single-entity
+        // source. Written to a TEMP file so the user's project tree stays
+        // clean — the headless path writes into its sandbox, but the editor
+        // must not add an _elaborated_ file to the visible project.
+        string parsePath = tbPath;
+        try
+        {
+            var flat = SourceElaborator.ElaborateOrNull(projectBasePath, tbName);
+            if (!string.IsNullOrEmpty(flat))
+            {
+                var tmp = Path.Combine(Path.GetTempPath(), $"kmila_tb_{tbName}_{Guid.NewGuid():N}.vhd");
+                await File.WriteAllTextAsync(tmp, flat).ConfigureAwait(false);
+                parsePath = tmp;
+            }
+        }
+        catch { /* fall back to the raw testbench source */ }
+
+        Parser = new Debugger.Repositories.Parser(parsePath);
+        Parser.ParseFile();
+        if (!Parser.Entities.Any())
+            throw new InvalidOperationException("Testbench produced no entities.");
+
+        var entity = Parser.Entities.FirstOrDefault(e =>
+                string.Equals(e.Name, tbName, StringComparison.OrdinalIgnoreCase) && e.Architecture != null)
+            ?? Parser.Entities.FirstOrDefault(e => e.Architecture != null);
+        if (entity == null)
+            throw new InvalidOperationException("No testbench entity with architecture found.");
+
+        // Testbench drives its own clock/reset in VHDL → no UI port moments.
+        var totalNs = (long)Math.Round(duration.TotalSeconds * 1e9);
+        var config = StimulusBuilder.BuildConfigNs(
+            entity, portMoments: null,
+            totalNs: totalNs,
+            tickResNs: LastTickResNs,
+            systemClockMhz: systemClockMhz);
+
+        Console.WriteLine($"[Sim.TB] entity={entity.Name} totalTicks={config.TotalTicks} " +
+            $"clocks={config.Clocks.Count} stimuli={config.Stimuli.Count}");
+
+        await RunConfigAsync(config, fastRun);
     }
 
     /// <summary>

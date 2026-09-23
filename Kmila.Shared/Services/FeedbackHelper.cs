@@ -14,6 +14,31 @@ public static class FeedbackHelper
     public const string GithubRepo = "Kmila9s/Kmila";
 
     /// <summary>
+    /// Kmila website base URL. Also the target of the "Report to Kmila servers"
+    /// bug-report handoff and the satisfaction-form links.
+    /// </summary>
+    public const string KmilaSite = "https://kmila.com.mx";
+
+    /// <summary>
+    /// Path of the bug-report web form on the Kmila site. Placeholder until the
+    /// real form path is provided — update this one constant to point the
+    /// "Report to Kmila servers" button at the live form.
+    /// </summary>
+    public const string KmilaReportFormPath = "/report";
+
+    /// <summary>
+    /// Satisfaction-survey link for an anonymous response. Placeholder until the
+    /// real URL is provided — the prompt only opens this in the browser.
+    /// </summary>
+    public const string SatisfactionAnonymousUrl = "https://kmila.com.mx/survey";
+
+    /// <summary>
+    /// Satisfaction-survey link for a signed-in / user-registered response.
+    /// Placeholder until the real URL is provided.
+    /// </summary>
+    public const string SatisfactionRegisteredUrl = "https://kmila.com.mx/survey?u=1";
+
+    /// <summary>
     /// Builds a Markdown diagnostics blob. When <paramref name="logContext"/>
     /// is non-null it's embedded verbatim in a <c>## Log entry</c> section
     /// — used by the Logs page's per-entry report path so the maintainer
@@ -68,5 +93,21 @@ public static class FeedbackHelper
         var qTitle = Uri.EscapeDataString(safeTitle);
         var qBody  = Uri.EscapeDataString(body);
         return $"https://github.com/{GithubRepo}/issues/new?title={qTitle}&body={qBody}";
+    }
+
+    /// <summary>
+    /// Builds the "Report to Kmila servers" URL with the title + body pre-filled
+    /// as query parameters, pointing at the Kmila website's bug-report form.
+    /// The app never POSTs anything itself — this URL is handed to the browser
+    /// (window.open), exactly like <see cref="BuildIssueUrl"/>, so the offline /
+    /// no-telemetry stance is preserved: the user's browser makes the request,
+    /// and only when the user chooses to submit the form.
+    /// </summary>
+    public static string BuildKmilaReportUrl(string title, string body)
+    {
+        var safeTitle = title.Length > 160 ? title[..160] + "…" : title;
+        var qTitle = Uri.EscapeDataString(safeTitle);
+        var qBody  = Uri.EscapeDataString(body);
+        return $"{KmilaSite}{KmilaReportFormPath}?title={qTitle}&body={qBody}";
     }
 }

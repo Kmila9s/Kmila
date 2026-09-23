@@ -9,6 +9,7 @@
 @inject Kmila.Shared.Services.SimulationSnapshotStore Snapshots
 @inject Kmila.Shared.Services.EditorSessionStore Sessions
 @inject Kmila.Shared.Services.ReplayState Replay
+@inject Kmila.Shared.Services.VersionControl.IProjectVersionControl Vc
 @inject Microsoft.AspNetCore.Components.NavigationManager NavigationManager
 <PageTitle>@string.Format(Traductor.T("EDITOR_PAGE_TITLE"), _project?.Name ?? string.Empty)</PageTitle>
 @*
@@ -275,6 +276,7 @@
         <EditorDock EntitiesCount="@(Builder.Parser?.Entities.Count() ?? 0)"
                     FilesCount="@_projectFiles.Count"
                     RunsCount="@_runsCount"
+                    SourceControlCount="@_scChangedCount"
                     WaveformsReady="@(_waveformData != null)"
                     OutputReady="@(Log.Entries.Count > 0)">
 
@@ -335,7 +337,8 @@
             </FlowContent>
 
             <PortsContent>
-                <PortsPanel OnBuildRequested="OnBuildRequested" />
+                <PortsPanel OnBuildRequested="OnBuildRequested"
+                            VhdlFiles="@_vhdlFilePaths" />
             </PortsContent>
 
             <WaveformsContent>
@@ -402,6 +405,12 @@
             <OutputContent>
                 <OutputPanel />
             </OutputContent>
+
+            <SourceControlContent>
+                <Kmila.Shared.Components.VersionControl.SourceControlPanel
+                    ProjectId="@_projectId"
+                    OnChangedCountChanged="@(c => { _scChangedCount = c; InvokeAsync(StateHasChanged); })" />
+            </SourceControlContent>
         </EditorDock>
 
         @* ---------- Status bar (bottom of the editor page) ---------- *@
@@ -438,6 +447,21 @@
     /// </summary>
     private ConfirmDialog _closeTabDialog = new();
     private List<ProjectFile> _projectFiles { get; set; } = new();
+
+    /// <summary>Changed-file count from the Source Control panel — drives its dock badge.</summary>
+    private int _scChangedCount;
+
+    /// <summary>Debounce timer for per-project auto-commit on save (VC).</summary>
+    private System.Threading.Timer? _autoCommitTimer;
+    private int _autoCommitInflight;
+
+    /// <summary>Project-relative paths of .vhd/.vhdl files — feeds the Workbench
+    /// testbench picker in PortsPanel.</summary>
+    private IEnumerable<string> _vhdlFilePaths => _projectFiles
+        .Where(f => f.FileName.EndsWith(".vhd", StringComparison.OrdinalIgnoreCase)
+                 || f.FileName.EndsWith(".vhdl", StringComparison.OrdinalIgnoreCase))
+        .Select(f => f.RelativePath)
+        .OrderBy(p => p, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Editor panes — at most 2 in Phase 2. <c>_panes[0]</c> is always
@@ -599,6 +623,8 @@
         Builder.OnSimulationCompleted     += OnSimulationDataReady;
         Builder.OnSimulationProgressUpdate += OnSimulationProgressUpdate;
         Builder.OnSimulationEnded         += OnSimulationEnded;
+        // Workbench: surface VHDL `report` output into the Output log.
+        Builder.OnReport                  += OnSimulationReport;
         // OnProgressAdvanced is owned by SimulationCoordinator (singleton/
         // per-circuit) so progress keeps flowing into Sim even when the
         // Editor isn't mounted. Editor only needs to react to UI-relevant
@@ -1078,6 +1104,26 @@
         _projectFiles  = allFiles.Where(f => !IsBvhdlSidecar(f)).ToList();
         _sidecarFiles  = allFiles.Where(IsBvhdlSidecar).ToList();
 
+        // Restore the per-project Workbench selection: if a testbench marker
+        // exists (and the file is still present), switch to testbench stimulus
+        // mode with that file. Otherwise default to the port-moment timeline.
+        try
+        {
+            var tb = await DbContext.GetProjectTestbenchAsync(_projectId);
+            if (!string.IsNullOrWhiteSpace(tb)
+                && _projectFiles.Any(f => string.Equals(f.RelativePath, tb, StringComparison.OrdinalIgnoreCase)))
+            {
+                Sim.SetTestbenchFile(tb);
+                Sim.SetStimulusMode(StimulusSource.Testbench);
+            }
+            else
+            {
+                Sim.SetTestbenchFile(null);
+                Sim.SetStimulusMode(StimulusSource.PortMoments);
+            }
+        }
+        catch { /* non-fatal: default to port-moment mode */ }
+
         // Record the open for the sidebar MRU so the top-10 reflects actual usage.
         _ = Recent.TouchAsync(_projectId);
 
@@ -1324,6 +1370,19 @@
             // takes over as the Replay tab's content.
             Replay.DetachLive();
 
+            StateHasChanged();
+        });
+    }
+
+    /// <summary>
+    /// Surfaces a VHDL <c>report</c> line (from a Workbench testbench run) into
+    /// the Output log so the user can read the testbench's self-check messages.
+    /// </summary>
+    private void OnSimulationReport(string message)
+    {
+        InvokeAsync(() =>
+        {
+            Log.Info($"report: {message}");
             StateHasChanged();
         });
     }
@@ -1767,27 +1826,52 @@
     /// </summary>
     private async Task OnRunRequested()
     {
-        // Blocks-mode Run always rebuilds: the user edited blocks since
-        // the last build but Sim.State may still say BuiltOk because
-        // Monaco's content hasn't changed yet. Sync to Monaco then force
-        // a fresh build before running.
-        if (_editorCardTab == EditorCardTab.Blocks)
+        // Workbench mode: the testbench path re-parses + elaborates the design
+        // on its own, so skip the single-file DUT build gate below. Require a
+        // testbench to be selected first.
+        var workbenchRun = Sim.StimulusMode == StimulusSource.Testbench;
+        if (workbenchRun && string.IsNullOrWhiteSpace(Sim.TestbenchFile))
         {
-            await SyncBlocksToCodeAsync();
-            var rebuilt = await RunBuildAsync();
-            if (!rebuilt) return;
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                Traductor.T("WORKBENCH_NO_SELECTION"), ToastType.Danger));
+            return;
         }
-        // Auto-build when stale
-        else if (Sim.State != SimState.BuiltOk && Sim.State != SimState.Complete && Sim.State != SimState.BuildError)
+
+        // Persist the per-project Workbench selection so it's restored next
+        // time the project opens. Best-effort — never blocks a run.
+        try
         {
-            var ok = await RunBuildAsync();
-            if (!ok) return;
+            if (workbenchRun)
+                await DbContext.SetProjectTestbenchAsync(_projectId, Sim.TestbenchFile!);
+            else
+                await DbContext.ClearProjectTestbenchAsync(_projectId);
         }
-        else if (Sim.State == SimState.BuildError)
+        catch { /* non-fatal */ }
+
+        if (!workbenchRun)
         {
-            // Try building once more — maybe the user fixed the code since
-            var ok = await RunBuildAsync();
-            if (!ok) return;
+            // Blocks-mode Run always rebuilds: the user edited blocks since
+            // the last build but Sim.State may still say BuiltOk because
+            // Monaco's content hasn't changed yet. Sync to Monaco then force
+            // a fresh build before running.
+            if (_editorCardTab == EditorCardTab.Blocks)
+            {
+                await SyncBlocksToCodeAsync();
+                var rebuilt = await RunBuildAsync();
+                if (!rebuilt) return;
+            }
+            // Auto-build when stale
+            else if (Sim.State != SimState.BuiltOk && Sim.State != SimState.Complete && Sim.State != SimState.BuildError)
+            {
+                var ok = await RunBuildAsync();
+                if (!ok) return;
+            }
+            else if (Sim.State == SimState.BuildError)
+            {
+                // Try building once more — maybe the user fixed the code since
+                var ok = await RunBuildAsync();
+                if (!ok) return;
+            }
         }
 
         var ports = Sim.GetPortMomentsForRun();
@@ -1834,8 +1918,16 @@
         // wired a clock. Defensive null-guards because this block runs on
         // the UI thread right before we detach into Task.Run — a silly NRE
         // here blocked the whole simulation in one student's build.
+        // Skipped in Workbench mode: the testbench supplies its own clock,
+        // so an auto-clock note would be misleading there.
         try
         {
+            if (workbenchRun)
+            {
+                Log.Info($"Workbench: running testbench '{Sim.TestbenchFile}'.");
+            }
+            else
+            {
             string? clkName = null;
             string? entityName = null;
             var entityForLog = Builder?.Parser?.Entities?
@@ -1872,20 +1964,42 @@
                          "'. Injecting a virtual _clk at " + effectiveClockMhz + " MHz " +
                          "(tick=" + tickResNs + " ns, mode=" + tickMode.ToToken() + ").");
             }
+            }
         }
         catch (Exception clkLogEx)
         {
             Logger.LogWarning(clkLogEx, "[Editor] Clock-status log failed — continuing run");
         }
 
+        // Workbench mode: drive the design from a VHDL testbench instead of the
+        // port-moment timeline. The testbench supplies its own clock/reset, so
+        // the port-moment `ports` list is intentionally not passed.
+        var useTestbench = Sim.StimulusMode == StimulusSource.Testbench
+                        && !string.IsNullOrWhiteSpace(Sim.TestbenchFile);
+        var testbenchFile = Sim.TestbenchFile;
+        var projectBasePath = _project?.BasePath;
+
         _ = Task.Run(async () =>
         {
             try
             {
-                await Builder.RunSimulationAsync(ports, duration,
-                    systemClockMhz: effectiveClockMhz,
-                    tickResNs: tickResNs,
-                    fastRun: Sim.FastMode);
+                if (useTestbench)
+                {
+                    await Builder.RunTestbenchAsync(
+                        projectBasePath ?? string.Empty,
+                        testbenchFile!,
+                        duration,
+                        systemClockMhz: effectiveClockMhz,
+                        tickResNs: tickResNs,
+                        fastRun: Sim.FastMode);
+                }
+                else
+                {
+                    await Builder.RunSimulationAsync(ports, duration,
+                        systemClockMhz: effectiveClockMhz,
+                        tickResNs: tickResNs,
+                        fastRun: Sim.FastMode);
+                }
             }
             catch (Exception ex)
             {
@@ -1984,6 +2098,10 @@
                     // regex-parsed approximation. No-op when the workspace
                     // is empty (user has only ever edited in Code mode).
                     await SaveBvhdlSidecarAsync(_openedFile);
+                    // Version control: if this project has per-project auto-commit
+                    // on (and is signed in), push the save up. Fire-and-forget +
+                    // debounced so rapid saves batch into one commit.
+                    ScheduleAutoCommit();
                 }
                 ToastService.Notify(Message(
                     result ? Traductor.T("COMMON_OK") : Traductor.T("COMMON_ERROR"),
@@ -1996,6 +2114,31 @@
             ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
         }
     }
+
+    /// <summary>
+    /// (Re)arms the auto-commit debounce. Fires ~2.5s after the last save so a
+    /// burst of saves batches into one commit. The engine no-ops unless the
+    /// project has auto-commit enabled and is signed in, so this is cheap when off.
+    /// </summary>
+    private void ScheduleAutoCommit()
+    {
+        var pid = _projectId;
+        if (pid <= 0) return;
+        _autoCommitTimer ??= new System.Threading.Timer(async _ =>
+        {
+            if (System.Threading.Interlocked.Exchange(ref _autoCommitInflight, 1) == 1) return;
+            try
+            {
+                var r = await Vc.TryAutoCommitAsync(pid);
+                if (r.Ok && r.Outcome == Kmila.Shared.Models.VersionControl.VcOutcome.Success)
+                    await InvokeAsync(() => { _scChangedCount = 0; StateHasChanged(); });
+            }
+            catch (Exception ex) { Logger.LogWarning(ex, "[Editor] auto-commit failed"); }
+            finally { System.Threading.Interlocked.Exchange(ref _autoCommitInflight, 0); }
+        }, null, System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
+        _autoCommitTimer.Change(2500, System.Threading.Timeout.Infinite);
+    }
+
     /// <summary>
     /// Handles the file removed event. FilesCard already ran the delete +
     /// toast; all we need to do here is drop the file from our local list and
@@ -3458,6 +3601,8 @@ end architecture behavioral;",
         Builder.OnSimulationCompleted     -= OnSimulationDataReady;
         Builder.OnSimulationProgressUpdate -= OnSimulationProgressUpdate;
         Builder.OnSimulationEnded         -= OnSimulationEnded;
+        Builder.OnReport                  -= OnSimulationReport;
+        _autoCommitTimer?.Dispose();
         // OnProgressAdvanced subscription lives on SimulationCoordinator now.
         Builder.OnEngineReady             -= OnEngineReadyForLiveReplay;
         Replay.OnBreakpointsChanged       -= OnBreakpointsChangedRepaint;

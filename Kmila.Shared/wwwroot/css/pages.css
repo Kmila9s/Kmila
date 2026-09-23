@@ -15406,6 +15406,182 @@ body:has(.visual-page.is-fullscreen) .status-bar {
 .examples-gallery-modal .modal-footer { padding: var(--space-3); border-bottom: 1px solid var(--border-subtle); }
 .examples-gallery-modal .modal-footer { border-bottom: 0; }
 
+/* --- User-authored samples in the gallery --- */
+.examples-gallery-subtitle {
+    margin: var(--space-4) 0 var(--space-2);
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.examples-gallery-card--user {
+    position: relative;
+    padding: 0;
+    flex-direction: row;
+}
+.examples-gallery-card__pick {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    flex: 1 1 auto;
+    padding: var(--space-3);
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    text-align: start;
+    color: inherit;
+    font: inherit;
+}
+.examples-gallery-card__delete {
+    position: absolute;
+    top: var(--space-2);
+    inset-inline-end: var(--space-2);
+    opacity: 0.6;
+}
+.examples-gallery-card--user:hover .examples-gallery-card__delete { opacity: 1; }
+
+/* --- Import-mode modal (raw vs. sample) --- */
+.import-mode-options {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3);
+    margin: var(--space-3) 0;
+}
+.import-mode-option {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    background: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: border-color 120ms ease, background-color 120ms ease;
+}
+.import-mode-option--active {
+    border-color: var(--accent, #f59e0b);
+    background: color-mix(in srgb, var(--surface-2) 82%, var(--accent) 18%);
+}
+.import-mode-option input { margin-top: 0.25rem; }
+.import-mode-option__icon { font-size: 1.4em; color: var(--accent, #f59e0b); }
+.import-mode-option__text { display: flex; flex-direction: column; gap: 2px; }
+.import-mode-option__title { font-weight: 600; color: var(--text); }
+.import-mode-option__desc { font-size: var(--fs-sm); color: var(--text-muted); line-height: 1.35; }
+.import-mode-form { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2); }
+.import-mode-form__preview {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background: var(--surface-2);
+    border: 1px dashed var(--border-subtle);
+    border-radius: var(--radius);
+    color: var(--text-muted);
+}
+.import-mode-form__preview .bi { font-size: 1.4em; color: var(--accent, #f59e0b); }
+@media (max-width: 560px) { .import-mode-options { grid-template-columns: 1fr; } }
+
+/* --- Stimulus-source selector (PortsPanel) --- */
+.ports-panel__stimulus {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-3);
+}
+.ports-panel__stimulus-label {
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--text-muted);
+}
+.kmila-segmented {
+    display: inline-flex;
+    padding: 2px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    gap: 2px;
+}
+.kmila-segmented__btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1, 4px);
+    padding: 0.3rem 0.7rem;
+    background: transparent;
+    border: 0;
+    border-radius: calc(var(--radius) - 2px);
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+    cursor: pointer;
+    transition: background-color 120ms ease, color 120ms ease;
+}
+.kmila-segmented__btn--active {
+    background: var(--surface-0, var(--surface));
+    color: var(--text);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+}
+.kmila-segmented__btn:disabled { opacity: 0.5; cursor: default; }
+.ports-panel__testbench { display: flex; flex-direction: column; gap: var(--space-2); }
+.ports-panel__testbench-info {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    margin: 0;
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+.ports-panel__testbench-info .bi { color: var(--accent, #f59e0b); }
+
+/* --- Satisfaction-survey invite (corner card) --- */
+.satisfaction-prompt {
+    position: fixed;
+    inset-inline-end: var(--space-4, 1rem);
+    inset-block-end: var(--space-4, 1rem);
+    z-index: 1080;
+    width: min(340px, calc(100vw - 2rem));
+    padding: var(--space-4, 1rem);
+    background: var(--surface, #fff);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.22);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    animation: satisfaction-in 180ms ease-out;
+}
+@keyframes satisfaction-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.satisfaction-prompt__close {
+    position: absolute;
+    top: var(--space-2);
+    inset-inline-end: var(--space-2);
+    background: transparent;
+    border: 0;
+    font-size: 1.1rem;
+    line-height: 1;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+.satisfaction-prompt__icon { font-size: 1.6em; color: var(--accent, #f59e0b); }
+.satisfaction-prompt__title { margin: 0; font-size: var(--fs-md); font-weight: 600; color: var(--text); }
+.satisfaction-prompt__body { margin: 0; font-size: var(--fs-sm); color: var(--text-muted); line-height: 1.4; }
+.satisfaction-prompt__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-1, 4px); }
+.satisfaction-prompt__minor { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-1, 4px); }
+.satisfaction-prompt__link {
+    background: transparent;
+    border: 0;
+    padding: 0;
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
+    text-decoration: underline;
+    cursor: pointer;
+}
+.satisfaction-prompt__link:hover { color: var(--text); }
+
 .kviz-wiring-modal .modal-header,
 .kviz-wiring-modal .modal-footer {
     padding: var(--space-3);

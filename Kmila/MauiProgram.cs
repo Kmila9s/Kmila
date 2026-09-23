@@ -293,6 +293,8 @@ public static class MauiProgram
 
         // Single-file .kmila project bundle — export/import all state in one JSON blob.
         builder.Services.AddScoped<ProjectBundleService>();
+        // User-authored samples (import-as-sample gallery entries).
+        builder.Services.AddScoped<UserSampleService>();
 
         // Cross-platform file export — MAUI heads write to
         // ~/Documents/Kmila/<Category>/ on macOS, iOS, and Android (via
@@ -308,6 +310,11 @@ public static class MauiProgram
         // the auth state propagates via the service's OnChange event so
         // the TopBar pill / Settings card can reactively re-render.
         builder.Services.AddScoped<GitHubAuth>();
+
+        // Per-project version control (GitHub-backed).
+        builder.Services.AddScoped<Kmila.Shared.Services.VersionControl.GitHubRemote>();
+        builder.Services.AddScoped<Kmila.Shared.Services.VersionControl.IProjectVersionControl,
+            Kmila.Shared.Services.VersionControl.ProjectVersionControl>();
 
         // Auto error reporter — opt-in per Settings → Account toggle,
         // gated additionally on GitHub login. Eagerly constructed by

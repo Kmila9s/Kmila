@@ -409,6 +409,8 @@ public class Program
         // .kmila project bundle export / import. Scoped so the inner
         // repositories resolve to the current circuit's DB context.
         builder.Services.AddScoped<ProjectBundleService>();
+        // User-authored samples (import-as-sample gallery entries).
+        builder.Services.AddScoped<UserSampleService>();
 
         // Cross-platform file export — Web target delegates to the JS
         // anchor-tag download helpers (kmila-shared-head.js). MAUI targets
@@ -423,6 +425,12 @@ public class Program
         // unconfigured Client ID leaves the in-app submit disabled but
         // the Tier 1+2 feedback paths still work.
         builder.Services.AddScoped<GitHubAuth>();
+
+        // Per-project version control (GitHub-backed). GitHubRemote wraps the
+        // Git Data API via GitHubAuth; ProjectVersionControl owns the VC logic.
+        builder.Services.AddScoped<Kmila.Shared.Services.VersionControl.GitHubRemote>();
+        builder.Services.AddScoped<Kmila.Shared.Services.VersionControl.IProjectVersionControl,
+            Kmila.Shared.Services.VersionControl.ProjectVersionControl>();
 
         // Auto error reporter. Eagerly constructed via MainLayout's
         // injection so the subscription is live before pages can throw.

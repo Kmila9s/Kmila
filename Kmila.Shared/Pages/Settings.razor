@@ -15,6 +15,7 @@
 @inject UserAssetStore UserAssets
 @inject LessonProgressStore LearnProgress
 @inject ProjectBundleService Bundles
+@inject UserSampleService UserSamples
 @inject Projects ProjectsRepo
 @inject GitHubAuth GitHubAuth
 @inject LibraryCompiler.Services.LibraryCompiler LibCompiler
@@ -593,6 +594,24 @@
                 </div>
             </header>
             <div class="settings-card__body">
+                @* Version-control scope: opt in to the wider `repo` scope so
+                   source control can use PRIVATE repositories. Takes effect on
+                   the next sign-in (OAuth scope is fixed at authorization time). *@
+                <div class="settings-row">
+                    <div class="settings-row__label">
+                        <strong>@Traductor.T("SETTINGS_VC_PRIVATE_TITLE")</strong>
+                        <small>@Traductor.T("SETTINGS_VC_PRIVATE_HINT")</small>
+                    </div>
+                    <div class="settings-row__control">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox"
+                                   id="vc-private-scope"
+                                   checked="@_privateScopeEnabled"
+                                   @onchange="OnPrivateScopeToggledAsync" />
+                        </div>
+                    </div>
+                </div>
+
                 @if (GitHubAuth.IsLoggedIn && GitHubAuth.Account != null)
                 {
                     @* Flat row mirroring .settings-list__item — same
@@ -957,6 +976,12 @@
                         <Icon Name="IconName.BoxArrowUpRight" />
                         <span>@Traductor.T("SETTINGS_FEEDBACK_OPEN_ISSUE")</span>
                     </button>
+                    <button type="button"
+                            class="kmila-btn kmila-btn--ghost kmila-btn--primary"
+                            @onclick="OpenKmilaReportAsync">
+                        <Icon Name="IconName.Globe" />
+                        <span>@Traductor.T("SETTINGS_FEEDBACK_KMILA")</span>
+                    </button>
                 </div>
                 <p class="settings-card__hint">@Traductor.T("SETTINGS_FEEDBACK_HINT")</p>
             </div>
@@ -966,6 +991,7 @@
 
 <ConfirmDialog @ref="_confirmDialog" />
 <Modal @ref="_accountLoginModal" Title="@Traductor.T("TOPBAR_SIGN_IN_GITHUB")" Size="ModalSize.Small" />
+<Modal @ref="_importModeModal" Title="@Traductor.T("IMPORT_MODE_TITLE")" />
 
 @* Library source viewer — opened from the "View" button on each
    imported library row. Plain <pre> rendering keeps the VHDL source
@@ -989,6 +1015,11 @@
     private List<string> _userLibs  = new();
     private int _learnCompleted;
     private ConfirmDialog _confirmDialog = default!;
+    private Modal _importModeModal = new();
+    // Bundle JSON held between reading the imported file and the user's
+    // raw-vs-sample choice in the import-mode modal.
+    private string? _pendingImportJson;
+    private string _pendingImportName = string.Empty;
 
     /// <summary>
     /// Current simulation tick-resolution mode. Loaded from AppSettings on
@@ -1058,6 +1089,7 @@
     // ─── Account / GitHub login state ────────────────────────────
     private const string AutoReportSettingKey = "KMILA_AUTO_REPORT_ENABLED";
     private bool _autoReportEnabled;
+    private bool _privateScopeEnabled;
     private bool _submitting;
     private string? _lastReportUrl;
     private Modal _accountLoginModal = new();
@@ -1116,6 +1148,7 @@
         _ = GitHubAuth.RestoreAsync();
         var autoRaw = await DbContext.GetSettingAsync(AutoReportSettingKey);
         _autoReportEnabled = string.Equals(autoRaw, "true", StringComparison.OrdinalIgnoreCase);
+        _privateScopeEnabled = await GitHubAuth.GetPrivateScopeAsync();
 
         // Tier 5.2 Phase B — hydrate the local-API triple. Only meaningful
         // when the ILocalApiHost is present (MAUI heads); reading is
@@ -1610,6 +1643,8 @@
         }
     }
 
+    /// <summary>Reads the chosen bundle file, then opens the import-mode modal
+    /// so the user picks a raw project import or a promote-to-sample save.</summary>
     private async Task OnBundleImportAsync(InputFileChangeEventArgs e)
     {
         var file = e.File;
@@ -1618,17 +1653,82 @@
         {
             using var stream = file.OpenReadStream(maxAllowedSize: 50 * 1024 * 1024);
             using var reader = new StreamReader(stream);
-            var json = await reader.ReadToEndAsync();
+            _pendingImportJson = await reader.ReadToEndAsync();
+            _pendingImportName = TryReadBundleName(_pendingImportJson);
 
-            // Same logic the Projects page uses for picking a base path.
-            var basePath =
+            var parameters = new Dictionary<string, object>
+            {
+                { "DefaultTitle", _pendingImportName },
+                { "OnConfirm", EventCallback.Factory.Create<ImportModeResult>(this, OnImportModeConfirmedAsync) },
+                { "OnCancel",  EventCallback.Factory.Create(this, OnImportModeCancelledAsync) }
+            };
+            await _importModeModal.ShowAsync<ImportModeModal>(
+                Traductor.T("IMPORT_MODE_TITLE"), null, parameters);
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+    }
+
+    /// <summary>Best-effort peek at the bundle's project name to prefill the
+    /// sample title. Returns empty string on any parse issue.</summary>
+    private static string TryReadBundleName(string json)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("Project", out var p)
+                && p.TryGetProperty("Name", out var n))
+                return n.GetString() ?? string.Empty;
+        }
+        catch { /* fall through to empty */ }
+        return string.Empty;
+    }
+
+    /// <summary>Base path for imports — mirrors the Projects page resolution.</summary>
+    private static string ResolveImportBasePath()
+    {
 #if WINDOWS || MACCATALYST || ANDROID || IOS
-                Microsoft.Maui.Storage.FileSystem.AppDataDirectory;
+        return Microsoft.Maui.Storage.FileSystem.AppDataDirectory;
 #else
-                OperatingSystem.IsBrowser() ? "/kmila" : Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData), "KmilaData");
+        return OperatingSystem.IsBrowser()
+            ? "/kmila"
+            : Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData), "KmilaData");
 #endif
+    }
 
-            var project = await Bundles.ImportAsync(json, basePath);
+    private async Task OnImportModeCancelledAsync()
+    {
+        _pendingImportJson = null;
+        await _importModeModal.HideAsync();
+    }
+
+    /// <summary>Applies the user's choice: raw import creates a project; sample
+    /// stores the bundle + metadata in the user-sample gallery store.</summary>
+    private async Task OnImportModeConfirmedAsync(ImportModeResult result)
+    {
+        var json = _pendingImportJson;
+        _pendingImportJson = null;
+        await _importModeModal.HideAsync();
+        if (string.IsNullOrWhiteSpace(json)) return;
+
+        try
+        {
+            if (result.AsSample)
+            {
+                var sample = await UserSamples.AddAsync(
+                    string.IsNullOrWhiteSpace(result.Title) ? _pendingImportName : result.Title,
+                    result.Icon, result.Description, json);
+                ToastService.Notify(sample != null
+                    ? Message(Traductor.T("COMMON_MESSAGE"),
+                        string.Format(Traductor.T("SETTINGS_BUNDLE_SAVED_SAMPLE"), sample.Title), ToastType.Success)
+                    : Message(Traductor.T("COMMON_ERROR"),
+                        Traductor.T("SETTINGS_BUNDLE_IMPORT_FAILED"), ToastType.Danger));
+                return;
+            }
+
+            var project = await Bundles.ImportAsync(json, ResolveImportBasePath());
             ToastService.Notify(project != null
                 ? Message(Traductor.T("COMMON_MESSAGE"),
                     string.Format(Traductor.T("SETTINGS_BUNDLE_IMPORTED"), project.Name), ToastType.Success)
@@ -1667,6 +1767,23 @@
         {
             var body = FeedbackHelper.BuildDiagnostics(Traductor.Lang ?? "en");
             var url  = FeedbackHelper.BuildIssueUrl("[Report] ", body);
+            await JS.InvokeVoidAsync("open", url, "_blank");
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+    }
+
+    /// <summary>Opens the Kmila website bug-report form with diagnostics
+    /// prefilled. Hands off to the browser — the app itself sends nothing,
+    /// preserving the offline / no-telemetry stance.</summary>
+    private async Task OpenKmilaReportAsync()
+    {
+        try
+        {
+            var body = FeedbackHelper.BuildDiagnostics(Traductor.Lang ?? "en");
+            var url  = FeedbackHelper.BuildKmilaReportUrl("[Report] ", body);
             await JS.InvokeVoidAsync("open", url, "_blank");
         }
         catch (Exception ex)
@@ -1740,6 +1857,18 @@
     {
         _autoReportEnabled = e.Value is bool b && b;
         await DbContext.SetSettingAsync(AutoReportSettingKey, _autoReportEnabled ? "true" : "false");
+    }
+
+    /// <summary>Toggles the private-repo (`repo`) scope opt-in for version
+    /// control. Takes effect on the next sign-in — if already signed in, tell
+    /// the user to sign out and back in for it to apply.</summary>
+    private async Task OnPrivateScopeToggledAsync(ChangeEventArgs e)
+    {
+        _privateScopeEnabled = e.Value is bool b && b;
+        await GitHubAuth.SetPrivateScopeAsync(_privateScopeEnabled);
+        if (GitHubAuth.IsLoggedIn)
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"),
+                Traductor.T("SETTINGS_VC_PRIVATE_REAUTH"), ToastType.Warning));
     }
 
     /// <summary>One-shot manual report. Posts the same diagnostics the
