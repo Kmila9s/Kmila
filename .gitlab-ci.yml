@@ -1,21 +1,16 @@
+stages:
+    - build
+
 variables:
     GIT_DEPTH: "20"
-    ANDROID_SDK_ROOT: "$CI_PROJECT_DIR/.android-sdk"   # in-project so GitLab can cache it
-    ANDROID_HOME: "$CI_PROJECT_DIR/.android-sdk"
-    USER: "root"       # Xamarin installer / some tools read the username from env
-    LOGNAME: "root"
 
-# Linux (non-Apple) build: Web + Android + Wasm.
-# iOS / MacCatalyst need a macOS runner (separate job, tagged [macos]).
-linux-build:
-    stage: build
-    image: mcr.microsoft.com/dotnet/sdk:9.0
-    cache:
-        key: android-sdk-v2          # bumped to drop the broken partial SDK from earlier runs
-        paths:
-            - .android-sdk/
+# ---------------------------------------------------------------------
+# Shared: clone the sibling repos the .sln references via ..\..\<Module>
+# (they must sit two levels above Kmila.sln). Spliced into each job with
+# GitLab's !reference so there's a single source of truth.
+# ---------------------------------------------------------------------
+.setup:
     before_script:
-        # Sibling repos the .sln references via ..\..\<Module> (two levels above Kmila.sln).
         - cd "$CI_PROJECT_DIR"
         - |
           for m in Interpreter LibraryCompiler Debugger TimeMachine Parser; do
@@ -24,24 +19,40 @@ linux-build:
               "http://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}:${CI_SERVER_PORT}/${CI_PROJECT_NAMESPACE}/$m.git" \
               "../../$m"
           done
-        - apt-get update && apt-get install -y --no-install-recommends openjdk-17-jdk-headless unzip curl
-        - export JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(which javac)")")")"
+
+# =====================================================================
+# Pi / arm64 runner — arch-neutral targets only: Web + Wasm.
+# .NET Android CANNOT build on arm64 (the Microsoft.Android.Sdk pack
+# ships an x86_64-only aapt2 -> XA0111 "Exec format error"), so NO
+# net9.0-android / net9.0-ios / net9.0-maccatalyst here.
+# =====================================================================
+web-wasm-build:
+    stage: build
+    image: mcr.microsoft.com/dotnet/sdk:9.0
+    variables:
+        TMPDIR: "$CI_PROJECT_DIR/.tmp"     # keep temp off the Pi's small /tmp tmpfs
+    before_script:
+        - mkdir -p "$TMPDIR"
+        - !reference [.setup, before_script]
         - dotnet workload install maui-android wasm-tools --skip-manifest-update
-        # Install the Android SDK via Google's sdkmanager (Java-based -> runs on ARM;
-        # avoids the Xamarin InstallAndroidDependencies installer which lacks Mono.Unix on arm64).
-        - |
-          if [ ! -d "$ANDROID_SDK_ROOT/cmdline-tools/latest" ]; then
-            mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
-            curl -sL -o /tmp/cmt.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-            unzip -q /tmp/cmt.zip -d "$ANDROID_SDK_ROOT/cmdline-tools"
-            mv "$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools" "$ANDROID_SDK_ROOT/cmdline-tools/latest"
-          fi
-        - yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" --licenses >/dev/null || true
-        - "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
     script:
-        # Web (net9.0)
-        - dotnet build Kmila.Web/Kmila.Web.csproj -c Release -f net9.0
-        # Android head (SDK is now pre-installed; no auto-download)
-        - dotnet build Kmila/Kmila.csproj -c Release -f net9.0-android -p:AndroidSdkDirectory="$ANDROID_SDK_ROOT" -p:JavaSdkDirectory="$JAVA_HOME" -p:TargetFrameworks=net9.0-android
-        # Wasm (net9.0)
+        - dotnet build Kmila.Web/Kmila.Web.csproj   -c Release -f net9.0
         - dotnet build Kmila.Wasm/Kmila.Wasm.csproj -c Release -f net9.0
+
+# =====================================================================
+# Mac runner (Apple Silicon) — ALL mobile: Android + iOS + MacCatalyst.
+# macOS supports the full .NET Android + Apple toolchain. Requires a
+# registered macOS runner tagged [macos] with Xcode + .NET 9.
+# Left `when: manual` until that runner exists so it never blocks the
+# pipeline; flip to automatic once the Mac runner is up.
+# =====================================================================
+mobile-build:
+    stage: build
+    tags: [macos]
+    when: manual
+    before_script:
+        - !reference [.setup, before_script]
+        - dotnet workload restore Kmila/Kmila.csproj
+    script:
+        # builds the head's default TFMs: net9.0-android;net9.0-ios;net9.0-maccatalyst
+        - dotnet build Kmila/Kmila.csproj -c Release
