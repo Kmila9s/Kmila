@@ -37,11 +37,13 @@ web-wasm-build:
         - apt-get update && apt-get install -y --no-install-recommends python3
         - ln -sf /usr/bin/python3 /usr/local/bin/python
         - !reference [.setup, before_script]
-        - dotnet workload install maui-android wasm-tools
+        - dotnet workload install wasm-tools
     script:
-        - dotnet build Kmila.Web/Kmila.Web.csproj   -c Release -f net9.0
-        - cd Kmila.Wasm
-        - dotnet build -c Release -f net9.0
+        # -p:TargetFrameworks=net9.0 collapses the multi-targeted sibling libs to
+        # net9.0 only, so they never pull their net9.0-android TFM (which would need
+        # the android workload and can't build on arm64 anyway).
+        - dotnet build Kmila.Web/Kmila.Web.csproj   -c Release -f net9.0 -p:TargetFrameworks=net9.0
+        - dotnet build Kmila.Wasm/Kmila.Wasm.csproj -c Release -f net9.0 -p:TargetFrameworks=net9.0 -p:KmilaWasm=true
 
 # =====================================================================
 # Build the Docker images (Web = Blazor Server, Wasm = static nginx).

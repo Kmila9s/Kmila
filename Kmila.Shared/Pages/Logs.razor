@@ -335,10 +335,12 @@
                 sb.AppendLine(entry.Exception);
             }
 
-            var body  = FeedbackHelper.BuildDiagnostics(Traductor.Lang ?? "en",
-                                                        logContext: sb.ToString());
-            var title = $"[{entry.Level}] {entry.Message}";
-            var url   = FeedbackHelper.BuildKmilaReportUrl(title, body);
+            var url = FeedbackHelper.BuildKmilaReportUrl(
+                Traductor.Lang ?? "en",
+                title: $"[{entry.Level}] {entry.Message}",
+                message: sb.ToString(),
+                category: string.IsNullOrEmpty(entry.Exception) ? null : "Crash",
+                appVersion: Traductor.T("APP_VERSION"));
             await JS.InvokeVoidAsync("open", url, "_blank");
         }
         catch

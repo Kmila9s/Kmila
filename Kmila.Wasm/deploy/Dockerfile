@@ -30,8 +30,8 @@ COPY . .
 # the engine graph (it also auto-trips on the browser-wasm RID, but we pass it
 # explicitly). Publish the .csproj, never a .sln, so no MAUI workload is pulled.
 RUN dotnet publish "App/Kmila/Kmila.Wasm/Kmila.Wasm.csproj" \
-        -c Release -o /app/publish \
-        -p:KmilaWasm=true
+        -c Release -o /app/publish -f net9.0 \
+        -p:TargetFrameworks=net9.0 -p:KmilaWasm=true
 
 # ── runtime stage — static file server only ─────────────────────────────────
 FROM nginx:alpine AS runtime

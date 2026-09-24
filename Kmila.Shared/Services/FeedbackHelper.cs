@@ -14,29 +14,26 @@ public static class FeedbackHelper
     public const string GithubRepo = "Kmila9s/Kmila";
 
     /// <summary>
-    /// Kmila website base URL. Also the target of the "Report to Kmila servers"
-    /// bug-report handoff and the satisfaction-form links.
+    /// Kmila website base URL. Host of the bug-report / satisfaction / download
+    /// pages the app hands off to (in the browser — the app never POSTs).
     /// </summary>
     public const string KmilaSite = "https://kmila.com.mx";
 
     /// <summary>
-    /// Path of the bug-report web form on the Kmila site. Placeholder until the
-    /// real form path is provided — update this one constant to point the
-    /// "Report to Kmila servers" button at the live form.
+    /// Language prefix for a Kmila-site path: Spanish lives at the root, every
+    /// other UI language uses the English mirror under <c>/en</c> (the site only
+    /// ships ES + EN UIs). Returns "" for Spanish, "/en" otherwise.
     /// </summary>
-    public const string KmilaReportFormPath = "/report";
+    private static string LangPrefix(string? uiLang)
+        => string.Equals(uiLang, "es", StringComparison.OrdinalIgnoreCase) ? "" : "/en";
 
-    /// <summary>
-    /// Satisfaction-survey link for an anonymous response. Placeholder until the
-    /// real URL is provided — the prompt only opens this in the browser.
-    /// </summary>
-    public const string SatisfactionAnonymousUrl = "https://kmila.com.mx/survey";
+    /// <summary>Satisfaction-survey page URL (the page itself offers the
+    /// anonymous / signed-in choice). Language-aware.</summary>
+    public static string SatisfactionUrl(string? uiLang) => $"{KmilaSite}{LangPrefix(uiLang)}/satisfaction";
 
-    /// <summary>
-    /// Satisfaction-survey link for a signed-in / user-registered response.
-    /// Placeholder until the real URL is provided.
-    /// </summary>
-    public const string SatisfactionRegisteredUrl = "https://kmila.com.mx/survey?u=1";
+    /// <summary>Desktop-app download page URL (used as the "use the native app"
+    /// call-to-action in the WASM demo). Language-aware.</summary>
+    public static string DownloadUrl(string? uiLang) => $"{KmilaSite}{LangPrefix(uiLang)}/download";
 
     /// <summary>
     /// Builds a Markdown diagnostics blob. When <paramref name="logContext"/>
@@ -96,18 +93,45 @@ public static class FeedbackHelper
     }
 
     /// <summary>
-    /// Builds the "Report to Kmila servers" URL with the title + body pre-filled
-    /// as query parameters, pointing at the Kmila website's bug-report form.
-    /// The app never POSTs anything itself — this URL is handed to the browser
-    /// (window.open), exactly like <see cref="BuildIssueUrl"/>, so the offline /
-    /// no-telemetry stance is preserved: the user's browser makes the request,
-    /// and only when the user chooses to submit the form.
+    /// Builds the Kmila website bug-report URL with the form fields pre-filled as
+    /// query parameters (the page prefills itself on GET; the human then reviews
+    /// and submits). The app never POSTs — the URL is handed to the browser
+    /// (window.open), preserving the offline / no-telemetry stance.
+    ///
+    /// Matches the site contract (KmilaWeb <c>/bug-report</c>): params
+    /// <c>title</c>(200) · <c>message</c>(4000) · <c>category</c>(80) ·
+    /// <c>version</c>(40) · <c>platform</c>(60) · <c>timestamp</c>(64). Values are
+    /// URL-encoded (newlines become %0A) and clipped to the field limits; the
+    /// site truncates over-length values and ignores unknown params anyway.
     /// </summary>
-    public static string BuildKmilaReportUrl(string title, string body)
+    /// <param name="uiLang">UI language — routes to the ES (root) or EN (/en) form.</param>
+    /// <param name="title">Short summary (optional — user can fill it on the form).</param>
+    /// <param name="message">What happened / steps / expected vs actual (optional).</param>
+    /// <param name="category">Crash / UI / Performance / Data / Other (optional).</param>
+    /// <param name="appVersion">App version string (a leading "v" is stripped).</param>
+    public static string BuildKmilaReportUrl(
+        string uiLang, string? title = null, string? message = null,
+        string? category = null, string? appVersion = null)
     {
-        var safeTitle = title.Length > 160 ? title[..160] + "…" : title;
-        var qTitle = Uri.EscapeDataString(safeTitle);
-        var qBody  = Uri.EscapeDataString(body);
-        return $"{KmilaSite}{KmilaReportFormPath}?title={qTitle}&body={qBody}";
+        var parts = new List<string>();
+        void Add(string key, string? val, int max)
+        {
+            if (string.IsNullOrEmpty(val)) return;
+            var v = val.Length > max ? val[..max] : val;
+            parts.Add($"{key}={Uri.EscapeDataString(v)}");
+        }
+        Add("title",    title,    200);
+        Add("message",  message,  4000);
+        Add("category", category, 80);
+        Add("version",  NormalizeVersion(appVersion), 40);
+        Add("platform", System.Runtime.InteropServices.RuntimeInformation.OSDescription, 60);
+        Add("timestamp", DateTime.UtcNow.ToString("o"), 64);
+
+        var qs = parts.Count > 0 ? "?" + string.Join("&", parts) : string.Empty;
+        return $"{KmilaSite}{LangPrefix(uiLang)}/bug-report{qs}";
     }
+
+    /// <summary>Strips a leading "v"/"V" (and spaces) from a display version like "v1.25.0".</summary>
+    private static string? NormalizeVersion(string? v)
+        => string.IsNullOrWhiteSpace(v) ? null : v.Trim().TrimStart('v', 'V').Trim();
 }

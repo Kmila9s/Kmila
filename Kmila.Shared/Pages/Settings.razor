@@ -1782,8 +1782,10 @@
     {
         try
         {
-            var body = FeedbackHelper.BuildDiagnostics(Traductor.Lang ?? "en");
-            var url  = FeedbackHelper.BuildKmilaReportUrl("[Report] ", body);
+            // Opens the Kmila bug-report form with version/platform/timestamp
+            // pre-filled; the user writes the title + description on the page.
+            var url = FeedbackHelper.BuildKmilaReportUrl(
+                Traductor.Lang ?? "en", appVersion: Traductor.T("APP_VERSION"));
             await JS.InvokeVoidAsync("open", url, "_blank");
         }
         catch (Exception ex)

@@ -419,6 +419,26 @@
                    Line="_cursorLine"
                    Column="_cursorColumn"
                    Language="@_currentLanguage" />
+
+        @* WASM demo: the simulation runs on the browser's single thread, so the
+           page is unresponsive until it finishes. Explain that + point to the
+           native app. Painted before the loop starts (see OnRunRequested); the
+           CSS spinner keeps animating on the compositor during the freeze. *@
+        @if (OperatingSystem.IsBrowser() && Sim.State == SimState.Running)
+        {
+            <div class="wasm-sim-overlay" role="status" aria-live="polite">
+                <div class="wasm-sim-overlay__card">
+                    <div class="wasm-sim-overlay__spinner"></div>
+                    <h3 class="wasm-sim-overlay__title">@Traductor.T("WASM_SIM_TITLE")</h3>
+                    <p class="wasm-sim-overlay__body">@Traductor.T("WASM_SIM_BODY")</p>
+                    <a href="@FeedbackHelper.DownloadUrl(Traductor.Lang)" target="_blank" rel="noopener noreferrer"
+                       class="kmila-btn kmila-btn--accent kmila-btn--sm">
+                        <Icon Name="IconName.Download" />
+                        <span>@Traductor.T("WASM_SIM_CTA")</span>
+                    </a>
+                </div>
+            </div>
+        }
 }
 </section>
 @* Two refs — one for short forms (create-file) at Regular, one for long
@@ -1978,6 +1998,16 @@
                         && !string.IsNullOrWhiteSpace(Sim.TestbenchFile);
         var testbenchFile = Sim.TestbenchFile;
         var projectBasePath = _project?.BasePath;
+
+        // Single-threaded WASM: the sim loop runs on the browser's only thread,
+        // so the page can't repaint until it finishes. Give the browser one
+        // frame to paint the "demo is busy" notice (CSS spinner keeps animating
+        // on the compositor even while the JS thread is blocked) before we start.
+        if (OperatingSystem.IsBrowser())
+        {
+            StateHasChanged();
+            await Task.Delay(50);
+        }
 
         _ = Task.Run(async () =>
         {

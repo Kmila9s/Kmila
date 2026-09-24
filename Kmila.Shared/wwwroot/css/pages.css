@@ -15638,6 +15638,33 @@ body:has(.visual-page.is-fullscreen) .status-bar {
 }
 .satisfaction-prompt__link:hover { color: var(--text); }
 
+/* --- WASM demo: simulation-busy overlay --- */
+.wasm-sim-overlay {
+    position: fixed; inset: 0; z-index: 1090;
+    display: flex; align-items: center; justify-content: center;
+    background: color-mix(in srgb, var(--surface, #111) 55%, transparent);
+    backdrop-filter: blur(2px);
+}
+.wasm-sim-overlay__card {
+    max-width: min(420px, calc(100vw - 2rem));
+    display: flex; flex-direction: column; align-items: center; gap: var(--space-3);
+    padding: var(--space-4, 1.25rem);
+    background: var(--surface, #fff); color: var(--text);
+    border: 1px solid var(--border-subtle); border-radius: var(--radius);
+    box-shadow: 0 16px 44px rgba(0,0,0,0.3); text-align: center;
+}
+.wasm-sim-overlay__title { margin: 0; font-size: var(--fs-md); font-weight: 600; }
+.wasm-sim-overlay__body { margin: 0; font-size: var(--fs-sm); color: var(--text-muted); line-height: 1.5; }
+/* Compositor-thread animation keeps spinning even while the single JS thread
+   is blocked by the simulation loop — the whole point of this overlay. */
+.wasm-sim-overlay__spinner {
+    width: 2.4rem; height: 2.4rem; border-radius: 50%;
+    border: 3px solid color-mix(in srgb, var(--accent, #f59e0b) 30%, transparent);
+    border-top-color: var(--accent, #f59e0b);
+    animation: wasm-sim-spin 0.8s linear infinite;
+}
+@keyframes wasm-sim-spin { to { transform: rotate(360deg); } }
+
 .kviz-wiring-modal .modal-header,
 .kviz-wiring-modal .modal-footer {
     padding: var(--space-3);

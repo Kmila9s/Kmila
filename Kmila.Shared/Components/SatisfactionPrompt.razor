@@ -25,15 +25,12 @@
             @(_answered ? Traductor.T("SATISFACTION_BODY_AGAIN") : Traductor.T("SATISFACTION_BODY"))
         </p>
         <div class="satisfaction-prompt__actions">
+            @* The survey page itself offers the anonymous / signed-in choice,
+               so a single link suffices. *@
             <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--sm"
-                    @onclick="() => AnswerAsync(FeedbackHelper.SatisfactionAnonymousUrl)">
-                <Icon Name="IconName.Incognito" />
-                <span>@Traductor.T("SATISFACTION_ANSWER_ANON")</span>
-            </button>
-            <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
-                    @onclick="() => AnswerAsync(FeedbackHelper.SatisfactionRegisteredUrl)">
-                <Icon Name="IconName.PersonFill" />
-                <span>@Traductor.T("SATISFACTION_ANSWER_USER")</span>
+                    @onclick="() => AnswerAsync(FeedbackHelper.SatisfactionUrl(Traductor.Lang))">
+                <Icon Name="IconName.ChatHeartFill" />
+                <span>@Traductor.T("SATISFACTION_ANSWER")</span>
             </button>
         </div>
         <div class="satisfaction-prompt__minor">
