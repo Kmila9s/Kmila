@@ -1,0 +1,85 @@
+{
+  "tests": [
+    {
+      "id": "t1",
+      "visible": true,
+      "descriptions": { "en": "d=1, then short reset between two clock edges", "es": "d=1 y reset breve entre dos flancos" },
+      "durationMicros": 4,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,    "scale": "NS", "value": "0" },
+          { "time": 405,  "scale": "NS", "value": "1" },
+          { "time": 413,  "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "d", "values": [
+          { "time": 0, "scale": "NS", "value": "1" }
+        ]}
+      ]
+    },
+    {
+      "id": "t2",
+      "visible": false,
+      "descriptions": { "en": "Reset held at start", "es": "Reset alto al inicio" },
+      "durationMicros": 4,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "d", "values": [
+          { "time": 0, "scale": "NS", "value": "1" }
+        ]}
+      ]
+    },
+    {
+      "id": "t3",
+      "visible": false,
+      "descriptions": { "en": "d toggles, no reset", "es": "d alterna, sin reset" },
+      "durationMicros": 4,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "d", "values": [
+          { "time": 0,   "scale": "NS", "value": "0" },
+          { "time": 105, "scale": "NS", "value": "1" },
+          { "time": 305, "scale": "NS", "value": "0" }
+        ]}
+      ]
+    },
+    {
+      "id": "t4",
+      "visible": false,
+      "descriptions": { "en": "Reset held — q must remain 0", "es": "Reset mantenido — q permanece en 0" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0, "scale": "NS", "value": "1" }
+        ]},
+        { "portName": "d", "values": [
+          { "time": 0, "scale": "NS", "value": "1" }
+        ]}
+      ]
+    },
+    {
+      "id": "t5",
+      "visible": false,
+      "descriptions": { "en": "Reset asserts asynchronously while clk is low", "es": "Reset se activa en mitad del ciclo de reloj" },
+      "durationMicros": 4,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,    "scale": "NS", "value": "0" },
+          { "time": 605,  "scale": "NS", "value": "1" }
+        ]},
+        { "portName": "d", "values": [
+          { "time": 0, "scale": "NS", "value": "1" }
+        ]}
+      ]
+    }
+  ]
+}

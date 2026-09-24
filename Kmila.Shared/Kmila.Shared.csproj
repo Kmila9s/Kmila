@@ -1,19 +1,153 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFrameworks>net9.0;net9.0-android</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('osx'))">$(TargetFrameworks);net9.0-ios;net9.0-maccatalyst</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-  </PropertyGroup>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- CA1416 fires because the netstandard target *could* run on browser
+         (Blazor WebAssembly), but the Web host uses Blazor Server and the
+         MAUI heads run on native runtimes; FileSystemWatcher is supported
+         in every target we actually ship. Suppressing here keeps the build
+         clean without weakening the platform check at runtime — UserAssetStore
+         already wraps watcher creation in try/catch with a logged warning. -->
+    <NoWarn>$(NoWarn);CS1587;CS1591;CS1570;CS1573;CS1574;CS1998;CS8602;CS8604;CS8625;CS8892;CS0219;CS0618;CS4014;NETSDK1206;CA1416</NoWarn>
+    <!-- MAUI is required for every native head (android/ios/maccatalyst); web (net9.0) opts out. -->
+    <UseMaui Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) != ''">true</UseMaui>
 
+    <!-- KmilaWasm: the net9.0 flavor consumed by the Blazor WebAssembly head
+         (Kmila.Wasm). It drops the ASP.NET Core server framework (Kestrel/MVC/
+         SignalR-server) and the /api/v1 code, which have no browser-wasm
+         runtime. Auto-trips on the browser-wasm RID so a WASM publish/build
+         needs no extra flag; Kmila.Wasm.csproj also sets it explicitly and it
+         can be forced with -p:KmilaWasm=true. Kmila.Web / MAUI never set it, so
+         their builds are unchanged. Native SQLite (sqlite-net-pcl) is KEPT for
+         wasm — its browser-wasm e_sqlite3 links via WasmBuildNative. -->
+    <KmilaWasm Condition="'$(RuntimeIdentifier)' == 'browser-wasm'">true</KmilaWasm>
+
+    <!-- See <Target Name="_KmilaSharedForceRclSwa"> below for the actual
+         RCL-mode override. The MAUI SDK targets re-set
+         StaticWebAssetProjectMode=Root + StaticWebAssetBasePath=/ after this
+         PropertyGroup runs (because <UseMaui>true</UseMaui> tells MAUI to
+         treat the project as an app); a Target firing later is the only way
+         to win. -->
+    <StaticWebAssetProjectMode>Default</StaticWebAssetProjectMode>
+    <StaticWebAssetBasePath>_content/Kmila.Shared</StaticWebAssetBasePath>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">15.0</SupportedOSPlatformVersion>
+  </PropertyGroup>
   <ItemGroup>
     <SupportedPlatform Include="browser" />
   </ItemGroup>
 
+  <!-- Copy Devices folder to output directory -->
+  <ItemGroup>
+    <Content Update="wwwroot\Devices\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <!-- Ring 5 capstone gallery example (2026-07-14): 15 VHDL files loaded
+       via Assembly.GetManifestResourceStream when the user picks
+       "capstone-calc" from the example gallery. Inlining as C# string
+       constants would bloat ProjectsView.razor by ~70 KB — resources
+       keep the code file lean. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\CapstoneCalc\*.vhd" />
+  </ItemGroup>
+
+  <!-- Common packages for all targets -->
   <ItemGroup>
     <PackageReference Include="Blazor.Bootstrap" Version="3.4.0" />
     <PackageReference Include="BlazorMonaco" Version="3.3.0" />
+    <!-- Markdig: full GFM + advanced extensions (tables, fenced code, task
+         lists, autolinks, etc.). BlazorBootstrap's built-in <Markdown>
+         component uses a regex parser that doesn't handle tables or ASCII art
+         reliably; Markdig is the .NET standard and renders everything
+         correctly. See LessonView.razor for the rendering path. -->
+    <PackageReference Include="Markdig" Version="0.38.0" />
+    <PackageReference Include="sqlite-net-pcl" Version="1.9.172" />
+    <ProjectReference Include="../../../Debugger/Debugger.csproj" />
+    <ProjectReference Include="../../../Interpreter/Interpreter.csproj" />
+    <ProjectReference Include="../../../LibraryCompiler/LibraryCompiler.csproj" />
+  </ItemGroup>
+
+  <!-- Web-specific settings (net9.0 only). KMILA_HAS_ASPNETCORE is the
+       unifying guard used by shared /api/v1 code so the same #if switches
+       on for both Kmila.Web and the MAUI-embedded Kestrel host (Phase B).
+       Excluded from the KmilaWasm (browser) flavor — the /api/v1 server code
+       and the ASP.NET Core shared framework have no browser-wasm runtime. -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net9.0' and '$(KmilaWasm)' != 'true'">
+    <DefineConstants>$(DefineConstants);ASPNETCORE;KMILA_HAS_ASPNETCORE</DefineConstants>
+  </PropertyGroup>
+
+  <!-- Components.Web is a managed package that works in the browser too, and
+       the shared UI compiles against it (see _Imports.razor), so keep it for
+       every net9.0 flavor including wasm. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
     <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="9.0.5" />
   </ItemGroup>
+
+  <!-- The full ASP.NET Core shared framework (Kestrel/MVC/SignalR server) only
+       exists for server runtimes — never link it into the browser flavor. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net9.0' and '$(KmilaWasm)' != 'true'">
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <!-- MAUI-specific packages (every native head: android/ios/maccatalyst/windows).
+       Phase B: an in-process HTTP host serving /api/v1 (see
+       Kmila/Services/EmbeddedApiHost.cs) is built on System.Net.HttpListener
+       from the BCL, NOT on Kestrel — Microsoft.AspNetCore.App has no runtime
+       pack for maccatalyst/ios/android RIDs. The shared endpoint bodies live
+       in Kmila.Shared/Services/Api/SimulationApiHandlers.cs and are called
+       from both Kmila.Web's Minimal-API map and the HttpListener dispatcher. -->
+  <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) != ''">
+    <DefineConstants>$(DefineConstants);KMILA_MAUI_API</DefineConstants>
+
+    <!-- Ship this RCL's static web assets UNCOMPRESSED on the native heads.
+         The compression pipeline (default on for net6+) emits _content/ assets
+         (Bootstrap, Bootstrap Icons + its woff2, JetBrains Mono, …) ONLY as
+         precompressed .gz/.br with no plain sibling. The Mac Catalyst
+         BlazorWebView asset resolver looks up the exact plain filename and does
+         NOT decompress/content-negotiate the .gz/.br, so every such request
+         returns the framework stub "There is no content at _content/…"
+         (HTTP 200, text/plain) — silently breaking icons + Bootstrap-styled
+         links/layout on Mac Catalyst only (iOS/Android/Web resolvers cope).
+         Disabling compression forces plain files to ship, which the resolver
+         finds. Scoped to the MAUI TFMs; the net9.0 target consumed by
+         Kmila.Web keeps compression. Must be set here on the RCL (not just the
+         app head) because these .gz/.br are generated in THIS project's build
+         (Kmila.Shared/obj/<tfm>/compressed). -->
+    <CompressionEnabled>false</CompressionEnabled>
+  </PropertyGroup>
+
+  <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) != ''">
+    <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
+  </ItemGroup>
+
+  <!--
+    Restore RCL static-web-asset semantics after the MAUI SDK has run. MAUI
+    sets StaticWebAssetProjectMode=Root and StaticWebAssetBasePath=/ when it
+    sees <UseMaui>true</UseMaui>, mounting all wwwroot/ files at the bundle
+    root and breaking _content/Kmila.Shared/... references in the host page.
+    Re-applying the values here, BeforeTargets the SWA pipeline reads them,
+    routes Kmila.Shared/wwwroot under _content/Kmila.Shared/ in the bundle
+    just like NuGet RCLs (Blazor.Bootstrap, BlazorMonaco) — which the
+    MainPage.xaml's `wwwroot/index.html` is already wired to expect.
+
+    Web (net9.0) doesn't run these targets — the Razor SDK has already set
+    the same values in ResolveStaticWebAssetsConfiguration; this override is
+    a no-op for that target.
+  -->
+  <Target Name="_KmilaSharedForceRclSwa"
+          BeforeTargets="ResolveStaticWebAssetsConfiguration;ComputeReferenceStaticWebAssetItems;DefineStaticWebAssets;ConvertStaticWebAssetsToMauiAssets;_GenerateStaticWebAssetsBuildManifest">
+    <PropertyGroup>
+      <StaticWebAssetProjectMode>Default</StaticWebAssetProjectMode>
+      <StaticWebAssetBasePath>_content/Kmila.Shared</StaticWebAssetBasePath>
+    </PropertyGroup>
+  </Target>
 
 </Project>

@@ -1,0 +1,64 @@
+{
+  "tests": [
+    { "id": "t1", "visible": true, "descriptions": { "en": "Reset, start with a=0011 b=0001, observe acc add", "es": "Reset, start con a=0011 b=0001, observa la suma en acc" }, "durationMicros": 3, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "start", "values": [
+        { "time": 0,    "scale": "NS", "value": "0" },
+        { "time": 100,  "scale": "NS", "value": "1" },
+        { "time": 200,  "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "a", "values": [ { "time": 0, "scale": "NS", "value": "0011" } ] },
+      { "portName": "b", "values": [ { "time": 0, "scale": "NS", "value": "0001" } ] }
+    ]},
+    { "id": "t2", "visible": false, "descriptions": { "en": "a=0001 b=0010 — q0,q-1 stays at 00 -> no op", "es": "a=0001 b=0010 — q0,q-1 = 00 -> sin operación" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "start", "values": [
+        { "time": 0,    "scale": "NS", "value": "0" },
+        { "time": 100,  "scale": "NS", "value": "1" },
+        { "time": 200,  "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "a", "values": [ { "time": 0, "scale": "NS", "value": "0001" } ] },
+      { "portName": "b", "values": [ { "time": 0, "scale": "NS", "value": "0010" } ] }
+    ]},
+    { "id": "t3", "visible": false, "descriptions": { "en": "a=0101 b=0001 — first step adds 5", "es": "a=0101 b=0001 — primer paso suma 5" }, "durationMicros": 3, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "start", "values": [
+        { "time": 0,    "scale": "NS", "value": "0" },
+        { "time": 100,  "scale": "NS", "value": "1" },
+        { "time": 200,  "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "a", "values": [ { "time": 0, "scale": "NS", "value": "0101" } ] },
+      { "portName": "b", "values": [ { "time": 0, "scale": "NS", "value": "0001" } ] }
+    ]},
+    { "id": "t4", "visible": false, "descriptions": { "en": "Held in reset", "es": "Reset mantenido" }, "durationMicros": 1, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [ { "time": 0, "scale": "NS", "value": "1" } ] },
+      { "portName": "start", "values": [ { "time": 0, "scale": "NS", "value": "1" } ] },
+      { "portName": "a",     "values": [ { "time": 0, "scale": "NS", "value": "1111" } ] },
+      { "portName": "b",     "values": [ { "time": 0, "scale": "NS", "value": "0001" } ] }
+    ]},
+    { "id": "t5", "visible": false, "descriptions": { "en": "Two consecutive starts re-arm the engine", "es": "Dos starts consecutivos rearman el motor" }, "durationMicros": 3, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "start", "values": [
+        { "time": 0,    "scale": "NS", "value": "0" },
+        { "time": 100,  "scale": "NS", "value": "1" },
+        { "time": 200,  "scale": "NS", "value": "0" },
+        { "time": 800,  "scale": "NS", "value": "1" },
+        { "time": 900,  "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "a", "values": [ { "time": 0, "scale": "NS", "value": "0010" } ] },
+      { "portName": "b", "values": [ { "time": 0, "scale": "NS", "value": "0001" } ] }
+    ]}
+  ]
+}

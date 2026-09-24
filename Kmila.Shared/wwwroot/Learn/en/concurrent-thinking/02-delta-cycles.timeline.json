@@ -1,0 +1,164 @@
+{
+  "code": "process(clk)\nbegin\n  if rising_edge(clk) then\n    a <= x;        -- line 4\n    b <= y;        -- line 5\n  end if;\nend process;",
+  "language": "vhdl",
+  "signalOrder": [
+    "clk",
+    "x",
+    "y",
+    "a",
+    "b"
+  ],
+  "steps": [
+    {
+      "t": 0,
+      "highlightLines": [],
+      "signals": {
+        "clk": "0",
+        "x": "0",
+        "y": "0",
+        "a": "0",
+        "b": "0"
+      },
+      "note": {
+        "en": "δ₀ — cold start. Inputs and outputs all at 0. Process is asleep.",
+        "es": "δ₀ — inicio en frío. Entradas y salidas en 0. El proceso duerme.",
+        "ar": "δ₀ — بدء بارد. كل الدخل والخرج عند 0. المعالجة نائمة.",
+        "ch": "δ₀ — 冷启动。所有输入输出都是 0。进程在睡眠。",
+        "de": "δ₀ — Kaltstart. Eingänge und Ausgänge alle bei 0. Prozess schläft.",
+        "fr": "δ₀ — démarrage à froid. Entrées et sorties toutes à 0. Le process dort.",
+        "jp": "δ₀ — コールドスタート。入力も出力もすべて 0。process は眠っている。"
+      }
+    },
+    {
+      "t": 1,
+      "highlightLines": [
+        1
+      ],
+      "signals": {
+        "clk": "1",
+        "x": "1",
+        "y": "1",
+        "a": "0",
+        "b": "0"
+      },
+      "note": {
+        "en": "δ₀ — clock rises 0 → 1 and x, y already changed to 1. The process wakes because clk is in its sensitivity list.",
+        "es": "δ₀ — el reloj sube 0 → 1 y x, y ya cambiaron a 1. El proceso se despierta porque clk está en su lista de sensibilidad.",
+        "ar": "δ₀ — الساعة ترتفع 0 → 1 و x، y تغيَّرا توًّا إلى 1. تستيقظ المعالجة لأن clk في قائمة حساسيَّتها.",
+        "ch": "δ₀ — 时钟从 0 → 1 上升,x、y 已经变成 1。process 醒来,因为 clk 在它的敏感列表中。",
+        "de": "δ₀ — Takt steigt 0 → 1 und x, y haben sich gerade auf 1 geändert. Der Prozess wacht auf, weil clk in seiner Sensitivitätsliste steht.",
+        "fr": "δ₀ — l'horloge monte 0 → 1 et x, y viennent de passer à 1. Le process se réveille parce que clk est dans sa liste de sensibilité.",
+        "jp": "δ₀ — クロックが 0 → 1 に上昇、x、y もすでに 1 に変化。clk が感度リストにあるので process が起動。"
+      }
+    },
+    {
+      "t": 2,
+      "highlightLines": [
+        3
+      ],
+      "signals": {
+        "clk": "1",
+        "x": "1",
+        "y": "1",
+        "a": "0",
+        "b": "0"
+      },
+      "note": {
+        "en": "Line 3: rising_edge(clk) is true (just went 0 → 1). We enter the if-body.",
+        "es": "Línea 3: rising_edge(clk) es cierto (acaba de pasar 0 → 1). Entramos al cuerpo del if.",
+        "ar": "السطر 3: rising_edge(clk) صحيح (انتقل توًّا من 0 → 1). ندخل جسم if.",
+        "ch": "第 3 行:rising_edge(clk) 为真(刚从 0 → 1)。我们进入 if 体。",
+        "de": "Zeile 3: rising_edge(clk) ist wahr (ist gerade von 0 → 1 gegangen). Wir betreten den if-Body.",
+        "fr": "Ligne 3 : rising_edge(clk) est vrai (vient de passer 0 → 1). On entre dans le corps du if.",
+        "jp": "行 3:rising_edge(clk) は真(今 0 → 1 に変化)。if 本体に入る。"
+      }
+    },
+    {
+      "t": 3,
+      "highlightLines": [
+        4
+      ],
+      "signals": {
+        "clk": "1",
+        "x": "1",
+        "y": "1",
+        "a": "0",
+        "b": "0"
+      },
+      "note": {
+        "en": "Line 4: schedule a <= x. Transaction posted at δ₀; a still reads as the OLD value (0) until the delta closes.",
+        "es": "Línea 4: programar a <= x. Transacción registrada en δ₀; a aún se lee con el valor VIEJO (0) hasta cerrar el delta.",
+        "ar": "السطر 4: جدولة a <= x. تسجَّل المعاملة عند δ₀؛ يقرأ a بقيمته القديمة (0) حتى تُغلَق الدلتا.",
+        "ch": "第 4 行:调度 a <= x。事务登记在 δ₀;在 delta 关闭之前 a 仍读到旧值 (0)。",
+        "de": "Zeile 4: a <= x einplanen. Transaktion bei δ₀ eingetragen; a wird noch als ALTER Wert (0) gelesen, bis das Delta schließt.",
+        "fr": "Ligne 4 : planifier a <= x. Transaction enregistrée à δ₀ ; a se lit toujours avec l'ANCIENNE valeur (0) jusqu'à la fermeture du delta.",
+        "jp": "行 4:a <= x をスケジュール。δ₀ にトランザクションを登録;デルタがクローズするまで a は古い値 (0) で読み出される。"
+      }
+    },
+    {
+      "t": 4,
+      "highlightLines": [
+        5
+      ],
+      "signals": {
+        "clk": "1",
+        "x": "1",
+        "y": "1",
+        "a": "0",
+        "b": "0"
+      },
+      "note": {
+        "en": "Line 5: schedule b <= y. Both transactions are queued for the SAME delta — they'll commit together.",
+        "es": "Línea 5: programar b <= y. Ambas transacciones están encoladas para el MISMO delta — se confirmarán juntas.",
+        "ar": "السطر 5: جدولة b <= y. كلتا المعاملتَين مُدرَجتان لنفس الدلتا — ستلتزمان معًا.",
+        "ch": "第 5 行:调度 b <= y。两个事务排入同一 delta — 它们会一起 commit。",
+        "de": "Zeile 5: b <= y einplanen. Beide Transaktionen sind für das SELBE Delta in der Warteschlange — sie werden gemeinsam comitten.",
+        "fr": "Ligne 5 : planifier b <= y. Les deux transactions sont en file pour le MÊME delta — elles s'engagent ensemble.",
+        "jp": "行 5:b <= y をスケジュール。両トランザクションは同じデルタにキュー — 一緒にコミットされる。"
+      }
+    },
+    {
+      "t": 5,
+      "highlightLines": [
+        6,
+        7
+      ],
+      "signals": {
+        "clk": "1",
+        "x": "1",
+        "y": "1",
+        "a": "0",
+        "b": "0"
+      },
+      "note": {
+        "en": "Process exits. Two transactions pending: a ← 1 and b ← 1. Real time has NOT advanced yet — only deltas have.",
+        "es": "El proceso termina. Dos transacciones pendientes: a ← 1 y b ← 1. El tiempo REAL aún no avanza — solo los deltas.",
+        "ar": "تنتهي المعالجة. معاملتان معلَّقتان: a ← 1 و b ← 1. لم يتقدَّم الزمن الحقيقي بعد — فقط الدلتا.",
+        "ch": "process 退出。两个事务待提交:a ← 1 与 b ← 1。真实仿真时间还没有推进 — 只是 delta 在推进。",
+        "de": "Prozess endet. Zwei Transaktionen offen: a ← 1 und b ← 1. Die echte Simulationszeit ist NOCH NICHT vorgerückt — nur die Deltas.",
+        "fr": "Le process se termine. Deux transactions en attente : a ← 1 et b ← 1. Le temps réel n'a PAS avancé — seulement les deltas.",
+        "jp": "process 終了。保留中のトランザクションは 2 つ:a ← 1 と b ← 1。実時間はまだ進んでいない — デルタだけが進んだ。"
+      }
+    },
+    {
+      "t": 6,
+      "highlightLines": [],
+      "signals": {
+        "clk": "1",
+        "x": "1",
+        "y": "1",
+        "a": "1",
+        "b": "1"
+      },
+      "note": {
+        "en": "δ₁ — delta closes. Both a and b commit to 1 at exactly the same simulation instant. No race condition: the simulator gives both updates an identical timestamp.",
+        "es": "δ₁ — cierra el delta. Tanto a como b se confirman en 1 exactamente en el mismo instante de simulación. Sin condición de carrera: el simulador les da a ambas actualizaciones la misma marca de tiempo.",
+        "ar": "δ₁ — تُغلَق الدلتا. كل من a وb يلتزمان بـ 1 في نفس لحظة المحاكاة بالضبط. لا حالة سباق: يُعطي المحاكي كلا التحديثَين الطابع الزمني نفسه.",
+        "ch": "δ₁ — delta 关闭。a 与 b 在完全相同的仿真瞬间 commit 到 1。没有竞争:仿真器给两次更新打的是同一个时间戳。",
+        "de": "δ₁ — Delta schließt. Sowohl a als auch b committen genau im selben Simulationsinstant auf 1. Keine Race Condition: der Simulator gibt beiden Updates einen identischen Zeitstempel.",
+        "fr": "δ₁ — delta se ferme. a et b s'engagent tous deux à 1 au même instant de simulation. Pas de condition de course : le simulateur attribue aux deux mises à jour le même horodatage.",
+        "jp": "δ₁ — デルタがクローズ。a と b はまったく同じシミュレーション瞬間に 1 にコミット。競合状態なし:シミュレータは両更新に同一のタイムスタンプを与える。"
+      }
+    }
+  ]
+}

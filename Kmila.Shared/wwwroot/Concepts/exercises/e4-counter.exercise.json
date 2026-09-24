@@ -1,0 +1,257 @@
+{
+  "version": 1,
+  "toolbox": {
+    "kind": "flyoutToolbox",
+    "contents": [
+      { "kind": "block", "type": "kmila_on_clock" },
+      { "kind": "block", "type": "kmila_increment_count" }
+    ]
+  },
+  "compositions": [
+    {
+      "fingerprint": "kmila_on_clock(BODY=kmila_increment_count)",
+      "label": {
+        "en": "Clocked counter: +1 every rising edge",
+        "es": "Contador con reloj: +1 en cada flanco de subida"
+      },
+      "timeline": {
+        "code": "process(clk)\nbegin\n  if rising_edge(clk) then\n    count <= count + 1;\n  end if;\nend process;",
+        "language": "vhdl",
+        "signalOrder": ["clk", "count"],
+        "steps": [
+          {
+            "t": 0,
+            "highlightLines": [],
+            "signals": { "clk": "0", "count": "0000" },
+            "note": {
+              "en": "Cold start. Clock is low; the counter holds at 0000.",
+              "es": "Inicio en frío. El reloj está en bajo; el contador se mantiene en 0000."
+            }
+          },
+          {
+            "t": 1,
+            "highlightLines": [1],
+            "signals": { "clk": "1", "count": "0000" },
+            "note": {
+              "en": "Clock rises 0 → 1. The process wakes because clk is in its sensitivity list.",
+              "es": "El reloj sube 0 → 1. El proceso se despierta porque clk está en su lista de sensibilidad."
+            }
+          },
+          {
+            "t": 2,
+            "highlightLines": [3],
+            "signals": { "clk": "1", "count": "0000" },
+            "note": {
+              "en": "Line 3: if rising_edge(clk). True — it was 0 last cycle, now it's 1. We enter the if-body.",
+              "es": "Línea 3: if rising_edge(clk). Cierto — antes era 0, ahora es 1. Entramos al cuerpo del if."
+            }
+          },
+          {
+            "t": 3,
+            "highlightLines": [4],
+            "signals": { "clk": "1", "count": "0000" },
+            "note": {
+              "en": "Line 4: count <= count + 1. Schedules count to become 0001. Not visible yet — it's a signal transaction.",
+              "es": "Línea 4: count <= count + 1. Programa que count sea 0001. Aún no visible — es una transacción de señal."
+            }
+          },
+          {
+            "t": 4,
+            "highlightLines": [],
+            "signals": { "clk": "1", "count": "0001" },
+            "note": {
+              "en": "Delta ends. count is now 0001. The register has captured one clock tick.",
+              "es": "Termina el delta. count ahora es 0001. El registro capturó un tick de reloj."
+            }
+          },
+          {
+            "t": 5,
+            "highlightLines": [],
+            "signals": { "clk": "0", "count": "0001" },
+            "note": {
+              "en": "Clock falls back to 0. The process wakes — but rising_edge is false, so we skip the body and the counter holds.",
+              "es": "El reloj vuelve a 0. El proceso se despierta — pero rising_edge es falso, así que saltamos el cuerpo y el contador se mantiene."
+            }
+          },
+          {
+            "t": 6,
+            "highlightLines": [1, 3, 4],
+            "signals": { "clk": "1", "count": "0001" },
+            "note": {
+              "en": "Next rising edge. Process wakes, rising_edge true, we schedule count + 1.",
+              "es": "Siguiente flanco de subida. El proceso se despierta, rising_edge es cierto, programamos count + 1."
+            }
+          },
+          {
+            "t": 7,
+            "highlightLines": [],
+            "signals": { "clk": "1", "count": "0010" },
+            "note": {
+              "en": "Delta ends. count = 0010. Each clock tick = one increment — that's a clocked counter.",
+              "es": "Termina el delta. count = 0010. Cada tick de reloj = un incremento — eso es un contador con reloj."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fingerprint": "kmila_on_clock(BODY=kmila_increment_count|kmila_increment_count)",
+      "label": {
+        "en": "Stride-2 counter: +2 every rising edge",
+        "es": "Contador con paso 2: +2 en cada flanco de subida"
+      },
+      "timeline": {
+        "code": "process(clk)\nbegin\n  if rising_edge(clk) then\n    count <= count + 1;\n    count <= count + 1;\n  end if;\nend process;",
+        "language": "vhdl",
+        "signalOrder": ["clk", "count", "note"],
+        "steps": [
+          {
+            "t": 0,
+            "highlightLines": [],
+            "signals": { "clk": "0", "count": "0000", "note": "idle" },
+            "note": {
+              "en": "Two increments stacked inside one clocked body. Heads up — VHDL semantics will surprise you here.",
+              "es": "Dos incrementos apilados dentro del mismo cuerpo con reloj. Atento — la semántica de VHDL te va a sorprender."
+            }
+          },
+          {
+            "t": 1,
+            "highlightLines": [1, 3],
+            "signals": { "clk": "1", "count": "0000", "note": "edge!" },
+            "note": {
+              "en": "Rising edge fires. Both line 4 and line 5 are sequential statements inside the same process — they execute one after the other.",
+              "es": "El flanco se dispara. La línea 4 y la línea 5 son sentencias secuenciales dentro del mismo proceso — se ejecutan una tras otra."
+            }
+          },
+          {
+            "t": 2,
+            "highlightLines": [4],
+            "signals": { "clk": "1", "count": "0000", "note": "schedule count<=0001" },
+            "note": {
+              "en": "Line 4 schedules count to become 0001 at delta-end. Inside the process body the variable read still sees the OLD value (0000).",
+              "es": "La línea 4 programa que count valga 0001 al final del delta. Dentro del cuerpo, la lectura sigue viendo el valor ANTIGUO (0000)."
+            }
+          },
+          {
+            "t": 3,
+            "highlightLines": [5],
+            "signals": { "clk": "1", "count": "0000", "note": "schedule count<=0001 (again!)" },
+            "note": {
+              "en": "Line 5 schedules count + 1 again — but count is still 0000 in this evaluation. So the SECOND schedule is also 0001, and it OVERWRITES the first.",
+              "es": "La línea 5 programa otra vez count + 1 — pero count sigue siendo 0000 en esta evaluación. Así que la SEGUNDA programación también es 0001, y SOBREESCRIBE la primera."
+            }
+          },
+          {
+            "t": 4,
+            "highlightLines": [],
+            "signals": { "clk": "1", "count": "0001", "note": "+1, not +2" },
+            "note": {
+              "en": "Delta ends. count = 0001. Two source-level increments produced ONE actual increment — that's the signal-vs-variable trap. Use a variable, or refactor to count <= count + 2.",
+              "es": "Termina el delta. count = 0001. Dos incrementos en el código produjeron UN solo incremento real — esa es la trampa de signal vs variable. Usa una variable, o reescribe como count <= count + 2."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fingerprint": "kmila_increment_count",
+      "label": {
+        "en": "Free-running increment — no clock!",
+        "es": "Incremento libre — ¡sin reloj!"
+      },
+      "timeline": {
+        "code": "-- WARNING: not inside a clocked process\ncount <= count + 1;",
+        "language": "vhdl",
+        "signalOrder": ["count", "status"],
+        "steps": [
+          {
+            "t": 0,
+            "highlightLines": [],
+            "signals": { "count": "0000", "status": "before elaboration" },
+            "note": {
+              "en": "You dropped count <= count + 1 as a concurrent statement, with NO clock wrapper around it. Let's see what the simulator does.",
+              "es": "Pusiste count <= count + 1 como sentencia concurrente, SIN un envoltorio con reloj. Veamos qué hace el simulador."
+            }
+          },
+          {
+            "t": 1,
+            "highlightLines": [2],
+            "signals": { "count": "0000", "status": "sensitivity: count itself" },
+            "note": {
+              "en": "Concurrent signal assignment is sensitive to every signal on the right side — that means it re-evaluates every time count changes.",
+              "es": "Una asignación concurrente es sensible a cada señal del lado derecho — es decir, se vuelve a evaluar cada vez que cambia count."
+            }
+          },
+          {
+            "t": 2,
+            "highlightLines": [2],
+            "signals": { "count": "0001", "status": "first delta" },
+            "note": {
+              "en": "count is now 0001. But that change wakes the assignment again → schedules 0002. Then 0003. Then 0004…",
+              "es": "Ahora count es 0001. Pero ese cambio dispara la asignación otra vez → programa 0002. Luego 0003. Luego 0004…"
+            }
+          },
+          {
+            "t": 3,
+            "highlightLines": [2],
+            "signals": { "count": "0010", "status": "delta cascade!" },
+            "note": {
+              "en": "Each delta cycle, count grows by 1. The simulator never stops — it's a delta-cycle loop and simulation time never advances. Real hardware can't do this either: count would oscillate at infinite frequency.",
+              "es": "Cada ciclo delta, count crece en 1. El simulador nunca se detiene — es un bucle de ciclos delta y el tiempo de simulación nunca avanza. El hardware real tampoco puede: count oscilaría a frecuencia infinita."
+            }
+          },
+          {
+            "t": 4,
+            "highlightLines": [],
+            "signals": { "count": "????", "status": "iteration limit hit" },
+            "note": {
+              "en": "The simulator hits its iteration limit and gives up. Lesson: a counter NEEDS a clocked process — otherwise the increment chases itself without pause.",
+              "es": "El simulador alcanza su límite de iteraciones y se rinde. Lección: un contador NECESITA un proceso con reloj — si no, el incremento se persigue a sí mismo sin pausa."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fingerprint": "kmila_on_clock",
+      "label": {
+        "en": "Empty clocked process",
+        "es": "Proceso con reloj vacío"
+      },
+      "timeline": {
+        "code": "process(clk)\nbegin\n  if rising_edge(clk) then\n    -- (nothing here)\n  end if;\nend process;",
+        "language": "vhdl",
+        "signalOrder": ["clk", "count"],
+        "steps": [
+          {
+            "t": 0,
+            "highlightLines": [],
+            "signals": { "clk": "0", "count": "0000" },
+            "note": {
+              "en": "You stacked a clock wrapper with nothing inside. The process is well-formed VHDL — but it has no body to execute.",
+              "es": "Apilaste un envoltorio de reloj sin nada adentro. El proceso es VHDL correcto — pero no tiene cuerpo que ejecutar."
+            }
+          },
+          {
+            "t": 1,
+            "highlightLines": [1, 3],
+            "signals": { "clk": "1", "count": "0000" },
+            "note": {
+              "en": "Rising edge fires. The process wakes, evaluates rising_edge(clk) — true — and enters an empty if-body.",
+              "es": "Se dispara el flanco de subida. El proceso se despierta, evalúa rising_edge(clk) — cierto — y entra a un if vacío."
+            }
+          },
+          {
+            "t": 2,
+            "highlightLines": [],
+            "signals": { "clk": "1", "count": "0000" },
+            "note": {
+              "en": "Nothing happens. count never changes. A counter NEEDS the increment block stacked inside the clock wrapper — drag kmila_increment_count into the BODY slot.",
+              "es": "No pasa nada. count no cambia nunca. Un contador NECESITA el bloque de incremento dentro del envoltorio del reloj — arrastra kmila_increment_count al slot BODY."
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,442 @@
+@*
+    RunsPanel — content for the Runs dock tab.
+
+    Lists every captured snapshot for the current project, newest first.
+    Clicking a card replays that run into the Waveforms tab. Checkboxes
+    select multiple runs for compare mode — when two or more are selected,
+    a banner appears with a "Compare in Waveforms" CTA that hands the
+    selection off to the parent Editor.
+
+    Per-row actions (reachable via hover): rename, pin (exempt from LRU
+    eviction), export JSON, delete.
+*@
+
+@using Kmila.Shared.Models
+@using Kmila.Shared.Services
+@implements IDisposable
+@inject SimulationSnapshotStore Snapshots
+
+@* Toolbar is always visible — even on empty state — so the import button
+   doesn't disappear and force the user to capture a run first just to learn
+   the import path exists. *@
+<div class="runs-panel__toolbar">
+    <span class="runs-panel__count">@(_snapshots?.Count ?? 0)</span>
+    <span class="runs-panel__toolbar-spacer"></span>
+    <label class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm runs-panel__import"
+           title="@Traductor.T("RUNS_IMPORT")">
+        <Icon Name="IconName.Upload" />
+        <span>@Traductor.T("RUNS_IMPORT")</span>
+        @* d-none keeps the native file picker invisible — clicking the
+           label triggers it because the input is its descendant. *@
+        <InputFile OnChange="OnImportFileSelectedAsync" accept=".json" class="d-none" />
+    </label>
+</div>
+
+@if (_snapshots == null)
+{
+    <div class="kmila-dock__empty">
+        <Spinner Type="SpinnerType.Border" Color="SpinnerColor.Primary" />
+    </div>
+}
+else if (_snapshots.Count == 0)
+{
+    <div class="kmila-dock__empty">
+        <div class="kmila-dock__empty-icon"><Icon Name="IconName.ClockHistory" /></div>
+        <p>@Traductor.T("RUNS_EMPTY")</p>
+        <small class="text-muted">@Traductor.T("RUNS_EMPTY_HINT")</small>
+    </div>
+}
+else
+{
+    <div class="runs-panel">
+        @if (_selected.Count >= 2)
+        {
+            @* slot/banner-cta — compare bar reads as a one-line action banner.
+               Both buttons stay Family-11 (single family per row); close becomes
+               icon-only ghost-primary at --sm. *@
+            <div class="runs-panel__compare-bar" role="status">
+                <Icon Name="IconName.LayersHalf" />
+                <span>@string.Format(Traductor.T("RUNS_COMPARE_READY"), _selected.Count)</span>
+                <KmilaTooltip TextKey="RUNS_COMPARE_OPEN_TIP">
+                    <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--sm"
+                            @onclick="StartCompare">
+                        <Icon Name="IconName.GraphUp" />
+                        <span>@Traductor.T("RUNS_COMPARE_OPEN")</span>
+                    </button>
+                </KmilaTooltip>
+                <KmilaTooltip TextKey="COMMON_CANCEL">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                            @onclick="ClearSelection"
+                            aria-label="@Traductor.T("COMMON_CANCEL")">
+                        <Icon Name="IconName.XLg" />
+                    </button>
+                </KmilaTooltip>
+            </div>
+        }
+
+        <ul class="runs-panel__list">
+            <Virtualize Items="_snapshots" Context="snap" ItemSize="84" OverscanCount="4">
+                @{ var isSelected = _selected.Contains(snap.Id); }
+                <li @key="snap.Id" class="runs-panel__item @(isSelected ? "is-selected" : "") @(snap.Pinned ? "is-pinned" : "")">
+                    <label class="runs-panel__select" title="@Traductor.T("RUNS_SELECT")">
+                        <input type="checkbox" checked="@isSelected"
+                               @onchange="() => ToggleSelected(snap.Id)" />
+                    </label>
+
+                    <button type="button" class="runs-panel__main"
+                            @onclick="() => LoadSingleAsync(snap)">
+                        <div class="runs-panel__head">
+                            <span class="runs-panel__label">@snap.Label</span>
+                            @if (snap.Pinned)
+                            {
+                                <span class="runs-panel__pin-chip" title="@Traductor.T("RUNS_PINNED")">
+                                    <Icon Name="IconName.PinAngleFill" />
+                                </span>
+                            }
+                        </div>
+                        <div class="runs-panel__meta">
+                            <span class="runs-panel__chip">
+                                <Icon Name="IconName.Clock" />
+                                @snap.Time @snap.Scale
+                            </span>
+                            @if (!string.IsNullOrEmpty(snap.FpgaModel))
+                            {
+                                <span class="runs-panel__chip">
+                                    <Icon Name="IconName.CpuFill" />
+                                    @snap.FpgaModel
+                                </span>
+                            }
+                            <span class="runs-panel__chip">
+                                <Icon Name="IconName.GraphUp" />
+                                @snap.SignalCount
+                            </span>
+                            <span class="runs-panel__chip runs-panel__chip--muted">
+                                @FormatAge(snap.CreatedAt)
+                            </span>
+                        </div>
+                    </button>
+
+                    @* slot/list-row-actions — 4 icon-only actions; Family-14 (.kmila-btn-icon)
+                       fits the row rhythm better than Family-11 with its label padding.
+                       Pin / Rename / Export = neutral primary; Delete = danger on hover. *@
+                    <div class="runs-panel__actions">
+                        <KmilaTooltip TextKey="@(snap.Pinned ? "RUNS_UNPIN" : "RUNS_PIN")">
+                            <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
+                                    @onclick="() => TogglePinAsync(snap)"
+                                    aria-label="@Traductor.T(snap.Pinned ? "RUNS_UNPIN" : "RUNS_PIN")">
+                                <Icon Name="@(snap.Pinned ? IconName.PinAngleFill : IconName.PinAngle)" />
+                            </button>
+                        </KmilaTooltip>
+                        <KmilaTooltip TextKey="RUNS_RENAME">
+                            <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
+                                    @onclick="() => RenameAsync(snap)"
+                                    aria-label="@Traductor.T("RUNS_RENAME")">
+                                <Icon Name="IconName.Pencil" />
+                            </button>
+                        </KmilaTooltip>
+                        <KmilaTooltip TextKey="RUNS_EXPORT">
+                            <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
+                                    @onclick="() => ExportAsync(snap)"
+                                    aria-label="@Traductor.T("RUNS_EXPORT")">
+                                <Icon Name="IconName.Download" />
+                            </button>
+                        </KmilaTooltip>
+                        <KmilaTooltip TextKey="COMMON_DELETE">
+                            <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--danger kmila-btn-icon--sm"
+                                    @onclick="() => DeleteAsync(snap)"
+                                    aria-label="@Traductor.T("COMMON_DELETE")">
+                                <Icon Name="IconName.Trash" />
+                            </button>
+                        </KmilaTooltip>
+                    </div>
+                </li>
+            </Virtualize>
+        </ul>
+    </div>
+}
+
+@* Rename modal — driven by Blazor state instead of the native window.prompt
+   so it follows the rest of the app's modal styling (Bootstrap-themed, ESC to
+   close, focus management, etc). *@
+<Modal @ref="_renameModal" Title="@Traductor.T("RUNS_RENAME")" Size="ModalSize.Small">
+    <BodyTemplate>
+        <div class="form-floating">
+            <input type="text"
+                   id="run-rename-input"
+                   class="form-control"
+                   placeholder="@Traductor.T("RUNS_RENAME_PROMPT")"
+                   @bind="_renameDraft"
+                   @bind:event="oninput"
+                   @onkeydown="OnRenameKeyDown" />
+            <label for="run-rename-input">@Traductor.T("RUNS_RENAME_PROMPT")</label>
+        </div>
+    </BodyTemplate>
+    <FooterTemplate>
+        @* Family-11 (.kmila-btn) — secondary "Cancel" uses ghost+primary tint,
+           save uses solid accent. Matches the rest of the modal CTAs (Confirm
+           dialogs, CreateFileModal, ConfigurationModal). *@
+        <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary"
+                @onclick="() => _renameModal.HideAsync()">
+            @Traductor.T("COMMON_CANCEL")
+        </button>
+        <button type="button" class="kmila-btn kmila-btn--primary"
+                @onclick="CommitRenameAsync">
+            @Traductor.T("COMMON_SAVE")
+        </button>
+    </FooterTemplate>
+</Modal>
+
+<ConfirmDialog @ref="_deleteDialog" />
+
+@code {
+    /// <summary>Project whose runs we're listing. Editor passes this in.</summary>
+    [Parameter] public int ProjectId { get; set; }
+
+    /// <summary>Single-run load: replay this snapshot in the Waveforms tab.</summary>
+    [Parameter] public EventCallback<SimulationSnapshot> OnLoadSnapshot { get; set; }
+
+    /// <summary>Multi-run compare: Editor overlays all selected in Waveforms.</summary>
+    [Parameter] public EventCallback<List<SimulationSnapshot>> OnCompareSnapshots { get; set; }
+
+    private List<SimulationSnapshot>? _snapshots;
+    private readonly HashSet<int> _selected = new();
+
+    // Rename modal state
+    private Modal _renameModal = default!;
+    private SimulationSnapshot? _renameTarget;
+    private string _renameDraft = string.Empty;
+
+    // Delete confirmation
+    private ConfirmDialog _deleteDialog = new();
+
+    protected override void OnInitialized()
+    {
+        Snapshots.OnChange += OnSnapshotsChanged;
+        Traductor.StaticOnLangChanged += OnLangChanged;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (ProjectId <= 0) { _snapshots = new(); return; }
+        // ListMetadataAsync omits the heavy WaveformJson column — the panel
+        // only needs labels + counts + flags. Single-row open + export +
+        // compare-hydrate paths re-fetch the full row via GetByIdAsync when
+        // they actually need the waveform payload.
+        _snapshots = await Snapshots.ListMetadataAsync(ProjectId);
+        // Drop stale selection ids so the count stays honest after deletes.
+        _selected.IntersectWith(_snapshots.Select(s => s.Id));
+    }
+
+    private async void OnSnapshotsChanged(int projectId)
+    {
+        if (projectId != ProjectId) return;
+        await ReloadAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void OnLangChanged() => InvokeAsync(StateHasChanged);
+
+    private void ToggleSelected(int id)
+    {
+        if (!_selected.Add(id)) _selected.Remove(id);
+    }
+
+    private void ClearSelection() => _selected.Clear();
+
+    private async Task LoadSingleAsync(SimulationSnapshot snap)
+    {
+        _selected.Clear();
+        if (OnLoadSnapshot.HasDelegate)
+            await OnLoadSnapshot.InvokeAsync(snap);
+    }
+
+    private async Task StartCompare()
+    {
+        var picks = _snapshots?.Where(s => _selected.Contains(s.Id)).ToList() ?? new();
+        if (picks.Count < 2) return;
+        if (OnCompareSnapshots.HasDelegate)
+            await OnCompareSnapshots.InvokeAsync(picks);
+    }
+
+    private async Task TogglePinAsync(SimulationSnapshot snap)
+        => await Snapshots.SetPinnedAsync(snap.Id, !snap.Pinned);
+
+    /// <summary>
+    /// Opens the in-app rename modal pre-filled with the snapshot's current
+    /// label. Replaces the previous window.prompt call — that one was a glaring
+    /// hole in the styling and didn't match the Bootstrap modal aesthetic the
+    /// rest of the app uses.
+    /// </summary>
+    private async Task RenameAsync(SimulationSnapshot snap)
+    {
+        _renameTarget = snap;
+        _renameDraft  = snap.Label;
+        await _renameModal.ShowAsync();
+    }
+
+    private async Task OnRenameKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await CommitRenameAsync();
+        else if (e.Key == "Escape") await _renameModal.HideAsync();
+    }
+
+    private async Task CommitRenameAsync()
+    {
+        if (_renameTarget == null) return;
+        var next = (_renameDraft ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(next))
+        {
+            await _renameModal.HideAsync();
+            return;
+        }
+        if (string.Equals(next, _renameTarget.Label, StringComparison.Ordinal))
+        {
+            await _renameModal.HideAsync();
+            return;
+        }
+        var ok = await Snapshots.RenameAsync(_renameTarget.Id, next);
+        await _renameModal.HideAsync();
+        if (ok)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"),
+                Traductor.T("RUNS_RENAMED_OK"), ToastType.Success));
+        }
+        else
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                Traductor.T("RUNS_RENAMED_FAILED"), ToastType.Danger));
+        }
+        _renameTarget = null;
+    }
+
+    private async Task ExportAsync(SimulationSnapshot snap)
+    {
+        // The row carried by the Runs list is metadata-only (no WaveformJson
+        // — see ReloadAsync). Re-fetch the full record from SQLite before
+        // serialising so the exported file actually contains the waveform.
+        var full = string.IsNullOrEmpty(snap.WaveformJson)
+            ? await Snapshots.GetByIdAsync(snap.Id)
+            : snap;
+        if (full == null || string.IsNullOrEmpty(full.WaveformJson))
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                Traductor.T("RUNS_EXPORT_FAILED"), ToastType.Danger));
+            return;
+        }
+        // Ship the full row as a JSON file. On Web the IFileExportService
+        // routes through the kmilaDownloadText JS helper; on MAUI it writes
+        // to ~/Documents/Kmila/Runs/.
+        var payload = System.Text.Json.JsonSerializer.Serialize(full,
+            new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        var safe = SanitizeFile(full.Label);
+        var fileName = $"kmila-run-{full.Id}-{safe}.json";
+        var result = await Export.SaveTextAsync(ExportCategory.Runs, fileName, "application/json", payload);
+        if (result.Saved)
+        {
+            var msg = result.Path != null ? $"Saved: {result.Path}" : Traductor.T("RUNS_EXPORT_OK");
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), msg, ToastType.Success));
+        }
+        else
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                result.Error ?? Traductor.T("RUNS_EXPORT_FAILED"), ToastType.Danger));
+        }
+    }
+
+    /// <summary>
+    /// Replaces the previous window.confirm with the BlazorBootstrap
+    /// ConfirmDialog component used throughout the rest of the app
+    /// (FilesCard delete, ProjectsView delete). Same UX, same theme.
+    /// </summary>
+    private async Task DeleteAsync(SimulationSnapshot snap)
+    {
+        var options = new ConfirmDialogOptions
+        {
+            YesButtonColor = ButtonColor.Danger,
+            NoButtonColor  = ButtonColor.Secondary,
+            AutoFocusYesButton = false,
+            YesButtonText = Traductor.T("COMMON_DELETE"),
+            NoButtonText  = Traductor.T("COMMON_GO_BACK")
+        };
+        var confirmed = await _deleteDialog.ShowAsync(
+            Traductor.T("RUNS_DELETE_TITLE"),
+            string.Format(Traductor.T("RUNS_DELETE_CONFIRM"), snap.Label),
+            string.Empty,
+            options);
+        if (!confirmed) return;
+        var ok = await Snapshots.DeleteAsync(snap.Id);
+        if (ok)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"),
+                Traductor.T("RUNS_DELETED_OK"), ToastType.Success));
+        }
+        else
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                Traductor.T("RUNS_DELETED_FAILED"), ToastType.Danger));
+        }
+    }
+
+    /// <summary>
+    /// Reads the picked .json file as text, hands it to the store. The store
+    /// resets identity + project binding before insert, so a run exported from
+    /// another machine / project lands cleanly under the current project.
+    /// </summary>
+    private async Task OnImportFileSelectedAsync(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+        // 5 MB ceiling — captured runs are JSON-encoded transitions; even
+        // long simulations rarely exceed a couple of MB. Bumping the limit
+        // is fine, but unbounded reads from user input is not.
+        const long maxBytes = 5 * 1024 * 1024;
+        try
+        {
+            using var stream = file.OpenReadStream(maxBytes);
+            using var reader = new StreamReader(stream);
+            var json = await reader.ReadToEndAsync();
+            var snap = await Snapshots.ImportFromJsonAsync(ProjectId, json);
+            if (snap == null)
+            {
+                ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                    Traductor.T("RUNS_IMPORT_FAILED"), ToastType.Danger));
+                return;
+            }
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"),
+                string.Format(Traductor.T("RUNS_IMPORTED_OK"), snap.Label), ToastType.Success));
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                $"{Traductor.T("RUNS_IMPORT_FAILED")}: {ex.Message}", ToastType.Danger));
+        }
+    }
+
+    private string FormatAge(DateTime createdUtc)
+    {
+        var diff = DateTime.UtcNow - createdUtc;
+        if (diff.TotalMinutes < 1) return Traductor.T("RUNS_AGE_JUST_NOW");
+        if (diff.TotalMinutes < 60) return Traductor.T("RUNS_AGE_MIN", (int)diff.TotalMinutes);
+        if (diff.TotalHours  < 24) return Traductor.T("RUNS_AGE_HOUR", (int)diff.TotalHours);
+        return createdUtc.ToLocalTime().ToString("MMM d · HH:mm");
+    }
+
+    private static string SanitizeFile(string s)
+    {
+        var buf = new System.Text.StringBuilder();
+        foreach (var c in s)
+            buf.Append(char.IsLetterOrDigit(c) ? c : '_');
+        return buf.ToString();
+    }
+
+    public void Dispose()
+    {
+        Snapshots.OnChange -= OnSnapshotsChanged;
+        Traductor.StaticOnLangChanged -= OnLangChanged;
+    }
+}

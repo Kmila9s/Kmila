@@ -1,0 +1,81 @@
+{
+  "tests": [
+    {
+      "id": "t1",
+      "visible": true,
+      "descriptions": { "en": "din held high — CRC diverges between 0x07 and 0x1D taps", "es": "din siempre alto — CRC diverge entre taps 0x07 y 0x1D" },
+      "durationMicros": 3,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "din", "values": [{ "time": 0, "scale": "NS", "value": "1" }] }
+      ]
+    },
+    {
+      "id": "t2",
+      "visible": false,
+      "descriptions": { "en": "din held low — CRC stays 0", "es": "din siempre bajo — CRC permanece 0" },
+      "durationMicros": 3,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "din", "values": [{ "time": 0, "scale": "NS", "value": "0" }] }
+      ]
+    },
+    {
+      "id": "t3",
+      "visible": false,
+      "descriptions": { "en": "din toggles every 80 ns", "es": "din alterna cada 80 ns" },
+      "durationMicros": 3,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "din", "values": [
+          { "time": 0,   "scale": "NS", "value": "0" },
+          { "time": 80,  "scale": "NS", "value": "1" },
+          { "time": 160, "scale": "NS", "value": "0" },
+          { "time": 240, "scale": "NS", "value": "1" },
+          { "time": 320, "scale": "NS", "value": "0" }
+        ]}
+      ]
+    },
+    {
+      "id": "t4",
+      "visible": false,
+      "descriptions": { "en": "Held in reset — CRC stays 00000000", "es": "Reset mantenido — CRC permanece 00000000" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [{ "time": 0, "scale": "NS", "value": "1" }] },
+        { "portName": "din",   "values": [{ "time": 0, "scale": "NS", "value": "1" }] }
+      ]
+    },
+    {
+      "id": "t5",
+      "visible": false,
+      "descriptions": { "en": "Single 1 bit then quiet", "es": "Un único 1 y luego silencio" },
+      "durationMicros": 3,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "din", "values": [
+          { "time": 0,   "scale": "NS", "value": "0" },
+          { "time": 100, "scale": "NS", "value": "1" },
+          { "time": 120, "scale": "NS", "value": "0" }
+        ]}
+      ]
+    }
+  ]
+}

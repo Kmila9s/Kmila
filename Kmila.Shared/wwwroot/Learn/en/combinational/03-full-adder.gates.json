@@ -1,0 +1,363 @@
+{
+  "viewBox": "0 0 880 460",
+  "nodes": [
+    {
+      "id": "a",
+      "kind": "input",
+      "label": "a",
+      "x": 60,
+      "y": 80
+    },
+    {
+      "id": "b",
+      "kind": "input",
+      "label": "b",
+      "x": 60,
+      "y": 180
+    },
+    {
+      "id": "cin",
+      "kind": "input",
+      "label": "cin",
+      "x": 60,
+      "y": 320
+    },
+    {
+      "id": "g_xor1",
+      "kind": "xor",
+      "label": "XOR",
+      "x": 260,
+      "y": 80
+    },
+    {
+      "id": "g_and1",
+      "kind": "and",
+      "label": "AND",
+      "x": 260,
+      "y": 220
+    },
+    {
+      "id": "g_xor2",
+      "kind": "xor",
+      "label": "XOR",
+      "x": 540,
+      "y": 80
+    },
+    {
+      "id": "g_and2",
+      "kind": "and",
+      "label": "AND",
+      "x": 540,
+      "y": 220
+    },
+    {
+      "id": "g_or",
+      "kind": "or",
+      "label": "OR",
+      "x": 700,
+      "y": 330
+    },
+    {
+      "id": "sum",
+      "kind": "output",
+      "label": "sum",
+      "x": 820,
+      "y": 108
+    },
+    {
+      "id": "cout",
+      "kind": "output",
+      "label": "cout",
+      "x": 820,
+      "y": 358
+    }
+  ],
+  "wires": [
+    {
+      "id": "w_a_xor1",
+      "source": "a",
+      "path": "M60,80 L240,80 L240,98 L260,98",
+      "activeFor": ["g_xor1"]
+    },
+    {
+      "id": "w_a_and1",
+      "source": "a",
+      "path": "M60,80 L240,80 L240,238 L260,238",
+      "activeFor": ["g_and1"]
+    },
+    {
+      "id": "w_b_xor1",
+      "source": "b",
+      "path": "M60,180 L220,180 L220,118 L260,118",
+      "activeFor": ["g_xor1"]
+    },
+    {
+      "id": "w_b_and1",
+      "source": "b",
+      "path": "M60,180 L220,180 L220,258 L260,258",
+      "activeFor": ["g_and1"]
+    },
+    {
+      "id": "w_cin_xor2",
+      "source": "cin",
+      "path": "M60,320 L480,320 L480,118 L540,118",
+      "activeFor": ["g_xor2"]
+    },
+    {
+      "id": "w_cin_and2",
+      "source": "cin",
+      "path": "M60,320 L480,320 L480,258 L540,258",
+      "activeFor": ["g_and2"]
+    },
+    {
+      "id": "w_s1_xor2",
+      "source": "s1",
+      "path": "M320,108 L420,108 L420,98 L540,98",
+      "activeFor": ["g_xor2"]
+    },
+    {
+      "id": "w_s1_and2",
+      "source": "s1",
+      "path": "M320,108 L420,108 L420,238 L540,238",
+      "activeFor": ["g_and2"]
+    },
+    {
+      "id": "w_c1_or",
+      "source": "c1",
+      "path": "M320,248 L660,248 L660,348 L700,348"
+    },
+    {
+      "id": "w_c2_or",
+      "source": "c2",
+      "path": "M600,248 L640,248 L640,368 L700,368"
+    },
+    {
+      "id": "w_sum_out",
+      "source": "sum",
+      "path": "M600,108 L820,108"
+    },
+    {
+      "id": "w_cout_out",
+      "source": "cout",
+      "path": "M760,358 L820,358"
+    }
+  ],
+  "signalOrder": [
+    "cin",
+    "a",
+    "b",
+    "s1",
+    "c1",
+    "c2",
+    "sum",
+    "cout"
+  ],
+  "steps": [
+    {
+      "t": 0,
+      "values": {
+        "a": "0",
+        "b": "0",
+        "cin": "0",
+        "s1": "0",
+        "c1": "0",
+        "c2": "0",
+        "sum": "0",
+        "cout": "0"
+      },
+      "active": [],
+      "note": {
+        "en": "Cold start. cin=a=b=0, so every internal net and both outputs are 0. The diagram shows ONE bit-slice of the full adder — tiled four times, this is the design the lesson's VHDL describes with a single `+`.",
+        "es": "Inicio en frío. cin=a=b=0, así que todas las redes internas y ambas salidas son 0. El diagrama muestra UNA rebanada de bit del sumador completo — repetida cuatro veces, es el diseño que el VHDL de la lección describe con un solo `+`.",
+        "ar": "بدء بارد. cin=a=b=0، فكل الشبكات الداخليَّة وكلا الخرجَين عند 0. يُظهر المخطَّط شريحة بت واحدة من الجامع الكامل — كُرِّرت أربع مرَّات لتُكوِّن التصميم الذي يصفه VHDL للدرس بـ + واحد.",
+        "ch": "冷启动。cin=a=b=0,所有内部网线和两个输出都是 0。图中展示的是全加器的一个 bit 切片 — 重复四次就构成本课 VHDL 用一个 `+` 描述的设计。",
+        "de": "Kaltstart. cin=a=b=0, also sind alle internen Netze und beide Ausgänge 0. Das Diagramm zeigt EINE Bit-Slice des Volladdierers — vierfach gekachelt ergibt das den Entwurf, den das VHDL der Lektion mit einem einzigen `+` beschreibt.",
+        "fr": "Démarrage à froid. cin=a=b=0, donc tous les nets internes et les deux sorties sont à 0. Le diagramme montre UNE tranche de bit de l'additionneur complet — répétée quatre fois, c'est la conception que le VHDL de la leçon décrit avec un seul `+`.",
+        "jp": "コールドスタート。cin=a=b=0 で、すべての内部ネットと両出力が 0。図は全加算器の 1 ビットスライス — これを 4 つ並べたものが、レッスンの VHDL が 1 つの `+` で記述している設計。"
+      }
+    },
+    {
+      "t": 1,
+      "values": {
+        "a": "0",
+        "b": "1",
+        "cin": "0",
+        "s1": "1",
+        "c1": "0",
+        "c2": "0",
+        "sum": "1",
+        "cout": "0"
+      },
+      "active": [
+        "g_xor1",
+        "g_xor2"
+      ],
+      "note": {
+        "en": "b flips to 1. The first XOR fires (a≠b), s1 goes hot. Watch how s1 then feeds the second XOR — sum follows, also goes to 1. No carry is generated yet: c1 needs a AND b, and a is still 0.",
+        "es": "b sube a 1. La primera XOR se enciende (a≠b), s1 se activa. Mira cómo s1 alimenta a la segunda XOR — sum también sube a 1. Aún no hay acarreo: c1 necesita a AND b, y a sigue en 0.",
+        "ar": "b يقفز إلى 1. تنطلق XOR الأولى (a≠b)، فيسخن s1. شاهد كيف يُغذِّي s1 الـ XOR الثانية — sum يتبع، يصير 1. لا حمل بعد: c1 يحتاج a AND b، و a لا يزال 0.",
+        "ch": "b 翻到 1。第一个 XOR 触发(a≠b),s1 变热。看 s1 如何馈入第二个 XOR — sum 跟着上升到 1。还没有进位:c1 需要 a AND b,而 a 仍是 0。",
+        "de": "b kippt auf 1. Das erste XOR feuert (a≠b), s1 wird heiß. Beachte, wie s1 dann das zweite XOR speist — sum folgt und geht ebenfalls auf 1. Noch kein Carry: c1 braucht a AND b, und a ist immer noch 0.",
+        "fr": "b bascule à 1. Le premier XOR s'allume (a≠b), s1 devient chaud. Regardez comment s1 alimente le second XOR — sum suit, devient aussi 1. Pas encore de retenue : c1 a besoin de a AND b, et a est encore 0.",
+        "jp": "b が 1 に反転。最初の XOR が発火(a≠b)、s1 がホットに。s1 が次の XOR を駆動する様子を見て — sum も追従して 1 に。キャリーはまだ:c1 は a AND b を要するが、a はまだ 0。"
+      }
+    },
+    {
+      "t": 2,
+      "values": {
+        "a": "1",
+        "b": "0",
+        "cin": "0",
+        "s1": "1",
+        "c1": "0",
+        "c2": "0",
+        "sum": "1",
+        "cout": "0"
+      },
+      "active": [],
+      "note": {
+        "en": "Mirror of the last row: a=1, b=0. Every gate output is identical to step 1 because XOR and AND are both commutative. The diagram changes which wire is hot (now `a` instead of `b`) but the gate outputs don't move.",
+        "es": "Espejo de la fila anterior: a=1, b=0. Cada salida es idéntica al paso 1 porque XOR y AND son ambas conmutativas. El diagrama cambia qué cable está activo (ahora `a` en lugar de `b`) pero las salidas no se mueven.",
+        "ar": "صورة معكوسة للسطر السابق: a=1، b=0. كل خرج بوابة مطابق للخطوة 1 لأنَّ XOR وAND متبادلان. يتغيَّر المخطَّط أيَّ سلك ساخن (الآن `a` بدل `b`) لكن خروج البوابات لا يتحرَّك.",
+        "ch": "上一行的镜像:a=1, b=0。每个门的输出都和第 1 步一样,因为 XOR 与 AND 都是可交换的。图上变化的是哪根线热(现在是 `a` 而不是 `b`),但门输出不动。",
+        "de": "Spiegelbild der letzten Zeile: a=1, b=0. Jeder Gatterausgang ist identisch zu Schritt 1, weil XOR und AND beide kommutativ sind. Das Diagramm zeigt, welcher Draht heiß ist (jetzt `a` statt `b`), aber die Gatterausgänge bewegen sich nicht.",
+        "fr": "Miroir de la ligne précédente : a=1, b=0. Chaque sortie de porte est identique à l'étape 1 parce que XOR et AND sont commutatives. Le diagramme change quel fil est chaud (maintenant `a` au lieu de `b`) mais les sorties ne bougent pas.",
+        "jp": "前の行の鏡像:a=1、b=0。XOR と AND は両方とも交換則を満たすので、各ゲート出力はステップ 1 と同一。図ではホットな線が変わる(`b` の代わりに今は `a`)が、ゲート出力は動かない。"
+      }
+    },
+    {
+      "t": 3,
+      "values": {
+        "a": "1",
+        "b": "1",
+        "cin": "0",
+        "s1": "0",
+        "c1": "1",
+        "c2": "0",
+        "sum": "0",
+        "cout": "1"
+      },
+      "active": [
+        "g_xor1",
+        "g_and1",
+        "g_xor2",
+        "g_or"
+      ],
+      "note": {
+        "en": "Both a and b are 1. The first XOR drops back to 0 (inputs equal) so sum drops too — but the AND fires, c1 = 1. That feeds the OR, and cout becomes 1. This is the only way to generate a carry with cin=0.",
+        "es": "Tanto a como b son 1. La primera XOR vuelve a 0 (entradas iguales), así que sum también baja — pero la AND se enciende, c1 = 1. Eso alimenta la OR y cout sube a 1. Es la única forma de generar acarreo con cin=0.",
+        "ar": "a وb كلاهما 1. تعود XOR الأولى إلى 0 (الدخلان متساويان) فيسقط sum أيضًا — لكن AND تنطلق، c1 = 1. تُغذِّي OR، فيصير cout = 1. هذه الطريقة الوحيدة لتوليد حمل مع cin=0.",
+        "ch": "a 和 b 都是 1。第一个 XOR 回到 0(输入相等),所以 sum 也掉了 — 但 AND 触发,c1 = 1。它馈入 OR,cout 上升到 1。这是 cin=0 时产生进位的唯一方式。",
+        "de": "Beide a und b sind 1. Das erste XOR fällt zurück auf 0 (Eingänge gleich), sum fällt also auch — aber das AND feuert, c1 = 1. Das speist das OR, cout wird 1. Das ist die einzige Möglichkeit, mit cin=0 einen Carry zu erzeugen.",
+        "fr": "a et b valent tous deux 1. Le premier XOR retombe à 0 (entrées égales) donc sum redescend aussi — mais le AND s'allume, c1 = 1. Cela alimente le OR, et cout devient 1. C'est la seule façon de générer une retenue avec cin=0.",
+        "jp": "a も b も 1。最初の XOR は 0 に戻る(入力が等しい)ので sum も下がる — しかし AND が発火、c1 = 1。それが OR を駆動し、cout は 1 に。これが cin=0 でキャリーを生成する唯一の方法。"
+      }
+    },
+    {
+      "t": 4,
+      "values": {
+        "a": "0",
+        "b": "0",
+        "cin": "1",
+        "s1": "0",
+        "c1": "0",
+        "c2": "0",
+        "sum": "1",
+        "cout": "0"
+      },
+      "active": [
+        "g_and1",
+        "g_xor2",
+        "g_or"
+      ],
+      "note": {
+        "en": "cin flips to 1, a and b reset to 0. s1 stays 0, so c2 stays 0. But the second XOR sees s1=0 XOR cin=1 → sum=1. The OR drops because both its inputs are now 0. Pure cin pass-through.",
+        "es": "cin sube a 1, a y b vuelven a 0. s1 sigue en 0, así que c2 también. Pero la segunda XOR ve s1=0 XOR cin=1 → sum=1. La OR baja porque ambas entradas son 0. Es cin pasando directo a sum.",
+        "ar": "cin يقفز إلى 1، a وb يعودان إلى 0. يبقى s1 عند 0، فيبقى c2 عند 0. لكن XOR الثانية ترى s1=0 XOR cin=1 → sum=1. تسقط OR لأن دخلَيها الآن 0. تمرير مباشر لـ cin.",
+        "ch": "cin 翻到 1,a 和 b 回到 0。s1 仍是 0,所以 c2 仍是 0。但第二个 XOR 看 s1=0 XOR cin=1 → sum=1。OR 因为两输入都是 0 而下降。纯 cin 直通。",
+        "de": "cin kippt auf 1, a und b setzen sich auf 0 zurück. s1 bleibt 0, also bleibt c2 auf 0. Aber das zweite XOR sieht s1=0 XOR cin=1 → sum=1. Das OR fällt, weil beide Eingänge jetzt 0 sind. Reines cin-Durchreichen.",
+        "fr": "cin bascule à 1, a et b reviennent à 0. s1 reste à 0, donc c2 reste à 0. Mais le second XOR voit s1=0 XOR cin=1 → sum=1. Le OR retombe parce que ses deux entrées sont maintenant à 0. Pur passe-cin.",
+        "jp": "cin が 1 に反転、a と b は 0 にリセット。s1 は 0 のままなので c2 も 0 のまま。だが 2 つ目の XOR が s1=0 XOR cin=1 → sum=1 を見る。OR は両入力 0 なので下がる。純粋な cin パススルー。"
+      }
+    },
+    {
+      "t": 5,
+      "values": {
+        "a": "0",
+        "b": "1",
+        "cin": "1",
+        "s1": "1",
+        "c1": "0",
+        "c2": "1",
+        "sum": "0",
+        "cout": "1"
+      },
+      "active": [
+        "g_xor1",
+        "g_and2",
+        "g_xor2",
+        "g_or"
+      ],
+      "note": {
+        "en": "b adds to cin. s1 = 0 XOR 1 = 1, then sum = 1 XOR 1 = 0 because s1 and cin now match. The AND between s1 and cin fires — c2 = 1. cout follows via the OR. Carry came from the SECOND AND this time.",
+        "es": "Se suma b a cin. s1 = 0 XOR 1 = 1, luego sum = 1 XOR 1 = 0 porque s1 y cin coinciden. La AND entre s1 y cin se enciende — c2 = 1. cout sigue por la OR. Esta vez el acarreo vino de la SEGUNDA AND.",
+        "ar": "يُضاف b إلى cin. s1 = 0 XOR 1 = 1، ثم sum = 1 XOR 1 = 0 لأن s1 وcin تطابقا. تنطلق AND بين s1 وcin — c2 = 1. يتبع cout عبر OR. الحمل جاء هذه المرة من AND الثانية.",
+        "ch": "b 加到 cin 上。s1 = 0 XOR 1 = 1,然后 sum = 1 XOR 1 = 0,因为现在 s1 与 cin 相等。s1 与 cin 之间的 AND 触发 — c2 = 1。cout 通过 OR 跟着上来。这一次进位来自第二个 AND。",
+        "de": "b kommt zu cin dazu. s1 = 0 XOR 1 = 1, dann sum = 1 XOR 1 = 0, weil s1 und cin jetzt übereinstimmen. Das AND zwischen s1 und cin feuert — c2 = 1. cout folgt über das OR. Der Carry kam diesmal vom ZWEITEN AND.",
+        "fr": "b s'ajoute à cin. s1 = 0 XOR 1 = 1, puis sum = 1 XOR 1 = 0 parce que s1 et cin coïncident désormais. Le AND entre s1 et cin s'allume — c2 = 1. cout suit via le OR. Cette fois, la retenue vient du SECOND AND.",
+        "jp": "b が cin に加わる。s1 = 0 XOR 1 = 1、次に sum = 1 XOR 1 = 0(s1 と cin が一致)。s1 と cin の AND が発火 — c2 = 1。cout は OR を経て追従。今回キャリーは 2 つ目の AND から来た。"
+      }
+    },
+    {
+      "t": 6,
+      "values": {
+        "a": "1",
+        "b": "0",
+        "cin": "1",
+        "s1": "1",
+        "c1": "0",
+        "c2": "1",
+        "sum": "0",
+        "cout": "1"
+      },
+      "active": [],
+      "note": {
+        "en": "Commutative again: swap a and b and nothing downstream moves. Sum and cout are unchanged. This is why bit-level adders compose so cleanly — each slice's behaviour depends only on the BIT count, not on which input is which.",
+        "es": "Conmutativa de nuevo: intercambia a y b y nada cambia aguas abajo. sum y cout no se mueven. Por eso los sumadores bit a bit componen tan limpiamente — cada rebanada depende solo del CONTEO de bits, no de cuál entrada es cuál.",
+        "ar": "تبادل مرَّة أخرى: بدِّل a وb ولن يتحرَّك شيء بعدها. sum وcout دون تغيير. لهذا تنضمُّ الجامعات على مستوى البت بأناقة — سلوك كل شريحة يعتمد على عدد البتات فقط، لا على هويَّة الدخل.",
+        "ch": "再次说明可交换性:对调 a 与 b,下游一点都不动。sum 和 cout 不变。这就是为什么按位加法器组合起来如此干净 — 每个切片的行为只依赖位数,而不依赖哪个输入是哪个。",
+        "de": "Erneut kommutativ: tausche a und b und nichts dahinter bewegt sich. Sum und cout unverändert. Deshalb komponieren bitweise Addierer so sauber — das Verhalten jeder Slice hängt nur von der BIT-Anzahl ab, nicht davon, welcher Eingang welcher ist.",
+        "fr": "Commutativité encore : échangez a et b et rien en aval ne bouge. Sum et cout sont inchangés. C'est pourquoi les additionneurs au bit s'assemblent si proprement — le comportement de chaque tranche ne dépend que du COMPTE de bits, pas de quelle entrée est laquelle.",
+        "jp": "再び交換則:a と b を入れ替えても下流は動かない。sum と cout は不変。これがビット単位の加算器が綺麗に合成できる理由 — 各スライスの動作はビット数だけに依存し、どの入力がどちらかは関係ない。"
+      }
+    },
+    {
+      "t": 7,
+      "values": {
+        "a": "1",
+        "b": "1",
+        "cin": "1",
+        "s1": "0",
+        "c1": "1",
+        "c2": "0",
+        "sum": "1",
+        "cout": "1"
+      },
+      "active": [
+        "g_xor1",
+        "g_and1",
+        "g_and2",
+        "g_xor2"
+      ],
+      "note": {
+        "en": "All three inputs are 1. s1 drops back to 0 (XOR with equal inputs). c1 = 1 (a AND b). c2 = 0 (s1 is 0). cout stays at 1 — but watch the wires: this time the carry comes from c1, not c2. Either way, sum=1 because 1+1+1 = 3 = binary 11.",
+        "es": "Las tres entradas son 1. s1 vuelve a 0 (XOR con entradas iguales). c1 = 1 (a AND b). c2 = 0 (s1 es 0). cout se queda en 1 — pero mira los cables: ahora el acarreo viene de c1, no de c2. De cualquier modo, sum=1 porque 1+1+1 = 3 = binario 11.",
+        "ar": "كل المدخلات الثلاث 1. يعود s1 إلى 0 (XOR لدخلَين متساويَين). c1 = 1 (a AND b). c2 = 0 (s1 = 0). يبقى cout عند 1 — لكن انظر للأسلاك: هذه المرَّة الحمل جاء من c1 لا c2. على أي حال، sum=1 لأنَّ 1+1+1 = 3 = 11 ثنائيًّا.",
+        "ch": "三个输入都是 1。s1 回到 0(相等输入的 XOR)。c1 = 1 (a AND b)。c2 = 0(s1 是 0)。cout 仍是 1 — 但看线:这次进位来自 c1,不是 c2。无论哪种情况,sum=1,因为 1+1+1 = 3 = 二进制 11。",
+        "de": "Alle drei Eingänge sind 1. s1 fällt zurück auf 0 (XOR mit gleichen Eingängen). c1 = 1 (a AND b). c2 = 0 (s1 ist 0). cout bleibt auf 1 — aber beobachte die Drähte: diesmal kommt der Carry von c1, nicht von c2. So oder so, sum=1, weil 1+1+1 = 3 = binär 11.",
+        "fr": "Les trois entrées sont à 1. s1 retombe à 0 (XOR d'entrées égales). c1 = 1 (a AND b). c2 = 0 (s1 est 0). cout reste à 1 — mais regardez les fils : cette fois la retenue vient de c1, pas de c2. Dans tous les cas, sum=1 parce que 1+1+1 = 3 = binaire 11.",
+        "jp": "3 入力すべてが 1。s1 は 0 に戻る(等しい入力の XOR)。c1 = 1(a AND b)。c2 = 0(s1 は 0)。cout は 1 のまま — だが線を見て:今回キャリーは c2 ではなく c1 から来る。いずれにせよ sum=1、なぜなら 1+1+1 = 3 = 2 進数で 11。"
+      }
+    }
+  ]
+}

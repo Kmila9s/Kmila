@@ -1,0 +1,86 @@
+{
+  "tests": [
+    {
+      "id": "t1",
+      "visible": true,
+      "descriptions": { "en": "Reset, then x=1 — must reach S2", "es": "Reset y luego x=1 — debe alcanzar S2" },
+      "durationMicros": 4,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "x", "values": [
+          { "time": 0, "scale": "NS", "value": "1" }
+        ]}
+      ]
+    },
+    {
+      "id": "t2",
+      "visible": false,
+      "descriptions": { "en": "x stays 0 — FSM should sit in S1 after one cycle", "es": "x en 0 — la FSM se queda en S1 tras un ciclo" },
+      "durationMicros": 4,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "x", "values": [
+          { "time": 0, "scale": "NS", "value": "0" }
+        ]}
+      ]
+    },
+    {
+      "id": "t3",
+      "visible": false,
+      "descriptions": { "en": "x rises after some cycles in S1", "es": "x sube tras varios ciclos en S1" },
+      "durationMicros": 4,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "x", "values": [
+          { "time": 0,   "scale": "NS", "value": "0" },
+          { "time": 200, "scale": "NS", "value": "1" }
+        ]}
+      ]
+    },
+    {
+      "id": "t4",
+      "visible": false,
+      "descriptions": { "en": "Held in reset — state stays 00", "es": "Reset mantenido — estado en 00" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0, "scale": "NS", "value": "1" }
+        ]},
+        { "portName": "x", "values": [
+          { "time": 0, "scale": "NS", "value": "1" }
+        ]}
+      ]
+    },
+    {
+      "id": "t5",
+      "visible": false,
+      "descriptions": { "en": "x glitches high briefly", "es": "x sube brevemente" },
+      "durationMicros": 4,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "x", "values": [
+          { "time": 0,   "scale": "NS", "value": "0" },
+          { "time": 105, "scale": "NS", "value": "1" },
+          { "time": 145, "scale": "NS", "value": "0" }
+        ]}
+      ]
+    }
+  ]
+}

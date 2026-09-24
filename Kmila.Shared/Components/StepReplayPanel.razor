@@ -1,0 +1,224 @@
+@*
+    StepReplayPanel — Editor dock content for the new "Replay" tab.
+
+    Subscribes to ReplayState; renders one of three states:
+      • Live (Phase B) — a simulation is in flight. Shows a Pause / Resume /
+        Step button row driving the engine directly. The current sim's
+        partial waveform is visible on the Waveforms tab in parallel.
+      • Post-hoc replay — there's a captured timeline doc. Renders the shared
+        ExecutionPlayer with line highlights derived from the source code
+        (Phase B added the highlight mapping in ReplayBuilder).
+      • Empty — no simulation has run yet.
+*@
+
+@inject ReplayState Replay
+@implements IDisposable
+
+@if (Replay.IsLiveActive)
+{
+    <div class="kmila-replay kmila-replay--live">
+        <header class="kmila-replay__header">
+            <Icon Name="IconName.RecordCircle" />
+            <span class="kmila-replay__title">@Traductor.T("EDITOR_REPLAY_LIVE_TITLE")</span>
+            <span class="kmila-replay__meta">@(Replay.IsLivePaused
+                ? Traductor.T("EDITOR_REPLAY_LIVE_PAUSED")
+                : Traductor.T("EDITOR_REPLAY_LIVE_RUNNING"))
+                · @(Replay.LiveDoc?.Steps.Count ?? 0) @Traductor.T("EDITOR_REPLAY_LIVE_FRAMES")
+            </span>
+        </header>
+
+        <div class="kmila-replay__live-controls" role="group"
+             aria-label="@Traductor.T("EDITOR_REPLAY_LIVE_CONTROLS")">
+            @if (Replay.IsLivePaused)
+            {
+                <KmilaTooltip TextKey="SIM_RESUME">
+                    <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--sm"
+                            aria-label="@Traductor.T("SIM_RESUME")"
+                            @onclick="OnResumeLive">
+                        <Icon Name="IconName.PlayFill" />
+                        <span>@Traductor.T("SIM_RESUME")</span>
+                    </button>
+                </KmilaTooltip>
+            }
+            else
+            {
+                <KmilaTooltip TextKey="SIM_PAUSE">
+                    <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--sm"
+                            aria-label="@Traductor.T("SIM_PAUSE")"
+                            @onclick="OnPauseLive">
+                        <Icon Name="IconName.PauseFill" />
+                        <span>@Traductor.T("SIM_PAUSE")</span>
+                    </button>
+                </KmilaTooltip>
+            }
+            <KmilaTooltip TextKey="CONCEPTS_PLAYER_STEP_FORWARD">
+                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                        aria-label="@Traductor.T("CONCEPTS_PLAYER_STEP_FORWARD")"
+                        disabled="@(!Replay.IsLivePaused)"
+                        @onclick="OnStepLive">
+                    <Icon Name="IconName.SkipEnd" />
+                    <span>@Traductor.T("CONCEPTS_PLAYER_STEP_FORWARD")</span>
+                </button>
+            </KmilaTooltip>
+            <span class="kmila-replay__live-hint">
+                @Traductor.T("EDITOR_REPLAY_LIVE_HINT")
+            </span>
+        </div>
+
+        @* Phase E: line-breakpoint editor. Shown only in live mode because
+           that's the only time the engine can be paused — adds nothing to
+           the post-hoc replay UX. The list and the engine-side check both
+           live in ReplayState. *@
+        <details class="kmila-replay__breakpoints" open="@(Replay.Breakpoints.Count > 0)">
+            <summary>
+                <Icon Name="IconName.RecordCircle" />
+                <span>@Traductor.T("EDITOR_REPLAY_BREAKPOINTS_TITLE")</span>
+                <span class="kmila-replay__bp-count">@Replay.Breakpoints.Count</span>
+            </summary>
+            <div class="kmila-replay__bp-row">
+                <input type="number" min="1" placeholder="@Traductor.T("EDITOR_REPLAY_BREAKPOINTS_PLACEHOLDER")"
+                       @bind="_pendingBreakpointLine" @bind:event="oninput"
+                       @onkeydown="OnBreakpointInputKeyDown"
+                       class="kmila-replay__bp-input" />
+                <KmilaTooltip TextKey="EDITOR_REPLAY_BREAKPOINTS_ADD">
+                    <button type="button" class="kmila-btn-icon"
+                            aria-label="@Traductor.T("EDITOR_REPLAY_BREAKPOINTS_ADD")"
+                            @onclick="OnAddBreakpoint">
+                        <Icon Name="IconName.PlusCircle" />
+                    </button>
+                </KmilaTooltip>
+            </div>
+            @if (Replay.Breakpoints.Count == 0)
+            {
+                <p class="kmila-replay__bp-empty">@Traductor.T("EDITOR_REPLAY_BREAKPOINTS_EMPTY")</p>
+            }
+            else
+            {
+                <ul class="kmila-replay__bp-list">
+                    @foreach (var bp in OrderedBreakpoints())
+                    {
+                        var line = bp;
+                        var untracked = Replay.TrackedLines.Count > 0 && !Replay.IsLineTracked(line);
+                        <li class="@(untracked ? "is-untracked" : "")">
+                            <span>@string.Format(Traductor.T("EDITOR_REPLAY_BREAKPOINTS_AT_LINE"), line)</span>
+                            @if (untracked)
+                            {
+                                <span class="kmila-replay__bp-warn"
+                                      title="@Traductor.T("EDITOR_BP_UNTRACKED_WARN")">
+                                    <Icon Name="IconName.ExclamationTriangle" />
+                                </span>
+                            }
+                            <KmilaTooltip TextKey="EDITOR_REPLAY_BREAKPOINTS_REMOVE">
+                                <button type="button" class="kmila-btn-icon"
+                                        aria-label="@Traductor.T("EDITOR_REPLAY_BREAKPOINTS_REMOVE")"
+                                        @onclick="() => Replay.ToggleBreakpoint(line)">
+                                    <Icon Name="IconName.XCircle" />
+                                </button>
+                            </KmilaTooltip>
+                        </li>
+                    }
+                </ul>
+            }
+        </details>
+
+        @if (Replay.LiveDoc is { Steps.Count: > 0 } liveDoc)
+        {
+            @* FollowLive=true → ExecutionPlayer auto-advances to the latest
+               step as the doc grows. LiveTick is a render trigger so the
+               component re-runs OnParametersSetAsync even though Doc identity
+               doesn't change (we mutate the same instance per frame). *@
+            <ExecutionPlayer Doc="liveDoc"
+                             Lang="@(Traductor.Lang ?? "en")"
+                             FollowLive="true"
+                             LiveTick="Replay.LiveFrameTick" />
+        }
+    </div>
+}
+else if (Replay.Current is { Steps.Count: > 0 } doc)
+{
+    <div class="kmila-replay">
+        <header class="kmila-replay__header">
+            <Icon Name="IconName.PlayCircle" />
+            <span class="kmila-replay__title">@Traductor.T("EDITOR_REPLAY_TITLE")</span>
+            <span class="kmila-replay__meta">
+                @string.Format(Traductor.T("EDITOR_REPLAY_FRAMES_FMT"), doc.Steps.Count)
+            </span>
+
+            @* Phase C: detail-level selector. Drives ReplayBuilder.maxFrames
+               on the cached waveform — no resim required. Default 200
+               matches Phase A. *@
+            <label class="kmila-replay__detail" title="@Traductor.T("EDITOR_REPLAY_DETAIL_TITLE")">
+                <Icon Name="IconName.Sliders" />
+                <select value="@Replay.MaxFrames.ToString()" @onchange="OnDetailLevelChanged">
+                    <option value="50">@Traductor.T("EDITOR_REPLAY_DETAIL_LOW")</option>
+                    <option value="200">@Traductor.T("EDITOR_REPLAY_DETAIL_MED")</option>
+                    <option value="1000">@Traductor.T("EDITOR_REPLAY_DETAIL_HIGH")</option>
+                </select>
+            </label>
+        </header>
+        <ExecutionPlayer Doc="doc" Lang="@(Traductor.Lang ?? "en")" />
+    </div>
+}
+else
+{
+    <div class="kmila-replay-empty">
+        <div class="kmila-replay-empty__icon"><Icon Name="IconName.PlayCircle" /></div>
+        <h3>@Traductor.T("EDITOR_REPLAY_EMPTY_TITLE")</h3>
+        <p>@Traductor.T("EDITOR_REPLAY_EMPTY_BODY")</p>
+    </div>
+}
+
+@code {
+    private int? _pendingBreakpointLine;
+
+    protected override void OnInitialized()
+    {
+        Replay.OnChange              += OnReplayChanged;
+        Replay.OnLiveChanged         += OnReplayChanged;
+        Replay.OnBreakpointsChanged  += OnReplayChanged;
+        Replay.OnLineMapChanged      += OnReplayChanged;
+    }
+
+    private void OnReplayChanged() => InvokeAsync(StateHasChanged);
+
+    private void OnPauseLive()  => Replay.LivePause();
+    private void OnResumeLive() => Replay.LiveResume();
+    private void OnStepLive()   => Replay.LiveStep();
+
+    private void OnDetailLevelChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var max))
+            Replay.SetMaxFrames(max);
+    }
+
+    private void OnAddBreakpoint()
+    {
+        if (_pendingBreakpointLine is int ln && ln > 0)
+        {
+            // ToggleBreakpoint adds when absent / removes when present —
+            // either is what the user expects from "Add at line N".
+            if (!Replay.Breakpoints.Contains(ln))
+                Replay.ToggleBreakpoint(ln);
+            _pendingBreakpointLine = null;
+        }
+    }
+
+    private void OnBreakpointInputKeyDown(KeyboardEventArgs e)
+    {
+        // Enter inside the line-number input adds the breakpoint without
+        // forcing the user to reach for the plus button — the same nudge
+        // every IDE makes.
+        if (e.Key == "Enter") OnAddBreakpoint();
+    }
+
+    private IEnumerable<int> OrderedBreakpoints() =>
+        Replay.Breakpoints.OrderBy(x => x);
+
+    public void Dispose()
+    {
+        Replay.OnChange              -= OnReplayChanged;
+        Replay.OnLiveChanged         -= OnReplayChanged;
+        Replay.OnBreakpointsChanged  -= OnReplayChanged;
+        Replay.OnLineMapChanged      -= OnReplayChanged;
+    }
+}

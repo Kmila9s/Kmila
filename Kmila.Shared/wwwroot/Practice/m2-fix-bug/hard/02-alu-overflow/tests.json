@@ -1,0 +1,59 @@
+{
+  "tests": [
+    {
+      "id": "t1",
+      "visible": true,
+      "descriptions": { "en": "127 + 1 = -128 — true signed overflow", "es": "127 + 1 = -128 — desbordamiento con signo real" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "a", "values": [{ "time": 0, "scale": "NS", "value": "01111111" }] },
+        { "portName": "b", "values": [{ "time": 0, "scale": "NS", "value": "00000001" }] }
+      ]
+    },
+    {
+      "id": "t2",
+      "visible": false,
+      "descriptions": { "en": "(-128) + (-1) wraps to +127 — overflow", "es": "(-128) + (-1) gira a +127 — desbordamiento" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "a", "values": [{ "time": 0, "scale": "NS", "value": "10000000" }] },
+        { "portName": "b", "values": [{ "time": 0, "scale": "NS", "value": "11111111" }] }
+      ]
+    },
+    {
+      "id": "t3",
+      "visible": false,
+      "descriptions": { "en": "5 + 3 = 8 — no overflow", "es": "5 + 3 = 8 — sin desbordamiento" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "a", "values": [{ "time": 0, "scale": "NS", "value": "00000101" }] },
+        { "portName": "b", "values": [{ "time": 0, "scale": "NS", "value": "00000011" }] }
+      ]
+    },
+    {
+      "id": "t4",
+      "visible": false,
+      "descriptions": { "en": "Mixed signs: 100 + (-50) = 50 — never overflow", "es": "Signos mixtos: 100 + (-50) = 50 — nunca desborda" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "a", "values": [{ "time": 0, "scale": "NS", "value": "01100100" }] },
+        { "portName": "b", "values": [{ "time": 0, "scale": "NS", "value": "11001110" }] }
+      ]
+    },
+    {
+      "id": "t5",
+      "visible": false,
+      "descriptions": { "en": "(-100) + (-100) = -200 — overflow (out of range)", "es": "(-100) + (-100) = -200 — desbordamiento (fuera de rango)" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "a", "values": [{ "time": 0, "scale": "NS", "value": "10011100" }] },
+        { "portName": "b", "values": [{ "time": 0, "scale": "NS", "value": "10011100" }] }
+      ]
+    }
+  ]
+}

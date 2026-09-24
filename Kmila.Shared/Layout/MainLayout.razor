@@ -1,26 +1,246 @@
-﻿@inherits LayoutComponentBase
+@*
+    MainLayout Component
 
-<div class="page">
-    <div class="sidebar">
+    The main application layout that wraps all pages with consistent navigation and styling.
+
+    Features:
+    - Loading state to prevent rendering until translations are initialized
+    - RTL (Right-to-Left) support for Arabic language via dir attribute
+    - Responsive sidebar navigation (NavMenu)
+    - Top navigation bar (TopBar) with FPGA selector and settings
+    - Toast notifications positioned at top center
+    - Error UI for unhandled exceptions
+
+    Implementation Notes:
+    - Uses _isLoading flag to defer child rendering until Traductor.InitializeAsync() completes
+    - This prevents the race condition where components display translation keys instead of values
+    - Subscribes to OnLangChanged event for dynamic language switching
+    - Implements IDisposable to clean up event subscriptions
+
+    Dependencies:
+    - Traductor (injected translation service)
+    - ApplicationDbContext (injected database context for settings)
+*@
+@inherits LayoutComponentBase
+@implements IDisposable
+@* Eagerly construct the auto-error-reporter so its AppLogStore
+   subscription is live for the lifetime of the layout. The variable
+   is unused inside the component but the @inject side-effect is what
+   we want — DI instantiates it once per circuit / app session. *@
+@inject AutoErrorReporter AutoErrorReporter
+@* Same pattern for the simulation coordinator: its constructor wires
+   ProgramBuilder.OnProgressAdvanced + OnSimulationEnded into Sim, and
+   that bridge has to stay live whether or not the Editor page is
+   currently mounted — otherwise navigating away mid-run freezes the
+   sidebar / projects-card "background sim" surfaces. *@
+@inject SimulationCoordinator SimulationCoordinator
+@inject Kmila.Shared.Services.ReplayState Replay
+
+@if (!_isLoading)
+{
+    <div class="kmila-shell" dir="@(Traductor.IsRtl ? "rtl" : "ltr")" lang="@Traductor.Lang">
+
+        @* A11y skip-link — hidden until focused. Lets keyboard users bypass
+           the sidebar + TopBar on every page load. *@
+        <a class="kmila-skip-link" href="#kmila-main-content">
+            @Traductor.T("A11Y_SKIP_TO_CONTENT")
+        </a>
+
         <NavMenu />
+
+        <main class="kmila-shell__main" id="kmila-main-content" tabindex="-1">
+            <TopBar />
+
+            @* Article fills the available main area (sidebar + TopBar already
+               consume their own space). The .content rule in app.css applies
+               horizontal padding + min-width:0; views that want a tighter
+               reading column can opt in by capping their own max-width. *@
+            <article class="content px-4">
+                @Body
+            </article>
+
+            @* Slim footer — privacy link lives here so it's reachable from
+               every page without crowding the sidebar. Markup is intentionally
+               minimal; styling lives in .kmila-shell__footer (pages.css). *@
+            <footer class="kmila-shell__footer">
+                <a href="/privacy">@Traductor.T("FOOTER_PRIVACY")</a>
+            </footer>
+        </main>
     </div>
-
-    <main>
-        <div class="top-row px-4">
-            <ThemeSwitcher OnThemeChanged='async (string e) =>{
-                string theme = e == "dark" ? "vs-dark" : "vs";
-                await BlazorMonaco.Editor.Global.SetTheme(JS, theme);
-            }'/>
-        </div>
-
-        <article class="content px-4">
-            @Body
-        </article>
-    </main>
-</div>
-
+}
+else
+{
+    <div class="d-flex justify-content-center align-items-center vh-100">
+        <Spinner Type="SpinnerType.Border" Color="SpinnerColor.Primary" />
+    </div>
+}
+<KmilaToastHost />
+<SatisfactionPrompt @ref="_satisfactionPrompt" />
 <div id="blazor-error-ui" data-nosnippet>
-    An unhandled error has occurred.
-    <a href="." class="reload">Reload</a>
+    @Traductor.T("ERROR_UNHANDLED")
+    <a href="." class="reload">@Traductor.T("COMMON_RELOAD")</a>
     <span class="dismiss">🗙</span>
 </div>
+
+@code {
+    /// <summary>
+    /// Indicates whether the layout is in loading state.
+    /// When true, shows a spinner instead of the main content.
+    /// This prevents child components from rendering before translations are initialized.
+    /// </summary>
+    private bool _isLoading = true;
+
+    /// <summary>
+    /// Initializes the layout component asynchronously.
+    /// Sets up the database, loads language preferences, and initializes the translation service.
+    /// </summary>
+    /// <remarks>
+    /// The loading state (_isLoading) is set to false only AFTER Traductor.InitializeAsync() completes.
+    /// This ensures that all child components render with proper translations instead of raw keys.
+    /// </remarks>
+    protected override async Task OnInitializedAsync()
+    {
+        // Initialize database tables (creates tables if they don't exist)
+        await DbContext.InitDBAsync();
+
+        // Subscribe to language changes to refresh the layout when user switches language
+        Traductor.StaticOnLangChanged += OnLanguageChanged;
+
+        // Load saved language preference from SQLite and initialize the translation service
+        // Pass the settings reader callback for reactive language changes
+        var savedLanguage = await DbContext.GetSettingAsync(AppSettings.KEY_LANGUAGE);
+        await Traductor.InitializeAsync(savedLanguage, DbContext.GetSettingAsync);
+
+        // Apply the persisted live-replay-during-run preference before the
+        // first sim has a chance to fire. Default off — see ReplayState for
+        // the memory rationale. The setting page mutates the same property +
+        // re-persists; we only read here.
+        try
+        {
+            var raw = await DbContext.GetSettingAsync(AppSettings.KEY_LIVE_REPLAY_DURING_RUN);
+            Replay.LiveReplayDuringRun =
+                string.Equals(raw, "true", StringComparison.OrdinalIgnoreCase);
+        }
+        catch { /* missing key / DB blip — keep the default-off behaviour */ }
+
+        // Mark loading complete - this ensures children render after translations are ready
+        // Without this, components would display keys like "HOME_FEATURE_PROTOTYPING" instead of translated text
+        _isLoading = false;
+    }
+
+    /// <summary>
+    /// Per-route welcome tour. Fires the first time a user lands on each
+    /// major view (Home, Projects, Editor, Learn, Concepts, Practice,
+    /// Settings). Steps come from <see cref="TourCatalog"/>; the JS engine
+    /// owns the localStorage flag per tour, sets it on Skip/Finish, and
+    /// polls for the first step's DOM target up to ~1.5 s so we don't fire
+    /// before the page has hydrated.
+    /// </summary>
+    private bool _layoutReady;
+    private string? _lastTourRoute;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_isLoading) return;
+
+        // First render after the loading spinner clears — subscribe to
+        // navigation + fire the tour for the initial route.
+        if (!_layoutReady)
+        {
+            _layoutReady = true;
+            NavigationManager.LocationChanged += OnRouteChanged;
+            await TryFireTourForCurrentRouteAsync();
+        }
+    }
+
+    private async void OnRouteChanged(object? sender,
+        Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        try { await TryFireTourForCurrentRouteAsync(); }
+        catch { /* tour is non-essential */ }
+
+        // Occasional satisfaction-survey invite. Low per-navigation probability
+        // on top of the component's own 24h rate-limit + dismiss/answered flags,
+        // so it stays rare and never nags. Non-blocking corner card.
+        try
+        {
+            if (_satisfactionPrompt != null)
+                await _satisfactionPrompt.TryShowAsync(0.12);
+        }
+        catch { /* survey prompt is non-essential */ }
+    }
+
+    private SatisfactionPrompt? _satisfactionPrompt;
+
+    /// <summary>
+    /// Resolves the current path to a <see cref="RouteTour"/>, checks the
+    /// JS-side seen flag, and fires <c>kmilaTutorial.startWhenReady</c> if
+    /// the user hasn't seen it. Bails out fast for routes with no tour
+    /// authored (e.g. /logs, /privacy, sub-routes that share the editor
+    /// tour).
+    /// </summary>
+    private async Task TryFireTourForCurrentRouteAsync()
+    {
+        var path = new Uri(NavigationManager.Uri).AbsolutePath;
+        if (string.Equals(path, _lastTourRoute, StringComparison.OrdinalIgnoreCase))
+            return; // avoid double-firing on same-route re-renders
+        _lastTourRoute = path;
+
+        var tour = TourCatalog.GetForRoute(path, Traductor.T);
+        if (tour == null) return;
+
+        try
+        {
+            var seen = await JS.InvokeAsync<bool>("kmilaTutorial.hasSeen", tour.StorageKey);
+            if (seen) return;
+
+            // Brief delay so the route's components have a moment to mount
+            // before the engine starts polling for the first selector. The
+            // engine's own startWhenReady retries for ~1.5 s on top of this.
+            await Task.Delay(200);
+
+            var stepsPayload = new object[tour.Steps.Count];
+            for (int i = 0; i < tour.Steps.Count; i++)
+            {
+                var s = tour.Steps[i];
+                stepsPayload[i] = new { target = s.Target, title = s.Title, body = s.Body };
+            }
+
+            var labels = new
+            {
+                next   = Traductor.T("TUTORIAL_NEXT"),
+                back   = Traductor.T("TUTORIAL_BACK"),
+                skip   = Traductor.T("TUTORIAL_SKIP"),
+                finish = Traductor.T("TUTORIAL_FINISH"),
+                stepOf = Traductor.T("TUTORIAL_STEP_OF"),
+            };
+            var options = new { storageKey = tour.StorageKey };
+
+            await JS.InvokeVoidAsync("kmilaTutorial.startWhenReady",
+                stepsPayload, labels, options);
+        }
+        catch
+        {
+            // Tour engine not loaded, JS interop blocked, etc. Silent.
+        }
+    }
+
+
+    /// <summary>
+    /// Handles language change events from the Traductor service.
+    /// Triggers a re-render of the layout to update RTL direction and refresh child components.
+    /// </summary>
+    private void OnLanguageChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Cleans up event subscriptions when the component is disposed.
+    /// </summary>
+    public void Dispose()
+    {
+        Traductor.StaticOnLangChanged -= OnLanguageChanged;
+        NavigationManager.LocationChanged -= OnRouteChanged;
+    }
+}

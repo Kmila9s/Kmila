@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#334155" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)" />
+    <meta name="format-detection" content="telephone=no" />
+    <title>Kmila — VHDL Playground (Demo)</title>
+    <base href="/" />
+    <!-- ╔═══════════════════════════════════════════════════════════════════╗
+         ║   SHARED HEAD-LEVEL JS — DO NOT INLINE NEW LOGIC HERE.            ║
+         ║   Edit Kmila.Shared/wwwroot/js/kmila-shared-head.js instead so     ║
+         ║   MAUI (Kmila/wwwroot/index.html), Web (Kmila.Web/Components/      ║
+         ║   App.razor) and this WASM host stay in sync. Bump ?v= when the    ║
+         ║   shared file changes. See memory: project_dual_host_pages.md.     ║
+         ╚═══════════════════════════════════════════════════════════════════╝ -->
+    <script src="_content/Kmila.Shared/js/kmila-shared-head.js?v=14"></script>
+    <!-- Vendored (offline) Bootstrap CSS, Bootstrap Icons, JetBrains Mono.
+         Mirror any change in the MAUI + Web host pages. -->
+    <link rel="stylesheet" href="_content/Kmila.Shared/lib/jetbrains-mono/jetbrains-mono.css">
+    <link rel="stylesheet" href="_content/Kmila.Shared/lib/bootstrap/bootstrap.min.css">
+    <link rel="stylesheet" href="_content/Kmila.Shared/lib/bootstrap-icons/bootstrap-icons.min.css">
+    <link href="_content/Blazor.Bootstrap/blazor.bootstrap.css" rel="stylesheet" />
+
+    <!-- Mermaid diagram rendering (shared with the other hosts via the same API). -->
+    <script type="module">
+        import mermaid from '/_content/Kmila.Shared/lib/mermaid/mermaid.esm.min.mjs';
+        const cssVar = (name, fallback) => {
+            const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+            return v || fallback;
+        };
+        const kmilaMermaidConfig = () => {
+            const dark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+            return {
+                startOnLoad: false,
+                securityLevel: 'strict',
+                theme: 'base',
+                themeVariables: {
+                    fontFamily: cssVar('--font-sans', 'system-ui, sans-serif'),
+                    background: cssVar('--surface-1', dark ? '#0f172a' : '#ffffff'),
+                    primaryColor: cssVar('--surface-2', dark ? '#1e293b' : '#f1f5f9'),
+                    primaryTextColor: cssVar('--text-strong', dark ? '#f8fafc' : '#0f172a'),
+                    primaryBorderColor: cssVar('--kmila-accent', '#1f57c4'),
+                    lineColor: cssVar('--text-muted', dark ? '#94a3b8' : '#64748b'),
+                    secondaryColor: cssVar('--surface-3', dark ? '#334155' : '#e2e8f0'),
+                    tertiaryColor: cssVar('--surface-2', dark ? '#1e293b' : '#f8fafc'),
+                    textColor: cssVar('--text-default', dark ? '#e2e8f0' : '#1e293b'),
+                },
+            };
+        };
+        mermaid.initialize(kmilaMermaidConfig());
+        let mermaidRunning = false;
+        let mermaidPending = false;
+        window.kmilaMermaidRun = async function () {
+            if (mermaidRunning) { mermaidPending = true; return; }
+            mermaidRunning = true;
+            try {
+                do {
+                    mermaidPending = false;
+                    await new Promise(r => requestAnimationFrame(r));
+                    const nodes = Array.from(document.querySelectorAll('pre.mermaid:not([data-processed])'));
+                    for (const el of nodes) {
+                        if (!el.hasAttribute('data-kmila-mermaid-src')) {
+                            el.setAttribute('data-kmila-mermaid-src', el.textContent || '');
+                        }
+                    }
+                    for (const el of nodes) {
+                        const src = el.getAttribute('data-kmila-mermaid-src') || '';
+                        try {
+                            await mermaid.parse(src);
+                            await mermaid.run({ nodes: [el] });
+                        } catch (e) {
+                            console.warn('[mermaid]', e, src.slice(0, 80));
+                            el.removeAttribute('data-processed');
+                        }
+                    }
+                } while (mermaidPending);
+            } finally {
+                mermaidRunning = false;
+            }
+        };
+        new MutationObserver(() => {
+            mermaid.initialize(kmilaMermaidConfig());
+            document.querySelectorAll('pre.mermaid').forEach(el => {
+                var src = el.getAttribute('data-kmila-mermaid-src');
+                if (src !== null) el.textContent = src;
+                el.removeAttribute('data-processed');
+            });
+            window.kmilaMermaidRun();
+        }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-bs-theme'] });
+        window.addEventListener('load', () => window.kmilaMermaidRun());
+    </script>
+    <!-- ╔═══════════════════════════════════════════════════════════════════╗
+         ║   SHARED DESIGN STYLESHEETS — KEEP IN SYNC WITH THE MAUI + WEB     ║
+         ║   HOST PAGES. Bump every ?v= together when a referenced file       ║
+         ║   changes. See memory: project_dual_host_pages.md.                ║
+         ╚═══════════════════════════════════════════════════════════════════╝ -->
+    <link rel="stylesheet" href="_content/Kmila.Shared/css/tokens.css?v=8" />
+    <link rel="stylesheet" href="_content/Kmila.Shared/app.css?v=8" />
+    <link rel="stylesheet" href="_content/Kmila.Shared/css/pages.css?v=39" />
+    <link rel="stylesheet" href="_content/Kmila.Shared/css/buttons.css?v=13" />
+    <link rel="stylesheet" href="app.css" />
+    <link rel="stylesheet" href="Kmila.Wasm.styles.css" />
+    <link rel="icon" href="data:,">
+</head>
+
+<body>
+
+    <div id="app">
+        <div class="kmila-boot">
+            <div class="kmila-boot-spinner"></div>
+            <div class="kmila-boot-label">Loading Kmila…</div>
+            <div class="kmila-boot-sub">Compiling the VHDL engine in your browser</div>
+        </div>
+    </div>
+
+    <div id="blazor-error-ui">
+        An unhandled error has occurred.
+        <a href="" class="reload">Reload</a>
+        <a class="dismiss">🗙</a>
+    </div>
+
+    <!-- Vendored Bootstrap JS, Chart.js + datalabels, SortableJS, Blazor.Bootstrap.
+         All under Kmila.Shared/wwwroot/lib/ (offline-first, shared across hosts). -->
+    <script src="_content/Kmila.Shared/lib/bootstrap/bootstrap.bundle.min.js"></script>
+    <script src="_content/Kmila.Shared/lib/chartjs/chart.umd.js"></script>
+    <script src="_content/Kmila.Shared/lib/jspdf/jspdf.umd.min.js"></script>
+    <script src="_content/Kmila.Shared/lib/chartjs/chartjs-plugin-datalabels.min.js"></script>
+    <script src="_content/Kmila.Shared/lib/sortablejs/Sortable.min.js"></script>
+    <script src="_content/Blazor.Bootstrap/blazor.bootstrap.js"></script>
+
+    <!-- kmila-blocks: visual-programming engine for /concepts/exercise/*. -->
+    <script src="_content/Kmila.Shared/js/kmila-blocks.js"></script>
+    <script src="_content/Kmila.Shared/js/kmila-blocks-vhdl.js"></script>
+
+    <!-- WebAudio wrapper for the buzzer widget (needs a user gesture to unlock). -->
+    <script src="_content/Kmila.Shared/js/kmila-audio.js"></script>
+
+    <!-- Run Monaco's language services on the main thread. Avoids first-run
+         worker-URL/cross-origin surprises on a static host; language services
+         are slightly slower but correct, which is what a demo wants. -->
+    <script>
+      (function () {
+        var stubUrl = URL.createObjectURL(new Blob([''], { type: 'application/javascript' }));
+        window.MonacoEnvironment = window.MonacoEnvironment || {};
+        window.MonacoEnvironment.getWorkerUrl = function () { return stubUrl; };
+        window.MonacoEnvironment.getWorker = function () { return new Worker(stubUrl); };
+      })();
+    </script>
+    <script src="_content/BlazorMonaco/jsInterop.js"></script>
+    <script src="_content/BlazorMonaco/lib/monaco-editor/min/vs/loader.js"></script>
+    <script src="_content/BlazorMonaco/lib/monaco-editor/min/vs/editor/editor.main.js"></script>
+    <!-- VHDL language support — must load after Monaco editor. -->
+    <script src="_content/Kmila.Shared/js/vhdl-data/vhdl-data.en.js"></script>
+    <script src="_content/Kmila.Shared/js/vhdl-data/vhdl-data.es.js"></script>
+    <script src="_content/Kmila.Shared/js/vhdl-data/vhdl-data.fr.js"></script>
+    <script src="_content/Kmila.Shared/js/vhdl-data/vhdl-data.de.js"></script>
+    <script src="_content/Kmila.Shared/js/vhdl-data/vhdl-data.ch.js"></script>
+    <script src="_content/Kmila.Shared/js/vhdl-data/vhdl-data.jp.js"></script>
+    <script src="_content/Kmila.Shared/js/vhdl-data/vhdl-data.ar.js"></script>
+    <script src="_content/Kmila.Shared/js/vhdl.js"></script>
+    <script src="_content/Kmila.Shared/js/lesson-code.js?v=20260522a"></script>
+    <!-- Kmila app utilities (file download helpers used by WebFileExportService). -->
+    <script src="_content/Kmila.Shared/js/app.js?v=20260719a"></script>
+    <!-- Visual Runtime canvas rasteriser + export + recording. -->
+    <script src="_content/Kmila.Shared/js/kmila-canvas-paint.js?v=1"></script>
+    <script src="_content/Kmila.Shared/js/kmila-canvas-export.js?v=4"></script>
+    <script src="_content/Kmila.Shared/js/kmila-canvas-record.js?v=4"></script>
+    <!-- Welcome tour (first-run coachmark overlay). -->
+    <script src="_content/Kmila.Shared/js/kmila-tutorial.js?v=3"></script>
+
+    <!-- OPFS <-> MEMFS persistence sync for the /kmila tree (DB + project files). -->
+    <script src="js/kmila-wasm-fs.js"></script>
+
+    <!-- Blazor WebAssembly bootstrap. -->
+    <script src="_framework/blazor.webassembly.js"></script>
+
+</body>
+
+</html>

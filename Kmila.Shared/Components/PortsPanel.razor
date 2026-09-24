@@ -1,0 +1,153 @@
+@*
+    PortsPanel — content for the Ports dock tab.
+
+    Renders one PortMomentInput per IN port across all parsed entities. The
+    time / scale / running flag come from <see cref="SimulationParameters"/>,
+    and port moment edits are pushed back into the same service — no local
+    copies, no manual sync with the Run bar.
+
+    Empty states:
+      • no entities           → "Build your design first" with inline Build button
+      • entities but no INs   → "This design has no input ports"
+*@
+@implements IDisposable
+@using Parser.Models
+@using Interpreter.Services
+@inject SimulationParameters Sim
+
+@{
+    IEnumerable<Entity> entities = Builder?.Parser?.Entities ?? Enumerable.Empty<Entity>();
+    var hasEntities = entities.Any();
+    var hasInputs = entities.SelectMany(e => e.Ports).Any(p => p.PortType == PortType.IN);
+    var running = Sim.State == SimState.Running || Sim.State == SimState.Paused;
+}
+
+@if (!hasEntities)
+{
+    <div class="kmila-dock__empty">
+        <div class="kmila-dock__empty-icon"><Icon Name="IconName.Diagram3" /></div>
+        <p>@Traductor.T("EDITOR_EMPTY_PORTS_NO_BUILD")</p>
+        <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--sm"
+                @onclick="() => OnBuildRequested.InvokeAsync()">
+            <Icon Name="IconName.Tools" />
+            <span>@Traductor.T("SIM_BUILD")</span>
+        </button>
+    </div>
+}
+else
+{
+    <div class="ports-panel">
+        @* Stimulus-source selector — pick between the classic port-moment
+           timeline and a VHDL testbench (Workbench mode). Both remain
+           available; the choice applies to the next Run. *@
+        <div class="ports-panel__stimulus" role="group" aria-label="@Traductor.T("STIMULUS_SOURCE_LABEL")">
+            <span class="ports-panel__stimulus-label">@Traductor.T("STIMULUS_SOURCE_LABEL")</span>
+            <div class="kmila-segmented">
+                <button type="button"
+                        class="kmila-segmented__btn @(Sim.StimulusMode == StimulusSource.PortMoments ? "kmila-segmented__btn--active" : "")"
+                        disabled="@running"
+                        @onclick="() => Sim.SetStimulusMode(StimulusSource.PortMoments)">
+                    <Icon Name="IconName.Sliders" />
+                    <span>@Traductor.T("STIMULUS_PORT_MOMENTS")</span>
+                </button>
+                <button type="button"
+                        class="kmila-segmented__btn @(Sim.StimulusMode == StimulusSource.Testbench ? "kmila-segmented__btn--active" : "")"
+                        disabled="@running"
+                        @onclick="() => Sim.SetStimulusMode(StimulusSource.Testbench)">
+                    <Icon Name="IconName.FileEarmarkCode" />
+                    <span>@Traductor.T("STIMULUS_TESTBENCH")</span>
+                </button>
+            </div>
+        </div>
+
+        @if (Sim.StimulusMode == StimulusSource.Testbench)
+        {
+            var tbFiles = (VhdlFiles ?? Enumerable.Empty<string>()).ToList();
+            <section class="ports-panel__testbench">
+                @if (tbFiles.Count == 0)
+                {
+                    <div class="kmila-dock__empty">
+                        <div class="kmila-dock__empty-icon"><Icon Name="IconName.FileEarmarkCode" /></div>
+                        <p>@Traductor.T("WORKBENCH_NO_TB_FILES")</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="form-floating">
+                        <select class="form-select" id="workbenchTb" disabled="@running"
+                                value="@(Sim.TestbenchFile ?? string.Empty)"
+                                @onchange="OnTestbenchSelected">
+                            <option value="">@Traductor.T("WORKBENCH_NONE")</option>
+                            @foreach (var f in tbFiles)
+                            {
+                                <option value="@f">@f</option>
+                            }
+                        </select>
+                        <label for="workbenchTb">@Traductor.T("WORKBENCH_PICK_TESTBENCH")</label>
+                    </div>
+                    <p class="ports-panel__testbench-info">
+                        <Icon Name="IconName.InfoCircle" />
+                        <span>@Traductor.T("WORKBENCH_INFO")</span>
+                    </p>
+                }
+            </section>
+        }
+        else if (!hasInputs)
+        {
+            <div class="kmila-dock__empty">
+                <div class="kmila-dock__empty-icon"><Icon Name="IconName.Plugin" /></div>
+                <p>@Traductor.T("EDITOR_EMPTY_PORTS_NO_IN")</p>
+            </div>
+        }
+        else
+        {
+            @foreach (var entity in entities.Where(e => e.Ports.Any(p => p.PortType == PortType.IN)))
+            {
+                <section class="ports-panel__entity">
+                    <header class="ports-panel__entity-head">
+                        <Icon Name="IconName.Diagram3Fill" />
+                        <span class="ports-panel__entity-name">@entity.Name</span>
+                    </header>
+                    <div class="ports-panel__list">
+                        @foreach (var port in entity.Ports.Where(p => p.PortType == PortType.IN))
+                        {
+                            <PortMomentInput
+                                Variable="port"
+                                LimitTime="Sim.Time"
+                                TimeScale="Sim.Scale"
+                                IsRunning="running"
+                                InitialConfiguration="@(Sim.PortMoments.TryGetValue(port.Name ?? string.Empty, out var cfg) ? cfg : null)"
+                                OnPortMomentsChanged="@((PortMomentConfiguration c) => Sim.UpsertPortMoment(c))" />
+                        }
+                    </div>
+                </section>
+            }
+        }
+    </div>
+}
+
+@code {
+    /// <summary>Fired when the user taps the inline "Build" button in the empty state.</summary>
+    [Parameter] public EventCallback OnBuildRequested { get; set; }
+
+    /// <summary>Project-relative paths of the .vhd/.vhdl files, used to populate
+    /// the Workbench testbench picker. Supplied by the Editor.</summary>
+    [Parameter] public IEnumerable<string> VhdlFiles { get; set; } = Enumerable.Empty<string>();
+
+    private void OnTestbenchSelected(ChangeEventArgs e)
+        => Sim.SetTestbenchFile(e.Value?.ToString());
+
+    protected override void OnInitialized()
+    {
+        Sim.OnChange += OnStateChanged;
+        Traductor.StaticOnLangChanged += OnStateChanged;
+    }
+
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Sim.OnChange -= OnStateChanged;
+        Traductor.StaticOnLangChanged -= OnStateChanged;
+    }
+}

@@ -1,0 +1,128 @@
+@*
+    QuizletPanel — end-of-lesson micro-quiz for the Concepts track.
+
+    Renders a single radio question, locks in the answer on "Check", then
+    reveals an explanation. A correct answer fires OnPassed so the parent
+    can auto-mark the lesson complete. Wrong answers stay on the page so
+    the student can try again after reading the explanation.
+*@
+
+<div class="kmila-quizlet">
+    <header class="kmila-quizlet__header">
+        <Icon Name="IconName.PatchQuestionFill" />
+        <span>@Traductor.T("CONCEPTS_QUIZ_HEADER")</span>
+    </header>
+
+    <p class="kmila-quizlet__question">
+        @ConceptCatalog.Localize(Quizlet.Question, Lang, Quizlet.Question.GetValueOrDefault("en", ""))
+    </p>
+
+    <fieldset class="kmila-quizlet__options" disabled="@_locked">
+        @foreach (var opt in Quizlet.Options)
+        {
+            <label class="kmila-quizlet__option @OptionStateClass(opt)">
+                <input type="radio"
+                       name="@_groupName"
+                       value="@opt.Id"
+                       checked="@(_selected == opt.Id)"
+                       @onchange="() => OnPick(opt.Id)" />
+                <span>@ConceptCatalog.Localize(opt.Label, Lang, opt.Id)</span>
+            </label>
+        }
+    </fieldset>
+
+    @if (!_locked)
+    {
+        <button type="button"
+                class="kmila-btn kmila-btn--accent"
+                disabled="@(string.IsNullOrEmpty(_selected))"
+                @onclick="CheckAsync">
+            <Icon Name="IconName.CheckCircleFill" />
+            <span>@Traductor.T("CONCEPTS_QUIZ_CHECK")</span>
+        </button>
+    }
+    else
+    {
+        var picked = Quizlet.Options.FirstOrDefault(o => o.Id == _selected);
+        if (picked != null)
+        {
+            <div class="kmila-quizlet__feedback @(_lastWasCorrect ? "kmila-quizlet__feedback--ok" : "kmila-quizlet__feedback--miss")">
+                <Icon Name="@(_lastWasCorrect ? IconName.CheckCircleFill : IconName.XCircleFill)" />
+                <div>
+                    <strong>
+                        @Traductor.T(_lastWasCorrect ? "CONCEPTS_QUIZ_CORRECT" : "CONCEPTS_QUIZ_INCORRECT")
+                    </strong>
+                    <p>
+                        @ConceptCatalog.Localize(picked.Explanation, Lang,
+                            picked.Explanation.GetValueOrDefault("en", ""))
+                    </p>
+                </div>
+            </div>
+            @if (!_lastWasCorrect)
+            {
+                <button type="button"
+                        class="kmila-btn kmila-btn--ghost"
+                        @onclick="Retry">
+                    <Icon Name="IconName.ArrowCounterclockwise" />
+                    <span>@Traductor.T("CONCEPTS_QUIZ_RETRY")</span>
+                </button>
+            }
+        }
+    }
+</div>
+
+@code {
+    /// <summary>The quiz to render. Must have at least 2 options.</summary>
+    [Parameter, EditorRequired] public ConceptQuizlet Quizlet { get; set; } = new();
+
+    /// <summary>Current UI language — drives label / explanation localization.</summary>
+    [Parameter] public string Lang { get; set; } = "en";
+
+    /// <summary>Fires once when the student commits a correct answer.</summary>
+    [Parameter] public EventCallback OnPassed { get; set; }
+
+    private string _selected = string.Empty;
+    private bool _locked;
+    private bool _lastWasCorrect;
+    private readonly string _groupName = $"quiz-{Guid.NewGuid():N}";
+
+    private void OnPick(string id)
+    {
+        if (_locked) return;
+        _selected = id;
+    }
+
+    private async Task CheckAsync()
+    {
+        if (string.IsNullOrEmpty(_selected)) return;
+        var picked = Quizlet.Options.FirstOrDefault(o => o.Id == _selected);
+        if (picked == null) return;
+
+        _lastWasCorrect = picked.Correct;
+        _locked = true;
+
+        if (_lastWasCorrect && OnPassed.HasDelegate)
+        {
+            await OnPassed.InvokeAsync();
+        }
+    }
+
+    private void Retry()
+    {
+        _locked = false;
+        _selected = string.Empty;
+    }
+
+    /// <summary>
+    /// CSS hint per option once the quiz is locked — green for the
+    /// correct answer, red for the (wrong) selected one, neutral for the
+    /// rest. Helps students see at a glance what they should have picked.
+    /// </summary>
+    private string OptionStateClass(ConceptQuizletOption opt)
+    {
+        if (!_locked) return string.Empty;
+        if (opt.Correct) return "kmila-quizlet__option--correct";
+        if (opt.Id == _selected) return "kmila-quizlet__option--wrong";
+        return string.Empty;
+    }
+}

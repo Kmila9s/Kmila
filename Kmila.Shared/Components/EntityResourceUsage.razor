@@ -1,0 +1,89 @@
+@*
+    EntityResourceUsage — section shown inside EntityView for each parsed entity.
+
+    Renders six ResourceMetricBox cards in a responsive bento grid, plus a
+    tokenized info note explaining the accuracy caveat. All user-visible strings
+    are localized; variants are passed via the legacy BadgeColor so the metric
+    card picks up the right token color.
+*@
+@using Interpreter.Services
+
+@if (ResourceUsage != null)
+{
+    <section class="resource-usage">
+        <header class="resource-usage__header">
+            <span class="home-section__eyebrow">@Traductor.T("RESOURCE_ESTIMATED")</span>
+            <h3 class="resource-usage__title">
+                <Icon Name="IconName.CpuFill" />
+                <span>@Traductor.T("RESOURCE_USAGE_TITLE")</span>
+            </h3>
+        </header>
+
+        <div class="resource-usage__grid">
+            <ResourceMetricBox Title="@(Traductor.T("RESOURCE_FLIPFLOPS"))"
+                               Icon="IconName.ToggleOn"
+                               Value="@ResourceUsage.FlipFlops.ToString()"
+                               Unit="@(Traductor.T("RESOURCE_UNIT_FFS"))"
+                               BadgeColor="BadgeColor.Primary"
+                               AccuracyLabel="~95%" />
+
+            <ResourceMetricBox Title="@(Traductor.T("RESOURCE_LUTS"))"
+                               Icon="IconName.Grid"
+                               Value="@ResourceUsage.LUTs.ToString()"
+                               Unit="@(Traductor.T("RESOURCE_UNIT_LUTS"))"
+                               BadgeColor="BadgeColor.Success"
+                               AccuracyLabel="~70%" />
+
+            <ResourceMetricBox Title="@(Traductor.T("RESOURCE_DSP_SLICES"))"
+                               Icon="IconName.Calculator"
+                               Value="@ResourceUsage.DSPSlices.ToString()"
+                               Unit="@(Traductor.T("RESOURCE_UNIT_SLICES"))"
+                               BadgeColor="BadgeColor.Info"
+                               AccuracyLabel="~85%" />
+
+            <ResourceMetricBox Title="@(Traductor.T("RESOURCE_BRAM"))"
+                               Icon="IconName.Memory"
+                               Value="@ResourceUsage.BRAMBlocks.ToString("F1")"
+                               Unit="@(Traductor.T("RESOURCE_UNIT_BLOCKS"))"
+                               BadgeColor="BadgeColor.Warning"
+                               AccuracyLabel="~85%" />
+
+            <ResourceMetricBox Title="@(Traductor.T("RESOURCE_IO_PINS"))"
+                               Icon="IconName.Plugin"
+                               Value="@ResourceUsage.IOPins.ToString()"
+                               Unit="@(Traductor.T("RESOURCE_UNIT_PINS"))"
+                               BadgeColor="BadgeColor.Danger"
+                               AccuracyLabel="@(Traductor.T("RESOURCE_ACCURACY_EXACT"))" />
+
+            <ResourceMetricBox Title="@(Traductor.T("RESOURCE_CLOCK_DOMAINS"))"
+                               Icon="IconName.Clock"
+                               Value="@ResourceUsage.ClockDomains.ToString()"
+                               Unit="@(Traductor.T("RESOURCE_UNIT_DOMAINS"))"
+                               BadgeColor="BadgeColor.Secondary"
+                               AccuracyLabel="@(Traductor.T("RESOURCE_ACCURACY_EXACT"))">
+                @if (ResourceUsage.ClockSignals.Any())
+                {
+                    <div class="resource-metric__chips">
+                        @foreach (var clk in ResourceUsage.ClockSignals)
+                        {
+                            <span class="resource-metric__chip">@clk</span>
+                        }
+                    </div>
+                }
+            </ResourceMetricBox>
+        </div>
+
+        <div class="resource-usage__note" role="note">
+            <Icon Name="IconName.InfoCircleFill" />
+            <p>
+                <strong>@Traductor.T("RESOURCE_NOTE_HEADING"):</strong>
+                @Traductor.T("RESOURCE_NOTE_BODY")
+            </p>
+        </div>
+    </section>
+}
+
+@code {
+    [Parameter]
+    public Resources? ResourceUsage { get; set; }
+}

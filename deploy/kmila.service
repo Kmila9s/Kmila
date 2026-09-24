@@ -1,0 +1,33 @@
+# systemd unit for the Kmila web app (native / framework-dependent publish).
+# Template — install.sh substitutes __DOTNET__ with the resolved `dotnet` path
+# and installs this to /etc/systemd/system/kmila.service.
+#
+# Data (SQLite DB, imported packs, library cache) lives under the service
+# user's HOME (/var/lib/kmila); ExecStartPre pre-creates $HOME/.config because
+# .NET's Environment.GetFolderPath(ApplicationData) verifies the dir exists and
+# returns "" otherwise (same lesson as the container).
+
+[Unit]
+Description=Kmila — VHDL learning & debugging tool (web)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kmila
+Group=kmila
+WorkingDirectory=/opt/kmila
+Environment=HOME=/var/lib/kmila
+Environment=XDG_CONFIG_HOME=/var/lib/kmila/.config
+Environment=ASPNETCORE_URLS=http://+:8080
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=DOTNET_CLI_TELEMETRY_OPTOUT=1
+StateDirectory=kmila
+ExecStartPre=/bin/sh -c 'mkdir -p "$XDG_CONFIG_HOME"'
+ExecStart=__DOTNET__ /opt/kmila/Kmila.Web.dll
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,186 @@
+@namespace Kmila.Shared.Components.VisualRun
+@using Kmila.Shared.Services.VisualRun
+@inject Microsoft.JSInterop.IJSRuntime JS
+@implements IAsyncDisposable
+
+@*
+    Piezo buzzer widget (FW-5).
+
+    Two operating modes via the `mode` config key:
+      • "freq" (default, assisted) — 2 pins: `freq_hz` (16-bit unsigned
+                                    Hz) + `enable` (std_logic gate). The
+                                    widget parses freq_hz each frame and
+                                    retunes the shared Web Audio
+                                    oscillator whenever enable = '1'.
+      • "signal" (raw)             — 1 pin `signal`. Student drives the
+                                    PWM themselves. v1 only shows a
+                                    visual pulse; frequency measurement
+                                    + audio for raw mode is deferred.
+
+    Audio uses the `window.kmilaAudio` module (kmila-audio.js). iOS +
+    Android WebView both suspend AudioContext until the first user
+    gesture; the buzzer eagerly calls setTone anyway, and the next
+    user-gestured button/switch press unlocks the context so the tone
+    resumes on the next tick.
+
+    Run-state gating: the tone is only emitted while the coordinator is
+    actively ticking (see CoordinatorActive). When the sim is stopped or
+    paused — including the auto-pause on tab-switch — the port values freeze
+    at their last state, so this gate is what turns the oscillator off (the
+    next render pushes silence). VisualPanel also calls kmilaAudio.stopAll()
+    on stop / tab-hide as an immediate belt-and-suspenders silence.
+*@
+
+<div class="kviz-widget kviz-buzzer kviz-buzzer--mode-@Mode @(EditMode ? "kviz-buzzer--edit" : "") @(IsActive ? "kviz-buzzer--active" : "") @(Selected ? "kviz-widget--selected" : "")"
+     style="left:@(Comp.Position.X)px; top:@(Comp.Position.Y)px;"
+     data-component-id="@Comp.Id"
+     data-mode="@Mode"
+     data-active="@(IsActive ? "1" : "0")"
+     data-freq="@FreqHz"
+     @onpointerdown="HandlePointerDown">
+    <div class="kviz-buzzer__body">
+        <span class="kviz-buzzer__ring kviz-buzzer__ring--1" aria-hidden="true"></span>
+        <span class="kviz-buzzer__ring kviz-buzzer__ring--2" aria-hidden="true"></span>
+        <svg class="kviz-buzzer__icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/>
+            <path d="M15.5 8.5c1.2 1.2 1.2 5.8 0 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+            <path d="M18 6c2.5 2.5 2.5 9.5 0 12" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        </svg>
+    </div>
+    <div class="kviz-buzzer__meta">
+        <div class="kviz-buzzer__freq">@FreqLabel</div>
+        <div class="kviz-buzzer__port">@PortLabel</div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public KvizComponent Comp { get; set; } = default!;
+    [Parameter] public VisualRunCoordinator? Coordinator { get; set; }
+    [Parameter] public bool EditMode { get; set; }
+    [Parameter] public bool Selected { get; set; }
+    [Parameter] public EventCallback<Microsoft.AspNetCore.Components.Web.PointerEventArgs> OnPointerDownExternal { get; set; }
+
+    [CascadingParameter(Name = "FrameVersion")] public int FrameVersion { get; set; }
+
+    // Tracks the last (freq, active) tuple pushed to JS so we don't
+    // spam the audio node on identical repaints. Reset in Dispose.
+    private int _lastFreqPushed = -1;
+    private bool _lastActivePushed;
+    private bool _voiceAllocated;
+
+    // The buzzer is only audible/visibly ringing while the coordinator is
+    // actively ticking. When the run is stopped or paused (including the
+    // auto-pause on tab-switch) the port values FREEZE at their last state —
+    // often enable='1', freq>0 — so without this gate the tone would keep
+    // droning after the sim halts. Gating IsActive on the run state makes the
+    // next render (StopRun/Pause both trigger one) push silence.
+    private bool CoordinatorActive => Coordinator is { IsRunning: true, IsPaused: false };
+
+    private string Mode => Comp.Config.GetString("mode", "freq") == "signal" ? "signal" : "freq";
+
+    private int FreqHz
+    {
+        get
+        {
+            if (Coordinator == null) return 0;
+            if (Mode == "signal") return 0; // raw-mode audio deferred; no measured Hz
+            if (!Comp.Bindings.TryGetValue("freq_hz", out var port) || string.IsNullOrEmpty(port))
+                return 0;
+            var raw = Coordinator.LatestSlicedValue(port);
+            if (string.IsNullOrEmpty(raw)) return 0;
+            int hz = 0;
+            foreach (var ch in raw)
+            {
+                hz <<= 1;
+                if (ch == '1') hz |= 1;
+                else if (ch != '0') return 0; // U/X/Z → silent
+            }
+            return hz;
+        }
+    }
+
+    private bool EnableHigh
+    {
+        get
+        {
+            if (Coordinator == null) return false;
+            if (Mode == "signal")
+            {
+                if (!Comp.Bindings.TryGetValue("signal", out var port) || string.IsNullOrEmpty(port))
+                    return false;
+                var v = Coordinator.LatestSlicedValue(port);
+                return !string.IsNullOrEmpty(v) && v[^1] == '1';
+            }
+            if (!Comp.Bindings.TryGetValue("enable", out var ep) || string.IsNullOrEmpty(ep))
+                return true; // assisted with no gate → always on when freq_hz > 0
+            var ev = Coordinator.LatestSlicedValue(ep);
+            return !string.IsNullOrEmpty(ev) && ev[^1] == '1';
+        }
+    }
+
+    private bool IsActive => CoordinatorActive && EnableHigh && (Mode == "signal" || FreqHz > 0);
+
+    private string FreqLabel => Mode == "signal"
+        ? (EnableHigh ? "on" : "off")
+        : (IsActive ? $"{FreqHz} Hz" : "off");
+
+    private string PortLabel
+    {
+        get
+        {
+            if (Mode == "signal")
+            {
+                return Comp.Bindings.TryGetValue("signal", out var p) && !string.IsNullOrEmpty(p)
+                    ? p : "(unwired)";
+            }
+            var fp = Comp.Bindings.TryGetValue("freq_hz", out var f) ? f : null;
+            var en = Comp.Bindings.TryGetValue("enable", out var e) ? e : null;
+            if (string.IsNullOrEmpty(fp) && string.IsNullOrEmpty(en)) return "(unwired)";
+            return $"{fp ?? "?"} · {en ?? "?"}";
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Push the current (freq, active) state to the audio subsystem.
+        // `active` folds in the run state (via IsActive), so when the sim is
+        // stopped/paused the tone is switched off on the very next render even
+        // though the frozen port values still read "enabled". Only invoke JS
+        // when something changed so we don't hammer interop every frame.
+        int hz = FreqHz;
+        bool active = Mode == "freq" && IsActive; // freq-mode audio only
+        bool changed = firstRender || hz != _lastFreqPushed || active != _lastActivePushed;
+        if (!changed) return;
+        _lastFreqPushed = hz;
+        _lastActivePushed = active;
+        try
+        {
+            if (active)
+            {
+                await JS.InvokeVoidAsync("kmilaAudio.setTone", Comp.Id, hz, 0.10);
+                _voiceAllocated = true;
+            }
+            else if (_voiceAllocated)
+            {
+                await JS.InvokeVoidAsync("kmilaAudio.stop", Comp.Id);
+            }
+        }
+        catch { /* JS not ready during prerender / SSR — retry next pass */ }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (!_voiceAllocated) return;
+        try
+        {
+            await JS.InvokeVoidAsync("kmilaAudio.dispose", Comp.Id);
+        }
+        catch { /* JS gone with the circuit; nothing to release */ }
+    }
+
+    private async Task HandlePointerDown(Microsoft.AspNetCore.Components.Web.PointerEventArgs e)
+    {
+        if (OnPointerDownExternal.HasDelegate)
+            await OnPointerDownExternal.InvokeAsync(e);
+    }
+}

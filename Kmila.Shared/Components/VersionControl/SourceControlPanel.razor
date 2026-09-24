@@ -1,0 +1,482 @@
+@using Kmila.Shared.Models.VersionControl
+@using Kmila.Shared.Services.VersionControl
+@implements IDisposable
+@inject IProjectVersionControl Vc
+@inject GitHubAuth GitHubAuth
+@inject IServiceProvider SP
+
+@*
+    Source Control dock panel — VSCode-like: link/create a repo, see changes,
+    commit+push, pull, browse history, view per-file diffs. All GitHub traffic
+    is explicit (or per-project auto-commit) and only on Web/MAUI; the WASM demo
+    hides it (GitHub is CORS-blocked there).
+*@
+<div class="sc-panel">
+    @if (!(_demo?.AllowGitHubLogin ?? true))
+    {
+        <div class="kmila-dock__empty">
+            <div class="kmila-dock__empty-icon"><Icon Name="IconName.Git" /></div>
+            <p>@Traductor.T("VC_UNAVAILABLE_DEMO")</p>
+        </div>
+    }
+    else if (!GitHubAuth.IsLoggedIn)
+    {
+        <div class="kmila-dock__empty">
+            <div class="kmila-dock__empty-icon"><Icon Name="IconName.Github" /></div>
+            <p>@Traductor.T("VC_SIGN_IN_PROMPT")</p>
+            <a href="/settings" class="kmila-btn kmila-btn--accent kmila-btn--sm">
+                <Icon Name="IconName.GearFill" />
+                <span>@Traductor.T("VC_GO_SETTINGS")</span>
+            </a>
+        </div>
+    }
+    else if (_link == null)
+    {
+        @* Not linked — offer link-existing / create-new *@
+        @if (_mode == Mode.Link)
+        {
+            <div class="sc-form">
+                <h4>@Traductor.T("VC_LINK_TITLE")</h4>
+                @if (_repos != null && _repos.Count > 0)
+                {
+                    <div class="form-floating mb-2">
+                        <select class="form-select" id="scRepoPick" @onchange="OnRepoPicked">
+                            <option value="">@Traductor.T("VC_LINK_PICK")</option>
+                            @foreach (var r in _repos)
+                            {
+                                <option value="@r.FullName">@r.FullName@(r.Private ? " 🔒" : "")</option>
+                            }
+                        </select>
+                        <label for="scRepoPick">@Traductor.T("VC_LINK_PICK")</label>
+                    </div>
+                }
+                <div class="sc-form__row">
+                    <input class="form-control" placeholder="@Traductor.T("VC_LINK_OWNER")" @bind="_linkOwner" />
+                    <input class="form-control" placeholder="@Traductor.T("VC_LINK_REPO")" @bind="_linkRepo" />
+                    <input class="form-control sc-form__branch" placeholder="@Traductor.T("VC_LINK_BRANCH")" @bind="_linkBranch" />
+                </div>
+                <div class="sc-form__actions">
+                    <button class="kmila-btn kmila-btn--ghost kmila-btn--sm" @onclick="() => _mode = Mode.None" disabled="@_busy">@Traductor.T("VC_CANCEL")</button>
+                    <button class="kmila-btn kmila-btn--accent kmila-btn--sm" @onclick="ConfirmLinkAsync"
+                            disabled="@(_busy || string.IsNullOrWhiteSpace(_linkOwner) || string.IsNullOrWhiteSpace(_linkRepo))">
+                        @Traductor.T("VC_LINK_EXISTING")
+                    </button>
+                </div>
+            </div>
+        }
+        else if (_mode == Mode.Create)
+        {
+            <div class="sc-form">
+                <h4>@Traductor.T("VC_CREATE_TITLE")</h4>
+                <input class="form-control mb-2" placeholder="@Traductor.T("VC_CREATE_NAME")" @bind="_createName" />
+                <input class="form-control mb-2" placeholder="@Traductor.T("VC_CREATE_DESC")" @bind="_createDesc" />
+                <label class="sc-form__check">
+                    <input type="checkbox" @bind="_createPrivate" disabled="@(!_privateScopeOn)" />
+                    <span>@Traductor.T("VC_CREATE_PRIVATE")</span>
+                </label>
+                @if (!_privateScopeOn)
+                {
+                    <p class="sc-form__hint">@Traductor.T("VC_CREATE_PRIVATE_HINT")</p>
+                }
+                <div class="sc-form__actions">
+                    <button class="kmila-btn kmila-btn--ghost kmila-btn--sm" @onclick="() => _mode = Mode.None" disabled="@_busy">@Traductor.T("VC_CANCEL")</button>
+                    <button class="kmila-btn kmila-btn--accent kmila-btn--sm" @onclick="CreateRepoAsync"
+                            disabled="@(_busy || string.IsNullOrWhiteSpace(_createName))">
+                        @Traductor.T("VC_CREATE_BUTTON")
+                    </button>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="kmila-dock__empty">
+                <div class="kmila-dock__empty-icon"><Icon Name="IconName.Git" /></div>
+                <h4>@Traductor.T("VC_NOT_LINKED_TITLE")</h4>
+                <p>@Traductor.T("VC_NOT_LINKED_BODY")</p>
+                <div class="sc-form__actions">
+                    <button class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm" @onclick="OpenLinkAsync">
+                        <Icon Name="IconName.Link" /> <span>@Traductor.T("VC_LINK_EXISTING")</span>
+                    </button>
+                    <button class="kmila-btn kmila-btn--accent kmila-btn--sm" @onclick="OpenCreateAsync">
+                        <Icon Name="IconName.PlusLg" /> <span>@Traductor.T("VC_CREATE_NEW")</span>
+                    </button>
+                </div>
+            </div>
+        }
+    }
+    else
+    {
+        @* Linked — toolbar + changes / history / diff *@
+        <div class="sc-header">
+            <a class="sc-header__repo" href="https://github.com/@_link.Owner/@_link.Repo" target="_blank" rel="noopener noreferrer">
+                <Icon Name="IconName.Github" /> <span>@_link.Owner/@_link.Repo</span>
+                <span class="sc-header__branch">@_link.Branch</span>
+            </a>
+            <label class="sc-header__auto" title="@Traductor.T("VC_AUTOCOMMIT_HINT")">
+                <input type="checkbox" checked="@_link.AutoCommit" @onchange="ToggleAutoCommitAsync" disabled="@_busy" />
+                <span>@Traductor.T("VC_AUTOCOMMIT")</span>
+            </label>
+        </div>
+
+        <div class="sc-toolbar">
+            <button class="kmila-btn kmila-btn--ghost kmila-btn--sm" @onclick="RefreshAsync" disabled="@_busy" title="@Traductor.T("VC_REFRESH")">
+                <Icon Name="IconName.ArrowRepeat" /> <span>@Traductor.T("VC_REFRESH")</span>
+            </button>
+            <button class="kmila-btn kmila-btn--ghost kmila-btn--sm" @onclick="PullAsync" disabled="@_busy" title="@Traductor.T("VC_PULL")">
+                <Icon Name="IconName.CloudArrowDown" /> <span>@Traductor.T("VC_PULL")</span>
+            </button>
+            <button class="kmila-btn kmila-btn--accent kmila-btn--sm" @onclick="() => { _mode = Mode.Commit; _view = View.Changes; }"
+                    disabled="@(_busy || _status is null || !_status.HasChanges)" title="@Traductor.T("VC_COMMIT")">
+                <Icon Name="IconName.CloudArrowUp" /> <span>@Traductor.T("VC_COMMIT")</span>
+            </button>
+            <button class="kmila-btn kmila-btn--ghost kmila-btn--sm @(_view == View.History ? "is-active" : "")" @onclick="ShowHistoryAsync" disabled="@_busy">
+                <Icon Name="IconName.ClockHistory" /> <span>@Traductor.T("VC_HISTORY")</span>
+            </button>
+            <button class="kmila-btn kmila-btn--ghost kmila-btn--sm sc-toolbar__unlink" @onclick="UnlinkAsync" disabled="@_busy" title="@Traductor.T("VC_UNLINK")">
+                <Icon Name="IconName.XCircle" />
+            </button>
+        </div>
+
+        @if (_busy)
+        {
+            <div class="sc-busy"><Spinner Type="SpinnerType.Border" Size="SpinnerSize.Small" /> <span>@Traductor.T("COMMON_LOADING")</span></div>
+        }
+
+        @if (_mode == Mode.Commit)
+        {
+            <div class="sc-commit">
+                <textarea class="form-control" rows="2" placeholder="@Traductor.T("VC_COMMIT_PLACEHOLDER")" @bind="_commitMessage"></textarea>
+                <div class="sc-form__actions">
+                    <button class="kmila-btn kmila-btn--ghost kmila-btn--sm" @onclick="() => _mode = Mode.None" disabled="@_busy">@Traductor.T("VC_CANCEL")</button>
+                    <button class="kmila-btn kmila-btn--success kmila-btn--sm" @onclick="CommitAsync" disabled="@_busy">
+                        @Traductor.T("VC_COMMIT_BUTTON")
+                    </button>
+                </div>
+            </div>
+        }
+
+        @if (_view == View.History)
+        {
+            <div class="sc-history">
+                @if (_history == null || _history.Count == 0)
+                {
+                    <p class="kmila-muted sc-empty-line">@Traductor.T("VC_HISTORY_EMPTY")</p>
+                }
+                else
+                {
+                    @foreach (var c in _history)
+                    {
+                        <a class="sc-commit-row" href="@c.HtmlUrl" target="_blank" rel="noopener noreferrer">
+                            <span class="sc-commit-row__msg">@FirstLine(c.Message)</span>
+                            <span class="sc-commit-row__meta">@c.AuthorName · @c.ShortSha · @c.Date.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</span>
+                        </a>
+                    }
+                }
+            </div>
+        }
+        else
+        {
+            <div class="sc-changes">
+                @if (_status == null || !_status.HasChanges)
+                {
+                    <p class="kmila-muted sc-empty-line">@Traductor.T("VC_NO_CHANGES")</p>
+                }
+                else
+                {
+                    @foreach (var ch in _status.Changes)
+                    {
+                        var localCh = ch;
+                        <button class="sc-change-row @(_selectedDiffPath == ch.RelativePath ? "is-selected" : "")"
+                                @onclick="() => ShowDiffAsync(localCh.RelativePath)">
+                            <span class="sc-badge sc-badge--@ch.Kind.ToString().ToLowerInvariant()">@BadgeLetter(ch.Kind)</span>
+                            <span class="sc-change-row__path">@ch.RelativePath</span>
+                        </button>
+                    }
+                }
+
+                @if (_selectedDiffPath != null && _diffText != null)
+                {
+                    <div class="sc-diff">
+                        @foreach (var line in _diffLines)
+                        {
+                            <div class="sc-diff__line sc-diff__line--@line.Cls">@line.Text</div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    }
+</div>
+
+<ConfirmDialog @ref="_confirm" />
+
+@code {
+    [Parameter] public int ProjectId { get; set; }
+    /// <summary>Fires with the current changed-file count so the dock badge updates.</summary>
+    [Parameter] public EventCallback<int> OnChangedCountChanged { get; set; }
+
+    private IDemoCapabilities? _demo => SP.GetService(typeof(IDemoCapabilities)) as IDemoCapabilities;
+
+    private enum Mode { None, Link, Create, Commit }
+    private enum View { Changes, History }
+
+    private VcProjectLink? _link;
+    private VcStatus? _status;
+    private List<VcCommit>? _history;
+    private List<VcRepoInfo>? _repos;
+    private Mode _mode = Mode.None;
+    private View _view = View.Changes;
+    private bool _busy;
+    private bool _privateScopeOn;
+
+    private string _linkOwner = "";
+    private string _linkRepo = "";
+    private string _linkBranch = "main";
+    private string _createName = "";
+    private string _createDesc = "";
+    private bool _createPrivate;
+    private string _commitMessage = "";
+
+    private string? _selectedDiffPath;
+    private string? _diffText;
+    private List<(string Cls, string Text)> _diffLines = new();
+
+    private ConfirmDialog _confirm = default!;
+
+    protected override void OnInitialized()
+    {
+        GitHubAuth.OnChange += OnAuthChanged;
+        Traductor.StaticOnLangChanged += OnAuthChanged;
+    }
+
+    private int _loadedForProject = -1;
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ProjectId != _loadedForProject)
+        {
+            _loadedForProject = ProjectId;
+            await LoadAsync();
+        }
+    }
+
+    private void OnAuthChanged() => InvokeAsync(async () => { await LoadAsync(); });
+
+    public void Dispose()
+    {
+        GitHubAuth.OnChange -= OnAuthChanged;
+        Traductor.StaticOnLangChanged -= OnAuthChanged;
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            await GitHubAuth.RestoreAsync();
+            _privateScopeOn = await GitHubAuth.GetPrivateScopeAsync();
+            if (ProjectId <= 0) { _link = null; _status = null; return; }
+            _link = await Vc.GetLinkAsync(ProjectId);
+            _status = _link != null && GitHubAuth.IsLoggedIn ? await Vc.GetStatusAsync(ProjectId) : null;
+            await NotifyCountAsync();
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+        finally { StateHasChanged(); }
+    }
+
+    private async Task NotifyCountAsync()
+        => await OnChangedCountChanged.InvokeAsync(_status?.Changes.Count ?? 0);
+
+    // ─── Link / create ───────────────────────────────────────────
+
+    private async Task OpenLinkAsync()
+    {
+        _mode = Mode.Link;
+        _linkOwner = GitHubAuth.Account?.Login ?? "";
+        _repos = await Vc_ListReposSafe();
+        StateHasChanged();
+    }
+
+    private async Task<List<VcRepoInfo>?> Vc_ListReposSafe()
+    {
+        // ListRepos lives on GitHubRemote, reached through the service graph via
+        // a pull-style call would be heavy; instead resolve GitHubRemote directly.
+        try
+        {
+            var remote = SP.GetService(typeof(GitHubRemote)) as GitHubRemote;
+            return remote == null ? null : await remote.ListReposAsync();
+        }
+        catch { return null; }
+    }
+
+    private void OnRepoPicked(ChangeEventArgs e)
+    {
+        var full = e.Value?.ToString();
+        if (string.IsNullOrEmpty(full)) return;
+        var slash = full.IndexOf('/');
+        if (slash > 0) { _linkOwner = full[..slash]; _linkRepo = full[(slash + 1)..]; }
+    }
+
+    private void OpenCreateAsync()
+    {
+        _mode = Mode.Create;
+        _createName = "";
+        _createPrivate = false;
+    }
+
+    private async Task ConfirmLinkAsync()
+    {
+        var ok = await _confirm.ShowAsync(
+            Traductor.T("VC_LINK_CONFIRM_TITLE"),
+            Traductor.T("VC_LINK_CONFIRM_BODY"),
+            DangerOptions(Traductor.T("VC_LINK_EXISTING")));
+        if (!ok) return;
+        await RunAsync(() => Vc.LinkExistingAsync(ProjectId, _linkOwner, _linkRepo, _linkBranch));
+        _mode = Mode.None;
+    }
+
+    private async Task CreateRepoAsync()
+    {
+        await RunAsync(() => Vc.CreateAndLinkAsync(ProjectId, _createName, _createDesc, _createPrivate));
+        _mode = Mode.None;
+    }
+
+    // ─── Linked actions ──────────────────────────────────────────
+
+    private async Task RefreshAsync() => await LoadAsync();
+
+    private async Task ToggleAutoCommitAsync(ChangeEventArgs e)
+    {
+        var on = e.Value is bool b && b;
+        await Vc.SetAutoCommitAsync(ProjectId, on);
+        _link = await Vc.GetLinkAsync(ProjectId);
+        StateHasChanged();
+    }
+
+    private async Task CommitAsync()
+    {
+        var msg = _commitMessage;
+        await RunAsync(async () =>
+        {
+            var r = await Vc.CommitAndPushAsync(ProjectId, msg);
+            if (r.Outcome == VcOutcome.NeedsPull)
+            {
+                var pull = await _confirm.ShowAsync(Traductor.T("VC_NEEDS_PULL_TITLE"),
+                    Traductor.T("VC_NEEDS_PULL_BODY"), DangerOptions(Traductor.T("VC_PULL")));
+                if (pull) { await Vc.PullAsync(ProjectId); r = await Vc.CommitAndPushAsync(ProjectId, msg); }
+            }
+            return r;
+        });
+        _commitMessage = "";
+        _mode = Mode.None;
+    }
+
+    private async Task PullAsync()
+    {
+        await RunAsync(async () =>
+        {
+            var r = await Vc.PullAsync(ProjectId);
+            if (r.Outcome == VcOutcome.Conflict)
+            {
+                var force = await _confirm.ShowAsync(Traductor.T("VC_CONFLICT_TITLE"),
+                    Traductor.T("VC_CONFLICT_BODY"), DangerOptions(Traductor.T("VC_PULL_FORCE")));
+                if (force) r = await Vc.PullAsync(ProjectId, force: true);
+            }
+            return r;
+        });
+    }
+
+    private async Task ShowHistoryAsync()
+    {
+        _view = View.History;
+        _busy = true; StateHasChanged();
+        try { _history = await Vc.GetHistoryAsync(ProjectId); }
+        finally { _busy = false; StateHasChanged(); }
+    }
+
+    private async Task UnlinkAsync()
+    {
+        var ok = await _confirm.ShowAsync(Traductor.T("VC_UNLINK_CONFIRM_TITLE"),
+            Traductor.T("VC_UNLINK_CONFIRM_BODY"), DangerOptions(Traductor.T("VC_UNLINK")));
+        if (!ok) return;
+        await Vc.UnlinkAsync(ProjectId);
+        _link = null; _status = null; _history = null; _view = View.Changes;
+        await NotifyCountAsync();
+        StateHasChanged();
+    }
+
+    private async Task ShowDiffAsync(string path)
+    {
+        if (_selectedDiffPath == path) { _selectedDiffPath = null; _diffText = null; StateHasChanged(); return; }
+        _selectedDiffPath = path;
+        _diffText = await Vc.GetFileDiffAsync(ProjectId, path);
+        _diffLines = (_diffText ?? "").Split('\n').Select(l => (Cls: DiffClass(l), Text: l)).ToList();
+        StateHasChanged();
+    }
+
+    // ─── Shared run wrapper ──────────────────────────────────────
+
+    private async Task RunAsync(Func<Task<VcResult>> op)
+    {
+        _busy = true; StateHasChanged();
+        try
+        {
+            var r = await op();
+            var text = OutcomeText(r);
+            ToastService.Notify(Message(
+                r.Ok ? Traductor.T("COMMON_OK") : Traductor.T("COMMON_ERROR"),
+                text, r.Ok ? ToastType.Success : (r.Outcome == VcOutcome.RateLimited ? ToastType.Warning : ToastType.Danger)));
+            _link = await Vc.GetLinkAsync(ProjectId);
+            _status = _link != null ? await Vc.GetStatusAsync(ProjectId) : null;
+            _selectedDiffPath = null; _diffText = null;
+            await NotifyCountAsync();
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+        finally { _busy = false; StateHasChanged(); }
+    }
+
+    private string OutcomeText(VcResult r) => r.Outcome switch
+    {
+        VcOutcome.Success     => r.Message ?? Traductor.T("VC_OUT_SUCCESS"),
+        VcOutcome.UpToDate    => Traductor.T("VC_OUT_UPTODATE"),
+        VcOutcome.NoChanges   => Traductor.T("VC_OUT_NOCHANGES"),
+        VcOutcome.NeedsPull   => Traductor.T("VC_OUT_NEEDSPULL"),
+        VcOutcome.Conflict    => Traductor.T("VC_OUT_CONFLICT"),
+        VcOutcome.NotSignedIn => Traductor.T("VC_OUT_NOTSIGNEDIN"),
+        VcOutcome.RateLimited => Traductor.T("VC_OUT_RATELIMITED"),
+        _                     => r.Message ?? Traductor.T("VC_OUT_ERROR"),
+    };
+
+    private static string BadgeLetter(VcChangeKind k) => k switch
+    {
+        VcChangeKind.Added => "A", VcChangeKind.Modified => "M", VcChangeKind.Deleted => "D", _ => "?"
+    };
+
+    private static string DiffClass(string line)
+    {
+        if (line.StartsWith("@@")) return "hunk";
+        if (line.StartsWith("+++") || line.StartsWith("---")) return "meta";
+        if (line.StartsWith("+")) return "add";
+        if (line.StartsWith("-")) return "del";
+        return "ctx";
+    }
+
+    private static string FirstLine(string s)
+    {
+        var i = s.IndexOf('\n');
+        return i < 0 ? s : s[..i];
+    }
+
+    private ConfirmDialogOptions DangerOptions(string yes) => new()
+    {
+        YesButtonColor = ButtonColor.Danger,
+        YesButtonText = yes,
+        NoButtonColor = ButtonColor.Secondary,
+        NoButtonText = Traductor.T("COMMON_CANCEL"),
+        AutoFocusYesButton = false
+    };
+}

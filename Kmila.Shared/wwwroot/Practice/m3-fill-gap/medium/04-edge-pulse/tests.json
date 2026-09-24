@@ -1,0 +1,52 @@
+{
+  "tests": [
+    { "id": "t1", "visible": true,  "descriptions": { "en": "Single rising edge on d", "es": "Único flanco ascendente en d" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "d", "values": [
+        { "time": 0,   "scale": "NS", "value": "0" },
+        { "time": 300, "scale": "NS", "value": "1" }
+      ]}
+    ]},
+    { "id": "t2", "visible": false, "descriptions": { "en": "d held low — no pulse", "es": "d en bajo — sin pulso" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "d", "values": [{ "time": 0, "scale": "NS", "value": "0" }] }
+    ]},
+    { "id": "t3", "visible": false, "descriptions": { "en": "d held high — pulse only on first edge", "es": "d en alto — pulso solo en el primer flanco" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "d", "values": [{ "time": 0, "scale": "NS", "value": "1" }] }
+    ]},
+    { "id": "t4", "visible": false, "descriptions": { "en": "Two rising edges", "es": "Dos flancos ascendentes" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "d", "values": [
+        { "time": 0,    "scale": "NS", "value": "0" },
+        { "time": 200,  "scale": "NS", "value": "1" },
+        { "time": 600,  "scale": "NS", "value": "0" },
+        { "time": 1000, "scale": "NS", "value": "1" }
+      ]}
+    ]},
+    { "id": "t5", "visible": false, "descriptions": { "en": "Reset suppresses an in-flight edge", "es": "El reset suprime un flanco en curso" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,    "scale": "NS", "value": "1" },
+        { "time": 25,   "scale": "NS", "value": "0" },
+        { "time": 250,  "scale": "NS", "value": "1" },
+        { "time": 275,  "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "d", "values": [
+        { "time": 0,   "scale": "NS", "value": "0" },
+        { "time": 200, "scale": "NS", "value": "1" }
+      ]}
+    ]}
+  ]
+}

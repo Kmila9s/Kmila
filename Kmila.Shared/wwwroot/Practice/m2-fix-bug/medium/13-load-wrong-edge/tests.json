@@ -1,0 +1,101 @@
+{
+  "tests": [
+    {
+      "id": "t1",
+      "visible": true,
+      "descriptions": { "en": "Load 1010 around the first rising edge", "es": "Carga 1010 alrededor del primer flanco de subida" },
+      "durationMicros": 4,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "load", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" }
+        ]},
+        { "portName": "d", "values": [
+          { "time": 0, "scale": "NS", "value": "1010" }
+        ]}
+      ]
+    },
+    {
+      "id": "t2",
+      "visible": false,
+      "descriptions": { "en": "Load held low — q stays 0000", "es": "load en bajo — q permanece en 0000" },
+      "durationMicros": 4,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "load", "values": [
+          { "time": 0, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "d", "values": [
+          { "time": 0, "scale": "NS", "value": "1111" }
+        ]}
+      ]
+    },
+    {
+      "id": "t3",
+      "visible": false,
+      "descriptions": { "en": "load pulses high for one rising edge", "es": "load se activa para un flanco de subida" },
+      "durationMicros": 4,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "load", "values": [
+          { "time": 0,   "scale": "NS", "value": "0" },
+          { "time": 95,  "scale": "NS", "value": "1" },
+          { "time": 125, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "d", "values": [
+          { "time": 0, "scale": "NS", "value": "0110" }
+        ]}
+      ]
+    },
+    {
+      "id": "t4",
+      "visible": false,
+      "descriptions": { "en": "Held in reset", "es": "Reset mantenido" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0, "scale": "NS", "value": "1" }
+        ]},
+        { "portName": "load", "values": [
+          { "time": 0, "scale": "NS", "value": "1" }
+        ]},
+        { "portName": "d", "values": [
+          { "time": 0, "scale": "NS", "value": "1111" }
+        ]}
+      ]
+    },
+    {
+      "id": "t5",
+      "visible": false,
+      "descriptions": { "en": "d changes mid-cycle while load=1", "es": "d cambia a mitad de ciclo con load=1" },
+      "durationMicros": 4,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "load", "values": [
+          { "time": 0, "scale": "NS", "value": "1" }
+        ]},
+        { "portName": "d", "values": [
+          { "time": 0,   "scale": "NS", "value": "0001" },
+          { "time": 205, "scale": "NS", "value": "0010" }
+        ]}
+      ]
+    }
+  ]
+}

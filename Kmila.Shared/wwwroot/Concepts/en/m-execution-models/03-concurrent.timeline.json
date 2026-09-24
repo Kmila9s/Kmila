@@ -1,0 +1,105 @@
+{
+  "code": "-- Four concurrent statements. Source order doesn't matter.\narchitecture rtl of gates4 is\nbegin\n  o_and  <= a and b;     -- line 4\n  o_or   <= a or  b;     -- line 5\n  o_xor  <= a xor b;     -- line 6\n  o_nand <= a nand b;    -- line 7\nend architecture;",
+  "language": "vhdl",
+  "signalOrder": ["a", "b", "o_and", "o_or", "o_xor", "o_nand"],
+  "steps": [
+    {
+      "t": 0,
+      "highlightLines": [],
+      "signals": { "a": "U", "b": "U", "o_and": "U", "o_or": "U", "o_xor": "U", "o_nand": "U" },
+      "note": {
+        "en": "Cold start. All outputs are U because the inputs are U — there's nothing to evaluate yet.",
+        "es": "Inicio en frío. Todas las salidas están en U porque las entradas están en U — todavía no hay nada que evaluar.",
+        "fr": "Démarrage à froid. Toutes les sorties sont à U parce que les entrées sont à U — il n'y a encore rien à évaluer.",
+        "de": "Kaltstart. Alle Ausgänge sind U, weil die Eingänge U sind — es gibt noch nichts auszuwerten.",
+        "ch": "冷启动。所有输出都是 U，因为输入是 U——还没有可以求值的东西。",
+        "jp": "コールドスタート。入力が U なので出力もすべて U だ——まだ評価すべきものは何もない。",
+        "ar": "بداية باردة. جميع المخارج على U لأن المداخل على U — لا يوجد شيء لتقييمه بعد."
+      }
+    },
+    {
+      "t": 1,
+      "highlightLines": [],
+      "signals": { "a": "1", "b": "0", "o_and": "U", "o_or": "U", "o_xor": "U", "o_nand": "U" },
+      "note": {
+        "en": "Inputs change: a = 1, b = 0. Every concurrent statement that reads a or b is now sensitive — all four will fire together.",
+        "es": "Las entradas cambian: a = 1, b = 0. Todas las sentencias concurrentes que leen a o b ahora están sensibles — las cuatro se dispararán juntas.",
+        "fr": "Les entrées changent : a = 1, b = 0. Toute sentence concurrente qui lit a ou b est maintenant sensible — les quatre vont se déclencher ensemble.",
+        "de": "Die Eingänge ändern sich: a = 1, b = 0. Jede nebenläufige Anweisung, die a oder b liest, ist jetzt empfindlich — alle vier werden gemeinsam feuern.",
+        "ch": "输入变化：a = 1，b = 0。每条读取 a 或 b 的并发语句现在都被激活——四条会一起触发。",
+        "jp": "入力が変化する：a = 1、b = 0。a か b を読むすべての並行文がいま反応する——4 つが一斉に発火する。",
+        "ar": "تتغيَّر المداخل: a = 1، b = 0. كل جملة متزامنة تقرأ a أو b أصبحت الآن حساسة — الأربع ستنطلق معًا."
+      }
+    },
+    {
+      "t": 2,
+      "highlightLines": [4, 5, 6, 7],
+      "signals": { "a": "1", "b": "0", "o_and": "U", "o_or": "U", "o_xor": "U", "o_nand": "U" },
+      "note": {
+        "en": "ALL FOUR lines evaluate in this delta cycle, at the same simulation time. Source order is irrelevant — swap any two and the result is identical.",
+        "es": "LAS CUATRO líneas se evalúan en este ciclo delta, al mismo tiempo de simulación. El orden del código es irrelevante — intercambia dos y el resultado es idéntico.",
+        "fr": "LES QUATRE lignes s'évaluent dans ce cycle delta, au même instant de simulation. L'ordre du code source n'a aucune importance — échange-en deux et le résultat est identique.",
+        "de": "ALLE VIER Zeilen werden in diesem Delta-Zyklus zur selben Simulationszeit ausgewertet. Die Quelltextreihenfolge ist irrelevant — tausche zwei beliebige aus und das Ergebnis ist identisch.",
+        "ch": "四条语句全都在这个 delta 周期内、同一个仿真时刻求值。源代码顺序毫无意义——把任意两行对调，结果一模一样。",
+        "jp": "4 つの文がこの delta サイクル内で、同じシミュレーション時刻に評価される。ソース順は関係ない——どの 2 行を入れ替えても結果は同じだ。",
+        "ar": "الأسطر الأربعة كلها تُقيَّم في دورة الدلتا هذه، في نفس زمن المحاكاة. ترتيب المصدر لا يهم — بدِّل أيَّ اثنين وستحصل على النتيجة نفسها."
+      }
+    },
+    {
+      "t": 3,
+      "highlightLines": [],
+      "signals": { "a": "1", "b": "0", "o_and": "0", "o_or": "1", "o_xor": "1", "o_nand": "1" },
+      "note": {
+        "en": "Delta ends. All four outputs commit at once: AND=0, OR=1, XOR=1, NAND=1.",
+        "es": "Termina el delta. Las cuatro salidas se confirman a la vez: AND=0, OR=1, XOR=1, NAND=1.",
+        "fr": "Le delta se termine. Les quatre sorties se confirment en même temps : AND=0, OR=1, XOR=1, NAND=1.",
+        "de": "Der Delta-Zyklus endet. Alle vier Ausgänge werden gleichzeitig übernommen: AND=0, OR=1, XOR=1, NAND=1.",
+        "ch": "delta 周期结束。四个输出一次性提交：AND=0，OR=1，XOR=1，NAND=1。",
+        "jp": "delta サイクル終了。4 つの出力が一度に確定する：AND=0、OR=1、XOR=1、NAND=1。",
+        "ar": "تنتهي الدلتا. تُثبَّت المخارج الأربعة دفعةً واحدة: AND=0، OR=1، XOR=1، NAND=1."
+      }
+    },
+    {
+      "t": 4,
+      "highlightLines": [],
+      "signals": { "a": "1", "b": "1", "o_and": "0", "o_or": "1", "o_xor": "1", "o_nand": "1" },
+      "note": {
+        "en": "Now b flips to 1. The same four statements wake again — concurrent statements have an implicit sensitivity list of every signal they read.",
+        "es": "Ahora b cambia a 1. Las mismas cuatro sentencias se despiertan otra vez — las sentencias concurrentes tienen una lista de sensibilidad implícita con cada señal que leen.",
+        "fr": "Maintenant b passe à 1. Les mêmes quatre sentences se réveillent — les sentences concurrentes ont une liste de sensibilité implicite avec chaque signal qu'elles lisent.",
+        "de": "Jetzt springt b auf 1. Dieselben vier Anweisungen erwachen erneut — nebenläufige Anweisungen haben eine implizite Sensitivitätsliste mit jedem gelesenen signal.",
+        "ch": "现在 b 翻转为 1。同样的四条语句再次被唤醒——并发语句对它们读取的每个 signal 都拥有一份隐式敏感列表。",
+        "jp": "こんどは b が 1 に反転する。同じ 4 つの文がもう一度目を覚ます——並行文は読むすべての signal に対して暗黙の感度リストを持っている。",
+        "ar": "الآن ينقلب b إلى 1. الجمل الأربع نفسها تستيقظ من جديد — الجمل المتزامنة تمتلك قائمة حساسية ضمنية لكل signal تقرأه."
+      }
+    },
+    {
+      "t": 5,
+      "highlightLines": [4, 5, 6, 7],
+      "signals": { "a": "1", "b": "1", "o_and": "0", "o_or": "1", "o_xor": "1", "o_nand": "1" },
+      "note": {
+        "en": "Re-evaluation, again all four at once. Old values still showing on the right — transactions are scheduled, not yet visible.",
+        "es": "Re-evaluación, otra vez las cuatro a la vez. Los valores viejos siguen visibles — las transacciones están programadas, aún no son visibles.",
+        "fr": "Ré-évaluation, encore les quatre en même temps. Les anciennes valeurs sont toujours affichées à droite — les transactions sont programmées, pas encore visibles.",
+        "de": "Neuauswertung, wieder alle vier gleichzeitig. Rechts erscheinen immer noch die alten Werte — die Transaktionen sind eingeplant, aber noch nicht sichtbar.",
+        "ch": "重新求值，还是四条一起。右侧仍显示旧值——事务已被登记，但还看不到。",
+        "jp": "再評価、こんども 4 つ同時だ。右側にはまだ古い値が見えている——トランザクションは予約されただけで、まだ見えない。",
+        "ar": "إعادة تقييم، مرَّةً أخرى الأربع دفعةً واحدة. القيم القديمة لا تزال ظاهرة على اليمين — المعاملات مسجَّلة لكنَّها لم تصبح مرئية بعد."
+      }
+    },
+    {
+      "t": 6,
+      "highlightLines": [],
+      "signals": { "a": "1", "b": "1", "o_and": "1", "o_or": "1", "o_xor": "0", "o_nand": "0" },
+      "note": {
+        "en": "Delta closes. AND=1, OR=1, XOR=0, NAND=0 — all visible together, no in-between state.",
+        "es": "Cierra el delta. AND=1, OR=1, XOR=0, NAND=0 — todo visible junto, sin estado intermedio.",
+        "fr": "Le delta se ferme. AND=1, OR=1, XOR=0, NAND=0 — tout devient visible en même temps, sans état intermédiaire.",
+        "de": "Der Delta-Zyklus schließt. AND=1, OR=1, XOR=0, NAND=0 — alles wird gemeinsam sichtbar, ohne Zwischenzustand.",
+        "ch": "delta 关闭。AND=1，OR=1，XOR=0，NAND=0——全部同时可见，没有中间状态。",
+        "jp": "delta が閉じる。AND=1、OR=1、XOR=0、NAND=0——すべてが一斉に見える。途中状態はない。",
+        "ar": "تُغلق الدلتا. AND=1، OR=1، XOR=0، NAND=0 — كل شيء يظهر معًا، دون حالة وسيطة."
+      }
+    }
+  ]
+}

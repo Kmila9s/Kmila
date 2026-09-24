@@ -1,0 +1,105 @@
+{
+  "code": "-- Variables update immediately; signals wait until end of delta.\nprocess(a, b)\n  variable tmp : integer := 0;\nbegin\n  tmp := a + 1;        -- line 5: variable updates RIGHT NOW\n  tmp := tmp * 2;      -- line 6: reads the new tmp\n  result <= tmp + b;   -- line 7: signal scheduled, NOT visible yet\nend process;",
+  "language": "vhdl",
+  "signalOrder": ["a", "b", "tmp", "result"],
+  "steps": [
+    {
+      "t": 0,
+      "highlightLines": [],
+      "signals": { "a": "0", "b": "5", "tmp": "0", "result": "U" },
+      "note": {
+        "en": "Cold start. tmp is a variable initialized to 0; signals a, b, result start with whatever they had before.",
+        "es": "Inicio en frío. tmp es una variable inicializada en 0; las señales a, b y result conservan lo que tuvieran antes.",
+        "fr": "Démarrage à froid. tmp est une variable initialisée à 0 ; les signaux a, b et result gardent ce qu'ils avaient avant.",
+        "de": "Kaltstart. tmp ist eine variable, initialisiert auf 0; die Signale a, b und result behalten das, was sie vorher hatten.",
+        "ch": "冷启动。tmp 是一个初始化为 0 的 variable；signal a、b、result 保持之前的值。",
+        "jp": "コールドスタート。tmp は 0 で初期化された variable、signal である a、b、result はそれまでの値を保持している。",
+        "ar": "بداية باردة. tmp هو variable مُهيَّأ إلى 0؛ الإشارات a وb وresult تحتفظ بما كان لديها من قبل."
+      }
+    },
+    {
+      "t": 1,
+      "highlightLines": [2],
+      "signals": { "a": "3", "b": "5", "tmp": "0", "result": "U" },
+      "note": {
+        "en": "Input a just changed to 3. The sensitivity list says 'wake on a or b' — so the process wakes.",
+        "es": "La entrada a acaba de cambiar a 3. La lista de sensibilidad dice 'despierta con a o b' — el proceso se despierta.",
+        "fr": "L'entrée a vient de passer à 3. La liste de sensibilité dit « réveille-toi sur a ou b » — le process se réveille donc.",
+        "de": "Der Eingang a hat sich gerade auf 3 geändert. Die Sensitivitätsliste sagt „wach auf bei a oder b\" — also erwacht der process.",
+        "ch": "输入 a 刚变为 3。敏感信号列表写着「当 a 或 b 变化时唤醒」——所以 process 被唤醒。",
+        "jp": "入力 a が 3 に変わったばかり。感度リストは「a か b が変わったら起きろ」と言っているので、process は目を覚ます。",
+        "ar": "الدخل a تغيَّر للتوّ إلى 3. قائمة الحساسية تقول «استيقظ عند a أو b» — لذا يستيقظ process."
+      }
+    },
+    {
+      "t": 2,
+      "highlightLines": [5],
+      "signals": { "a": "3", "b": "5", "tmp": "4", "result": "U" },
+      "note": {
+        "en": "Line 5: tmp := a + 1. Variables update IMMEDIATELY — tmp is now 4 and the next statement sees the new value.",
+        "es": "Línea 5: tmp := a + 1. Las variables se actualizan INMEDIATAMENTE — tmp ahora es 4 y la siguiente sentencia ve el nuevo valor.",
+        "fr": "Ligne 5 : tmp := a + 1. Les variables se mettent à jour IMMÉDIATEMENT — tmp vaut maintenant 4 et la sentence suivante voit la nouvelle valeur.",
+        "de": "Zeile 5: tmp := a + 1. Variablen aktualisieren SOFORT — tmp ist jetzt 4 und die nächste Anweisung sieht den neuen Wert.",
+        "ch": "第 5 行：tmp := a + 1。variable 会立即更新——tmp 现在是 4，下一条语句就能看到新值。",
+        "jp": "5 行目：tmp := a + 1。variable は即座に更新される——tmp はいま 4 で、次の文はもう新しい値を見る。",
+        "ar": "السطر 5: tmp := a + 1. المتغيرات (variable) تُحدَّث فورًا — قيمة tmp الآن هي 4، والجملة التالية ترى القيمة الجديدة."
+      }
+    },
+    {
+      "t": 3,
+      "highlightLines": [6],
+      "signals": { "a": "3", "b": "5", "tmp": "8", "result": "U" },
+      "note": {
+        "en": "Line 6: tmp := tmp * 2. Reads the new tmp (4), multiplies by 2 → tmp is now 8. This is what 'sequential' really means.",
+        "es": "Línea 6: tmp := tmp * 2. Lee el nuevo tmp (4), lo multiplica por 2 → tmp ahora es 8. Esto es lo que realmente significa 'secuencial'.",
+        "fr": "Ligne 6 : tmp := tmp * 2. Lit le nouveau tmp (4), multiplie par 2 → tmp vaut maintenant 8. Voilà ce que « séquentiel » veut vraiment dire.",
+        "de": "Zeile 6: tmp := tmp * 2. Liest das neue tmp (4), multipliziert mit 2 → tmp ist jetzt 8. Genau das heißt „sequenziell\" wirklich.",
+        "ch": "第 6 行：tmp := tmp * 2。读取新的 tmp（4）、乘以 2 → tmp 现在是 8。这就是「顺序」的真正含义。",
+        "jp": "6 行目：tmp := tmp * 2。新しい tmp（4）を読み、2 倍する → tmp はいま 8。これが「順次」の本当の意味だ。",
+        "ar": "السطر 6: tmp := tmp * 2. يقرأ قيمة tmp الجديدة (4)، ويضربها في 2 → قيمة tmp الآن هي 8. هذا هو المعنى الحقيقي لكلمة «تسلسلي»."
+      }
+    },
+    {
+      "t": 4,
+      "highlightLines": [7],
+      "signals": { "a": "3", "b": "5", "tmp": "8", "result": "U" },
+      "note": {
+        "en": "Line 7: result <= tmp + b = 8 + 5 = 13. But result is a SIGNAL — we only posted a transaction. result still reads as U.",
+        "es": "Línea 7: result <= tmp + b = 8 + 5 = 13. Pero result es una SEÑAL — solo registramos una transacción. result aún se lee como U.",
+        "fr": "Ligne 7 : result <= tmp + b = 8 + 5 = 13. Mais result est un SIGNAL — on n'a fait que publier une transaction. result se lit encore comme U.",
+        "de": "Zeile 7: result <= tmp + b = 8 + 5 = 13. Aber result ist ein SIGNAL — wir haben nur eine Transaktion eingeplant. result liest sich weiterhin als U.",
+        "ch": "第 7 行：result <= tmp + b = 8 + 5 = 13。但 result 是一个 signal——我们只是登记了一个事务。result 读出来仍然是 U。",
+        "jp": "7 行目：result <= tmp + b = 8 + 5 = 13。だが result は signal だ——トランザクションを登録しただけで、result はまだ U のまま。",
+        "ar": "السطر 7: result <= tmp + b = 8 + 5 = 13. لكنَّ result إشارة (signal) — لم نفعل سوى تسجيل معاملة. قراءة result لا تزال U."
+      }
+    },
+    {
+      "t": 5,
+      "highlightLines": [8],
+      "signals": { "a": "3", "b": "5", "tmp": "8", "result": "U" },
+      "note": {
+        "en": "Process exits. The body ran 5 → 6 → 7 in strict source order. Swap any two lines and the result would change.",
+        "es": "El proceso termina. El cuerpo se ejecutó 5 → 6 → 7 en orden estricto del código. Intercambia dos líneas y el resultado cambiaría.",
+        "fr": "Le process se termine. Le corps s'est exécuté 5 → 6 → 7 dans l'ordre strict du code. Échange deux lignes et le résultat changerait.",
+        "de": "Der process endet. Der Körper lief 5 → 6 → 7 in strenger Quelltextreihenfolge. Tausch zwei Zeilen und das Ergebnis ändert sich.",
+        "ch": "process 结束。主体按 5 → 6 → 7 的严格源代码顺序执行。任意交换两行，结果就会不同。",
+        "jp": "process が終わる。本体は 5 → 6 → 7 の厳密なソース順で走った。二行を入れ替えれば結果は変わる。",
+        "ar": "ينتهي process. جسم الشيفرة نفَّذ 5 → 6 → 7 بترتيب صارم كما في الكود. بدِّل سطرَين وستتغيَّر النتيجة."
+      }
+    },
+    {
+      "t": 6,
+      "highlightLines": [],
+      "signals": { "a": "3", "b": "5", "tmp": "8", "result": "13" },
+      "note": {
+        "en": "Delta cycle ends. NOW result commits to 13. The signal's new value is finally visible to the outside world.",
+        "es": "Termina el ciclo delta. AHORA result se confirma en 13. El nuevo valor de la señal por fin es visible al exterior.",
+        "fr": "Le cycle delta se termine. MAINTENANT result se fige à 13. La nouvelle valeur du signal est enfin visible à l'extérieur.",
+        "de": "Der Delta-Zyklus endet. JETZT wird result auf 13 festgeschrieben. Der neue Wert des Signals ist endlich nach außen sichtbar.",
+        "ch": "delta 周期结束。现在 result 才提交为 13。这个 signal 的新值终于对外可见了。",
+        "jp": "デルタサイクルが終わる。ここでようやく result が 13 に確定する。この signal の新しい値がやっと外の世界に見える。",
+        "ar": "تنتهي دورة الدلتا. الآن يُثبَّت result على 13. القيمة الجديدة للإشارة (signal) صارت أخيرًا مرئية للعالم الخارجي."
+      }
+    }
+  ]
+}

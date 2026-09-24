@@ -1,0 +1,83 @@
+@*
+    TopBar — sticky app header.
+
+    Layout (LTR):
+      [☰ hamburger (mobile only)]  [Breadcrumbs]            [ConfigurationsPill] [ProfileMenu]
+
+    Was much busier before — the right side used to host four separate
+    <details> popovers (account, FPGA, language, theme). They're now
+    consolidated under <ProfileMenu>: a single avatar trigger with
+    everything user-scoped collapsed inside. ConfigurationsPill stays
+    inline because it's project state (named simulation configs), not
+    user preference, and surfacing it next to Build/Run is the point.
+*@
+@implements IDisposable
+@inject SidebarState SidebarState
+@inject NavigationManager Nav
+
+<header class="kmila-topbar" role="banner">
+    <div class="kmila-topbar__inner">
+
+        <div class="kmila-topbar__start">
+            <button type="button"
+                    class="kmila-btn-icon kmila-btn-icon--ghost kmila-topbar__menu-btn"
+                    @onclick="SidebarState.ToggleMobile"
+                    aria-label="@Traductor.T(SidebarState.IsMobileOpen ? "SIDEBAR_CLOSE_MENU" : "SIDEBAR_OPEN_MENU")">
+                <Icon Name="@(SidebarState.IsMobileOpen ? IconName.X : IconName.List)" />
+            </button>
+
+            <Breadcrumbs />
+        </div>
+
+        <div class="kmila-topbar__end" data-tour="topbar-end">
+            @* Project-state pill — saved/loaded simulation configurations.
+               Only meaningful inside the editor; on Home / Projects / Learn /
+               Settings the pill reads as "No config" which is noise (you're
+               not in a project yet). Scope it to the routes where it has
+               actionable meaning. *@
+            @if (IsOnProjectRoute())
+            {
+                <span data-tour="topbar-configurations">
+                    <ConfigurationsPill />
+                </span>
+            }
+
+            @* Everything user-scoped (account · FPGA · language · theme ·
+               settings · sign-out) lives here. The avatar acts as a single
+               anchor so adding more options in the future doesn't widen the
+               bar. *@
+            <span data-tour="topbar-profile">
+                <ProfileMenu />
+            </span>
+        </div>
+    </div>
+</header>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Traductor.StaticOnLangChanged += OnLanguageChanged;
+        SidebarState.OnChange += OnSidebarStateChanged;
+        Nav.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnSidebarStateChanged() => InvokeAsync(StateHasChanged);
+    private void OnLanguageChanged() => InvokeAsync(StateHasChanged);
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+        => InvokeAsync(StateHasChanged);
+
+    private bool IsOnProjectRoute()
+    {
+        var path = new Uri(Nav.Uri).AbsolutePath;
+        return path.StartsWith("/editor/", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/practice/", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/concepts/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public void Dispose()
+    {
+        Traductor.StaticOnLangChanged -= OnLanguageChanged;
+        SidebarState.OnChange -= OnSidebarStateChanged;
+        Nav.LocationChanged -= OnLocationChanged;
+    }
+}

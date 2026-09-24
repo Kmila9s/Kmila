@@ -3,12 +3,138 @@
 
 <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#334155" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Kmila" />
+    <meta name="format-detection" content="telephone=no" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="_content/Kmila.Shared/favicon.png" />
     <base href="/" />
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-LN+7fdVzj6u52u30Kp6M/trliBMCMKTyK833zpbD+pXdCLuTusPj697FH4R/5mcr" crossorigin="anonymous">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+    @* ╔═══════════════════════════════════════════════════════════════════╗
+       ║   SHARED HEAD-LEVEL JS — DO NOT INLINE NEW LOGIC HERE.            ║
+       ║   Edit Kmila.Shared/wwwroot/js/kmila-shared-head.js instead so     ║
+       ║   both Web (this file) and MAUI (Kmila/wwwroot/index.html) stay   ║
+       ║   in sync automatically. Bump ?v= when the shared file changes.   ║
+       ║   See memory: project_dual_host_pages.md.                         ║
+       ╚═══════════════════════════════════════════════════════════════════╝ *@
+    <script src="_content/Kmila.Shared/js/kmila-shared-head.js?v=14"></script>
+    @* ╔═══════════════════════════════════════════════════════════════════╗
+       ║  OFFLINE-FIRST: vendored copies of Bootstrap CSS, Bootstrap Icons, ║
+       ║  and JetBrains Mono live under Kmila.Shared/wwwroot/lib/. Mirror   ║
+       ║  any change here in Kmila/wwwroot/index.html. CDN refs were        ║
+       ║  removed so the Android target works without the network.         ║
+       ╚═══════════════════════════════════════════════════════════════════╝ *@
+    <link rel="stylesheet" href="_content/Kmila.Shared/lib/jetbrains-mono/jetbrains-mono.css">
+    <link rel="stylesheet" href="_content/Kmila.Shared/lib/bootstrap/bootstrap.min.css">
+    <link rel="stylesheet" href="_content/Kmila.Shared/lib/bootstrap-icons/bootstrap-icons.min.css">
     <link href="_content/Blazor.Bootstrap/blazor.bootstrap.css" rel="stylesheet" />
-    <link rel="stylesheet" href="_content/Kmila.Shared/app.css" />
+
+    @* Mermaid diagrams — Markdown lessons with ```mermaid fenced blocks get
+       rewritten to <pre class="mermaid"> which this script auto-initializes.
+       kmilaMermaidRun is exposed so pages that render Markdown after the first
+       paint (LessonView, etc.) can re-scan the DOM on navigation. *@
+    <script type="module">
+        import mermaid from '/_content/Kmila.Shared/lib/mermaid/mermaid.esm.min.mjs';
+        // Pull live token values from the document so Mermaid blends with
+        // the kmila palette in BOTH light and dark themes. Default Mermaid
+        // theme renders pale-yellow boxes that clash with the rest of the
+        // app (see audit 2026-06-14, finding A-12).
+        const cssVar = (name, fallback) => {
+            const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+            return v || fallback;
+        };
+        const kmilaMermaidConfig = () => {
+            const dark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+            return {
+                startOnLoad: false,
+                securityLevel: 'strict',
+                theme: 'base',
+                themeVariables: {
+                    fontFamily: cssVar('--font-sans', 'system-ui, sans-serif'),
+                    background: cssVar('--surface-1', dark ? '#0f172a' : '#ffffff'),
+                    primaryColor: cssVar('--surface-2', dark ? '#1e293b' : '#f1f5f9'),
+                    primaryTextColor: cssVar('--text-strong', dark ? '#f8fafc' : '#0f172a'),
+                    primaryBorderColor: cssVar('--kmila-accent', '#1f57c4'),
+                    lineColor: cssVar('--text-muted', dark ? '#94a3b8' : '#64748b'),
+                    secondaryColor: cssVar('--surface-3', dark ? '#334155' : '#e2e8f0'),
+                    tertiaryColor: cssVar('--surface-2', dark ? '#1e293b' : '#f8fafc'),
+                    textColor: cssVar('--text-default', dark ? '#e2e8f0' : '#1e293b'),
+                },
+            };
+        };
+        mermaid.initialize(kmilaMermaidConfig());
+        // Mermaid replaces pre.mermaid's innerHTML with the rendered SVG on
+        // first run, which DESTROYS the original source. Re-running on a
+        // theme switch then tries to parse the SVG markup as mermaid syntax
+        // and fails — the diagram silently disappears. Stash the source in a
+        // data attribute the first time we see each pre so we can restore it
+        // before re-rendering. (Backlog #7.)
+        //
+        // v11.15.0 code-splits diagram grammars into lazy chunks. `mermaid.run`
+        // by itself can race the first `import()` for the flowchart chunk on
+        // hydration — the pre exists in the DOM but the parser isn't loaded
+        // yet, so every diagram falls to the "Syntax error / version 11.15.0"
+        // fallback. Awaiting `mermaid.parse(src)` before `run` forces the
+        // chunk import to resolve first. Single-flight + pending flag
+        // coalesces overlapping calls from the load handler, LessonView's
+        // OnAfterRender, and the theme-swap observer during hydration.
+        let mermaidRunning = false;
+        let mermaidPending = false;
+        window.kmilaMermaidRun = async function () {
+            if (mermaidRunning) { mermaidPending = true; return; }
+            mermaidRunning = true;
+            try {
+                do {
+                    mermaidPending = false;
+                    await new Promise(r => requestAnimationFrame(r));
+                    const nodes = Array.from(document.querySelectorAll('pre.mermaid:not([data-processed])'));
+                    for (const el of nodes) {
+                        if (!el.hasAttribute('data-kmila-mermaid-src')) {
+                            el.setAttribute('data-kmila-mermaid-src', el.textContent || '');
+                        }
+                    }
+                    for (const el of nodes) {
+                        const src = el.getAttribute('data-kmila-mermaid-src') || '';
+                        try {
+                            await mermaid.parse(src);
+                            await mermaid.run({ nodes: [el] });
+                        } catch (e) {
+                            console.warn('[mermaid]', e, src.slice(0, 80));
+                            el.removeAttribute('data-processed');
+                        }
+                    }
+                } while (mermaidPending);
+            } finally {
+                mermaidRunning = false;
+            }
+        };
+        // Re-theme on Bootstrap theme changes so dark-mode diagrams don't glow.
+        new MutationObserver(() => {
+            mermaid.initialize(kmilaMermaidConfig());
+            document.querySelectorAll('pre.mermaid').forEach(el => {
+                var src = el.getAttribute('data-kmila-mermaid-src');
+                if (src !== null) el.textContent = src;
+                el.removeAttribute('data-processed');
+            });
+            window.kmilaMermaidRun();
+        }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-bs-theme'] });
+        window.addEventListener('load', () => window.kmilaMermaidRun());
+    </script>
+    @* ╔═══════════════════════════════════════════════════════════════════╗
+       ║   SHARED DESIGN STYLESHEETS — KEEP THIS BLOCK IDENTICAL TO         ║
+       ║   Kmila/wwwroot/index.html. When you add/remove a sheet here,     ║
+       ║   mirror it in BOTH hosts. When you change any of the referenced  ║
+       ║   files, bump every ?v= so browsers refresh together.              ║
+       ║   See memory: project_dual_host_pages.md.                         ║
+       ╚═══════════════════════════════════════════════════════════════════╝ *@
+    <link rel="stylesheet" href="_content/Kmila.Shared/css/tokens.css?v=8" />
+    <link rel="stylesheet" href="_content/Kmila.Shared/app.css?v=8" />
+    <link rel="stylesheet" href="_content/Kmila.Shared/css/pages.css?v=39" />
+    <link rel="stylesheet" href="_content/Kmila.Shared/css/buttons.css?v=13" />
     <link rel="stylesheet" href="Kmila.Web.styles.css" />
     <link rel="icon" type="image/png" href="_content/Kmila.Shared/favicon.png" />
     <HeadOutlet @rendermode="InteractiveServer" />
@@ -16,17 +142,173 @@
 
 <body>
     <Routes @rendermode="InteractiveServer" />
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js" integrity="sha384-ndDqU0Gzau9qJ1lfW4pNLlhNTkCfHzAVBReH9diLvGRem5+R9g2FzA8ZGN954O5Q" crossorigin="anonymous"></script>
-    <!-- Add chart.js reference if chart components are used in your application. -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.0.1/chart.umd.js" integrity="sha512-gQhCDsnnnUfaRzD8k1L5llCCV6O9HN09zClIzzeJ8OJ9MpGmIlCxm+pdCkqTwqJ4JcjbojFr79rl2F1mzcoLMQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    <!-- Add chartjs-plugin-datalabels.min.js reference if chart components with data label feature is used in your application. -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js" integrity="sha512-JPcRR8yFa8mmCsfrw4TNte1ZvF1e3+1SdGMslZvmrzDYxS69J7J49vkFL8u6u8PlPJK+H3voElBtUCzaXj+6ig==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    <!-- Add sortable.js reference if SortableList component is used in your application. -->
-    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+    <!-- Vendored Bootstrap JS, Chart.js + datalabels plugin, SortableJS, and Blazor.Bootstrap.
+         All under Kmila.Shared/wwwroot/lib/ for offline (Android WebView, Mac Catalyst). -->
+    <script src="_content/Kmila.Shared/lib/bootstrap/bootstrap.bundle.min.js"></script>
+    <script src="_content/Kmila.Shared/lib/chartjs/chart.umd.js"></script>
+    <script src="_content/Kmila.Shared/lib/jspdf/jspdf.umd.min.js"></script>
+    <script src="_content/Kmila.Shared/lib/chartjs/chartjs-plugin-datalabels.min.js"></script>
+    <script src="_content/Kmila.Shared/lib/sortablejs/Sortable.min.js"></script>
     <script src="_content/Blazor.Bootstrap/blazor.bootstrap.js"></script>
+
+    <!-- kmila-blocks: our own visual-programming engine for /concepts/exercise/*.
+         Replaces Blockly entirely; no external dependency, no UMD/AMD interplay
+         with Monaco's loader, no 1MB of vendored library files. Block JSON
+         format matches Blockly's workspaces.save() shape so BlockProgram.cs
+         and the exercise fingerprint catalogs work unchanged. -->
+    <script src="_content/Kmila.Shared/js/kmila-blocks.js"></script>
+    <!-- VHDL author block family: registers the entity / arch / process /
+         if / assign + expression atom block types used by Editor's Blocks
+         tab. Pure registry calls; harmless to load app-wide. -->
+    <script src="_content/Kmila.Shared/js/kmila-blocks-vhdl.js"></script>
+
+    <!-- FW-5 buzzer audio subsystem. Thin WebAudio wrapper (unlock /
+         setTone / stop). Widgets call it directly; iOS + Android WebView
+         both require a user-gestured unlock before audio plays. -->
+    <script src="_content/Kmila.Shared/js/kmila-audio.js"></script>
+
     <script src="_content/BlazorMonaco/jsInterop.js"></script>
     <script src="_content/BlazorMonaco/lib/monaco-editor/min/vs/loader.js"></script>
     <script src="_content/BlazorMonaco/lib/monaco-editor/min/vs/editor/editor.main.js"></script>
+    <!-- VHDL language support - must load after Monaco editor -->
+    <!-- Doc-data files first, one per language (stubs for non-EN/ES fall back silently) -->
+    <script src="_content/Kmila.Shared/js/vhdl-data/vhdl-data.en.js"></script>
+    <script src="_content/Kmila.Shared/js/vhdl-data/vhdl-data.es.js"></script>
+    <script src="_content/Kmila.Shared/js/vhdl-data/vhdl-data.fr.js"></script>
+    <script src="_content/Kmila.Shared/js/vhdl-data/vhdl-data.de.js"></script>
+    <script src="_content/Kmila.Shared/js/vhdl-data/vhdl-data.ch.js"></script>
+    <script src="_content/Kmila.Shared/js/vhdl-data/vhdl-data.jp.js"></script>
+    <script src="_content/Kmila.Shared/js/vhdl-data/vhdl-data.ar.js"></script>
+    <script src="_content/Kmila.Shared/js/vhdl.js"></script>
+    <!-- Lesson-markdown colorizer — feeds Markdig's `<pre><code>` blocks
+         through Monaco's tokenizer so VHDL snippets in lessons look identical
+         to the Editor. Must load after vhdl.js (which registers the `vhdl`
+         language) and after editor.main.js (provides colorizeElement). -->
+    <script src="_content/Kmila.Shared/js/lesson-code.js?v=20260522a"></script>
+    <!-- Kmila app utilities (file download, etc.) -->
+    <script src="_content/Kmila.Shared/js/app.js?v=20260719a"></script>
+    <!-- Visual Runtime canvas rasteriser (§6 Items 1+2). Bespoke pure-2D
+         painter for the 12 widget families — no html2canvas, no CSS
+         parsing, no external deps. Must load BEFORE the record/export
+         helpers so their feature detection sees kmilaCanvasRender. -->
+    <script src="_content/Kmila.Shared/js/kmila-canvas-paint.js?v=1"></script>
+    <!-- Visual Runtime canvas export (§6 Item 2). SVG via foreignObject;
+         PNG via the shared kmilaCanvasRender. PDF via vendored jspdf. -->
+    <script src="_content/Kmila.Shared/js/kmila-canvas-export.js?v=4"></script>
+    <!-- Visual Runtime canvas recording v1 (§6 Item 1). MediaRecorder +
+         offscreen canvas fed by kmilaCanvasRender frames; webm output. -->
+    <script src="_content/Kmila.Shared/js/kmila-canvas-record.js?v=4"></script>
+    <!-- Welcome tour (first-run coachmark overlay) — kmila-tutorial.js -->
+    <script src="_content/Kmila.Shared/js/kmila-tutorial.js?v=3"></script>
+
+    @*
+        Custom reconnect modal. Blazor Server auto-injects an unstyled fallback
+        when the SignalR circuit drops; defining this element ourselves overrides
+        it so the disconnection UX matches the rest of the project.
+
+        State classes set by the framework:
+          .components-reconnect-show     — actively retrying
+          .components-reconnect-failed   — gave up after the retry budget
+          .components-reconnect-rejected — server refused the resume (circuit gone)
+
+        The button with id="components-reconnect-button" is wired automatically
+        to Blazor.reconnect(); the reload button calls location.reload() inline
+        because at that point the circuit is dead and no DI is reachable.
+    *@
+    <div id="components-reconnect-modal" class="kmila-reconnect" role="dialog" aria-live="assertive" aria-labelledby="kmila-reconnect-title" style="display: none;">
+        <div class="kmila-reconnect__backdrop" aria-hidden="true"></div>
+        <div class="kmila-reconnect__card" role="document">
+            <div class="kmila-reconnect__head">
+                <span class="kmila-reconnect__icon" aria-hidden="true">
+                    <svg viewBox="0 0 16 16" width="20" height="20" fill="currentColor"><path d="M10.706 3.294A12.55 12.55 0 0 0 8 3C5.259 3 2.723 3.882.663 5.379a.485.485 0 0 0-.048.736.518.518 0 0 0 .668.05A11.45 11.45 0 0 1 8 4c.63 0 1.249.05 1.852.148zm-1.39 1.297A11.5 11.5 0 0 0 8 4.5C5.466 4.5 3.156 5.475 1.452 7.087a.5.5 0 1 0 .69.726A10.5 10.5 0 0 1 8 5.5c.36 0 .713.018 1.06.052zM2.852 9.808a9.5 9.5 0 0 1 1.78-1.07l1.057 1.057a8 8 0 0 0-1.43.83.5.5 0 0 1-.6-.8c.06-.045.121-.087.181-.13l-.97-.97a.5.5 0 0 0-.018-.018zm5.234.21A6.5 6.5 0 0 0 8 10c-.99 0-1.94.221-2.79.62l1.018 1.018A5.5 5.5 0 0 1 8 11c.21 0 .416.012.617.034zM4.776 4.069l8.156 8.156a.5.5 0 1 0 .708-.708L4.683 2.56a.5.5 0 0 0-.707.707zM8 13a1 1 0 1 1 0 2 1 1 0 0 1 0-2"/></svg>
+                </span>
+                <div>
+                    <h2 id="kmila-reconnect-title" data-rcn-i18n="title">Connection lost</h2>
+                    <p class="kmila-reconnect__subtitle" data-rcn-i18n="subtitle">The link to the server was interrupted.</p>
+                </div>
+            </div>
+
+            <div class="kmila-reconnect__body">
+                <p class="kmila-reconnect__msg kmila-reconnect__msg--show" data-rcn-i18n="msgShow">
+                    Trying to reconnect…
+                </p>
+                <p class="kmila-reconnect__msg kmila-reconnect__msg--failed" data-rcn-i18n="msgFailed">
+                    We couldn't reconnect to the server. Reload the page to start a new session — your saved projects are intact.
+                </p>
+                <p class="kmila-reconnect__msg kmila-reconnect__msg--rejected" data-rcn-i18n="msgRejected">
+                    Your session has expired. Reload the page to continue — your saved projects are intact.
+                </p>
+
+                <div class="kmila-reconnect__spinner" aria-hidden="true">
+                    <span></span><span></span><span></span>
+                </div>
+            </div>
+
+            <div class="kmila-reconnect__actions">
+                <button type="button" id="components-reconnect-button" class="kmila-reconnect__btn kmila-reconnect__btn--primary" data-rcn-i18n="btnRetry">Try again</button>
+                <button type="button" class="kmila-reconnect__btn kmila-reconnect__btn--ghost" onclick="location.reload()" data-rcn-i18n="btnReload">Reload page</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Reconnect-modal localizer. Server-renders English; this script swaps
+        // text to the user's preferred language using the same key the rest of
+        // the app persists (`kmila-lang` in localStorage). Ships a baked-in
+        // dictionary because at reconnect time the SignalR circuit is dead and
+        // Traductor / DbContext are unreachable.
+        (function () {
+            var STR = {
+                en: { title: "Connection lost",                       subtitle: "The link to the server was interrupted.",                msgShow: "Trying to reconnect…",                                                                                       msgFailed: "We couldn't reconnect to the server. Reload the page to start a new session — your saved projects are intact.",                                  msgRejected: "Your session has expired. Reload the page to continue — your saved projects are intact.",                                  btnRetry: "Try again",      btnReload: "Reload page" },
+                es: { title: "Conexión perdida",                      subtitle: "El enlace con el servidor se interrumpió.",              msgShow: "Intentando reconectar…",                                                                                     msgFailed: "No fue posible reconectar al servidor. Recarga la página para iniciar una nueva sesión — tus proyectos guardados están intactos.",                msgRejected: "Tu sesión ha expirado. Recarga la página para continuar — tus proyectos guardados están intactos.",                        btnRetry: "Reintentar",     btnReload: "Recargar página" },
+                fr: { title: "Connexion perdue",                      subtitle: "Le lien avec le serveur a été interrompu.",              msgShow: "Tentative de reconnexion…",                                                                                  msgFailed: "Impossible de se reconnecter au serveur. Recharge la page pour démarrer une nouvelle session — tes projets enregistrés sont intacts.",            msgRejected: "Ta session a expiré. Recharge la page pour continuer — tes projets enregistrés sont intacts.",                             btnRetry: "Réessayer",      btnReload: "Recharger" },
+                de: { title: "Verbindung verloren",                   subtitle: "Die Verbindung zum Server wurde unterbrochen.",          msgShow: "Verbindung wird wiederhergestellt…",                                                                         msgFailed: "Verbindung zum Server konnte nicht wiederhergestellt werden. Lade die Seite neu, um eine neue Sitzung zu starten — deine gespeicherten Projekte bleiben erhalten.", msgRejected: "Deine Sitzung ist abgelaufen. Lade die Seite neu — deine gespeicherten Projekte bleiben erhalten.",                         btnRetry: "Erneut versuchen", btnReload: "Seite neu laden" },
+                ch: { title: "连接已断开",                              subtitle: "与服务器的连接被中断。",                                  msgShow: "正在尝试重新连接…",                                                                                          msgFailed: "无法重新连接到服务器。请重新加载页面以开启新会话 — 你已保存的项目不会丢失。",                                                                                                                                                                                                msgRejected: "会话已过期。请重新加载页面以继续 — 你已保存的项目不会丢失。",                                                                btnRetry: "重试",            btnReload: "重新加载页面" },
+                jp: { title: "接続が切断されました",                       subtitle: "サーバーとの接続が中断されました。",                       msgShow: "再接続を試みています…",                                                                                       msgFailed: "サーバーへ再接続できませんでした。ページを再読み込みして新しいセッションを開始してください — 保存済みのプロジェクトはそのままです。",                                                                                                                                                                  msgRejected: "セッションの有効期限が切れました。ページを再読み込みしてください — 保存済みのプロジェクトはそのままです。",                                                                                                            btnRetry: "再試行",          btnReload: "ページを再読み込み" },
+                ar: { title: "انقطع الاتصال",                            subtitle: "انقطع الرابط مع الخادم.",                                msgShow: "جارٍ محاولة إعادة الاتصال…",                                                                                  msgFailed: "تعذّر إعادة الاتصال بالخادم. أعِد تحميل الصفحة لبدء جلسة جديدة — مشروعاتك المحفوظة سليمة.",                                                                                                                                                                                                  msgRejected: "انتهت صلاحية جلستك. أعِد تحميل الصفحة للمتابعة — مشروعاتك المحفوظة سليمة.",                                                  btnRetry: "إعادة المحاولة",  btnReload: "إعادة تحميل الصفحة" }
+            };
+            var lang;
+            try { lang = localStorage.getItem('kmila-lang') || 'en'; } catch (_) { lang = 'en'; }
+            var dict = STR[lang] || STR.en;
+            var modal = document.getElementById('components-reconnect-modal');
+            if (!modal) return;
+            modal.querySelectorAll('[data-rcn-i18n]').forEach(function (el) {
+                var k = el.getAttribute('data-rcn-i18n');
+                if (dict[k]) el.textContent = dict[k];
+            });
+            // Match the document's text direction so Arabic flips correctly even
+            // when Blazor hasn't applied <html dir> yet.
+            if (lang === 'ar') modal.setAttribute('dir', 'rtl');
+
+            // Visibility sync. Some Blazor framework builds toggle the modal
+            // both by adding a state class AND by writing `style.display`
+            // inline; in that case a class-only CSS rule loses to the inline
+            // style and the modal stays hidden on disconnect. Mirroring the
+            // state class into style.display ourselves keeps visibility
+            // correct regardless of which path the framework takes — and the
+            // MutationObserver is cheap because the class attribute only
+            // changes a handful of times across a session.
+            var STATE_CLASSES = [
+                'components-reconnect-show',
+                'components-reconnect-failed',
+                'components-reconnect-rejected'
+            ];
+            function syncVisibility() {
+                var visible = STATE_CLASSES.some(function (c) {
+                    return modal.classList.contains(c);
+                });
+                modal.style.display = visible ? 'flex' : 'none';
+            }
+            try {
+                new MutationObserver(syncVisibility).observe(modal, {
+                    attributes: true,
+                    attributeFilter: ['class']
+                });
+            } catch (_) { /* MutationObserver missing — the class CSS still applies */ }
+            syncVisibility();
+        })();
+    </script>
+
     <script src="_framework/blazor.web.js"></script>
 </body>
 

@@ -1,0 +1,279 @@
+@*
+    BlockEditor — wraps a kmila-blocks workspace via JS interop.
+
+    Used by the Concepts exercises (`/concepts/exercise/{id}`). The toolbox
+    + initial state come from the parent; the component fires `OnChange`
+    whenever the workspace shape changes so the parent can re-fingerprint
+    and look for a pre-baked timeline match.
+
+    JS interop lives in `wwwroot/js/kmila-blocks.js` (loaded from both host
+    pages). Public interop names keep the `kmilaBlockly*` prefix for
+    historical reasons; the serialized JSON shape matches Blockly's
+    `workspaces.save()` so BlockProgram.cs's fingerprinting works
+    unchanged.
+*@
+
+@implements IAsyncDisposable
+@implements IDisposable
+
+<div class="kmila-block-editor">
+    <div id="@_workspaceId" class="kmila-block-editor__canvas"></div>
+
+    @* Phase G (2026-06-28): floating toolbar — overlays the canvas
+       top-end. Hidden until the workspace mounts so it doesn't flicker on
+       prerender. On phone widths the .kmila-block-root flips to column +
+       bottom-sheet palette, so the toolbar floats above the palette band
+       and stays reachable. *@
+    @if (_mounted && !ReadOnly)
+    {
+        <div class="kmila-block-toolbar" role="toolbar"
+             aria-label="@Traductor.T("BLOCK_EDITOR_TOOLBAR_ARIA")">
+            <KmilaTooltip TextKey="BLOCK_EDITOR_UNDO">
+                <button type="button" class="kmila-block-toolbar__btn"
+                        aria-label="@Traductor.T("BLOCK_EDITOR_UNDO")"
+                        @onclick="UndoAsync">
+                    <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
+                </button>
+            </KmilaTooltip>
+            <KmilaTooltip TextKey="BLOCK_EDITOR_REDO">
+                <button type="button" class="kmila-block-toolbar__btn"
+                        aria-label="@Traductor.T("BLOCK_EDITOR_REDO")"
+                        @onclick="RedoAsync">
+                    <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+                </button>
+            </KmilaTooltip>
+            <span class="kmila-block-toolbar__sep" aria-hidden="true"></span>
+            <KmilaTooltip TextKey="BLOCK_EDITOR_FIT">
+                <button type="button" class="kmila-block-toolbar__btn"
+                        aria-label="@Traductor.T("BLOCK_EDITOR_FIT")"
+                        @onclick="FitAsync">
+                    <i class="bi bi-aspect-ratio" aria-hidden="true"></i>
+                </button>
+            </KmilaTooltip>
+            <KmilaTooltip TextKey="BLOCK_EDITOR_CLEAR">
+                <button type="button" class="kmila-block-toolbar__btn kmila-block-toolbar__btn--danger"
+                        aria-label="@Traductor.T("BLOCK_EDITOR_CLEAR")"
+                        @onclick="() => ClearAsync()">
+                    <i class="bi bi-trash" aria-hidden="true"></i>
+                </button>
+            </KmilaTooltip>
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// Blockly toolbox definition. Either a string (raw JSON) or a
+    /// <c>JsonElement</c> — both get serialized to the JS side as-is.
+    /// </summary>
+    [Parameter, EditorRequired] public object Toolbox { get; set; } = "{}";
+
+    /// <summary>
+    /// Optional starter workspace state (Blockly serialization JSON).
+    /// When provided, the editor loads it after init so the student opens
+    /// the exercise with a partial composition.
+    /// </summary>
+    [Parameter] public string? InitialStateJson { get; set; }
+
+    /// <summary>Read-only mode for the "show me the solution" preview.</summary>
+    [Parameter] public bool ReadOnly { get; set; } = false;
+
+    /// <summary>Fires (debounced via Blockly) whenever the workspace shape changes.</summary>
+    [Parameter] public EventCallback OnChange { get; set; }
+
+    private readonly string _workspaceId = $"kmila-blockly-{Guid.NewGuid():N}";
+    private DotNetObjectReference<BlockEditor>? _dotnetRef;
+    private bool _mounted;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            // Hand a DotNetObjectReference to the JS side so Blockly's
+            // change listener can call OnWorkspaceChanged back into C#.
+            // The ref MUST live as long as the workspace, hence the field.
+            _dotnetRef = DotNetObjectReference.Create(this);
+
+            // Serialize the toolbox once here so the C# side controls the
+            // exact shape Blockly sees (avoids JSON.parse quirks on the JS
+            // side when callers pass either a string or a JsonElement).
+            var toolboxJson = Toolbox switch
+            {
+                string s => s,
+                System.Text.Json.JsonElement el => el.GetRawText(),
+                _ => System.Text.Json.JsonSerializer.Serialize(Toolbox)
+            };
+            // Blockly wants the toolbox as an object, not a JSON string —
+            // pass it through JS.InvokeVoidAsync as a raw value so it lands
+            // already parsed.
+            object? toolboxArg = string.IsNullOrWhiteSpace(toolboxJson)
+                ? null
+                : System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(toolboxJson);
+
+            await JS.InvokeVoidAsync("kmilaBlocklyInit",
+                _workspaceId, toolboxArg, ReadOnly, _dotnetRef);
+            _mounted = true;
+            // Phase G (2026-06-28) — re-render so the floating toolbar
+            // (which is gated on `_mounted`) becomes visible. Without
+            // this, the toolbar stays hidden because Blazor doesn't
+            // observe private-field mutations.
+            StateHasChanged();
+
+            if (!string.IsNullOrEmpty(InitialStateJson))
+            {
+                await JS.InvokeVoidAsync("kmilaBlocklyLoad", _workspaceId, InitialStateJson);
+            }
+        }
+        catch (Exception)
+        {
+            // JS not available (prerender, very early MAUI WebView boot).
+            // The component re-renders once the JS interop is up; the next
+            // OnAfterRenderAsync(firstRender=true) won't fire — so we'd
+            // need a manual retry. For our pages this isn't reached in
+            // practice; logging would just be noise during prerender.
+        }
+    }
+
+    /// <summary>
+    /// Returns the workspace's serialized JSON or null when the editor
+    /// hasn't mounted yet. Called by the parent on "Run" to fingerprint.
+    /// </summary>
+    public async ValueTask<string?> SerializeAsync()
+    {
+        if (!_mounted) return null;
+        try
+        {
+            return await JS.InvokeAsync<string?>("kmilaBlocklySerialize", _workspaceId);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Clear all blocks (the page's "Reset" button calls this).</summary>
+    public async ValueTask ClearAsync()
+    {
+        if (!_mounted) return;
+        try { await JS.InvokeVoidAsync("kmilaBlocklyClear", _workspaceId); }
+        catch { }
+    }
+
+    // Phase G (2026-06-28) — floating toolbar bindings. Each method
+    // delegates to the JS engine's existing undo/redo stacks (50-entry
+    // cap) and to the new scroll-to-origin fit helper. Errors swallowed
+    // because the toolbar is best-effort UX, never gating the workflow.
+    private async Task UndoAsync()
+    {
+        if (!_mounted) return;
+        try { await JS.InvokeVoidAsync("kmilaBlocksUndo", _workspaceId); }
+        catch { }
+    }
+    private async Task RedoAsync()
+    {
+        if (!_mounted) return;
+        try { await JS.InvokeVoidAsync("kmilaBlocksRedo", _workspaceId); }
+        catch { }
+    }
+    private async Task FitAsync()
+    {
+        if (!_mounted) return;
+        try { await JS.InvokeVoidAsync("kmilaBlocksFit", _workspaceId); }
+        catch { }
+    }
+
+    /// <summary>
+    /// Replace the workspace with the given serialization. Used by the
+    /// Editor's Code → Blocks sync (backlog #16 Step 3): parse the
+    /// active VHDL buffer to a workspace JSON and load it here so the
+    /// student sees their code rendered as blocks.
+    /// </summary>
+    public async ValueTask<bool> LoadAsync(string stateJson)
+    {
+        if (!_mounted || string.IsNullOrWhiteSpace(stateJson)) return false;
+        try
+        {
+            return await JS.InvokeAsync<bool>("kmilaBlocklyLoad", _workspaceId, stateJson);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Apply <paramref name="cssClass"/> to blocks whose id is in
+    /// <paramref name="blockIds"/>, removing it from all other blocks.
+    /// Backlog #16 Step 7 — Editor matches simulator-diagnostic lines
+    /// against the emitter's line→blockId map and decorates the
+    /// offending blocks with kmila-block--error.
+    /// </summary>
+    public async ValueTask HighlightAsync(IEnumerable<string> blockIds, string cssClass)
+    {
+        if (!_mounted) return;
+        try
+        {
+            await JS.InvokeVoidAsync("kmilaBlocksHighlight",
+                _workspaceId, blockIds.ToArray(), cssClass);
+        }
+        catch { /* JS not ready — diagnostics will retry on next publish */ }
+    }
+
+    /// <summary>Remove all instances of <paramref name="cssClass"/> from this workspace.</summary>
+    public async ValueTask ClearHighlightAsync(string cssClass)
+    {
+        if (!_mounted) return;
+        try
+        {
+            await JS.InvokeVoidAsync("kmilaBlocksClearHighlight",
+                _workspaceId, cssClass);
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// Manual resize hook — call after a dock change or container resize
+    /// so Blockly re-measures its SVG canvas.
+    /// </summary>
+    public async ValueTask ResizeAsync()
+    {
+        if (!_mounted) return;
+        try { await JS.InvokeVoidAsync("kmilaBlocklyResize", _workspaceId); }
+        catch { }
+    }
+
+    /// <summary>
+    /// Invoked by the JS-side Blockly change listener whenever the
+    /// workspace shape changes. We forward to the parent's OnChange.
+    /// </summary>
+    [JSInvokable]
+    public Task OnWorkspaceChanged()
+    {
+        if (OnChange.HasDelegate)
+        {
+            return OnChange.InvokeAsync();
+        }
+        return Task.CompletedTask;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_mounted)
+        {
+            try { await JS.InvokeVoidAsync("kmilaBlocklyDispose", _workspaceId); }
+            catch { /* page already unloading */ }
+        }
+        _dotnetRef?.Dispose();
+        _dotnetRef = null;
+    }
+
+    public void Dispose()
+    {
+        // Sync disposal path — DisposeAsync is preferred but Blazor's
+        // shutdown can call either. Best-effort cleanup of the DotNet ref;
+        // the JS workspace will be GC'd with the page.
+        _dotnetRef?.Dispose();
+        _dotnetRef = null;
+    }
+}

@@ -1,0 +1,307 @@
+@page "/concepts/exercise/{ExerciseId}"
+@using Kmila.Shared.Models
+@using Kmila.Shared.Services
+@using Kmila.Shared.Components
+@inject ConceptCatalog Catalog
+@inject ConceptProgressStore Progress
+@inject BlockProgram BlockProgram
+@implements IDisposable
+<PageTitle>@(_title ?? Traductor.T("CONCEPTS_TITLE"))</PageTitle>
+
+@*
+    ConceptExercise — Scratch-style block exercise.
+
+    The student composes a program in a Blockly workspace; when they press
+    Run, we fingerprint the workspace and look up a pre-baked execution
+    timeline from the exercise's catalog. On match, the ExecutionPlayer
+    plays the timeline; on miss, we surface a friendly "this combo isn't
+    pre-baked yet" hint so the page never feels broken.
+
+    The visible-line highlight pattern is the same one used by the lesson
+    player (kmilaExecHighlightLines), but here the "code" is symbolic —
+    the timeline drives the signal table and notes.
+*@
+
+<section class="lesson-page">
+    <div class="lesson-page__chrome">
+        <a href="/concepts" class="lesson-crumb">
+            <Icon Name="IconName.ArrowLeft" />
+            <span>@Traductor.T("CONCEPTS_ALL_CONCEPTS")</span>
+        </a>
+
+        @if (_exercise != null)
+        {
+            <div class="lesson-chip-row">
+                <span class="lesson-chip lesson-chip--kind">
+                    <Icon Name="IconName.PuzzleFill" />
+                    @KindLabel(_exercise.Kind)
+                </span>
+                <span class="lesson-chip lesson-chip--time">
+                    <Icon Name="IconName.ClockHistory" />
+                    ~@_exercise.EstimatedMinutes @Traductor.T("CONCEPTS_MINUTES_SHORT")
+                </span>
+                @if (_completed)
+                {
+                    <span class="lesson-chip lesson-chip--done">
+                        <Icon Name="IconName.CheckCircleFill" />
+                        @Traductor.T("CONCEPTS_DONE")
+                    </span>
+                }
+            </div>
+        }
+    </div>
+
+    @if (_loading)
+    {
+        <div class="learn-empty">
+            <Spinner Type="SpinnerType.Border" Color="SpinnerColor.Primary" />
+        </div>
+    }
+    else if (_exercise == null || _payload == null)
+    {
+        <div class="learn-empty">
+            <div class="learn-empty__icon"><Icon Name="IconName.PuzzleFill" /></div>
+            <h2>@Traductor.T("CONCEPTS_EXERCISE_NOT_FOUND")</h2>
+            <p>@Traductor.T("CONCEPTS_EXERCISE_NOT_FOUND_BODY")</p>
+            <a class="kmila-btn kmila-btn--accent" href="/concepts">@Traductor.T("CONCEPTS_BACK_CATALOG")</a>
+        </div>
+    }
+    else
+    {
+        <article class="lesson-body">
+            <h1>@_title</h1>
+            @if (!string.IsNullOrEmpty(_summary))
+            {
+                <p class="lesson-page__subtitle">@_summary</p>
+            }
+            @if (!string.IsNullOrEmpty(_brief))
+            {
+                <div class="lesson-markdown">
+                    @MarkdownRenderer.Render(_brief)
+                </div>
+            }
+
+            <div class="kmila-exercise-board">
+                <BlockEditor @ref="_editor"
+                             Toolbox="@_payload.Toolbox"
+                             InitialStateJson="@(_payload.Starter.ValueKind == System.Text.Json.JsonValueKind.Object ? _payload.Starter.GetRawText() : null)"
+                             OnChange="OnWorkspaceChanged" />
+
+                <div class="kmila-exercise-actions">
+                    <button type="button" class="kmila-btn kmila-btn--ghost"
+                            @onclick="ResetAsync"
+                            disabled="@_running">
+                        <Icon Name="IconName.ArrowCounterclockwise" />
+                        <span>@Traductor.T("CONCEPTS_EXERCISE_RESET")</span>
+                    </button>
+                    <button type="button" class="kmila-btn kmila-btn--accent"
+                            @onclick="RunAsync"
+                            disabled="@_running">
+                        @if (_running)
+                        {
+                            <Spinner Type="SpinnerType.Border" Size="SpinnerSize.Small" />
+                        }
+                        else
+                        {
+                            <Icon Name="IconName.PlayFill" />
+                        }
+                        <span>@Traductor.T("CONCEPTS_EXERCISE_RUN")</span>
+                    </button>
+                </div>
+
+                @if (_matchedComposition != null)
+                {
+                    <div class="kmila-exercise-match kmila-exercise-match--ok">
+                        <Icon Name="IconName.CheckCircleFill" />
+                        <div>
+                            <strong>@ConceptCatalog.Localize(_matchedComposition.Label, _lang, Traductor.T("CONCEPTS_EXERCISE_MATCHED"))</strong>
+                            <span>@Traductor.T("CONCEPTS_EXERCISE_MATCH_HINT")</span>
+                        </div>
+                    </div>
+                    <ExecutionPlayer Doc="_matchedComposition.Timeline" Lang="_lang" />
+                }
+                else if (_attemptedRun && !string.IsNullOrEmpty(_lastFingerprint))
+                {
+                    <div class="kmila-exercise-match kmila-exercise-match--miss">
+                        <Icon Name="IconName.QuestionDiamond" />
+                        <div>
+                            <strong>@Traductor.T("CONCEPTS_EXERCISE_NO_MATCH_TITLE")</strong>
+                            <span>@Traductor.T("CONCEPTS_EXERCISE_NO_MATCH_BODY")</span>
+                        </div>
+                    </div>
+                }
+                else if (_attemptedRun)
+                {
+                    <div class="kmila-exercise-match kmila-exercise-match--miss">
+                        <Icon Name="IconName.ExclamationTriangleFill" />
+                        <div>
+                            <strong>@Traductor.T("CONCEPTS_EXERCISE_EMPTY_TITLE")</strong>
+                            <span>@Traductor.T("CONCEPTS_EXERCISE_EMPTY_BODY")</span>
+                        </div>
+                    </div>
+                }
+            </div>
+        </article>
+
+        <footer class="lesson-footer">
+            <button type="button"
+                    class="kmila-btn @(_completed ? "kmila-btn--ghost kmila-btn--primary" : "kmila-btn--success")"
+                    @onclick="ToggleCompletedAsync">
+                <Icon Name="@(_completed ? IconName.ArrowCounterclockwise : IconName.CheckCircleFill)" />
+                <span>@Traductor.T(_completed ? "CONCEPTS_MARK_INCOMPLETE" : "CONCEPTS_MARK_COMPLETE")</span>
+            </button>
+        </footer>
+    }
+</section>
+
+@code {
+    [Parameter] public string ExerciseId { get; set; } = string.Empty;
+
+    private ConceptModule? _module;
+    private ConceptExercise? _exercise;
+    private ExercisePayload? _payload;
+    private BlockEditor? _editor;
+    private string _lang = "en";
+    private string? _title;
+    private string? _summary;
+    private string? _brief;
+    private bool _loading = true;
+    private bool _completed;
+    private bool _running;
+    private bool _attemptedRun;
+    private string? _lastFingerprint;
+    private ExerciseComposition? _matchedComposition;
+
+    protected override void OnInitialized()
+    {
+        Traductor.StaticOnLangChanged += OnLangChanged;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await ReloadAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (string.IsNullOrEmpty(_brief)) return;
+        // Pipe fenced code blocks in the brief through Monaco's tokenizer so
+        // any VHDL snippets render with the same colors as the Editor.
+        try { await JS.InvokeVoidAsync("kmilaColorizeLessonCode", ".lesson-markdown"); }
+        catch { /* monaco not loaded — fine */ }
+    }
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        _lang = Traductor.Lang ?? "en";
+        _matchedComposition = null;
+        _attemptedRun = false;
+        _lastFingerprint = null;
+
+        var pair = await Catalog.GetExerciseAsync(ExerciseId);
+        if (pair is null)
+        {
+            _module = null;
+            _exercise = null;
+            _payload = null;
+            _loading = false;
+            return;
+        }
+
+        _module = pair.Value.Module;
+        _exercise = pair.Value.Exercise;
+        _title = ConceptCatalog.Localize(_exercise.Titles, _lang, _exercise.Id);
+        _summary = ConceptCatalog.Localize(_exercise.Summaries, _lang, string.Empty);
+
+        _payload = await Catalog.GetExercisePayloadAsync(_exercise.Id);
+
+        // Markdown brief is optional — lives next to the exercise JSON at
+        // wwwroot/Concepts/exercises/{id}.md. We render whatever's there;
+        // EN fallback is the catalog's standard policy.
+        _brief = await Catalog.GetConceptBodyAsync("exercises", _exercise.Id, _lang);
+
+        _completed = await Progress.IsCompletedAsync("exercises", _exercise.Id);
+
+        _ = Progress.TouchLastOpenedAsync("exercises", _exercise.Id);
+
+        _loading = false;
+    }
+
+    /// <summary>
+    /// Fired by BlockEditor whenever the workspace shape changes. We
+    /// reset the match state so the student sees fresh feedback only
+    /// after they explicitly click Run again.
+    /// </summary>
+    private void OnWorkspaceChanged()
+    {
+        _matchedComposition = null;
+        _attemptedRun = false;
+        StateHasChanged();
+    }
+
+    private async Task RunAsync()
+    {
+        if (_payload == null || _editor == null) return;
+        _running = true;
+        try
+        {
+            var json = await _editor.SerializeAsync();
+            _lastFingerprint = BlockProgram.Fingerprint(json);
+            _attemptedRun = true;
+            _matchedComposition = BlockProgram.FindMatch(_payload, _lastFingerprint);
+
+            // Auto-mark completed the first time a match is found — same
+            // contract as Learn's "open the sample once" rule.
+            if (_matchedComposition != null && _exercise != null && !_completed)
+            {
+                await Progress.MarkCompletedAsync("exercises", _exercise.Id);
+                _completed = true;
+            }
+        }
+        finally
+        {
+            _running = false;
+        }
+    }
+
+    private async Task ResetAsync()
+    {
+        if (_editor != null) await _editor.ClearAsync();
+        _matchedComposition = null;
+        _attemptedRun = false;
+        _lastFingerprint = null;
+    }
+
+    private async Task ToggleCompletedAsync()
+    {
+        if (_exercise == null) return;
+        if (_completed)
+            await Progress.MarkIncompleteAsync("exercises", _exercise.Id);
+        else
+            await Progress.MarkCompletedAsync("exercises", _exercise.Id);
+        _completed = !_completed;
+    }
+
+    private void OnLangChanged()
+    {
+        InvokeAsync(async () =>
+        {
+            await ReloadAsync();
+            StateHasChanged();
+        });
+    }
+
+    private string KindLabel(ConceptExerciseKind k) => k switch
+    {
+        ConceptExerciseKind.Recipe  => Traductor.T("CONCEPTS_EXERCISE_KIND_RECIPE"),
+        ConceptExerciseKind.Logic   => Traductor.T("CONCEPTS_EXERCISE_KIND_LOGIC"),
+        ConceptExerciseKind.Clocked => Traductor.T("CONCEPTS_EXERCISE_KIND_CLOCKED"),
+        _                           => k.ToString()
+    };
+
+    public void Dispose()
+    {
+        Traductor.StaticOnLangChanged -= OnLangChanged;
+    }
+}

@@ -1,0 +1,207 @@
+@*
+    Privacy page — single source of truth for what Kmila stores, where, and
+    what (if anything) leaves the device. Linked from Settings and from the
+    layout footer; structured as four settings-card sections so the visual
+    language matches the rest of the app.
+*@
+@page "/privacy"
+@implements IDisposable
+
+<PageTitle>@Traductor.T("PRIVACY_TITLE")</PageTitle>
+
+<section class="settings-page">
+    <header class="settings-page__header">
+        <span class="home-section__eyebrow">@Traductor.T("PRIVACY_EYEBROW")</span>
+        <h1>@Traductor.T("PRIVACY_TITLE")</h1>
+        <p class="settings-page__intro">@Traductor.T("PRIVACY_INTRO")</p>
+    </header>
+
+    <div class="settings-page__grid">
+
+        @* --- Local storage inventory --- *@
+        <article class="settings-card">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--accent">
+                    <Icon Name="IconName.HddFill" />
+                </span>
+                <div class="settings-card__head-text">
+                    <h2>@Traductor.T("PRIVACY_LOCAL_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("PRIVACY_LOCAL_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                <p>@Traductor.T("PRIVACY_LOCAL_INTRO")</p>
+                <ul class="settings-list">
+                    <li class="settings-list__item">
+                        <div class="settings-list__info">
+                            <Icon Name="IconName.Database" />
+                            <span class="settings-list__name">@Traductor.T("PRIVACY_LOCAL_DB")</span>
+                        </div>
+                    </li>
+                    <li class="settings-list__item">
+                        <div class="settings-list__info">
+                            <Icon Name="IconName.GearFill" />
+                            <span class="settings-list__name">@Traductor.T("PRIVACY_LOCAL_SETTINGS")</span>
+                        </div>
+                    </li>
+                    <li class="settings-list__item">
+                        <div class="settings-list__info">
+                            <Icon Name="IconName.FileEarmarkCode" />
+                            <span class="settings-list__name">@Traductor.T("PRIVACY_LOCAL_BUNDLES")</span>
+                        </div>
+                    </li>
+                    <li class="settings-list__item">
+                        <div class="settings-list__info">
+                            <Icon Name="IconName.JournalText" />
+                            <span class="settings-list__name">@Traductor.T("PRIVACY_LOCAL_LOGS")</span>
+                        </div>
+                    </li>
+                </ul>
+                <p class="settings-card__note">
+                    <Icon Name="IconName.ShieldCheck" />
+                    <span>@Traductor.T("PRIVACY_LOCAL_NOTE")</span>
+                </p>
+            </div>
+        </article>
+
+        @* --- GitHub feedback round-trip --- *@
+        <article class="settings-card">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--info">
+                    <Icon Name="IconName.Github" />
+                </span>
+                <div class="settings-card__head-text">
+                    <h2>@Traductor.T("PRIVACY_FEEDBACK_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("PRIVACY_FEEDBACK_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                <p>@Traductor.T("PRIVACY_FEEDBACK_INTRO")</p>
+                <ul class="settings-list">
+                    <li class="settings-list__item">
+                        <div class="settings-list__info">
+                            <Icon Name="IconName.Clipboard2CheckFill" />
+                            <span class="settings-list__name">@Traductor.T("PRIVACY_FEEDBACK_TIER1")</span>
+                        </div>
+                    </li>
+                    <li class="settings-list__item">
+                        <div class="settings-list__info">
+                            <Icon Name="IconName.BoxArrowUpRight" />
+                            <span class="settings-list__name">@Traductor.T("PRIVACY_FEEDBACK_TIER2")</span>
+                        </div>
+                    </li>
+                    <li class="settings-list__item">
+                        <div class="settings-list__info">
+                            <Icon Name="IconName.PersonCircle" />
+                            <span class="settings-list__name">@Traductor.T("PRIVACY_FEEDBACK_TIER3")</span>
+                        </div>
+                    </li>
+                </ul>
+                <p class="settings-card__note">
+                    <Icon Name="IconName.InfoCircle" />
+                    <span>@Traductor.T("PRIVACY_FEEDBACK_NOTE")</span>
+                </p>
+                <p class="settings-card__note">
+                    <Icon Name="IconName.Git" />
+                    <span>@Traductor.T("PRIVACY_VC_NOTE")</span>
+                </p>
+            </div>
+        </article>
+
+        @* --- Kmila website links (bug report + survey) --- *@
+        <article class="settings-card">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--info">
+                    <Icon Name="IconName.Globe" />
+                </span>
+                <div class="settings-card__head-text">
+                    <h2>@Traductor.T("PRIVACY_KMILA_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("PRIVACY_KMILA_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                <p>@Traductor.T("PRIVACY_KMILA_INTRO")</p>
+                <ul class="settings-list">
+                    <li class="settings-list__item">
+                        <div class="settings-list__info">
+                            <Icon Name="IconName.BugFill" />
+                            <span class="settings-list__name">@Traductor.T("PRIVACY_KMILA_REPORT")</span>
+                        </div>
+                    </li>
+                    <li class="settings-list__item">
+                        <div class="settings-list__info">
+                            <Icon Name="IconName.ChatHeartFill" />
+                            <span class="settings-list__name">@Traductor.T("PRIVACY_KMILA_SURVEY")</span>
+                        </div>
+                    </li>
+                </ul>
+                <p class="settings-card__note">
+                    <Icon Name="IconName.ShieldCheck" />
+                    <span>@Traductor.T("PRIVACY_KMILA_NOTE")</span>
+                </p>
+            </div>
+        </article>
+
+        @* --- Third-party fonts / CDNs --- *@
+        <article class="settings-card">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--warning">
+                    <Icon Name="IconName.Cloud" />
+                </span>
+                <div class="settings-card__head-text">
+                    <h2>@Traductor.T("PRIVACY_CDN_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("PRIVACY_CDN_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                <p>@Traductor.T("PRIVACY_CDN_INTRO")</p>
+                <p class="settings-card__note">
+                    <Icon Name="IconName.ExclamationTriangleFill" />
+                    <span>@Traductor.T("PRIVACY_CDN_NOTE")</span>
+                </p>
+            </div>
+        </article>
+
+        @* --- Data deletion / export rights --- *@
+        <article class="settings-card">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--success">
+                    <Icon Name="IconName.ShieldLock" />
+                </span>
+                <div class="settings-card__head-text">
+                    <h2>@Traductor.T("PRIVACY_RIGHTS_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("PRIVACY_RIGHTS_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                <p>@Traductor.T("PRIVACY_RIGHTS_EXPORT")</p>
+                <p>@Traductor.T("PRIVACY_RIGHTS_DELETE")</p>
+                <div class="settings-card__actions">
+                    <a href="/settings" class="kmila-btn kmila-btn--primary">
+                        <Icon Name="IconName.GearFill" />
+                        <span>@Traductor.T("PRIVACY_RIGHTS_GO_SETTINGS")</span>
+                    </a>
+                </div>
+                <p class="settings-card__note">
+                    <Icon Name="IconName.InfoCircle" />
+                    <span>@Traductor.T("PRIVACY_RIGHTS_NOTE")</span>
+                </p>
+            </div>
+        </article>
+
+    </div>
+</section>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Traductor.StaticOnLangChanged += OnLang;
+    }
+
+    private void OnLang() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Traductor.StaticOnLangChanged -= OnLang;
+    }
+}

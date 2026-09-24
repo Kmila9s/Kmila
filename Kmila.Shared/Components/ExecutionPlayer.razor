@@ -1,0 +1,546 @@
+@*
+    ExecutionPlayer — the Concepts track's keystone widget.
+
+    Renders a read-only Monaco editor + a tape transport + a live signal
+    table, driven by a pre-recorded execution timeline (ExecutionTimelineDoc).
+    The component is fully self-contained: pass it a Doc and a Lang, and it
+    handles playback, line highlights via JS interop, and value-change pulses.
+
+    Why pre-recorded: see Documentacion/ROADMAP_concurrent_execution_module.md.
+    Phase 1 hardcodes the timelines so each step carries a teaching note and
+    we sidestep instrumenting the live simulator.
+*@
+
+@implements IDisposable
+
+<div class="kmila-exec-player" @onkeydown="OnKeyDown" tabindex="0">
+    <div class="kmila-exec-player__code">
+        <div class="kmila-exec-monaco">
+            <StandaloneCodeEditor @ref="_monaco"
+                                  ConstructionOptions="EditorOptions"
+                                  OnDidInit="OnMonacoInitAsync" />
+        </div>
+
+        <div class="kmila-exec-tape" role="group" aria-label="@Traductor.T("CONCEPTS_PLAYER_TAPE_LABEL")">
+            <div class="kmila-exec-tape__progress">
+                <span>@(_runner.CurrentIndex + 1) / @TotalSteps</span>
+                <div class="kmila-exec-tape__progress-track">
+                    <div class="kmila-exec-tape__progress-fill" style="width: @ProgressPct%"></div>
+                </div>
+                <span>@StepLabel</span>
+            </div>
+
+            <KmilaTooltip TextKey="CONCEPTS_PLAYER_RESTART">
+                <button type="button" class="kmila-btn-icon"
+                        aria-label="@Traductor.T("CONCEPTS_PLAYER_RESTART")"
+                        @onclick="OnRestart">
+                    <Icon Name="IconName.ArrowCounterclockwise" />
+                </button>
+            </KmilaTooltip>
+            <KmilaTooltip TextKey="CONCEPTS_PLAYER_STEP_BACK">
+                <button type="button" class="kmila-btn-icon"
+                        aria-label="@Traductor.T("CONCEPTS_PLAYER_STEP_BACK")"
+                        disabled="@(_runner.CurrentIndex == 0)"
+                        @onclick="OnStepBack">
+                    <Icon Name="IconName.SkipStart" />
+                </button>
+            </KmilaTooltip>
+            @if (_runner.IsPlaying)
+            {
+                <KmilaTooltip TextKey="CONCEPTS_PLAYER_PAUSE">
+                    <button type="button" class="kmila-btn-icon kmila-btn-icon--accent"
+                            aria-label="@Traductor.T("CONCEPTS_PLAYER_PAUSE")"
+                            @onclick="OnPause">
+                        <Icon Name="IconName.PauseFill" />
+                    </button>
+                </KmilaTooltip>
+            }
+            else
+            {
+                <KmilaTooltip TextKey="CONCEPTS_PLAYER_PLAY">
+                    <button type="button" class="kmila-btn-icon kmila-btn-icon--accent"
+                            aria-label="@Traductor.T("CONCEPTS_PLAYER_PLAY")"
+                            @onclick="OnPlay">
+                        <Icon Name="IconName.PlayFill" />
+                    </button>
+                </KmilaTooltip>
+            }
+            <KmilaTooltip TextKey="CONCEPTS_PLAYER_STEP_FORWARD">
+                <button type="button" class="kmila-btn-icon"
+                        aria-label="@Traductor.T("CONCEPTS_PLAYER_STEP_FORWARD")"
+                        disabled="@_runner.IsAtEnd"
+                        @onclick="OnStepForward">
+                    <Icon Name="IconName.SkipEnd" />
+                </button>
+            </KmilaTooltip>
+
+            <label class="kmila-exec-tape__speed">
+                @Traductor.T("CONCEPTS_PLAYER_SPEED")
+                <select value="@_speedKey" @onchange="OnSpeedChanged">
+                    <option value="0.5">0.5×</option>
+                    <option value="1">1×</option>
+                    <option value="2">2×</option>
+                </select>
+            </label>
+        </div>
+    </div>
+
+    <div class="kmila-exec-player__side">
+        <div class="kmila-exec-signals" aria-label="@Traductor.T("CONCEPTS_PLAYER_SIGNALS")">
+            <div class="kmila-exec-signals__header">@Traductor.T("CONCEPTS_PLAYER_SIGNALS")</div>
+
+            @* Phase D: filter / group UI surfaces only on large designs.
+               Threshold is 12 signals AND at least 2 distinct port types in
+               the metadata — small Concepts lessons never see this. *@
+            @if (ShouldShowFilterUI())
+            {
+                <div class="kmila-exec-signals__filter">
+                    <input type="search"
+                           class="kmila-exec-signals__search"
+                           placeholder="@Traductor.T("CONCEPTS_PLAYER_FILTER_SEARCH_PLACEHOLDER")"
+                           value="@_filterText"
+                           @oninput="OnFilterTextChanged" />
+                    <div class="kmila-exec-signals__chips"
+                         role="group"
+                         aria-label="@Traductor.T("CONCEPTS_PLAYER_FILTER_TYPES")">
+                        @foreach (var pt in AllPortTypes())
+                        {
+                            var key = pt;
+                            var active = _filterPortTypes.Contains(key);
+                            <button type="button"
+                                    class="kmila-exec-signals__chip @(active ? "kmila-exec-signals__chip--active" : "")"
+                                    @onclick="() => TogglePortType(key)">
+                                @PortTypeLabel(key)
+                            </button>
+                        }
+                        <label class="kmila-exec-signals__groupby">
+                            <input type="checkbox" checked="@_groupByType"
+                                   @onchange="OnGroupByChanged" />
+                            <span>@Traductor.T("CONCEPTS_PLAYER_FILTER_GROUP")</span>
+                        </label>
+                    </div>
+                </div>
+            }
+
+            <table class="kmila-exec-signals__table">
+                <tbody>
+                    @foreach (var (groupHeader, signalName) in FilteredAndGroupedNames())
+                    {
+                        if (groupHeader != null)
+                        {
+                            <tr class="kmila-exec-signals__group-row">
+                                <th colspan="2">@groupHeader</th>
+                            </tr>
+                            continue;
+                        }
+                        var name = signalName!;
+                        var value = _runner.CurrentStep.Signals.TryGetValue(name, out var v) ? v : "—";
+                        var changed = HasChanged(name, value);
+                        <tr>
+                            <th scope="row">@name</th>
+                            <td>
+                                <span class="kmila-exec-signals__value @(changed ? "kmila-exec-signals__value--changed" : "")">
+                                    @value
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="kmila-exec-player__note" role="status" aria-live="polite">
+            @if (!string.IsNullOrEmpty(_currentNote))
+            {
+                @_currentNote
+            }
+            else
+            {
+                <span class="kmila-exec-player__note-empty">@Traductor.T("CONCEPTS_PLAYER_NOTE_EMPTY")</span>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    /// <summary>Timeline to play. Swapping documents resets the runner.</summary>
+    [Parameter, EditorRequired] public ExecutionTimelineDoc Doc { get; set; } = new();
+
+    /// <summary>Current UI language — drives which <c>note</c> string we render.</summary>
+    [Parameter] public string Lang { get; set; } = "en";
+
+    /// <summary>Fired once when autoplay reaches the last step.</summary>
+    [Parameter] public EventCallback OnPlaybackComplete { get; set; }
+
+    /// <summary>
+    /// Phase B+ (2026-05-19): live-follow mode. When true, the player jumps
+    /// to the latest step every time <see cref="LiveTick"/> bumps — drives
+    /// the "watch the simulation as it runs" UX. When false (default), the
+    /// component behaves like the post-hoc replay surface it always was.
+    /// </summary>
+    [Parameter] public bool FollowLive { get; set; }
+
+    /// <summary>
+    /// Render-trigger counter. Increment any time the doc's steps list grows
+    /// in-place (same identity, new contents). The component compares against
+    /// the previous tick to decide whether to advance the cursor.
+    /// </summary>
+    [Parameter] public int LiveTick { get; set; }
+
+    private readonly TimelineRunner _runner = new();
+    private StandaloneCodeEditor? _monaco;
+    private bool _monacoReady;
+    private ExecutionTimelineDoc? _lastLoaded;
+    private string _speedKey = "1";
+    private Dictionary<string, string> _previousSignals = new();
+    private string _currentNote = string.Empty;
+    private int _lastLiveTick = -1;
+
+    // ─── Phase D filter state ────────────────────────────────────────────
+    private string _filterText = string.Empty;
+    private HashSet<string> _filterPortTypes =
+        new(new[] { "IN", "OUT", "INOUT", "BUFFER", "INTERNAL" }, StringComparer.OrdinalIgnoreCase);
+    private bool _groupByType;
+
+    private int TotalSteps => Math.Max(_runner.Document.Steps.Count, 1);
+    private int ProgressPct =>
+        _runner.Document.Steps.Count <= 1
+            ? 100
+            : (int)Math.Round(100.0 * (_runner.CurrentIndex) / (_runner.Document.Steps.Count - 1));
+
+    private string StepLabel =>
+        _runner.Document.Steps.Count == 0
+            ? string.Empty
+            : $"t = {_runner.CurrentStep.T}";
+
+    protected override void OnInitialized()
+    {
+        _runner.OnTick += OnRunnerTick;
+        _runner.OnComplete += OnRunnerComplete;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Reseed when the parent swaps to a different timeline document. We
+        // compare by reference because the catalog caches deserialised docs,
+        // so the same doc => same object identity.
+        if (!ReferenceEquals(Doc, _lastLoaded))
+        {
+            _lastLoaded = Doc;
+            _previousSignals = new();
+            _runner.Load(Doc ?? new ExecutionTimelineDoc());
+            _lastLiveTick = -1; // doc swap resets the live tick chase
+
+            if (_monacoReady && _monaco != null)
+            {
+                try
+                {
+                    await _monaco.SetValue(_runner.Document.Code);
+                }
+                catch { /* tolerated; first render path is via EditorOptions.Value */ }
+                await PushHighlightsAsync();
+            }
+            UpdateCurrentNote();
+            return;
+        }
+
+        // Phase B+ (2026-05-19): live-follow path. The parent (live-mode
+        // ReplayState) mutates the same doc in place — Doc identity hasn't
+        // changed, but new steps have been appended. Auto-advance the cursor
+        // to the latest step so the user sees frames as they arrive.
+        if (FollowLive && LiveTick != _lastLiveTick && Doc != null && Doc.Steps.Count > 0)
+        {
+            _lastLiveTick = LiveTick;
+            // Reload the runner against the (now-grown) doc so its internal
+            // step count tracks. Seek to the latest step.
+            _runner.Load(Doc);
+            _runner.SeekTo(Doc.Steps.Count - 1);
+            _previousSignals = new();
+            UpdateCurrentNote();
+            if (_monacoReady && _monaco != null)
+            {
+                try
+                {
+                    // Refresh Monaco source — in live mode the source may
+                    // have been re-injected per attach. Cheap idempotent op.
+                    var current = _runner.Document.Code ?? string.Empty;
+                    var existing = await _monaco.GetValue();
+                    if (existing != current)
+                        await _monaco.SetValue(current);
+                }
+                catch { /* tolerated */ }
+                await PushHighlightsAsync();
+            }
+        }
+    }
+
+    private StandaloneEditorConstructionOptions EditorOptions(StandaloneCodeEditor editor) =>
+        new()
+        {
+            AutomaticLayout = true,
+            Language = string.IsNullOrEmpty(Doc?.Language) ? "vhdl" : Doc.Language,
+            Value = Doc?.Code ?? string.Empty,
+            ReadOnly = true,
+            FontSize = 14,
+            ScrollBeyondLastLine = false,
+            Minimap = new EditorMinimapOptions { Enabled = false },
+        };
+
+    private async Task OnMonacoInitAsync()
+    {
+        _monacoReady = true;
+        try
+        {
+            var bsTheme = await JS.InvokeAsync<string?>(
+                "document.documentElement.getAttribute", "data-bs-theme");
+            await BlazorMonaco.Editor.Global.SetTheme(JS, bsTheme == "dark" ? "vs-dark" : "vs");
+        }
+        catch { /* prerender / WebView boot — fine */ }
+
+        // Seed the buffer in case OnParametersSetAsync ran before Monaco was
+        // ready — EditorOptions.Value handles the first paint but a parent
+        // can swap Doc before OnDidInit fires.
+        if (_monaco != null && !string.IsNullOrEmpty(_runner.Document.Code))
+        {
+            try { await _monaco.SetValue(_runner.Document.Code); } catch { }
+        }
+        await PushHighlightsAsync();
+        UpdateCurrentNote();
+        StateHasChanged();
+    }
+
+    private void OnRunnerTick()
+    {
+        UpdateCurrentNote();
+        InvokeAsync(async () =>
+        {
+            await PushHighlightsAsync();
+            StateHasChanged();
+        });
+    }
+
+    private void OnRunnerComplete()
+    {
+        if (OnPlaybackComplete.HasDelegate)
+        {
+            InvokeAsync(() => OnPlaybackComplete.InvokeAsync());
+        }
+    }
+
+    private async Task PushHighlightsAsync()
+    {
+        if (!_monacoReady) return;
+        try
+        {
+            var lines = _runner.CurrentStep.HighlightLines ?? new List<int>();
+            await JS.InvokeVoidAsync("kmilaExecHighlightLines", lines);
+        }
+        catch
+        {
+            // JS not available during prerender — the next tick will succeed.
+        }
+    }
+
+    private void UpdateCurrentNote()
+    {
+        var notes = _runner.CurrentStep.Note;
+        _currentNote = ConceptCatalog.LocalizeWithFallbackWarning(notes, Lang, string.Empty);
+    }
+
+    private void OnPlay()
+    {
+        // Snapshot signals as "previous" so the next tick's pulse highlights
+        // only the values that change *from this moment*.
+        SnapshotSignals();
+        _runner.Play();
+    }
+
+    private void OnPause() => _runner.Pause();
+
+    private void OnRestart()
+    {
+        SnapshotSignals();
+        _runner.Restart();
+    }
+
+    private void OnStepForward()
+    {
+        SnapshotSignals();
+        _runner.StepForward();
+    }
+
+    private void OnStepBack()
+    {
+        SnapshotSignals();
+        _runner.StepBack();
+    }
+
+    private void OnSpeedChanged(ChangeEventArgs e)
+    {
+        _speedKey = e.Value?.ToString() ?? "1";
+        if (double.TryParse(_speedKey, System.Globalization.NumberStyles.Any,
+                            System.Globalization.CultureInfo.InvariantCulture, out var x))
+        {
+            _runner.Speed = x;
+        }
+    }
+
+    private void SnapshotSignals()
+    {
+        _previousSignals = new Dictionary<string, string>(_runner.CurrentStep.Signals);
+    }
+
+    /// <summary>
+    /// True when the signal's value differs from the snapshot taken at the
+    /// previous step boundary. Drives the value-pulse animation; doubles as
+    /// "what changed this step" for students scanning the table.
+    /// </summary>
+    private bool HasChanged(string name, string value)
+    {
+        if (!_previousSignals.TryGetValue(name, out var prev)) return false;
+        return !string.Equals(prev, value, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Renders signals in the order specified by <c>signalOrder</c> on the
+    /// document, falling back to first-step insertion order when not set.
+    /// </summary>
+    private IEnumerable<string> OrderedSignalNames()
+    {
+        if (_runner.Document.SignalOrder.Count > 0)
+            return _runner.Document.SignalOrder;
+        if (_runner.Document.Steps.Count > 0)
+            return _runner.Document.Steps[0].Signals.Keys;
+        return Enumerable.Empty<string>();
+    }
+
+    // ─── Phase D: filter / group helpers ─────────────────────────────────
+
+    /// <summary>
+    /// Surfaces the filter UI only on designs big enough to need it:
+    /// 12+ signals AND at least two distinct port types in the metadata.
+    /// Small Concepts lessons never see it.
+    /// </summary>
+    private bool ShouldShowFilterUI()
+    {
+        var sigCount = _runner.Document.SignalOrder.Count;
+        if (sigCount == 0 && _runner.Document.Steps.Count > 0)
+            sigCount = _runner.Document.Steps[0].Signals.Count;
+        if (sigCount < 12) return false;
+        var meta = _runner.Document.SignalMeta;
+        if (meta == null || meta.Count == 0) return false;
+        var distinctTypes = new HashSet<string>(meta.Values, StringComparer.OrdinalIgnoreCase);
+        return distinctTypes.Count >= 2;
+    }
+
+    private static IEnumerable<string> AllPortTypes() =>
+        new[] { "IN", "OUT", "INOUT", "BUFFER", "INTERNAL" };
+
+    private string PortTypeLabel(string portType) => portType.ToUpperInvariant() switch
+    {
+        "IN"       => Traductor.T("CONCEPTS_PLAYER_FILTER_IN"),
+        "OUT"      => Traductor.T("CONCEPTS_PLAYER_FILTER_OUT"),
+        "INOUT"    => Traductor.T("CONCEPTS_PLAYER_FILTER_INOUT"),
+        "BUFFER"   => Traductor.T("CONCEPTS_PLAYER_FILTER_BUFFER"),
+        "INTERNAL" => Traductor.T("CONCEPTS_PLAYER_FILTER_INTERNAL"),
+        _          => portType,
+    };
+
+    private void TogglePortType(string portType)
+    {
+        if (!_filterPortTypes.Remove(portType))
+            _filterPortTypes.Add(portType);
+    }
+
+    private void OnFilterTextChanged(ChangeEventArgs e) =>
+        _filterText = e.Value?.ToString() ?? string.Empty;
+
+    private void OnGroupByChanged(ChangeEventArgs e) =>
+        _groupByType = e.Value is bool b && b;
+
+    private string ResolveType(string name) =>
+        _runner.Document.SignalMeta != null
+        && _runner.Document.SignalMeta.TryGetValue(name, out var t)
+        && !string.IsNullOrEmpty(t)
+            ? t.ToUpperInvariant()
+            : "INTERNAL";
+
+    /// <summary>
+    /// Yields signal rows, optionally separated by group headers. Each item
+    /// is either <c>(header, null)</c> (when grouping is on) or
+    /// <c>(null, name)</c>. The filter UI only fires when
+    /// <see cref="ShouldShowFilterUI"/> is true; otherwise this is just an
+    /// unfiltered ordered name list, preserving the original tape behaviour.
+    /// </summary>
+    private IEnumerable<(string? header, string? name)> FilteredAndGroupedNames()
+    {
+        var names = OrderedSignalNames();
+        var showUI = ShouldShowFilterUI();
+        var search = (_filterText ?? string.Empty).Trim();
+
+        var filtered = names.Where(n =>
+        {
+            if (!showUI) return true;
+            if (search.Length > 0 &&
+                n.IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0)
+                return false;
+            if (_filterPortTypes.Count > 0 &&
+                !_filterPortTypes.Contains(ResolveType(n)))
+                return false;
+            return true;
+        }).ToList();
+
+        if (!showUI || !_groupByType)
+        {
+            foreach (var n in filtered)
+                yield return (null, n);
+            yield break;
+        }
+
+        // Render groups in canonical port-type order so IN / OUT / INOUT /
+        // BUFFER / INTERNAL stay in the same vertical positions across
+        // designs. Empty groups are skipped to keep the table compact.
+        var byType = filtered
+            .GroupBy(n => ResolveType(n), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var pt in AllPortTypes())
+        {
+            if (!byType.TryGetValue(pt, out var list) || list.Count == 0) continue;
+            yield return (PortTypeLabel(pt), null);
+            foreach (var n in list)
+                yield return (null, n);
+        }
+    }
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        // Keyboard shortcuts are best-effort: when Monaco has focus it eats
+        // these keys. They work when the wrapping <div> has focus, e.g. after
+        // clicking on the signal table or note.
+        switch (e.Key)
+        {
+            case " ":
+            case "Spacebar":
+                if (_runner.IsPlaying) OnPause(); else OnPlay();
+                break;
+            case "ArrowRight":
+                OnStepForward();
+                break;
+            case "ArrowLeft":
+                OnStepBack();
+                break;
+            case "r":
+            case "R":
+                OnRestart();
+                break;
+        }
+    }
+
+    public void Dispose()
+    {
+        _runner.OnTick -= OnRunnerTick;
+        _runner.OnComplete -= OnRunnerComplete;
+        _runner.Pause();
+    }
+}

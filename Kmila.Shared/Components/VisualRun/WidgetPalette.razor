@@ -1,0 +1,161 @@
+@namespace Kmila.Shared.Components.VisualRun
+@using Microsoft.AspNetCore.Components
+
+@*
+    WidgetPalette — collapsible category sections of draggable widget chips.
+
+    Widgets are grouped into four families (Inputs / LEDs / Displays / Actuators)
+    so the palette scans quickly on both desktop (vertical rail) and mobile
+    (horizontal strip). Each group header toggles its body. Open/collapsed
+    state is remembered in localStorage under 'kmila-visual-palette-groups'.
+
+    Each chip emits OnSelected(widgetType) on click and OnDragStart on HTML5
+    drag start. VisualPanel's parent handlers spawn the widget at the click
+    origin (SpawnByType) or at the drop point (OnCanvasDrop).
+*@
+
+<aside class="visual-page__palette"
+       role="toolbar"
+       aria-label="@Traductor.T("VISUAL_PALETTE_LABEL")">
+    <h6 class="visual-page__palette-title">@Traductor.T("VISUAL_PALETTE_TITLE")</h6>
+    @foreach (var group in _groupOrder)
+    {
+        var isOpen = _openGroups.Contains(group);
+        <div class="visual-page__palette-group" data-open="@(isOpen ? "true" : "false")" data-group="@group">
+            <button type="button"
+                    class="visual-page__palette-group-header"
+                    aria-expanded="@isOpen"
+                    data-testid="@($"visual-palette-group-{group}")"
+                    @onclick="() => ToggleGroup(group)">
+                <span class="visual-page__palette-group-icon" aria-hidden="true">
+                    <Icon Name="@IconForGroup(group)" />
+                </span>
+                <span class="visual-page__palette-group-label">@Traductor.T(LabelKeyForGroup(group))</span>
+                <span class="visual-page__palette-group-chevron" aria-hidden="true">
+                    <Icon Name="IconName.ChevronDown" />
+                </span>
+            </button>
+            <div class="visual-page__palette-group-body">
+                @foreach (var w in _widgets.Where(x => x.Group == group))
+                {
+                    <KmilaTooltip TextKey="@w.LabelKey" Placement="Right">
+                        <button type="button"
+                                class="visual-page__palette-chip"
+                                disabled="@Disabled"
+                                draggable="true"
+                                data-testid="@($"visual-palette-{w.Type}")"
+                                data-widget-type="@w.Type"
+                                @onclick="() => OnSelected.InvokeAsync(w.Type)"
+                                @ondragstart="@(e => OnDragStart.InvokeAsync(w.Type))"
+                                @ondragend="@(e => OnDragEnd.InvokeAsync())"
+                                aria-label="@Traductor.T(w.LabelKey)">
+                            <span class="visual-page__palette-chip-icon" aria-hidden="true">
+                                <Icon Name="@w.Icon" />
+                            </span>
+                            <span class="visual-page__palette-chip-label">@Traductor.T(w.LabelKey)</span>
+                        </button>
+                    </KmilaTooltip>
+                }
+            </div>
+        </div>
+    }
+</aside>
+
+@code {
+    [Parameter] public EventCallback<string> OnSelected { get; set; }
+    [Parameter] public EventCallback<string> OnDragStart { get; set; }
+    [Parameter] public EventCallback OnDragEnd { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+
+    private enum WidgetGroup { Inputs, Leds, Displays, Actuators }
+
+    private record WidgetDef(string Type, string LabelKey, IconName Icon, WidgetGroup Group);
+
+    private static readonly WidgetGroup[] _groupOrder = new[]
+    {
+        WidgetGroup.Inputs, WidgetGroup.Leds, WidgetGroup.Displays, WidgetGroup.Actuators
+    };
+
+    // Default open: Inputs + LEDs (the two most-used families).
+    private HashSet<WidgetGroup> _openGroups = new() { WidgetGroup.Inputs, WidgetGroup.Leds };
+    private bool _stateLoaded;
+
+    private static readonly WidgetDef[] _widgets = new[]
+    {
+        // Inputs
+        new WidgetDef("button",        "VISUAL_PALETTE_BUTTON",         IconName.CircleFill,     WidgetGroup.Inputs),
+        new WidgetDef("switch",        "VISUAL_PALETTE_SWITCH",         IconName.ToggleOn,       WidgetGroup.Inputs),
+        new WidgetDef("multi-switch",  "VISUAL_PALETTE_MULTI_SWITCH",   IconName.Sliders,        WidgetGroup.Inputs),
+        new WidgetDef("keypad-matrix", "VISUAL_PALETTE_KEYPAD",         IconName.Grid,           WidgetGroup.Inputs),
+
+        // LEDs
+        new WidgetDef("led",             "VISUAL_PALETTE_LED",          IconName.Lightbulb,      WidgetGroup.Leds),
+        new WidgetDef("led-array",       "VISUAL_PALETTE_LED_ARRAY",    IconName.Grid,           WidgetGroup.Leds),
+        new WidgetDef("matrix-3x3",      "VISUAL_PALETTE_LED_MATRIX",   IconName.Grid3X3Gap,     WidgetGroup.Leds),
+        new WidgetDef("matrix-3x3-rgb",  "VISUAL_PALETTE_RGB_MATRIX",   IconName.Grid3X3GapFill, WidgetGroup.Leds),
+
+        // Displays
+        new WidgetDef("seven-seg",       "VISUAL_PALETTE_SEVEN_SEG",       IconName.Display, WidgetGroup.Displays),
+        new WidgetDef("seven-seg-bank",  "VISUAL_PALETTE_SEVEN_SEG_BANK",  IconName.Display, WidgetGroup.Displays),
+        new WidgetDef("lcd-hd44780",     "VISUAL_PALETTE_LCD",             IconName.Display, WidgetGroup.Displays),
+
+        // Actuators
+        new WidgetDef("buzzer-piezo",    "VISUAL_PALETTE_BUZZER",       IconName.VolumeUpFill,  WidgetGroup.Actuators),
+        new WidgetDef("stepper",         "VISUAL_PALETTE_STEPPER",      IconName.ArrowRepeat,   WidgetGroup.Actuators),
+    };
+
+    private static string LabelKeyForGroup(WidgetGroup g) => g switch
+    {
+        WidgetGroup.Inputs     => "VISUAL_PALETTE_GROUP_INPUTS",
+        WidgetGroup.Leds       => "VISUAL_PALETTE_GROUP_LEDS",
+        WidgetGroup.Displays   => "VISUAL_PALETTE_GROUP_DISPLAYS",
+        WidgetGroup.Actuators  => "VISUAL_PALETTE_GROUP_ACTUATORS",
+        _                       => string.Empty
+    };
+
+    private static IconName IconForGroup(WidgetGroup g) => g switch
+    {
+        WidgetGroup.Inputs     => IconName.ToggleOn,
+        WidgetGroup.Leds       => IconName.Lightbulb,
+        WidgetGroup.Displays   => IconName.Display,
+        WidgetGroup.Actuators  => IconName.VolumeUpFill,
+        _                       => IconName.Grid
+    };
+
+    private void ToggleGroup(WidgetGroup g)
+    {
+        if (!_openGroups.Add(g)) _openGroups.Remove(g);
+        _ = PersistStateAsync();
+    }
+
+    private async Task PersistStateAsync()
+    {
+        try
+        {
+            var csv = string.Join(",", _openGroups.Select(g => g.ToString()));
+            await JS.InvokeVoidAsync("localStorage.setItem", "kmila-visual-palette-groups", csv);
+        }
+        catch { /* localStorage disabled — non-fatal, state resets next load. */ }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _stateLoaded) return;
+        _stateLoaded = true;
+        try
+        {
+            var csv = await JS.InvokeAsync<string?>("localStorage.getItem", "kmila-visual-palette-groups");
+            if (!string.IsNullOrWhiteSpace(csv))
+            {
+                var parsed = csv.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                                .Select(s => Enum.TryParse<WidgetGroup>(s.Trim(), out var g) ? (WidgetGroup?)g : null)
+                                .Where(g => g.HasValue)
+                                .Select(g => g!.Value)
+                                .ToHashSet();
+                _openGroups = parsed;
+                StateHasChanged();
+            }
+        }
+        catch { /* First-mount JS interop can throw during prerender — safe to ignore. */ }
+    }
+}

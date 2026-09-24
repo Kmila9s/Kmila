@@ -1,0 +1,44 @@
+{
+  "tests": [
+    {
+      "id": "t1",
+      "visible": true,
+      "descriptions": { "en": "Reset for 25 ns then count freely", "es": "Reset por 25 ns y luego cuenta libre" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]}
+      ]
+    },
+    {
+      "id": "t2",
+      "visible": false,
+      "descriptions": { "en": "Reset pulse mid-run resets the count", "es": "Pulso de reset a mitad de ejecución reinicia la cuenta" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,   "scale": "NS", "value": "1" },
+          { "time": 25,  "scale": "NS", "value": "0" },
+          { "time": 500, "scale": "NS", "value": "1" },
+          { "time": 525, "scale": "NS", "value": "0" }
+        ]}
+      ]
+    },
+    {
+      "id": "t3",
+      "visible": false,
+      "descriptions": { "en": "Held in reset — q stays 0000", "es": "Reset mantenido — q permanece en 0000" },
+      "durationMicros": 1,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0, "scale": "NS", "value": "1" }
+        ]}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,71 @@
+{
+  "tests": [
+    {
+      "id": "t1",
+      "visible": true,
+      "descriptions": { "en": "All four requests stuck high — round-robin must rotate", "es": "Las cuatro peticiones activas — round-robin debe rotar" },
+      "durationMicros": 3,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "req", "values": [{ "time": 0, "scale": "NS", "value": "1111" }] }
+      ]
+    },
+    {
+      "id": "t2",
+      "visible": false,
+      "descriptions": { "en": "Only req(3) — grant must reach req(3)", "es": "Solo req(3) — grant debe llegar a req(3)" },
+      "durationMicros": 3,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "req", "values": [{ "time": 0, "scale": "NS", "value": "1000" }] }
+      ]
+    },
+    {
+      "id": "t3",
+      "visible": false,
+      "descriptions": { "en": "No requests — grant stays 0000", "es": "Sin peticiones — grant queda 0000" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "req", "values": [{ "time": 0, "scale": "NS", "value": "0000" }] }
+      ]
+    },
+    {
+      "id": "t4",
+      "visible": false,
+      "descriptions": { "en": "req(0) and req(3) both high — both must eventually be served", "es": "req(0) y req(3) activos — ambos deben atenderse" },
+      "durationMicros": 3,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "req", "values": [{ "time": 0, "scale": "NS", "value": "1001" }] }
+      ]
+    },
+    {
+      "id": "t5",
+      "visible": false,
+      "descriptions": { "en": "Held in reset — grant stays 0000", "es": "Reset mantenido — grant queda 0000" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [{ "time": 0, "scale": "NS", "value": "1" }] },
+        { "portName": "req",   "values": [{ "time": 0, "scale": "NS", "value": "1111" }] }
+      ]
+    }
+  ]
+}

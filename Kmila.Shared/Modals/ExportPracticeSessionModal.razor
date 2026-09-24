@@ -1,0 +1,125 @@
+@*
+    ExportPracticeSessionModal — picks the output format and a few
+    content toggles for the Practice-mode session export. Hands a
+    PracticeSessionExportRequest back to the caller via OnSubmit.
+
+    Layout follows ExportSchematicModal/ExportWaveformModal:
+      1. "Format" group — radio cards (Markdown / ZIP) with hint text.
+      2. "Options" toggles — code diffs, hidden tests, full code in MD.
+
+    The scope is fixed to "current exercise — full attempt history",
+    so there is no scope picker. The exercise id is supplied by the
+    parent page; the modal only collects user-form state.
+*@
+@implements IDisposable
+@using Kmila.Shared.Models.Practice
+
+<div class="kmila-export-form">
+    <section class="kmila-export-section">
+        <h3 class="kmila-export-section__title">@Traductor.T("PRACTICE_EXPORT_FORMAT_LABEL")</h3>
+        <div class="kmila-export-scope">
+            <label class="kmila-export-scope__opt">
+                <input type="radio" name="prex-format"
+                       checked="@(_format == PracticeSessionExportFormat.Markdown)"
+                       @onchange="() => _format = PracticeSessionExportFormat.Markdown" />
+                <div class="kmila-export-scope__body">
+                    <strong>@Traductor.T("PRACTICE_EXPORT_FORMAT_MD")</strong>
+                    <small>@Traductor.T("PRACTICE_EXPORT_FORMAT_MD_HINT")</small>
+                </div>
+            </label>
+            <label class="kmila-export-scope__opt">
+                <input type="radio" name="prex-format"
+                       checked="@(_format == PracticeSessionExportFormat.Zip)"
+                       @onchange="() => _format = PracticeSessionExportFormat.Zip" />
+                <div class="kmila-export-scope__body">
+                    <strong>@Traductor.T("PRACTICE_EXPORT_FORMAT_ZIP")</strong>
+                    <small>@Traductor.T("PRACTICE_EXPORT_FORMAT_ZIP_HINT")</small>
+                </div>
+            </label>
+        </div>
+    </section>
+
+    <section class="kmila-export-section">
+        <h3 class="kmila-export-section__title">@Traductor.T("PRACTICE_EXPORT_OPTIONS_GROUP")</h3>
+        <div class="kmila-export-checks">
+            <label class="kmila-export-check">
+                <input type="checkbox" class="form-check-input" @bind="_includeDiffs" />
+                <span class="kmila-export-check__body">
+                    <strong>@Traductor.T("PRACTICE_EXPORT_OPT_DIFFS")</strong>
+                    <small>@Traductor.T("PRACTICE_EXPORT_OPT_DIFFS_HINT")</small>
+                </span>
+            </label>
+            <label class="kmila-export-check">
+                <input type="checkbox" class="form-check-input" @bind="_includeHiddenTests" />
+                <span class="kmila-export-check__body">
+                    <strong>@Traductor.T("PRACTICE_EXPORT_OPT_HIDDEN_TESTS")</strong>
+                    <small>@Traductor.T("PRACTICE_EXPORT_OPT_HIDDEN_TESTS_HINT")</small>
+                </span>
+            </label>
+            @if (_format == PracticeSessionExportFormat.Markdown)
+            {
+                <label class="kmila-export-check">
+                    <input type="checkbox" class="form-check-input" @bind="_includeFullCode" />
+                    <span class="kmila-export-check__body">
+                        <strong>@Traductor.T("PRACTICE_EXPORT_OPT_FULLCODE")</strong>
+                        <small>@Traductor.T("PRACTICE_EXPORT_OPT_FULLCODE_HINT")</small>
+                    </span>
+                </label>
+            }
+        </div>
+    </section>
+
+    <footer class="kmila-export-footer">
+        <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm" @onclick="CancelAsync">
+            @Traductor.T("EXPORT_MODAL_CANCEL")
+        </button>
+        <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--sm" @onclick="SubmitAsync"
+                disabled="@(AttemptCount == 0)">
+            <Icon Name="IconName.Download" />
+            <span>@Traductor.T("EXPORT_MODAL_SUBMIT")</span>
+        </button>
+    </footer>
+</div>
+
+@code {
+    /// <summary>
+    /// How many attempts the parent has on file — surfaced so the
+    /// submit button can be disabled when there's nothing to export.
+    /// </summary>
+    [Parameter] public int AttemptCount { get; set; }
+
+    /// <summary>Caller is handed the validated request and is responsible for the actual download.</summary>
+    [Parameter] public EventCallback<PracticeSessionExportRequest> OnSubmit { get; set; }
+
+    /// <summary>Caller closes the modal in response to this callback.</summary>
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private PracticeSessionExportFormat _format = PracticeSessionExportFormat.Markdown;
+    private bool _includeDiffs = true;
+    private bool _includeHiddenTests = true;
+    private bool _includeFullCode = true;
+
+    protected override void OnParametersSet()
+    {
+        Traductor.StaticOnLangChanged += OnLangChanged;
+    }
+
+    private async Task SubmitAsync()
+    {
+        var req = new PracticeSessionExportRequest(
+            Format: _format,
+            IncludeDiffs: _includeDiffs,
+            IncludeHiddenTests: _includeHiddenTests,
+            IncludeFullCode: _includeFullCode);
+        await OnSubmit.InvokeAsync(req);
+    }
+
+    private async Task CancelAsync() => await OnCancel.InvokeAsync();
+
+    private void OnLangChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Traductor.StaticOnLangChanged -= OnLangChanged;
+    }
+}

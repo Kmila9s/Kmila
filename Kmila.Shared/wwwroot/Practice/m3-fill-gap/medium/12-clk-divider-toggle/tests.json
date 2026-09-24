@@ -1,0 +1,35 @@
+{
+  "tests": [
+    { "id": "t1", "visible": true,  "descriptions": { "en": "Reset 25 ns then run — observe slow clk_out", "es": "Reset 25 ns y luego corre — observa clk_out lento" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]}
+    ]},
+    { "id": "t2", "visible": false, "descriptions": { "en": "Held in reset — clk_out stays 0", "es": "Reset mantenido — clk_out queda en 0" }, "durationMicros": 1, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0, "scale": "NS", "value": "1" }
+      ]}
+    ]},
+    { "id": "t3", "visible": false, "descriptions": { "en": "Mid-run reset realigns the divider", "es": "Reset a mitad realinea el divisor" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,    "scale": "NS", "value": "1" },
+        { "time": 25,   "scale": "NS", "value": "0" },
+        { "time": 800,  "scale": "NS", "value": "1" },
+        { "time": 825,  "scale": "NS", "value": "0" }
+      ]}
+    ]},
+    { "id": "t4", "visible": false, "descriptions": { "en": "Long run — multiple toggles", "es": "Ejecución larga — varios toggles" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]}
+    ]},
+    { "id": "t5", "visible": false, "descriptions": { "en": "Late release of reset", "es": "Liberación tardía del reset" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,   "scale": "NS", "value": "1" },
+        { "time": 200, "scale": "NS", "value": "0" }
+      ]}
+    ]}
+  ]
+}

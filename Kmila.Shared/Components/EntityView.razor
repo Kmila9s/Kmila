@@ -1,0 +1,90 @@
+@*
+    EntityView — parsed entity panel (shown inside the Entities dock tab).
+
+    Rebuilt without BB Card/Grid. Title reads like VHDL syntax so students see
+    the source-code flavor mirrored back at them: `entity <name> is`. Ports
+    render as a compact signal list rather than a table — no pagination, no
+    filtering, no sorting; these lists are tiny (usually 4–10 ports).
+
+    The "Current Value" column only renders once at least one port has a
+    value (i.e., a simulation has run). Before then it's hidden entirely
+    rather than a column of placeholder dashes.
+*@
+@using Interpreter.Services
+@using Parser.Models
+
+<article class="entity-panel">
+    <header class="entity-panel__header">
+        <h3 class="entity-panel__title">
+            <span class="entity-panel__kw">entity</span>
+            <span class="entity-panel__name">@Entity.Name</span>
+            <span class="entity-panel__kw">is</span>
+        </h3>
+        <div class="entity-panel__meta" aria-hidden="true">
+            @if (_inCount > 0)
+            {
+                <span class="entity-chip entity-chip--in">
+                    <Icon Name="IconName.ArrowDownCircleFill" />
+                    @_inCount @Traductor.T("ENTITY_PORT_IN_ABBR")
+                </span>
+            }
+            @if (_outCount > 0)
+            {
+                <span class="entity-chip entity-chip--out">
+                    <Icon Name="IconName.ArrowUpCircleFill" />
+                    @_outCount @Traductor.T("ENTITY_PORT_OUT_ABBR")
+                </span>
+            }
+        </div>
+    </header>
+
+    @if (!Entity.Ports.Any())
+    {
+        <p class="entity-panel__empty">
+            <Icon Name="IconName.InfoCircle" />
+            @Traductor.T("ENTITY_NO_PORTS")
+        </p>
+    }
+    else
+    {
+        <ul class="signal-list @(_hasValues ? "signal-list--with-values" : "")" role="list">
+            @foreach (var port in Entity.Ports)
+            {
+                var isIn = port.PortType == PortType.IN;
+                var typeLabel = Enum.GetName(typeof(DATATYPES), port.Type) ?? "";
+                var valueStr = port.Value?.ToString() ?? "";
+
+                <li class="signal-row signal-row--@(isIn ? "in" : "out")">
+                    <span class="signal-row__dir" aria-hidden="true">
+                        <Icon Name="@(isIn ? IconName.ArrowDownCircleFill : IconName.ArrowUpCircleFill)" />
+                    </span>
+                    <span class="signal-row__name">@port.Name</span>
+                    <span class="signal-row__type">@typeLabel</span>
+                    @if (_hasValues)
+                    {
+                        <span class="signal-row__value @(string.IsNullOrEmpty(valueStr) ? "is-unset" : "")">
+                            @(string.IsNullOrEmpty(valueStr) ? "—" : valueStr)
+                        </span>
+                    }
+                </li>
+            }
+        </ul>
+    }
+
+    <EntityResourceUsage ResourceUsage="Entity.ResourceUsage" />
+</article>
+
+@code {
+    [Parameter, EditorRequired]
+    public Entity Entity { get; set; } = default!;
+
+    private int _inCount  => Entity.Ports.Count(p => p.PortType == PortType.IN);
+    private int _outCount => Entity.Ports.Count(p => p.PortType == PortType.OUT);
+
+    /// <summary>
+    /// True once at least one port has a non-empty current value — i.e. a
+    /// simulation has run and populated signal state. Drives whether the
+    /// "Current Value" column shows at all.
+    /// </summary>
+    private bool _hasValues => Entity.Ports.Any(p => !string.IsNullOrEmpty(p.Value?.ToString()));
+}

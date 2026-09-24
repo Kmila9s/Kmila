@@ -1,0 +1,76 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <!--
+    Kmila.Wasm — a THIRD, parallel head next to Kmila (MAUI) and Kmila.Web
+    (Blazor Server). This one is a Blazor WebAssembly client: the whole VHDL
+    engine (parse / simulate / synthesize / SVG) runs in the browser, hostable
+    as static files for a public demo. It is NOT a replacement for Kmila.Web.
+
+    It reuses Kmila.Shared verbatim. Two things make that work:
+      1. WasmBuildNative=true relinks the browser-wasm e_sqlite3 native asset
+         (shipped by sqlite-net-pcl -> SQLitePCLRaw) into dotnet.native.wasm, so
+         ApplicationDbContext + every repository run unchanged in the browser.
+         Requires the `wasm-tools` workload.
+      2. When Kmila.Shared is built for the browser it drops the ASP.NET Core
+         server bits — see the `KmilaWasm` gate in Kmila.Shared.csproj, which
+         auto-trips on the browser-wasm RID (belt-and-braces: pass
+         -p:KmilaWasm=true on the command line too).
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- Relink the native e_sqlite3.a into the wasm so sqlite-net-pcl works in
+         the browser. Applies to build AND publish so `dotnet run` has a working
+         DB too. Costs ~30-60s of emcc link per native rebuild. -->
+    <WasmBuildNative>true</WasmBuildNative>
+
+    <!-- Strip the ASP.NET Core server flavor from the whole reference graph
+         (Kmila.Shared, engine libs) when we build for the browser. Redundant
+         with Kmila.Shared's RID auto-detect, but explicit and harmless. -->
+    <KmilaWasm>true</KmilaWasm>
+
+    <!-- The engine libs (Debugger/Interpreter/TimeMachine) are OutputType=Exe
+         for their CLI harnesses, but Kmila only ever consumes their TYPES as
+         libraries. A self-contained wasm app otherwise refuses to reference a
+         non-self-contained executable (NETSDK1150); we only use them as class
+         libraries, so the check doesn't apply. -->
+    <ValidateExecutableReferencesMatchSelfContained>false</ValidateExecutableReferencesMatchSelfContained>
+
+    <!-- The custom VHDL/interpreter code + BlazorMonaco reflect over types the
+         trimmer can't see statically. Keep trimming conservative so a size pass
+         can't strip something the engine reaches by reflection. Revisit per
+         assembly once the demo runs end-to-end. -->
+    <PublishTrimmed>false</PublishTrimmed>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="9.0.8" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="9.0.8" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- sqlite-net-pcl 1.9.172 pins SQLitePCLRaw 2.1.2, whose browser-wasm
+       e_sqlite3 native was built against an older Emscripten than .NET 9's
+       (3.1.56) — the `time` symbol is (i32)->i32 there vs (i32)->i64 in the
+       SDK's libc, so every SQLite file op traps as "disk I/O error". Override
+       the transitive SQLitePCLRaw up to a build compiled for the current
+       Emscripten so the native links cleanly. -->
+  <ItemGroup>
+    <PackageReference Include="SQLitePCLRaw.bundle_green" Version="2.1.11" />
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.11" />
+    <PackageReference Include="SQLitePCLRaw.provider.e_sqlite3" Version="2.1.11" />
+    <PackageReference Include="SQLitePCLRaw.core" Version="2.1.11" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- NOTE: the browser build must be invoked with a GLOBAL property,
+         `-p:KmilaWasm=true` (see build-wasm.sh / the Dockerfile). It has to
+         affect RESTORE — that's where Kmila.Shared's transitive
+         Microsoft.AspNetCore.App FrameworkReference is resolved — so it cannot
+         be baked into this csproj or forwarded via AdditionalProperties. -->
+    <ProjectReference Include="../Kmila.Shared/Kmila.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

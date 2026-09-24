@@ -1,0 +1,105 @@
+{
+  "code": "-- A tiny process. Reads a and b; writes sum.\nprocess(a, b)\nbegin\n  if a = '1' then\n    sum <= b;\n  else\n    sum <= '0';\n  end if;\nend process;",
+  "language": "vhdl",
+  "signalOrder": ["a", "b", "sum"],
+  "steps": [
+    {
+      "t": 0,
+      "highlightLines": [],
+      "signals": { "a": "U", "b": "U", "sum": "U" },
+      "note": {
+        "en": "We start cold. All signals are 'U' (uninitialized). Nothing is running yet — the process is asleep.",
+        "es": "Empezamos en frío. Todas las señales están en 'U' (no inicializadas). Nada se ejecuta aún — el proceso está dormido.",
+        "fr": "On démarre à froid. Tous les signaux sont à 'U' (non initialisés). Rien ne tourne encore — le process dort.",
+        "de": "Wir starten kalt. Alle Signale stehen auf 'U' (uninitialisiert). Noch läuft nichts — der process schläft.",
+        "ch": "我们从头冷启动。所有信号都是 'U'（未初始化）。目前什么都还没在运行——process 正在睡觉。",
+        "jp": "コールドスタート。すべての signal は 'U'（未初期化）だ。まだ何も動いていない——process は眠っている。",
+        "ar": "نبدأ من الصفر. جميع الإشارات على 'U' (غير مُهيَّأة). لا شيء يعمل بعد — process نائم."
+      }
+    },
+    {
+      "t": 1,
+      "highlightLines": [2],
+      "signals": { "a": "1", "b": "0", "sum": "U" },
+      "note": {
+        "en": "Input a just changed to '1'. The sensitivity list says 'wake up when a or b changes' — so the process wakes.",
+        "es": "La entrada a acaba de cambiar a '1'. La lista de sensibilidad dice 'despierta cuando cambien a o b' — así que el proceso se despierta.",
+        "fr": "L'entrée a vient de passer à '1'. La liste de sensibilité dit « réveille-toi quand a ou b change » — donc le process s'éveille.",
+        "de": "Der Eingang a ist gerade auf '1' gewechselt. Die Sensitivitätsliste sagt „wach auf, wenn a oder b sich ändert\" — also erwacht der process.",
+        "ch": "输入 a 刚刚变成 '1'。敏感信号列表说「a 或 b 变化时就唤醒」——所以 process 醒了。",
+        "jp": "入力 a が '1' に変わった。感度リストには「a か b が変わったら起きろ」と書いてある——だから process は目を覚ます。",
+        "ar": "المدخل a تغيَّر للتوّ إلى '1'. قائمة الحساسية تقول «استيقظ عندما تتغيَّر a أو b» — لذا يستيقظ process."
+      }
+    },
+    {
+      "t": 2,
+      "highlightLines": [4],
+      "signals": { "a": "1", "b": "0", "sum": "U" },
+      "note": {
+        "en": "Sequential execution begins inside the process body. We evaluate the if-condition: is a = '1'? Yes.",
+        "es": "Comienza la ejecución secuencial dentro del cuerpo del proceso. Evaluamos la condición del if: ¿es a = '1'? Sí.",
+        "fr": "L'exécution séquentielle commence à l'intérieur du corps du process. On évalue la condition du if : a = '1' ? Oui.",
+        "de": "Die sequenzielle Ausführung beginnt im Körper des process. Wir werten die if-Bedingung aus: ist a = '1'? Ja.",
+        "ch": "顺序执行在 process 主体内部开始。我们求值 if 条件：a = '1' 吗？是的。",
+        "jp": "process 本体の中で順次実行が始まる。if 条件を評価する：a = '1' か？ そう、Yes だ。",
+        "ar": "يبدأ التنفيذ التسلسلي داخل جسم process. نُقيِّم شرط if: هل a = '1'؟ نعم."
+      }
+    },
+    {
+      "t": 3,
+      "highlightLines": [5],
+      "signals": { "a": "1", "b": "0", "sum": "U" },
+      "note": {
+        "en": "We schedule sum <= b. KEY INSIGHT: sum has NOT changed yet. We only posted a transaction; the value becomes visible after the delta cycle ends.",
+        "es": "Programamos sum <= b. IDEA CLAVE: sum AÚN no cambia. Solo registramos una transacción; el valor se hace visible al cerrar el ciclo delta.",
+        "fr": "On programme sum <= b. IDÉE CLÉ : sum n'a PAS encore changé. On a seulement posté une transaction ; la valeur ne devient visible qu'à la fin du cycle delta.",
+        "de": "Wir planen sum <= b ein. KERNIDEE: sum hat sich NOCH nicht geändert. Wir haben nur eine Transaktion eingereiht; der Wert wird erst sichtbar, wenn der Delta-Zyklus endet.",
+        "ch": "我们登记 sum <= b。关键点：sum 还没有变化。我们只是登记了一个事务；这个值要等到 delta 周期结束后才能被看见。",
+        "jp": "sum <= b をスケジュールする。ここが肝心：sum はまだ変わっていない。トランザクションを登録しただけで、値はデルタサイクルが終わるまで見えない。",
+        "ar": "نُجدوِل sum <= b. الفكرة الجوهرية: sum لم يتغيَّر بعد. سجَّلنا معاملة فقط؛ لا تظهر القيمة إلا بعد انتهاء دورة الدلتا."
+      }
+    },
+    {
+      "t": 4,
+      "highlightLines": [9],
+      "signals": { "a": "1", "b": "0", "sum": "U" },
+      "note": {
+        "en": "We exit the process. The body ran top-to-bottom, in source order — that's the sequential model.",
+        "es": "Salimos del proceso. El cuerpo se ejecutó de arriba hacia abajo, en el orden del código fuente — ese es el modelo secuencial.",
+        "fr": "On sort du process. Le corps s'est exécuté de haut en bas, dans l'ordre du code source — c'est le modèle séquentiel.",
+        "de": "Wir verlassen den process. Der Körper lief von oben nach unten, in Quelltextreihenfolge — das ist das sequenzielle Modell.",
+        "ch": "我们退出 process。主体自上而下、按源代码顺序执行——这就是顺序模型。",
+        "jp": "process を抜ける。本体は上から下へ、ソース順に実行された——これが順次モデルだ。",
+        "ar": "نخرج من process. جسمُه نُفِّذ من الأعلى إلى الأسفل، بترتيب الكود المصدري — هذا هو النموذج التسلسلي."
+      }
+    },
+    {
+      "t": 5,
+      "highlightLines": [],
+      "signals": { "a": "1", "b": "0", "sum": "0" },
+      "note": {
+        "en": "Delta cycle ends. NOW the transaction commits and sum becomes '0'. This is the difference between simulation time and wall-clock time.",
+        "es": "Termina el ciclo delta. AHORA la transacción se confirma y sum pasa a ser '0'. Esta es la diferencia entre tiempo de simulación y tiempo real.",
+        "fr": "Le cycle delta se termine. MAINTENANT la transaction est validée et sum devient '0'. C'est là toute la différence entre le temps de simulation et le temps réel.",
+        "de": "Der Delta-Zyklus endet. JETZT wird die Transaktion festgeschrieben und sum wird zu '0'. Genau darin liegt der Unterschied zwischen Simulationszeit und Echtzeit.",
+        "ch": "delta 周期结束。现在事务被提交，sum 变成 '0'。这就是仿真时间和真实时间的区别。",
+        "jp": "デルタサイクルが終わる。ここで初めてトランザクションが確定し、sum が '0' になる。これがシミュレーション時間と実時間の違いだ。",
+        "ar": "تنتهي دورة الدلتا. الآن تُثبَّت المعاملة وتصبح sum '0'. هذا هو الفرق بين زمن المحاكاة والزمن الحقيقي."
+      }
+    },
+    {
+      "t": 6,
+      "highlightLines": [],
+      "signals": { "a": "1", "b": "1", "sum": "0" },
+      "note": {
+        "en": "Input b just changed to '1'. The process will wake again — try stepping forward and watch the same dance repeat.",
+        "es": "La entrada b acaba de cambiar a '1'. El proceso se despertará otra vez — avanza paso a paso y observa cómo se repite la misma danza.",
+        "fr": "L'entrée b vient de passer à '1'. Le process va se réveiller à nouveau — avance pas à pas et regarde la même danse recommencer.",
+        "de": "Der Eingang b ist gerade auf '1' gewechselt. Der process wird erneut erwachen — geh Schritt für Schritt weiter und sieh, wie sich derselbe Tanz wiederholt.",
+        "ch": "输入 b 刚刚变成 '1'。process 会再次被唤醒——继续单步执行，看看同样的舞蹈如何重演。",
+        "jp": "入力 b が '1' に変わった。process はまた目を覚ます——ステップを進めて、同じダンスが繰り返されるのを見てみよう。",
+        "ar": "المدخل b تغيَّر للتوّ إلى '1'. سيستيقظ process من جديد — تقدَّم خطوة بخطوة وشاهد الرقصة نفسها تتكرَّر."
+      }
+    }
+  ]
+}

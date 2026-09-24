@@ -1,0 +1,156 @@
+{
+  "viewBox": "0 0 560 220",
+  "nodes": [
+    {
+      "id": "oe",
+      "kind": "input",
+      "label": "oe",
+      "x": 60,
+      "y": 30
+    },
+    {
+      "id": "d",
+      "kind": "input",
+      "label": "d",
+      "x": 60,
+      "y": 108
+    },
+    {
+      "id": "g_tri",
+      "kind": "tristate",
+      "label": "TRISTATE",
+      "x": 220,
+      "y": 80
+    },
+    {
+      "id": "y",
+      "kind": "output",
+      "label": "y",
+      "x": 440,
+      "y": 108
+    }
+  ],
+  "wires": [
+    {
+      "id": "w_d",
+      "source": "d",
+      "from": "d",
+      "to": "g_tri.in"
+    },
+    {
+      "id": "w_oe",
+      "source": "oe",
+      "from": "oe",
+      "to": "g_tri.en"
+    },
+    {
+      "id": "w_y",
+      "source": "y",
+      "from": "g_tri.out",
+      "to": "y"
+    }
+  ],
+  "signalOrder": [
+    "oe",
+    "d",
+    "y"
+  ],
+  "steps": [
+    {
+      "t": 0,
+      "values": {
+        "oe": "0",
+        "d": "0",
+        "y": "Z"
+      },
+      "active": [],
+      "note": {
+        "en": "oe = 0. The buffer is RELEASED — its output is high-impedance (Z), shown as a muted wire. The buffer isn't driving y at all, so any other device on this wire could talk without colliding.",
+        "es": "oe = 0. El buffer está LIBERADO — su salida está en alta impedancia (Z), mostrada como un cable apagado. El buffer no está empujando y, así que cualquier otro dispositivo en este cable podría hablar sin colisionar.",
+        "ar": "oe = 0. المُسلَّك مُحرَّر — خرجه عالي المُمانعة (Z)، يظهر بسلك باهت. المُسلَّك لا يُحرِّك y على الإطلاق، فيمكن لأي جهاز آخر على هذا السلك أن يتكلم دون تصادم.",
+        "ch": "oe = 0。缓冲器被释放 — 输出处于高阻态 (Z),线条显示为暗色。缓冲器完全不在驱动 y,因此这根线上任何其他设备都可以发话而不会冲突。",
+        "de": "oe = 0. Der Buffer ist FREIGEGEBEN — sein Ausgang ist hochohmig (Z), als gedämpfter Draht dargestellt. Der Buffer treibt y überhaupt nicht, also könnte jedes andere Gerät auf diesem Draht ohne Kollision sprechen.",
+        "fr": "oe = 0. Le tampon est RELÂCHÉ — sa sortie est en haute impédance (Z), montrée comme un fil atténué. Le tampon ne pilote pas y du tout, donc tout autre dispositif sur ce fil peut parler sans collision.",
+        "jp": "oe = 0。バッファは解放されている — 出力はハイインピーダンス (Z) で、薄い線で表示。バッファは y を全く駆動していないので、この線上の他のデバイスは衝突なしで話せる。"
+      }
+    },
+    {
+      "t": 1,
+      "values": {
+        "oe": "0",
+        "d": "1",
+        "y": "Z"
+      },
+      "active": [],
+      "note": {
+        "en": "d flips to 1 — but oe is still 0, so the buffer stays disconnected. y holds at Z. This is the key idea: oe gates the entire DATA PATH, not just the value. d can do whatever it wants and y won't notice.",
+        "es": "d sube a 1 — pero oe sigue en 0, así que el buffer sigue desconectado. y se queda en Z. La idea clave: oe controla TODO EL CAMINO DE DATOS, no solo el valor. d puede hacer lo que quiera y y no se entera.",
+        "ar": "d يقفز إلى 1 — لكن oe لا يزال 0، فيبقى المُسلَّك مفصولًا. y يبقى عند Z. الفكرة الجوهريَّة: oe يُغلق ممرَّ البيانات كاملًا، لا قيمته فقط. d يفعل ما يريد ولا يلاحظ y.",
+        "ch": "d 翻到 1 — 但 oe 仍是 0,所以缓冲器依然断开。y 保持在 Z。这是关键:oe 控制的是整条数据通路,不仅仅是值。d 怎么折腾都行,y 都不会注意。",
+        "de": "d kippt auf 1 — aber oe ist immer noch 0, also bleibt der Buffer abgekoppelt. y bleibt auf Z. Das ist die Kernidee: oe schaltet den GESAMTEN DATENPFAD, nicht nur den Wert. d kann tun, was es will, und y bekommt nichts mit.",
+        "fr": "d bascule à 1 — mais oe est toujours à 0, donc le tampon reste déconnecté. y reste à Z. L'idée clé : oe contrôle TOUT LE CHEMIN DE DONNÉES, pas juste la valeur. d peut faire ce qu'il veut et y ne le remarque pas.",
+        "jp": "d が 1 に反転 — だが oe はまだ 0 なので、バッファは切断されたまま。y は Z を保持。核心:oe はデータパス全体をゲートし、値だけではない。d は何をしても y は気づかない。"
+      }
+    },
+    {
+      "t": 2,
+      "values": {
+        "oe": "1",
+        "d": "1",
+        "y": "1"
+      },
+      "active": [
+        "g_tri"
+      ],
+      "note": {
+        "en": "oe goes high. The buffer wakes up and drives y with d's current value — y is now 1. The tristate just became a plain wire.",
+        "es": "oe sube. El buffer despierta y empuja y con el valor actual de d — y ahora vale 1. El triestado se acaba de convertir en un cable simple.",
+        "ar": "oe يرتفع. يستيقظ المُسلَّك ويُحرِّك y بقيمة d الحاليَّة — y الآن 1. تحوَّل ثلاثي الحالات إلى سلك بسيط.",
+        "ch": "oe 拉高。缓冲器苏醒,用 d 的当前值驱动 y — 现在 y = 1。三态刚刚变成了一根普通线。",
+        "de": "oe geht hoch. Der Buffer wacht auf und treibt y mit dem aktuellen Wert von d — y ist jetzt 1. Der Tristate wurde gerade zum einfachen Draht.",
+        "fr": "oe monte. Le tampon se réveille et pilote y avec la valeur actuelle de d — y vaut 1. Le trois-états vient de devenir un fil ordinaire.",
+        "jp": "oe が High に。バッファが目覚め、d の現在値で y を駆動 — y は 1 に。トライステートはただの線になった。"
+      }
+    },
+    {
+      "t": 3,
+      "values": {
+        "oe": "1",
+        "d": "0",
+        "y": "0"
+      },
+      "active": [
+        "g_tri"
+      ],
+      "note": {
+        "en": "d drops to 0 with oe still high. y follows immediately — it's just a buffer right now. As long as oe = 1, the tristate is transparent.",
+        "es": "d baja a 0 con oe aún alto. y le sigue al instante — ahora mismo es solo un buffer. Mientras oe = 1, el triestado es transparente.",
+        "ar": "d ينزل إلى 0 وoe لا يزال مرتفعًا. y يتبع فورًا — هو الآن مجرَّد مُسلَّك. ما دام oe = 1 فثلاثي الحالات شفَّاف.",
+        "ch": "d 降到 0,oe 仍为高。y 立刻跟随 — 现在它就是个普通缓冲器。只要 oe = 1,三态就是透明的。",
+        "de": "d fällt mit oe weiter high auf 0. y folgt sofort — es ist gerade ein einfacher Buffer. Solange oe = 1, ist der Tristate transparent.",
+        "fr": "d tombe à 0 avec oe toujours haut. y suit immédiatement — c'est juste un tampon en ce moment. Tant que oe = 1, le trois-états est transparent.",
+        "jp": "oe High のまま d が 0 に落ちる。y は即座に追従 — 今はただのバッファ。oe = 1 の間、トライステートは透明。"
+      }
+    },
+    {
+      "t": 4,
+      "values": {
+        "oe": "0",
+        "d": "0",
+        "y": "Z"
+      },
+      "active": [
+        "g_tri"
+      ],
+      "note": {
+        "en": "oe drops back to 0. y returns to Z instantly — even though d is also 0. This is the CORRECT behaviour. The lesson's broken VHDL does the OPPOSITE: it drives when oe = '0' and releases when oe = '1'. Run the unfixed sample and compare its waveforms to what you see here.",
+        "es": "oe vuelve a 0. y regresa a Z al instante — aunque d también esté en 0. Este es el comportamiento CORRECTO. El VHDL roto de la lección hace lo CONTRARIO: maneja cuando oe = '0' y libera cuando oe = '1'. Ejecuta la muestra sin arreglar y compara sus formas de onda con lo que ves aquí.",
+        "ar": "oe يعود إلى 0. يعود y إلى Z فورًا — حتى لو كان d أيضًا 0. هذا هو السلوك الصحيح. VHDL المعطوب في الدرس يفعل العكس: يُحرِّك حين oe = '0' ويُحرِّر حين oe = '1'. شغِّل العيِّنة دون إصلاح وقارن أشكال موجاتها بما تراه هنا.",
+        "ch": "oe 又掉到 0。y 立刻回到 Z — 即便此时 d 也是 0。这就是正确的行为。课程里那段坏掉的 VHDL 做的是反的:oe='0' 时驱动、oe='1' 时释放。运行未修复的样例,把它的波形与这里对比。",
+        "de": "oe fällt zurück auf 0. y kehrt sofort auf Z zurück — auch wenn d ebenfalls 0 ist. Das ist das KORREKTE Verhalten. Das kaputte VHDL der Lektion macht das GEGENTEIL: es treibt bei oe = '0' und gibt bei oe = '1' frei. Lass das ungepatcht Beispiel laufen und vergleiche seine Kurven mit dem, was du hier siehst.",
+        "fr": "oe retombe à 0. y revient instantanément à Z — même si d est aussi à 0. C'est le comportement CORRECT. Le VHDL cassé de la leçon fait le CONTRAIRE : il pilote quand oe = '0' et relâche quand oe = '1'. Lancez l'exemple non corrigé et comparez ses chronogrammes à ce que vous voyez ici.",
+        "jp": "oe が 0 に戻る。y は即座に Z に戻る — d も 0 なのに。これが正しい動作。レッスンの壊れた VHDL は逆をやる:oe = '0' で駆動し、oe = '1' で解放。未修正のサンプルを実行して、その波形をここに表示されているものと比較してみよう。"
+      }
+    }
+  ]
+}

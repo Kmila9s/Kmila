@@ -1,0 +1,248 @@
+@*
+    TemplateGalleryModal — gallery of v1 project templates rendered inside the
+    BB Modal hosted by ProjectsView. Mirrors ProjectDetailsModal's contract:
+    chrome (header/footer/close) belongs to the parent, this component owns
+    only the body.
+
+    On Create:
+      • ProjectTemplateService writes the project + files + applies defaults
+      • optional library auto-import fires when the user ticks the checkbox
+      • OnProjectCreated invokes with the new Project so the parent can hide
+        the modal and navigate to /editor/{id}.
+*@
+@implements IDisposable
+@inject ProjectTemplateService TemplateService
+
+<div class="kmila-template-gallery">
+
+    <p class="kmila-template-gallery__subtitle">
+        @Traductor.T("TEMPLATE_GALLERY_SUBTITLE")
+    </p>
+
+    @if (_loading)
+    {
+        <div class="kmila-template-grid kmila-template-grid--skeleton" aria-busy="true">
+            @for (var i = 0; i < 5; i++)
+            {
+                <div class="kmila-template-card kmila-template-card--skeleton">
+                    <div class="skeleton skeleton--avatar"></div>
+                    <div class="skeleton skeleton--title"></div>
+                    <div class="skeleton skeleton--line skeleton--short"></div>
+                </div>
+            }
+        </div>
+    }
+    else if (_templates.Count == 0)
+    {
+        <div class="kmila-template-gallery__empty">
+            <Icon Name="IconName.ExclamationTriangle" />
+            <span>@Traductor.T("COMMON_ERROR")</span>
+        </div>
+    }
+    else
+    {
+        <div class="kmila-template-grid" role="radiogroup" aria-label="@Traductor.T("TEMPLATE_GALLERY_TITLE")">
+            @foreach (var t in _templates)
+            {
+                var isActive = t.Id == _selectedTemplateId;
+                <button type="button"
+                        role="radio"
+                        aria-checked="@isActive"
+                        class="kmila-btn-tab kmila-btn-tab--accent kmila-template-card @(isActive ? "is-active" : "")"
+                        data-template-id="@t.Id"
+                        @onclick="() => SelectTemplate(t.Id)">
+                    <Icon Name="@ResolveIcon(t.Icon)" Class="kmila-template-card__icon" />
+                    <span class="kmila-template-card__name">@Traductor.T(t.NameKey)</span>
+                    <small class="kmila-template-card__desc">@Traductor.T(t.DescriptionKey)</small>
+                </button>
+            }
+        </div>
+
+        <div class="kmila-template-form">
+            <label class="project-form__label" for="TemplateProjectName">
+                @Traductor.T("PROJECT_NAME_LABEL")
+                <span class="project-form__required" aria-hidden="true">*</span>
+            </label>
+            <input id="TemplateProjectName"
+                   type="text"
+                   class="form-control"
+                   autocomplete="off"
+                   placeholder="@Traductor.T("TEMPLATE_PROJECT_NAME_PLACEHOLDER")"
+                   @bind="_projectName"
+                   @bind:event="oninput" />
+            @if (!string.IsNullOrWhiteSpace(_projectName))
+            {
+                <small class="project-form__hint">
+                    <Icon Name="IconName.FolderFill" />
+                    <span>@string.Format(Traductor.T("PROJECT_NAME_HINT"), SanitizedFolderPreview)</span>
+                </small>
+            }
+
+            @if (Selected?.AutoImportAsLibrary == true)
+            {
+                <label class="kmila-template-form__check">
+                    <input type="checkbox"
+                           class="form-check-input"
+                           @bind="_registerAsLibrary" />
+                    <span>
+                        <strong>@Traductor.T("TEMPLATE_LIBRARY_AUTOIMPORT_LABEL")</strong>
+                        <small>@Traductor.T("TEMPLATE_LIBRARY_AUTOIMPORT_HINT")</small>
+                    </span>
+                </label>
+            }
+        </div>
+
+        <div class="kmila-template-form__actions">
+            <button type="button"
+                    class="kmila-btn kmila-btn--accent kmila-btn--lg"
+                    disabled="@(_creating || string.IsNullOrWhiteSpace(_projectName) || Selected is null)"
+                    @onclick="CreateAsync">
+                @if (_creating)
+                {
+                    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                    <span>@Traductor.T("PROJECT_CREATING")</span>
+                }
+                else
+                {
+                    <Icon Name="IconName.CheckLg" />
+                    <span>@Traductor.T("TEMPLATE_CREATE_BUTTON")</span>
+                }
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public EventCallback<Project> OnProjectCreated { get; set; }
+
+    private List<ProjectTemplate> _templates = new();
+    private string _selectedTemplateId = string.Empty;
+    private string _projectName = string.Empty;
+    private bool _registerAsLibrary = false;
+    private bool _loading = true;
+    private bool _creating = false;
+
+    private ProjectTemplate? Selected =>
+        _templates.FirstOrDefault(t => t.Id == _selectedTemplateId);
+
+    /// <summary>
+    /// Live preview of the folder-safe form of the entered project name —
+    /// kept in sync with ProjectDetailsModal's hint so the user gets the
+    /// same feedback regardless of which create flow they use.
+    /// </summary>
+    private string SanitizedFolderPreview =>
+        string.IsNullOrWhiteSpace(_projectName)
+            ? "—"
+            : _projectName.Trim().Replace(" ", "").Replace('/', '_').Replace('-', '_');
+
+    protected override void OnInitialized()
+    {
+        Traductor.StaticOnLangChanged += OnLanguageChanged;
+    }
+
+    /// <summary>
+    /// OnParametersSet fires every time the parent re-renders us (including
+    /// after Modal.ShowAsync). Reset the transient form state so a second
+    /// open doesn't show "last-time's typed name".
+    /// </summary>
+    protected override async Task OnParametersSetAsync()
+    {
+        _projectName = string.Empty;
+        _registerAsLibrary = false;
+
+        if (_templates.Count == 0)
+        {
+            try
+            {
+                _templates = (await TemplateService.ListAsync()).ToList();
+                _selectedTemplateId = _templates.FirstOrDefault()?.Id ?? string.Empty;
+            }
+            catch (Exception ex)
+            {
+                ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+            }
+            finally
+            {
+                _loading = false;
+            }
+        }
+        else if (string.IsNullOrEmpty(_selectedTemplateId))
+        {
+            _selectedTemplateId = _templates[0].Id;
+        }
+    }
+
+    private void OnLanguageChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Traductor.StaticOnLangChanged -= OnLanguageChanged;
+    }
+
+    private void SelectTemplate(string id)
+    {
+        _selectedTemplateId = id;
+        // Auto-uncheck the library checkbox when switching to a non-library
+        // template so it doesn't carry over and confuse the form.
+        if (Selected?.AutoImportAsLibrary != true)
+        {
+            _registerAsLibrary = false;
+        }
+    }
+
+    /// <summary>
+    /// Resolves the manifest's icon string to a BB <see cref="IconName"/>.
+    /// Defaults to a generic file icon on parse failure so a typo in a
+    /// template.json doesn't crash the gallery.
+    /// </summary>
+    private static IconName ResolveIcon(string raw)
+    {
+        if (Enum.TryParse<IconName>(raw, ignoreCase: false, out var icon)) return icon;
+        return IconName.FileEarmark;
+    }
+
+    private async Task CreateAsync()
+    {
+        var template = Selected;
+        if (template is null) return;
+        if (string.IsNullOrWhiteSpace(_projectName)) return;
+
+        _creating = true;
+        StateHasChanged();
+        try
+        {
+            var project = await TemplateService.CreateProjectAsync(
+                template,
+                _projectName.Trim(),
+                description: null,
+                languageCode: Traductor.Lang,
+                registerAsLibrary: _registerAsLibrary);
+
+            if (project is null)
+            {
+                ToastService.Notify(Message(
+                    Traductor.T("COMMON_ERROR"),
+                    Traductor.T("PROJECT_CREATED_ERROR_MSG").Replace("{0}",
+                        Projects.LastError ?? string.Empty),
+                    ToastType.Danger));
+                return;
+            }
+
+            ToastService.Notify(Message(
+                Traductor.T("PROJECT_CREATED_SUCCESS"),
+                Traductor.T("PROJECT_CREATED_SUCCESS_MSG").Replace("{0}", project.BasePath),
+                ToastType.Success));
+
+            await OnProjectCreated.InvokeAsync(project);
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+        finally
+        {
+            _creating = false;
+            StateHasChanged();
+        }
+    }
+}

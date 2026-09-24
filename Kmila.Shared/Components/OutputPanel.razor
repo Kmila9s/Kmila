@@ -1,0 +1,112 @@
+@*
+    OutputPanel — content for the Output dock tab.
+
+    Render-only view onto <see cref="BuildLog"/>. Anything that wants to
+    surface a message to the user (build success/failure, simulation start/end,
+    validation warnings) appends to BuildLog and this panel picks it up.
+
+    Auto-scrolls to the newest entry on change.
+*@
+@implements IDisposable
+@inject BuildLog Log
+@inject IJSRuntime JS
+
+@if (Log.Entries.Count == 0)
+{
+    <div class="kmila-dock__empty">
+        <div class="kmila-dock__empty-icon"><Icon Name="IconName.TerminalFill" /></div>
+        <p>@Traductor.T("EDITOR_EMPTY_OUTPUT")</p>
+    </div>
+}
+else
+{
+    <div class="output-panel">
+        <div class="output-panel__toolbar">
+            <span class="output-panel__count">@Log.Entries.Count</span>
+            <KmilaTooltip TextKey="OUTPUT_EXPORT">
+                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                        @onclick="ExportLogAsync">
+                    <Icon Name="IconName.Download" />
+                    <span>@Traductor.T("OUTPUT_EXPORT")</span>
+                </button>
+            </KmilaTooltip>
+            <KmilaTooltip TextKey="OUTPUT_CLEAR">
+                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                        @onclick="Log.Clear">
+                    <Icon Name="IconName.Trash" />
+                    <span>@Traductor.T("OUTPUT_CLEAR")</span>
+                </button>
+            </KmilaTooltip>
+        </div>
+
+        <ol class="output-panel__list" role="log" aria-live="polite" aria-relevant="additions">
+            @foreach (var entry in Log.Entries)
+            {
+                var variant = entry.Level switch
+                {
+                    BuildLogLevel.Success => "success",
+                    BuildLogLevel.Warn    => "warning",
+                    BuildLogLevel.Error   => "danger",
+                    _                => "info"
+                };
+                var icon = entry.Level switch
+                {
+                    BuildLogLevel.Success => IconName.CheckCircleFill,
+                    BuildLogLevel.Warn    => IconName.ExclamationTriangleFill,
+                    BuildLogLevel.Error   => IconName.XCircleFill,
+                    _                => IconName.InfoCircleFill
+                };
+                <li class="output-row output-row--@variant">
+                    <span class="output-row__time">@entry.Timestamp.ToString("HH:mm:ss")</span>
+                    <span class="output-row__icon"><Icon Name="@icon" /></span>
+                    <span class="output-row__msg">@entry.Message</span>
+                </li>
+            }
+        </ol>
+    </div>
+}
+
+@code {
+    protected override void OnInitialized()
+    {
+        Log.OnChange += OnLogChanged;
+        Traductor.StaticOnLangChanged += OnLogChanged;
+    }
+
+    private void OnLogChanged() => InvokeAsync(StateHasChanged);
+
+    /// <summary>
+    /// Serializes the in-memory log to a plain-text .log file and triggers a
+    /// browser download. Each line is formatted as
+    /// <c>HH:mm:ss.fff [LEVEL] message</c> — easy to grep and survives copy/paste.
+    /// </summary>
+    private async Task ExportLogAsync()
+    {
+        if (Log.Entries.Count == 0) return;
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"# Kmila build log — exported {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+        foreach (var e in Log.Entries)
+        {
+            sb.AppendLine($"{e.Timestamp:HH:mm:ss.fff} [{e.Level.ToString().ToUpperInvariant()}] {e.Message}");
+        }
+        var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+        var result = await Export.SaveTextAsync(ExportCategory.Logs,
+            $"kmila-build-{stamp}.log", "text/plain", sb.ToString());
+        if (result.Saved)
+        {
+            var msg = result.Path != null ? $"Saved: {result.Path}" : Traductor.T("OUTPUT_LOG_DOWNLOADED");
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), msg, ToastType.Success));
+        }
+        else
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                result.Error ?? Traductor.T("COMMON_EXPORT_FAILED"), ToastType.Danger));
+        }
+    }
+
+    public void Dispose()
+    {
+        Log.OnChange -= OnLogChanged;
+        Traductor.StaticOnLangChanged -= OnLogChanged;
+    }
+}

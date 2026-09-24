@@ -1,9 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
-    <!--<TargetFrameworks>net9.0-android;net9.0-ios;net9.0-maccatalyst</TargetFrameworks>-->
-    <TargetFramework>net9.0-android</TargetFramework>
-    <!--<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net9.0-windows10.0.19041.0</TargetFrameworks>-->
+    <TargetFrameworks>net9.0-android35.0;net9.0-ios;net9.0-maccatalyst</TargetFrameworks>
+    <!-- Windows head, conditional so non-Windows machines still build. Phase B
+         enables it so the embedded Kestrel host has WinUI parity. -->
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net9.0-windows10.0.19041.0</TargetFrameworks>
     <!-- Uncomment to also build the tizen app. You will need to install tizen by following this: https://github.com/Samsung/Tizen.NET -->
     <!-- <TargetFrameworks>$(TargetFrameworks);net9.0-tizen</TargetFrameworks> -->
 
@@ -20,7 +21,29 @@
     <SingleProject>true</SingleProject>
     <ImplicitUsings>enable</ImplicitUsings>
     <EnableDefaultCssItems>false</EnableDefaultCssItems>
+
+    <!-- Ship static web assets UNCOMPRESSED in the MAUI bundle.
+         With compression on (the .NET 6+ default) the SDK emits RCL assets
+         under _content/ ONLY as precompressed .gz/.br siblings with no plain
+         copy. The Mac Catalyst BlazorWebView asset resolver looks up the exact
+         plain filename and does NOT decompress/content-negotiate the .gz/.br,
+         so those requests return the framework stub
+           "There is no content at _content/Kmila.Shared/lib/…"
+         (HTTP 200, text/plain). That silently broke Bootstrap CSS, Bootstrap
+         Icons (icons) + its woff2, and JetBrains Mono on Mac Catalyst only —
+         iOS/Android/Web resolvers handle the compressed variants, Mac Catalyst
+         does not. Disabling compression forces plain files to ship, which the
+         resolver finds. Scoped to this MAUI head; Kmila.Web keeps compression. -->
+    <CompressionEnabled>false</CompressionEnabled>
+
     <Nullable>enable</Nullable>
+    <NoWarn>$(NoWarn);CS1587;CS1591;CS1570;CS1573;CS1574;CS1998;CS8602;CS8604;CS8625;CS8892;CS0219;CS0618;CS4014;NETSDK1206</NoWarn>
+
+    <!-- Tier 5.2 Phase B — the MAUI head unconditionally gets the embedded
+         HttpListener /api/v1 host (iOS refuses at runtime). The same define
+         is set on Kmila.Shared's MAUI TFMs so #if guards in shared files
+         (Settings.razor, ILocalApiHost-adjacent code) fire consistently. -->
+    <DefineConstants>$(DefineConstants);KMILA_MAUI_API</DefineConstants>
 
     <!-- Display name -->
     <ApplicationTitle>Kmila</ApplicationTitle>
@@ -38,17 +61,51 @@
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">15.0</SupportedOSPlatformVersion>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion>
-    <!--<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
     <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
-    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'tizen'">6.5</SupportedOSPlatformVersion>-->
+    <!--<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'tizen'">6.5</SupportedOSPlatformVersion>-->
+  </PropertyGroup>
+
+  <!-- Android-specific packaging for Google Play's 16 KB page-size requirement
+       (mandatory for new releases targeting API 35+ since Nov 2025). Backwards
+       compatible: 16 KB-aligned APKs run unchanged on 4 KB-page devices because
+       16 is a multiple of 4 — devices < API 35 just ignore the extra padding.
+       minSdk stays at 24, so installable device set is unchanged. -->
+  <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+    <!-- Force the packager to align .so entries on 16 KB ZIP-page boundaries. -->
+    <AndroidZipAlignmentPages>16</AndroidZipAlignmentPages>
+    <!-- Keep native libs uncompressed inside the APK so the loader can mmap
+         them directly from the package. Requires API 23+ (we're at 24). -->
+    <AndroidExtractNativeLibs>false</AndroidExtractNativeLibs>
+    <!-- 64-bit ABIs only — 16 KB pages don't exist on 32-bit Android, and
+         Play no longer requires armeabi-v7a / x86 for new submissions. -->
+    <RuntimeIdentifiers>android-arm64;android-x64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <!-- Mac Catalyst: apply Platforms/MacCatalyst/Entitlements.plist to the
+       codesign step. MAUI does NOT pick up an entitlements file by filename
+       convention (unlike Info.plist), so without this the app ships sandboxed
+       and every export (IFileExportService) lands in the invisible per-app
+       container instead of ~/Documents/Kmila — i.e. "download never works".
+       The plist disables the sandbox on purpose (see its own comment). -->
+  <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">
+    <CodesignEntitlements>Platforms/MacCatalyst/Entitlements.plist</CodesignEntitlements>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- App Icon -->
-    <MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#512BD4" />
+    <!-- App Icon - Kmila branding with dark slate blue -->
+    <MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.png" Color="#475569" ForegroundScale="0.65" />
 
-    <!-- Splash Screen -->
-    <MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#512BD4" BaseSize="128,128" />
+    <!-- Splash Screen - Kmila branding.
+         Audit 2026-07-11: was pointing at `AppIcon\appiconfg.png` (621×775
+         portrait — includes the adaptive-icon safe-zone padding AND the
+         "Kmila" wordmark below the icon block). On Android 12+ the system
+         splash icon container is only ~288dp with a ~108dp guaranteed
+         safe zone, so the padded portrait PNG rendered as a tiny near-
+         invisible dog. Fix: use a square 621×621 icon-only crop generated
+         from the same source, saved under Resources/Splash/splash-icon.png,
+         with a larger BaseSize so the icon fills more of the splash frame. -->
+    <MauiSplashScreen Include="Resources\Splash\splash_icon.png" Color="#475569" BaseSize="192,192" />
 
     <!-- Images -->
     <MauiImage Include="Resources\Images\*" />
@@ -59,14 +116,78 @@
 
     <!-- Raw Assets (also remove the "Resources\Raw" prefix) -->
     <MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+
+    <!-- Include Devices from Shared project as raw assets -->
+    <MauiAsset Include="..\Kmila.Shared\wwwroot\Devices\**\*.json" LogicalName="Devices\%(RecursiveDir)%(Filename)%(Extension)" />
+
+    <!-- Translation dictionaries: pulled from Kmila.Shared so the Web build
+         and the MAUI bundle read the same file. Same LogicalName pattern as
+         Devices/Learn/Practice so MauiProgram.cs's Traductor resolver finds
+         them via FileSystem.OpenAppPackageFileAsync("Dictionaries/{lang}.json").
+         Without this rule, the bundle ships no dictionaries and every UI
+         string renders as its raw key (e.g. "NAV_LEARN" instead of "Learn"). -->
+    <MauiAsset Include="..\Kmila.Shared\wwwroot\Dictionaries\**\*.json" LogicalName="Dictionaries\%(RecursiveDir)%(Filename)%(Extension)" />
+
+    <!-- Learn curriculum: manifest + per-language Markdown bodies. Same
+         LogicalName pattern as Dictionaries so FileSystem.OpenAppPackageFileAsync
+         can open them using the relative path (Learn/manifest.json, Learn/en/…). -->
+    <MauiAsset Include="..\Kmila.Shared\wwwroot\Learn\**\*" LogicalName="Learn\%(RecursiveDir)%(Filename)%(Extension)" />
+
+    <!-- Practice catalog: manifest + per-exercise vhdl/json/md assets. Same
+         LogicalName pattern so PracticeCatalog can open them via
+         FileSystem.OpenAppPackageFileAsync ("Practice/manifest.json",
+         "Practice/{folder}/solution.vhdl", etc). -->
+    <MauiAsset Include="..\Kmila.Shared\wwwroot\Practice\**\*" LogicalName="Practice\%(RecursiveDir)%(Filename)%(Extension)" />
+
+    <!-- Concepts catalog: execution-models mini-curriculum. Manifest +
+         per-language markdown bodies + per-language timeline JSON sidecars.
+         Same LogicalName pattern so ConceptCatalog can open them via
+         FileSystem.OpenAppPackageFileAsync ("Concepts/manifest.json",
+         "Concepts/{lang}/{moduleId}/{lessonId}.md", etc). -->
+    <MauiAsset Include="..\Kmila.Shared\wwwroot\Concepts\**\*" LogicalName="Concepts\%(RecursiveDir)%(Filename)%(Extension)" />
+
+    <!-- Project templates: gallery shown in ProjectsView's "+ New project"
+         modal. Each template ships its own template.json + per-language
+         file tree (Templates/{id}/{lang}/files/...). Same LogicalName
+         pattern so ProjectTemplateService can open them via
+         FileSystem.OpenAppPackageFileAsync. -->
+    <MauiAsset Include="..\Kmila.Shared\wwwroot\Templates\**\*" LogicalName="Templates\%(RecursiveDir)%(Filename)%(Extension)" />
+
+    <!-- Vendored Swagger UI, read at runtime by EmbeddedApiHost via
+         FileSystem.OpenAppPackageFileAsync("lib/swagger-ui/..."). This is the
+         ONLY part of lib/ that needs the MauiAsset (app-package) path.
+
+         Do NOT broaden this back to `lib\**\*`. That blanket glob double-
+         declared every lib asset as BOTH an RCL static web asset AND a
+         MauiAsset; MAUI's ConvertStaticWebAssetsToMauiAssets then moves the
+         plain copy to the top-level `lib/` (not web-served) and leaves
+         _content/Kmila.Shared/lib/ with only the precompressed .gz/.br. The
+         Mac Catalyst BlazorWebView resolver can't serve those, so Bootstrap,
+         Bootstrap Icons (+woff2) and JetBrains Mono 404'd there — broken icons
+         and unstyled links, Mac-Catalyst-only. Narrowed to swagger-ui so the
+         rest of lib/ ships as normal web-served RCL assets (plain copies, like
+         css/). The original glob predates the switch off Blockly (now removed
+         entirely; replaced by kmila-blocks.js) so nothing else here needs it. -->
+    <MauiAsset Include="..\Kmila.Shared\wwwroot\lib\swagger-ui\**\*" LogicalName="lib\swagger-ui\%(RecursiveDir)%(Filename)%(Extension)" />
+
+    <!-- Tier 5.2 Phase B follow-up — vendored Swagger UI + OpenAPI JSON
+         snapshot. EmbeddedApiHost.HandleAsync serves /api-docs (the HTML
+         shim), /openapi/v1.json (the committed spec), and the swagger-ui
+         assets from FileSystem.OpenAppPackageFileAsync. Regenerate the
+         JSON with `curl http://localhost:5297/openapi/v1.json` after any
+         /api/v1 handler-signature change. -->
+    <MauiAsset Include="..\Kmila.Shared\wwwroot\api-docs\**\*" LogicalName="api-docs\%(RecursiveDir)%(Filename)%(Extension)" />
+    <MauiAsset Include="..\Kmila.Shared\wwwroot\openapi\**\*" LogicalName="openapi\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Blazor.Bootstrap" Version="3.4.0" />
     <PackageReference Include="BlazorMonaco" Version="3.3.0" />
     <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
+    <PackageReference Include="Microsoft.Maui.Essentials" Version="$(MauiVersion)" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="9.0.5" />
+    <PackageReference Include="sqlite-net-pcl" Version="1.9.172" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,0 +1,64 @@
+@implements IDisposable
+@inject Traductor Traductor
+
+<span class="kmila-tooltip kmila-tooltip--@(_placementClass)"
+      data-kmila-tip="@_text"
+      @attributes="ExtraAttrs">
+    @ChildContent
+    <span role="tooltip" id="@_id" class="kmila-tooltip__sr">@_text</span>
+</span>
+
+@code {
+    // TextKey is required — the Traductor key whose translation is shown
+    // on hover / focus. Copy is authored in en.json and translated across
+    // the seven dictionaries (es/fr/de/ch/jp/ar). Callers pass a key, not
+    // a literal string, so translations flip live via StaticOnLangChanged.
+    [Parameter, EditorRequired] public string TextKey { get; set; } = string.Empty;
+
+    // Optional positional arguments for string.Format substitutions
+    // (matches Traductor.T(key, params object[])). Kept nullable so the
+    // common case (no args) doesn't allocate.
+    [Parameter] public object[]? TextArgs { get; set; }
+
+    // Placement: "Top" (default), "Bottom", "Left", "Right". Case-insensitive
+    // — normalized to a lowercase CSS modifier below.
+    [Parameter] public string Placement { get; set; } = "Top";
+
+    // Slotted content — the button (or any element) that owns the tooltip.
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    // Passthrough for extra HTML attributes (e.g. class="", style="") the
+    // caller wants on the wrapper span without introducing a second element.
+    [Parameter(CaptureUnmatchedValues = true)]
+    public Dictionary<string, object>? ExtraAttrs { get; set; }
+
+    private string _id = $"kt-{Guid.NewGuid():N}";
+    private string _text = string.Empty;
+    private string _placementClass = "top";
+
+    protected override void OnInitialized()
+    {
+        Traductor.StaticOnLangChanged += OnLanguageChanged;
+    }
+
+    protected override void OnParametersSet()
+    {
+        _text = TextArgs is { Length: > 0 }
+            ? Traductor.T(TextKey, TextArgs)
+            : Traductor.T(TextKey);
+        _placementClass = (Placement ?? "Top").Trim().ToLowerInvariant() switch
+        {
+            "bottom" => "bottom",
+            "left"   => "left",
+            "right"  => "right",
+            _        => "top",
+        };
+    }
+
+    private void OnLanguageChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Traductor.StaticOnLangChanged -= OnLanguageChanged;
+    }
+}

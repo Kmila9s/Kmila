@@ -1,0 +1,224 @@
+@*
+    MarkdownModal Component
+
+    A beautiful modal component for displaying markdown files with enhanced styling,
+    loading states, and error handling. Features a clean card-based design with
+    a header showing file information and a scrollable content area.
+
+    Features:
+    - Card-based design with header and body sections
+    - Loading spinner while content is being fetched
+    - Error state handling with alert message
+    - Scrollable content area with custom height
+    - File name and project context in header
+    - Refresh button to reload content
+    - Empty state handling
+
+    Usage:
+    <MarkdownModal File="@projectFile" />
+
+    Dependencies:
+    - ProjectFiles repository (injected)
+    - BlazorBootstrap Markdown, Card, Icon, Badge, Button, Spinner, Alert components
+*@
+
+<Card Class="markdown-modal-card shadow-sm">
+    <CardHeader Class="bg-body-tertiary">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center gap-2">
+                <Icon Name="IconName.FileEarmarkText" Class="text-primary fs-5" />
+                <div>
+                    <strong class="fs-6">@(File?.FileName ?? Traductor.T("MARKDOWN_VIEWER_FALLBACK_TITLE"))</strong>
+                    @if(File?.Project != null)
+                    {
+                        <br/>
+                        <small class="text-muted">
+                            <Icon Name="IconName.Folder2" Class="me-1" />
+                            @File.Project.Name
+                        </small>
+                    }
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                @if(!_isLoading && !_hasError)
+                {
+                    <Badge Color="BadgeColor.Success" Pill="true">
+                        <Icon Name="IconName.CheckCircle" Class="me-1" />
+                        @Traductor.T("MARKDOWN_LOADED")
+                    </Badge>
+                }
+                @* Family-14 (.kmila-btn-icon). BB's Light/Outline button rendered
+                   foreign chrome inside a kmila modal; the icon-only refresh now
+                   shares the rest of the toolbar's geometry + interaction states. *@
+                <KmilaTooltip TextKey="MARKDOWN_REFRESH_TOOLTIP">
+                    <button type="button"
+                            class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--sm"
+                            @onclick="RefreshContentAsync"
+                            disabled="@_isLoading"
+                            aria-label="@Traductor.T("MARKDOWN_REFRESH_TOOLTIP")">
+                        <Icon Name="IconName.ArrowClockwise" />
+                    </button>
+                </KmilaTooltip>
+            </div>
+        </div>
+    </CardHeader>
+    <CardBody Class="p-0">
+        @if(_isLoading)
+        {
+            <!-- Loading State -->
+            <div class="d-flex flex-column justify-content-center align-items-center py-5">
+                <div class="spinner-border text-primary mb-3" role="status" aria-hidden="true"></div>
+                <span class="text-muted">@Traductor.T("MARKDOWN_LOADING")</span>
+            </div>
+        }
+        else if(_hasError)
+        {
+            <!-- Error State -->
+            <div class="p-3">
+                @* slot/banner-cta — retry trails the error text instead of being a separate centered row. *@
+                <Alert Color="AlertColor.Danger" Dismissible="false">
+                    <div class="kmila-slot-banner">
+                        <div class="d-flex align-items-start">
+                            <Icon Name="IconName.ExclamationTriangleFill" Class="me-2 fs-5" />
+                            <div>
+                                <strong>@Traductor.T("MARKDOWN_ERROR_LOADING")</strong>
+                                <p class="mb-0 mt-1 small">@_errorMessage</p>
+                            </div>
+                        </div>
+                        <KmilaTooltip TextKey="MARKDOWN_RETRY_TIP">
+                            <button type="button"
+                                    class="kmila-btn kmila-btn--primary kmila-btn--sm"
+                                    @onclick="RefreshContentAsync">
+                                <Icon Name="IconName.ArrowClockwise" />
+                                <span>@Traductor.T("MARKDOWN_RETRY")</span>
+                            </button>
+                        </KmilaTooltip>
+                    </div>
+                </Alert>
+            </div>
+        }
+        else if(string.IsNullOrWhiteSpace(_markdown))
+        {
+            <!-- Empty State -->
+            <div class="d-flex flex-column justify-content-center align-items-center py-5 text-muted">
+                <Icon Name="IconName.FileEarmark" Class="fs-1 mb-2 opacity-50" />
+                <span>@Traductor.T("MARKDOWN_EMPTY_TITLE")</span>
+                <small>@Traductor.T("MARKDOWN_EMPTY_SUBTITLE")</small>
+            </div>
+        }
+        else
+        {
+            <!-- Content Display (Markdig — tables + fenced code render correctly) -->
+            <div class="markdown-content-wrapper">
+                <div class="markdown-content p-3">
+                    @Kmila.Shared.Services.MarkdownRenderer.Render(_markdown)
+                </div>
+            </div>
+        }
+    </CardBody>
+</Card>
+
+@code{
+    #region Parameters
+
+    /// <summary>
+    /// The project file containing the markdown content to display.
+    /// When this parameter changes, the component automatically reloads the content.
+    /// </summary>
+    [Parameter]
+    public ProjectFile File { get; set; } = default!;
+
+    #endregion
+
+    #region Private Fields
+
+    /// <summary>
+    /// The loaded project file with its content.
+    /// </summary>
+    private ProjectFile _file = default!;
+
+    /// <summary>
+    /// The markdown content string to render.
+    /// </summary>
+    private string _markdown = string.Empty;
+
+    /// <summary>
+    /// Indicates whether content is currently being loaded.
+    /// </summary>
+    private bool _isLoading = true;
+
+    /// <summary>
+    /// Indicates whether an error occurred during content loading.
+    /// </summary>
+    private bool _hasError = false;
+
+    /// <summary>
+    /// The error message to display when loading fails.
+    /// </summary>
+    private string _errorMessage = string.Empty;
+
+    #endregion
+
+    #region Lifecycle Methods
+
+    /// <summary>
+    /// Called when the component parameters are set or changed.
+    /// Loads the markdown content from the file asynchronously.
+    /// </summary>
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadContentAsync();
+    }
+
+    #endregion
+
+    #region Private Methods
+
+    /// <summary>
+    /// Loads the markdown content from the specified file.
+    /// Handles loading states and error conditions.
+    /// </summary>
+    private async Task LoadContentAsync()
+    {
+        if (File == null)
+        {
+            _isLoading = false;
+            _hasError = true;
+            _errorMessage = Traductor.T("MARKDOWN_NO_FILE");
+            return;
+        }
+
+        try
+        {
+            _isLoading = true;
+            _hasError = false;
+            _errorMessage = string.Empty;
+            StateHasChanged();
+
+            _file = await ProjectFiles.ReadFileContentAsync(File, File.Project);
+            _markdown = _file?.Content ?? string.Empty;
+        }
+        catch (Exception ex)
+        {
+            _hasError = true;
+            _errorMessage = $"Failed to load file: {ex.Message}";
+            _markdown = string.Empty;
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Refreshes the markdown content by reloading from the file.
+    /// Called when the user clicks the refresh button.
+    /// </summary>
+    private async Task RefreshContentAsync()
+    {
+        await LoadContentAsync();
+    }
+
+    #endregion
+}

@@ -7,8 +7,34 @@
 @using static Microsoft.AspNetCore.Components.Web.RenderMode
 @using Microsoft.AspNetCore.Components.Web.Virtualization
 @using Microsoft.JSInterop
+@using Microsoft.Extensions.Logging
 @using BlazorBootstrap
 @using BlazorMonaco
 @using BlazorMonaco.Editor
 @using BlazorMonaco.Languages
+@using Kmila.Shared.Modals
+@using Kmila.Shared.Models
+@using Kmila.Shared.Components
+@using Kmila.Shared.Services
+@using Kmila.Shared.Services.Export
+@using Kmila.Shared.Repositories
+@using Parser.Models
+@using static Parser.Models.Constants
+@using static Kmila.Shared.Models.ToastMessages
+@using Kmila.Shared.Data
+@inject JSONFileReader JSONFileReader
+@inject Projects Projects
+@inject ProgramBuilder Builder
+@inject ProjectFiles ProjectFiles
 @inject IJSRuntime JS
+@* Custom toast service. Preserves BB's `ToastService.Notify(ToastMessage)`
+   call-site signature, so all existing `ToastService.Notify(...)` callers
+   keep compiling. The actual UI is rendered by `<KmilaToastHost />` mounted
+   in MainLayout. *@
+@inject KmilaToastService ToastService
+@inject NavigationManager NavigationManager
+@inject SelectedFPGA SelectedFPGA
+@inject Traductor Traductor
+@inject ApplicationDbContext DbContext
+@inject ConfigurationService ConfigService
+@inject IFileExportService Export

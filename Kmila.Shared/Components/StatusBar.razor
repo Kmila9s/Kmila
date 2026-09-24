@@ -1,0 +1,162 @@
+@*
+    StatusBar — thin bottom strip on the Editor page.
+
+    Two groups:
+      • Left  : file info (unsaved dot · filename · Ln/Col · language chip)
+      • Right : build status, resource % of selected FPGA, sim status
+
+    Clickable chips:
+      • Build status  → Output tab (so errors are one click away)
+      • Resource %    → Entities tab (where the per-entity estimate lives)
+
+    Responsive: under 640px the left group drops everything except the unsaved
+    dot + filename, and the right group keeps only build-status + resource %.
+*@
+@implements IDisposable
+@inject SimulationParameters Sim
+@inject EditorDockState DockState
+@inject SelectedFPGA SelectedFPGA
+
+<footer class="kmila-status-bar" role="status" aria-live="polite">
+
+    <div class="kmila-status-bar__group kmila-status-bar__group--start">
+        @if (HasUnsavedChanges)
+        {
+            <span class="kmila-status-bar__dot" title="@Traductor.T("EDITOR_UNSAVED")" aria-label="@Traductor.T("EDITOR_UNSAVED")"></span>
+        }
+        @if (!string.IsNullOrEmpty(FileName))
+        {
+            <span class="kmila-status-bar__file" title="@FileName">@FileName</span>
+            <span class="kmila-status-bar__sep" aria-hidden="true">·</span>
+            <span class="kmila-status-bar__pos" dir="ltr">
+                @Traductor.T("EDITOR_LINE_ABBR") @Line, @Traductor.T("EDITOR_COL_ABBR") @Column
+            </span>
+            <span class="kmila-status-bar__sep" aria-hidden="true">·</span>
+            <span class="kmila-status-bar__lang">@Language</span>
+        }
+    </div>
+
+    <div class="kmila-status-bar__group kmila-status-bar__group--end">
+
+        @* --- Build status chip --- *@
+        @{ var (buildValue, buildVariant, buildClickable) = GetBuildDisplay(); }
+        <KmilaTooltip TextKey="STATUS_BUILD_TOOLTIP" Placement="Top">
+            <button type="button"
+                    class="kmila-status-bar__stat kmila-status-bar__stat--@buildVariant"
+                    disabled="@(!buildClickable)"
+                    @onclick="() => DockState.SetActive(EditorTab.Output)">
+                <span class="kmila-status-bar__label">@Traductor.T("STATUS_BUILD"):</span>
+                <span class="kmila-status-bar__value">@buildValue</span>
+            </button>
+        </KmilaTooltip>
+
+        @* --- Resource % chip (only when both FPGA + entities are available) --- *@
+        @if (ResourcePercent is double pct && SelectedFPGA?.FPGA?.Model is string model)
+        {
+            var variant = pct >= 100 ? "danger" : pct >= 80 ? "warning" : pct >= 60 ? "info" : "success";
+            <KmilaTooltip TextKey="STATUS_RESOURCE_TOOLTIP" Placement="Top">
+                <button type="button"
+                        class="kmila-status-bar__stat kmila-status-bar__stat--@variant"
+                        @onclick="() => DockState.SetActive(EditorTab.Entities)">
+                    <span class="kmila-status-bar__value">@pct.ToString("F0")%</span>
+                    <span class="kmila-status-bar__muted">@Traductor.T("STATUS_OF")</span>
+                    <span class="kmila-status-bar__mono">@model</span>
+                </button>
+            </KmilaTooltip>
+        }
+
+        @* --- Sim status chip (read-only; reflects state) --- *@
+        @{ var (simValue, simVariant) = GetSimDisplay(); }
+        <span class="kmila-status-bar__stat kmila-status-bar__stat--@simVariant kmila-status-bar__stat--readonly">
+            <span class="kmila-status-bar__label">@Traductor.T("STATUS_SIM"):</span>
+            <span class="kmila-status-bar__value">@simValue</span>
+        </span>
+    </div>
+</footer>
+
+@code {
+    [Parameter] public bool HasUnsavedChanges { get; set; }
+    [Parameter] public string? FileName { get; set; }
+    [Parameter] public int Line { get; set; } = 1;
+    [Parameter] public int Column { get; set; } = 1;
+    [Parameter] public string Language { get; set; } = "";
+
+    /// <summary>
+    /// Highest individual resource utilisation across FF/LUT/DSP/BRAM/IO,
+    /// expressed as 0..100+. Null when we don't have enough data to report
+    /// (no FPGA selected, or no parsed entities). The "max of all" makes the
+    /// headline track the tightest constraint — which is what matters for
+    /// "will this design fit?".
+    /// </summary>
+    private double? ResourcePercent => ComputeResourcePercent();
+
+    protected override void OnInitialized()
+    {
+        Sim.OnChange += OnStateChanged;
+        SelectedFPGA.OnFPGAChange += OnStateChanged;
+        Traductor.StaticOnLangChanged += OnStateChanged;
+    }
+
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Sim.OnChange -= OnStateChanged;
+        SelectedFPGA.OnFPGAChange -= OnStateChanged;
+        Traductor.StaticOnLangChanged -= OnStateChanged;
+    }
+
+    /// <summary>
+    /// Maps the current <see cref="SimState"/> to build-row chip display.
+    /// Returns the label value, the semantic variant class, and whether the
+    /// chip should be clickable (only when there's something in the Output
+    /// tab worth jumping to).
+    /// </summary>
+    private (string value, string variant, bool clickable) GetBuildDisplay() => Sim.State switch
+    {
+        SimState.Idle        => (Traductor.T("STATUS_IDLE"),    "neutral", false),
+        SimState.Building    => (Traductor.T("SIM_BUILDING"),   "info",    false),
+        SimState.BuiltOk     => (Traductor.T("STATUS_OK"),      "success", true),
+        SimState.BuildError  => (Traductor.T("STATUS_ERROR"),   "danger",  true),
+        SimState.Running     => (Traductor.T("STATUS_OK"),      "success", true),
+        SimState.Paused      => (Traductor.T("STATUS_OK"),      "success", true),
+        SimState.Complete    => (Traductor.T("STATUS_OK"),      "success", true),
+        _                    => (Traductor.T("STATUS_IDLE"),    "neutral", false),
+    };
+
+    private (string value, string variant) GetSimDisplay() => Sim.State switch
+    {
+        SimState.Running  => (Traductor.T("SIM_RUNNING").ToLower(), "info"),
+        SimState.Paused   => (Traductor.T("STATUS_PAUSED"),         "warning"),
+        SimState.Complete => (Traductor.T("STATUS_DONE"),           "success"),
+        _                 => (Traductor.T("STATUS_IDLE"),           "neutral"),
+    };
+
+    private double? ComputeResourcePercent()
+    {
+        var fpga = SelectedFPGA?.FPGA;
+        if (fpga == null) return null;
+        if (Builder.Parser == null || !Builder.Parser.Entities.Any()) return null;
+
+        double max = 0;
+        bool gotAny = false;
+
+        void Check(double used, double? available)
+        {
+            if (available is not double limit || limit <= 0) return;
+            gotAny = true;
+            var pct = used / limit * 100.0;
+            if (pct > max) max = pct;
+        }
+
+        var entities = Builder.Parser.Entities.Where(e => e.ResourceUsage != null).ToList();
+
+        Check(entities.Sum(e => e.ResourceUsage.FlipFlops),  fpga.Resources?.RegistersFlipFlops);
+        Check(entities.Sum(e => e.ResourceUsage.LUTs),       fpga.Resources?.LogicUnits);
+        Check(entities.Sum(e => e.ResourceUsage.DSPSlices),  fpga.Resources?.DspSlices);
+        Check(entities.Sum(e => e.ResourceUsage.BRAMBlocks), fpga.Resources?.MemoryBlocks);
+        Check(entities.Sum(e => (double)e.ResourceUsage.IOPins), fpga.IO?.MaxUserIO);
+
+        return gotAny ? max : null;
+    }
+}

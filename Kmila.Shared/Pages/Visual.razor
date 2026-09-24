@@ -1,0 +1,17 @@
+@page "/visual/{ProjectId}"
+@using Kmila.Shared.Components.VisualRun
+
+@*
+    Thin route wrapper for the /visual/{ProjectId} URL. The actual canvas
+    lives in <VisualPanel> so the Editor's view-tabs strip (Code · Blocks ·
+    Replay · Visual) can mount the same component inline as its 4th view.
+    Standalone-route callers see the full header (Back button + project
+    title); the Editor passes EmbeddedMode=true to drop the header.
+*@
+
+<PageTitle>@Traductor.T("PAGE_TITLE_VISUAL")</PageTitle>
+<VisualPanel ProjectId="@ProjectId" EmbeddedMode="false" />
+
+@code {
+    [Parameter] public string ProjectId { get; set; } = string.Empty;
+}

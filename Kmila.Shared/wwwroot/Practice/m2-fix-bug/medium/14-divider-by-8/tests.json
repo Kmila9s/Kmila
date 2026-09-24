@@ -1,0 +1,69 @@
+{
+  "tests": [
+    {
+      "id": "t1",
+      "visible": true,
+      "descriptions": { "en": "Reset and free run — clk_out toggles every 2 input clocks", "es": "Reset y conteo libre — clk_out alterna cada 2 ciclos de entrada" },
+      "durationMicros": 4,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]}
+      ]
+    },
+    {
+      "id": "t2",
+      "visible": false,
+      "descriptions": { "en": "Held in reset", "es": "Reset mantenido" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0, "scale": "NS", "value": "1" }
+        ]}
+      ]
+    },
+    {
+      "id": "t3",
+      "visible": false,
+      "descriptions": { "en": "Reset pulse mid-run", "es": "Pulso de reset a mitad de ejecución" },
+      "durationMicros": 4,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,    "scale": "NS", "value": "1" },
+          { "time": 25,   "scale": "NS", "value": "0" },
+          { "time": 1000, "scale": "NS", "value": "1" },
+          { "time": 1025, "scale": "NS", "value": "0" }
+        ]}
+      ]
+    },
+    {
+      "id": "t4",
+      "visible": false,
+      "descriptions": { "en": "Free run, no initial reset assertion", "es": "Conteo libre, sin reset inicial" },
+      "durationMicros": 4,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0, "scale": "NS", "value": "0" }
+        ]}
+      ]
+    },
+    {
+      "id": "t5",
+      "visible": false,
+      "descriptions": { "en": "Reset for first 200 ns then free", "es": "Reset durante 200 ns y luego libre" },
+      "durationMicros": 4,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,   "scale": "NS", "value": "1" },
+          { "time": 205, "scale": "NS", "value": "0" }
+        ]}
+      ]
+    }
+  ]
+}

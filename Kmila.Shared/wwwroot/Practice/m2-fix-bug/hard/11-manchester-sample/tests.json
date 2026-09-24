@@ -1,0 +1,79 @@
+{
+  "tests": [
+    {
+      "id": "t1",
+      "visible": true,
+      "descriptions": { "en": "din held high — m must be \"10\" pattern (high then low)", "es": "din siempre alto — m debe seguir el patrón \"10\"" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "din", "values": [{ "time": 0, "scale": "NS", "value": "1" }] }
+      ]
+    },
+    {
+      "id": "t2",
+      "visible": false,
+      "descriptions": { "en": "din held low — m must be \"01\" pattern (low then high)", "es": "din siempre bajo — m debe seguir el patrón \"01\"" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "din", "values": [{ "time": 0, "scale": "NS", "value": "0" }] }
+      ]
+    },
+    {
+      "id": "t3",
+      "visible": false,
+      "descriptions": { "en": "Held in reset — m stays 0", "es": "Reset mantenido — m permanece 0" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [{ "time": 0, "scale": "NS", "value": "1" }] },
+        { "portName": "din",   "values": [{ "time": 0, "scale": "NS", "value": "1" }] }
+      ]
+    },
+    {
+      "id": "t4",
+      "visible": false,
+      "descriptions": { "en": "din alternates every 40 ns", "es": "din alterna cada 40 ns" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "din", "values": [
+          { "time": 0,   "scale": "NS", "value": "0" },
+          { "time": 80,  "scale": "NS", "value": "1" },
+          { "time": 160, "scale": "NS", "value": "0" },
+          { "time": 240, "scale": "NS", "value": "1" }
+        ]}
+      ]
+    },
+    {
+      "id": "t5",
+      "visible": false,
+      "descriptions": { "en": "din rises after a long zero stretch", "es": "din sube tras un largo tramo de ceros" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "din", "values": [
+          { "time": 0,   "scale": "NS", "value": "0" },
+          { "time": 600, "scale": "NS", "value": "1" }
+        ]}
+      ]
+    }
+  ]
+}

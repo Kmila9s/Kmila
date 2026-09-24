@@ -1,0 +1,187 @@
+@*
+    GitHubLoginModal — runs the OAuth Device Flow.
+
+    Shows the user code + verification URL, polls the token endpoint
+    in the background, fires OnSuccess once GitHub returns an access
+    token. The "configure first" branch covers deployments where the
+    Client ID hasn't been set yet — those see a doc link instead of a
+    confusing dead modal.
+
+    Privacy: this modal does not transmit anything beyond what GitHub
+    requires for OAuth (the public Client ID + the device code we
+    generate together with GitHub). No project data leaves the app
+    here.
+*@
+@implements IAsyncDisposable
+@inject GitHubAuth Auth
+
+<div class="github-login">
+    @if (!Auth.IsConfigured)
+    {
+        @* Deployer hasn't pasted a Client ID into GitHubAuthConfig yet. *@
+        <div class="alert alert-warning">
+            <strong>@Traductor.T("GH_LOGIN_NEEDS_CONFIG_TITLE")</strong>
+            <p class="mb-0">@Traductor.T("GH_LOGIN_NEEDS_CONFIG_BODY")</p>
+        </div>
+    }
+    else if (_error != null)
+    {
+        @* slot/banner-cta — retry trails the alert text instead of floating below. *@
+        <div class="alert alert-danger" role="alert">
+            <div class="kmila-slot-banner">
+                <span>@_error</span>
+                <KmilaTooltip TextKey="GH_LOGIN_RETRY_TIP">
+                    <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--sm" @onclick="StartAsync">
+                        <Icon Name="IconName.ArrowClockwise" />
+                        <span>@Traductor.T("COMMON_RETRY")</span>
+                    </button>
+                </KmilaTooltip>
+            </div>
+        </div>
+    }
+    else if (_code == null)
+    {
+        <div class="github-login__loading">
+            <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
+            <span>@Traductor.T("GH_LOGIN_REQUESTING")</span>
+        </div>
+    }
+    else
+    {
+        <p class="github-login__intro">@Traductor.T("GH_LOGIN_INSTRUCTIONS")</p>
+
+        <div class="github-login__steps">
+            <div class="github-login__step">
+                <span class="github-login__step-num">1</span>
+                <div>
+                    <div class="github-login__step-title">@Traductor.T("GH_LOGIN_OPEN_LINK")</div>
+                    <a href="@_code.VerificationUri" target="_blank" rel="noopener noreferrer"
+                       class="github-login__verification-link">
+                        <Icon Name="IconName.BoxArrowUpRight" />
+                        <span>@_code.VerificationUri</span>
+                    </a>
+                </div>
+            </div>
+
+            <div class="github-login__step">
+                <span class="github-login__step-num">2</span>
+                <div>
+                    <div class="github-login__step-title">@Traductor.T("GH_LOGIN_ENTER_CODE")</div>
+                    <div class="github-login__code-row">
+                        <code class="github-login__code">@_code.UserCode</code>
+                        <KmilaTooltip TextKey="COMMON_COPY">
+                            <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                                    @onclick="CopyCodeAsync">
+                                <Icon Name="@(_copied ? IconName.CheckLg : IconName.Clipboard)" />
+                                <span>@Traductor.T(_copied ? "COMMON_COPIED" : "COMMON_COPY")</span>
+                            </button>
+                        </KmilaTooltip>
+                    </div>
+                </div>
+            </div>
+
+            <div class="github-login__step">
+                <span class="github-login__step-num">3</span>
+                <div>
+                    <div class="github-login__step-title">@Traductor.T("GH_LOGIN_AUTHORIZE")</div>
+                    <div class="github-login__waiting">
+                        <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
+                        <span>@Traductor.T("GH_LOGIN_WAITING")</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <p class="github-login__privacy">
+            <Icon Name="IconName.ShieldLock" />
+            <span>@Traductor.T("GH_LOGIN_PRIVACY_NOTE")</span>
+        </p>
+    }
+</div>
+
+@code {
+    /// <summary>Fires when GitHub returns an access token. The parent
+    /// is responsible for closing the modal in response — this
+    /// component never closes itself.</summary>
+    [Parameter] public EventCallback OnSuccess { get; set; }
+
+    /// <summary>Fires when the user cancels (or the device code
+    /// expires). Same expectation: parent closes.</summary>
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private GitHubAuth.DeviceCodeResponse? _code;
+    private string? _error;
+    private bool _copied;
+    private CancellationTokenSource? _pollCts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Auth.IsConfigured) return;
+        await StartAsync();
+    }
+
+    /// <summary>
+    /// Kicks off the device flow. Step 1 (request a code) blocks the
+    /// modal until GitHub responds, then step 2 (poll for the token)
+    /// runs in the background; the user is free to follow the
+    /// instructions while we wait.
+    /// </summary>
+    private async Task StartAsync()
+    {
+        _error  = null;
+        _copied = false;
+        _code   = null;
+        StateHasChanged();
+
+        try
+        {
+            _code = await Auth.StartDeviceFlowAsync();
+            StateHasChanged();
+
+            _pollCts?.Cancel();
+            _pollCts?.Dispose();
+            _pollCts = new CancellationTokenSource();
+
+            var account = await Auth.PollForTokenAsync(_code, _pollCts.Token);
+            if (account != null)
+            {
+                if (OnSuccess.HasDelegate) await OnSuccess.InvokeAsync();
+            }
+            else
+            {
+                _error = Traductor.T("GH_LOGIN_EXPIRED");
+                StateHasChanged();
+            }
+        }
+        catch (TaskCanceledException) { /* user cancelled */ }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CopyCodeAsync()
+    {
+        if (_code == null) return;
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _code.UserCode);
+            _copied = true;
+            StateHasChanged();
+        }
+        catch
+        {
+            // Clipboard API blocked — non-fatal, the code is visible.
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        // Cancel the in-flight token poll so a closing modal doesn't
+        // keep hammering GitHub with stale device codes.
+        _pollCts?.Cancel();
+        _pollCts?.Dispose();
+        await Task.CompletedTask;
+    }
+}

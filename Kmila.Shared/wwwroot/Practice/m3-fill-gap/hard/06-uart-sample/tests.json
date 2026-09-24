@@ -1,0 +1,55 @@
+{
+  "tests": [
+    { "id": "t1", "visible": true, "descriptions": { "en": "Walk bit_count 0..15 — sample_now pulses on 8", "es": "Recorrer bit_count 0..15 — sample_now pulsa en 8" }, "durationMicros": 3, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "bit_count", "values": [
+        { "time": 0,    "scale": "NS", "value": "0000" },
+        { "time": 100,  "scale": "NS", "value": "0001" },
+        { "time": 200,  "scale": "NS", "value": "0010" },
+        { "time": 300,  "scale": "NS", "value": "0011" },
+        { "time": 400,  "scale": "NS", "value": "0100" },
+        { "time": 500,  "scale": "NS", "value": "0101" },
+        { "time": 600,  "scale": "NS", "value": "0110" },
+        { "time": 700,  "scale": "NS", "value": "0111" },
+        { "time": 800,  "scale": "NS", "value": "1000" },
+        { "time": 900,  "scale": "NS", "value": "1001" },
+        { "time": 1000, "scale": "NS", "value": "1010" },
+        { "time": 1100, "scale": "NS", "value": "1011" }
+      ]}
+    ]},
+    { "id": "t2", "visible": false, "descriptions": { "en": "bit_count stays at 7 — sample_now low", "es": "bit_count se queda en 7 — sample_now bajo" }, "durationMicros": 1, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "bit_count", "values": [ { "time": 0, "scale": "NS", "value": "0111" } ] }
+    ]},
+    { "id": "t3", "visible": false, "descriptions": { "en": "bit_count stays at 8 — sample_now high every cycle", "es": "bit_count en 8 — sample_now alto cada ciclo" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "bit_count", "values": [ { "time": 0, "scale": "NS", "value": "1000" } ] }
+    ]},
+    { "id": "t4", "visible": false, "descriptions": { "en": "Held in reset", "es": "Reset mantenido" }, "durationMicros": 1, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset",     "values": [ { "time": 0, "scale": "NS", "value": "1" } ] },
+      { "portName": "bit_count", "values": [ { "time": 0, "scale": "NS", "value": "1000" } ] }
+    ]},
+    { "id": "t5", "visible": false, "descriptions": { "en": "Two passes through value 8", "es": "Dos pasadas por el valor 8" }, "durationMicros": 3, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "bit_count", "values": [
+        { "time": 0,    "scale": "NS", "value": "0111" },
+        { "time": 200,  "scale": "NS", "value": "1000" },
+        { "time": 400,  "scale": "NS", "value": "1001" },
+        { "time": 1000, "scale": "NS", "value": "1000" },
+        { "time": 1200, "scale": "NS", "value": "1001" }
+      ]}
+    ]}
+  ]
+}

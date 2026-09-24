@@ -1,0 +1,82 @@
+{
+  "tests": [
+    {
+      "id": "t1",
+      "visible": true,
+      "descriptions": { "en": "Idle line drops to 0 — START phase must last 10 cycles", "es": "Línea idle baja a 0 — fase START debe durar 10 ciclos" },
+      "durationMicros": 3,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "rx", "values": [
+          { "time": 0,   "scale": "NS", "value": "1" },
+          { "time": 200, "scale": "NS", "value": "0" }
+        ]}
+      ]
+    },
+    {
+      "id": "t2",
+      "visible": false,
+      "descriptions": { "en": "Line stays high — FSM must stay IDLE", "es": "Línea siempre alta — FSM permanece en IDLE" },
+      "durationMicros": 3,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "rx", "values": [{ "time": 0, "scale": "NS", "value": "1" }] }
+      ]
+    },
+    {
+      "id": "t3",
+      "visible": false,
+      "descriptions": { "en": "Held in reset — state stays 00", "es": "Reset mantenido — state permanece 00" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [{ "time": 0, "scale": "NS", "value": "1" }] },
+        { "portName": "rx",    "values": [{ "time": 0, "scale": "NS", "value": "0" }] }
+      ]
+    },
+    {
+      "id": "t4",
+      "visible": false,
+      "descriptions": { "en": "Two consecutive frames", "es": "Dos tramas consecutivas" },
+      "durationMicros": 3,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "rx", "values": [
+          { "time": 0,    "scale": "NS", "value": "1" },
+          { "time": 200,  "scale": "NS", "value": "0" },
+          { "time": 600,  "scale": "NS", "value": "1" },
+          { "time": 1000, "scale": "NS", "value": "0" }
+        ]}
+      ]
+    },
+    {
+      "id": "t5",
+      "visible": false,
+      "descriptions": { "en": "Long start bit sustained low", "es": "Bit de start largo, mantenido en 0" },
+      "durationMicros": 3,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "rx", "values": [
+          { "time": 0,   "scale": "NS", "value": "1" },
+          { "time": 200, "scale": "NS", "value": "0" }
+        ]}
+      ]
+    }
+  ]
+}

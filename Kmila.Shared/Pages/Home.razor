@@ -1,25 +1,183 @@
-﻿@page "/"
+@page "/"
 @using Kmila.Shared.Services
+@inject LessonCatalog LessonCatalog
+@inject LessonProgressStore LearnProgress
+@implements IDisposable
+<PageTitle>@Traductor.T("COMMON_WELCOME")</PageTitle>
 
-<h1>Hello, world!</h1>
-<style>
-    #editor {
-        height: 350px;
-    }
-</style>
-<StandaloneCodeEditor ConstructionOptions="EditorConstructionOptions" Id="editor" />
+<section class="home-hero" aria-labelledby="home-hero-title">
+    <div class="home-hero__grid">
+        <div class="home-hero__copy">
+            <span class="home-hero__eyebrow">@Traductor.T("APP_SUBTITLE")</span>
+            <h1 id="home-hero-title" class="home-hero__title">@Traductor.T("HOME_TITLE")</h1>
+            <p class="home-hero__subtitle">@Traductor.T("HOME_SUBTITLE")</p>
+
+            <div class="home-hero__actions">
+                <a href="/projects" class="kmila-btn kmila-btn--accent kmila-btn--lg kmila-btn--featured home-hero__primary">
+                    <Icon Name="IconName.Rocket" />
+                    <span>@Traductor.T("HOME_GO_TO_PROJECTS")</span>
+                </a>
+                @* slot/page-hero-actions — only one --featured --accent CTA per hero;
+                   secondary actions ghost so the primary "Go to Projects" anchors. *@
+                <a href="/learn" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--lg home-hero__primary">
+                    <Icon Name="IconName.MortarboardFill" />
+                    <span>@Traductor.T("NAV_LEARN")</span>
+                    @if (_learnTotal > 0)
+                    {
+                        @* `dir="ltr"` keeps the numeric pair in reading order inside
+                           RTL languages (Arabic). Without it the digits + slash get
+                           bidi-reordered to "31 / 0". *@
+                        <span class="home-hero__progress-chip" dir="ltr"
+                              aria-label="@string.Format(Traductor.T("LEARN_YOUR_PROGRESS_FMT"), _learnDone, _learnTotal)">
+                            @_learnDone / @_learnTotal
+                        </span>
+                    }
+                </a>
+                <a href="https://github.com/Kmila9s" target="_blank" rel="noopener noreferrer" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--lg home-hero__secondary">
+                    <Icon Name="IconName.Github" />
+                    <span>@Traductor.T("HOME_GITHUB_LINK")</span>
+                </a>
+                <a href="https://kmila.com.mx" target="_blank" rel="noopener noreferrer" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--lg home-hero__secondary">
+                    <Icon Name="IconName.Globe" />
+                    <span>@Traductor.T("HOME_WEBPAGE_LINK")</span>
+                </a>
+            </div>
+        </div>
+
+        <div class="home-hero__art" aria-hidden="true">
+            <img src="_content/Kmila.Shared/img/Logo.png" alt="" class="home-hero__logo" />
+        </div>
+    </div>
+</section>
+
+<section class="home-overview" aria-labelledby="home-overview-title">
+    <div class="home-overview__header">
+        <span class="home-section__eyebrow">01 &middot; @Traductor.T("HOME_OVERVIEW_TITLE")</span>
+        <h2 id="home-overview-title">@Traductor.T("HOME_OVERVIEW_TITLE")</h2>
+    </div>
+    <div class="home-overview__body">
+        <p>@Traductor.T("HOME_OVERVIEW_P1")</p>
+        <p>@Traductor.T("HOME_OVERVIEW_P2")</p>
+    </div>
+</section>
+
+<section class="home-features" aria-labelledby="home-features-title">
+    <div class="home-features__header">
+        <span class="home-section__eyebrow">02 &middot; @Traductor.T("HOME_FEATURES_TITLE")</span>
+        <h2 id="home-features-title">@Traductor.T("HOME_FEATURES_TITLE")</h2>
+    </div>
+
+    <div class="home-bento">
+        <article class="home-bento__card home-bento__card--wide">
+            <div class="home-bento__icon home-bento__icon--accent">
+                <Icon Name="IconName.GraphUp" />
+            </div>
+            <h3>@Traductor.T("HOME_FEATURE_VISUALIZATION")</h3>
+            <p>@Traductor.T("HOME_FEATURE_VISUALIZATION_DESC")</p>
+        </article>
+
+        <article class="home-bento__card">
+            <div class="home-bento__icon home-bento__icon--primary">
+                <Icon Name="IconName.Laptop" />
+            </div>
+            <h3>@Traductor.T("HOME_FEATURE_CROSSPLATFORM")</h3>
+            <p>@Traductor.T("HOME_FEATURE_CROSSPLATFORM_DESC")</p>
+        </article>
+
+        <article class="home-bento__card">
+            <div class="home-bento__icon home-bento__icon--success">
+                <Icon Name="IconName.CloudSlashFill" />
+            </div>
+            <h3>@Traductor.T("HOME_FEATURE_OFFLINE")</h3>
+            <p>@Traductor.T("HOME_FEATURE_OFFLINE_DESC")</p>
+        </article>
+
+        <article class="home-bento__card">
+            <div class="home-bento__icon home-bento__icon--warning">
+                <Icon Name="IconName.Clipboard2CheckFill" />
+            </div>
+            <h3>@Traductor.T("HOME_FEATURE_PRELAB")</h3>
+            <p>@Traductor.T("HOME_FEATURE_PRELAB_DESC")</p>
+        </article>
+
+        <article class="home-bento__card">
+            <div class="home-bento__icon home-bento__icon--accent">
+                <Icon Name="IconName.UniversalAccessCircle" />
+            </div>
+            <h3>@Traductor.T("HOME_FEATURE_ACCESSIBILITY")</h3>
+            <p>@Traductor.T("HOME_FEATURE_ACCESSIBILITY_DESC")</p>
+        </article>
+
+        <article class="home-bento__card home-bento__card--highlight">
+            <div class="home-bento__icon home-bento__icon--primary">
+                <Icon Name="IconName.LightningChargeFill" />
+            </div>
+            <h3>@Traductor.T("HOME_FEATURE_PROTOTYPING")</h3>
+            <p>@Traductor.T("HOME_FEATURE_PROTOTYPING_DESC")</p>
+        </article>
+    </div>
+</section>
+
+<section class="home-cta" aria-label="@Traductor.T("HOME_CTA_ARIA_LABEL")">
+    <div class="home-cta__inner">
+        <div class="home-cta__text">
+            <h2>@Traductor.T("HOME_TITLE")</h2>
+            <p>@Traductor.T("HOME_GITHUB_TEXT")</p>
+        </div>
+        <div class="home-cta__actions">
+            <a href="/projects" class="kmila-btn kmila-btn--accent kmila-btn--lg kmila-btn--featured">
+                <Icon Name="IconName.ArrowRight" />
+                <span>@Traductor.T("HOME_GO_TO_PROJECTS")</span>
+            </a>
+            <a href="https://github.com/Kmila9s" target="_blank" rel="noopener noreferrer" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--lg home-cta__github">
+                <Icon Name="IconName.Github" />
+                <span>@Traductor.T("HOME_GITHUB_LINK")</span>
+            </a>
+            <a href="https://kmila.com.mx" target="_blank" rel="noopener noreferrer" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--lg home-cta__github">
+                <Icon Name="IconName.Globe" />
+                <span>@Traductor.T("HOME_WEBPAGE_LINK")</span>
+            </a>
+        </div>
+    </div>
+</section>
 
 @code {
-    private StandaloneEditorConstructionOptions EditorConstructionOptions(StandaloneCodeEditor editor)
+    private int _learnDone;
+    private int _learnTotal;
+
+    protected override async Task OnInitializedAsync()
     {
-        return new()
+        Traductor.StaticOnLangChanged += OnLanguageChanged;
+        LearnProgress.OnChange += OnLearnChanged;
+        await LoadLearnAsync();
+    }
+
+    private async Task LoadLearnAsync()
+    {
+        try
         {
-            AutomaticLayout = true,
-            Language="vhdl",
-            Value = "function xyz() {\n" +
-                    "   console.log(\"Hello world!\");\n" +
-                    "}",
-            
-        };
+            var manifest = await LessonCatalog.GetManifestAsync();
+            _learnTotal = manifest.Modules.Sum(m => m.Lessons.Count);
+            _learnDone  = await LearnProgress.TotalCompletedAsync();
+        }
+        catch
+        {
+            _learnTotal = 0;
+            _learnDone  = 0;
+        }
+    }
+
+    private void OnLanguageChanged() => InvokeAsync(StateHasChanged);
+
+    private async void OnLearnChanged()
+    {
+        await LoadLearnAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Traductor.StaticOnLangChanged -= OnLanguageChanged;
+        LearnProgress.OnChange -= OnLearnChanged;
     }
 }

@@ -1,0 +1,49 @@
+@namespace Kmila.Shared.Components.VisualRun
+@using Kmila.Shared.Services.VisualRun
+
+<div class="kviz-widget kviz-switch @(IsOn ? "kviz-switch--on" : "") @(EditMode ? "kviz-switch--edit" : "") @(Selected ? "kviz-widget--selected" : "")"
+     style="left:@(Comp.Position.X)px; top:@(Comp.Position.Y)px;"
+     data-component-id="@Comp.Id"
+     @onpointerdown="HandlePointerDown"
+     @onpointerdown:stopPropagation="@(!EditMode)"
+     @oncontextmenu:preventDefault>
+    <div class="kviz-switch-body">
+        <div class="kviz-switch-track">
+            <div class="kviz-switch-knob"></div>
+        </div>
+    </div>
+    <div class="kviz-switch-label">@Label</div>
+    <div class="kviz-switch-port">@PortLabel</div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public KvizComponent Comp { get; set; } = default!;
+    [Parameter] public VisualRunCoordinator? Coordinator { get; set; }
+    [Parameter] public bool EditMode { get; set; }
+    [Parameter] public bool Selected { get; set; }
+    [Parameter] public bool IsOn { get; set; }
+    [Parameter] public EventCallback<Microsoft.AspNetCore.Components.Web.PointerEventArgs> OnPointerDownExternal { get; set; }
+    [Parameter] public EventCallback<bool> OnToggleRequested { get; set; }
+
+    [CascadingParameter(Name = "FrameVersion")] public int FrameVersion { get; set; }
+
+    private string Label => Comp.Config.GetString("label", "SW");
+
+    private string PortLabel =>
+        Comp.Bindings.TryGetValue("out", out var p) && !string.IsNullOrEmpty(p) ? p : "(unwired)";
+
+    private async Task HandlePointerDown(Microsoft.AspNetCore.Components.Web.PointerEventArgs e)
+    {
+        if (EditMode)
+        {
+            // Edit mode: defer to canvas drag. No state change.
+            if (OnPointerDownExternal.HasDelegate)
+                await OnPointerDownExternal.InvokeAsync(e);
+            return;
+        }
+        // Run mode: toggle. Page-level state is the source of truth so
+        // the value survives Run/Stop cycles — fire the request upward.
+        if (OnToggleRequested.HasDelegate)
+            await OnToggleRequested.InvokeAsync(!IsOn);
+    }
+}

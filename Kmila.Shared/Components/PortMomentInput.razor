@@ -1,0 +1,513 @@
+@*
+    PortMomentInput — timeline-style editor for a single VHDL input port.
+
+    Rebuilt from scratch for Kmila's new flow: no off-canvas drawer, no
+    "base + extras" split. Everything is a single flat list of moments
+    (time/scale/value triplets) that the user can add, edit, reorder (by
+    re-sorting the time), and delete inline.
+
+    Clock mode is a toggle that replaces the list with a note — when on, the
+    emitted configuration is the special `{ Time=0, TimeScale="CLK",
+    Value="CLOCK" }` marker the ProgramBuilder recognises.
+
+    The visual timeline above the list is a read-only SVG showing moment
+    markers at their normalized position across `LimitTime`. It's a learning
+    aid — students can see the stimulus at a glance rather than reading a
+    table of numbers.
+
+    Public API (unchanged from the previous version so callers don't break):
+      • Variable, LimitTime, TimeScale, IsRunning, InitialConfiguration
+      • OnPortMomentsChanged(PortMomentConfiguration)
+*@
+
+<div class="port-moment @(_isClock ? "port-moment--clock" : "") @(IsRunning ? "port-moment--running" : "")">
+
+    @* ---------- Header ---------- *@
+    <header class="port-moment__head">
+        <span class="port-moment__dir" aria-hidden="true">
+            <Icon Name="IconName.ArrowDownCircleFill" />
+        </span>
+        <span class="port-moment__name">@(Variable?.Name ?? "—")</span>
+        <span class="port-moment__type">@TypeLabel</span>
+
+        @* Auto-detected system clock ports get a compact badge instead of
+           stimulus rows — the frequency is sourced from the Run-bar clock
+           field (FPGA default or per-project override), not from here. *@
+        @if (_isSystemClockPort)
+        {
+            <span class="port-moment__syslclk-chip" title="@Traductor.T("PORT_CLOCK_AUTO_TOOLTIP")">
+                <Icon Name="IconName.CpuFill" />
+                <span>@Traductor.T("PORT_CLOCK_AUTO_BADGE")</span>
+            </span>
+        }
+    </header>
+
+    @if (_isClock || _isSystemClockPort)
+    {
+        @* Clock port — no manual moments. The Run bar owns the clock
+           frequency; the user can't set it here anymore. *@
+        <div class="port-moment__clock-note">
+            <Icon Name="IconName.InfoCircleFill" />
+            <p>@Traductor.T("PORT_CLOCK_AUTO_NOTE")</p>
+        </div>
+    }
+    else
+    {
+        @* ---------- Read-only timeline viz ---------- *@
+        <div class="port-moment__timeline" aria-hidden="true">
+            <svg class="port-moment__timeline-svg"
+                 viewBox="0 0 1000 36"
+                 preserveAspectRatio="none"
+                 role="img">
+                @* Baseline + tick marks at 0, 25, 50, 75, 100 % *@
+                <line x1="0" y1="22" x2="1000" y2="22" class="port-moment__timeline-axis" />
+                @foreach (var p in new[] { 0, 250, 500, 750, 1000 })
+                {
+                    <line x1="@p" y1="18" x2="@p" y2="26" class="port-moment__timeline-tick" />
+                }
+
+                @foreach (var m in _moments)
+                {
+                    var xPercent = ComputeNormalizedX(m);
+                    var x = (xPercent * 10.0).ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
+                    <g class="port-moment__timeline-marker">
+                        <line x1="@x" y1="8" x2="@x" y2="22" />
+                        <circle cx="@x" cy="22" r="3.5" />
+                    </g>
+                }
+            </svg>
+            <div class="port-moment__timeline-bounds">
+                <span>0</span>
+                <span>@LimitTime @TimeScale</span>
+            </div>
+        </div>
+
+        @* ---------- Moments list ---------- *@
+        <div class="port-moment__moments">
+            @if (_moments.Count == 0)
+            {
+                <p class="port-moment__empty">@Traductor.T("PORT_NO_MOMENTS")</p>
+            }
+            else
+            {
+                <div class="port-moment__grid">
+                    <div class="port-moment__grid-head" aria-hidden="true">
+                        <span>@Traductor.T("PORT_TIME")</span>
+                        <span>@Traductor.T("PORT_SCALE")</span>
+                        <span>@Traductor.T("PORT_VALUE")</span>
+                        <span></span>
+                    </div>
+                    @for (var i = 0; i < _moments.Count; i++)
+                    {
+                        var idx = i; // capture
+                        var m = _moments[idx];
+                        <div class="port-moment__row" @key="m">
+                            <input type="number"
+                                   class="form-control form-control-sm port-moment__time"
+                                   min="0" max="@LimitTime" step="1"
+                                   value="@m.Time"
+                                   inputmode="numeric" enterkeyhint="next"
+                                   disabled="@IsRunning"
+                                   @onchange="@(e => OnTimeChangedAsync(idx, e))"
+                                   aria-label="@Traductor.T("PORT_TIME")" />
+
+                            @* Blazor's `<select value="...">` only sets the DOM `value` attribute,
+                               which browsers ignore on <select>. Pre-selection has to flow
+                               through each <option selected> for the dropdown to actually
+                               reflect the loaded config (bug: per-moment scale always showed
+                               the first option after a config load). *@
+                            <select class="form-select form-select-sm port-moment__scale"
+                                    disabled="@IsRunning"
+                                    @onchange="@(e => OnScaleChangedAsync(idx, e))"
+                                    aria-label="@Traductor.T("PORT_SCALE")">
+                                @foreach (var scale in _availableScales)
+                                {
+                                    <option value="@scale.ToString()" selected="@(scale == m.Scale)">@scale</option>
+                                }
+                            </select>
+
+                            <div class="port-moment__value-wrap">
+                                @switch (Variable?.Type ?? DATATYPES.UNKNOWN)
+                                {
+                                    case DATATYPES.INTEGER:
+                                    case DATATYPES.NATURAL:
+                                        <input type="number"
+                                               class="form-control form-control-sm port-moment__value"
+                                               placeholder="@ValuePlaceholder"
+                                               value="@m.Value"
+                                               min="@(Variable!.Type == DATATYPES.NATURAL ? "0" : null)"
+                                               inputmode="@(Variable!.Type == DATATYPES.NATURAL ? "numeric" : "numeric")"
+                                               enterkeyhint="next"
+                                               disabled="@IsRunning"
+                                               @onchange="@(e => OnValueChangedAsync(idx, e))"
+                                               aria-label="@Traductor.T("PORT_VALUE")" />
+                                        break;
+                                    case DATATYPES.BOOLEAN:
+                                        <select class="form-select form-select-sm port-moment__value"
+                                                value="@m.Value"
+                                                disabled="@IsRunning"
+                                                @onchange="@(e => OnValueChangedAsync(idx, e))"
+                                                aria-label="@Traductor.T("PORT_VALUE")">
+                                            <option value=""></option>
+                                            <option value="true">true</option>
+                                            <option value="false">false</option>
+                                        </select>
+                                        break;
+                                    default:
+                                        @* std_logic, std_logic_vector, bit, hex — free-form text with length cap + char whitelist *@
+                                        <input type="text"
+                                               class="form-control form-control-sm port-moment__value @(IsValueInvalid(m.Value) ? "is-invalid" : "")"
+                                               placeholder="@ValuePlaceholder"
+                                               value="@m.Value"
+                                               maxlength="@MaxValueLength"
+                                               disabled="@IsRunning"
+                                               spellcheck="false"
+                                               autocomplete="off"
+                                               autocorrect="off"
+                                               autocapitalize="off"
+                                               @onchange="@(e => OnValueChangedAsync(idx, e))"
+                                               aria-label="@Traductor.T("PORT_VALUE")" />
+                                        break;
+                                }
+                                @if (ShowCounter(m.Value))
+                                {
+                                    <span class="port-moment__counter @(IsValueInvalid(m.Value) ? "is-invalid" : "")">
+                                        @m.Value.Length/@MaxValueLength
+                                    </span>
+                                }
+                            </div>
+
+                            <KmilaTooltip TextKey="PORT_REMOVE_MOMENT">
+                                <button type="button"
+                                        class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm port-moment__remove"
+                                        @onclick="@(() => RemoveMomentAsync(idx))"
+                                        disabled="@IsRunning"
+                                        aria-label="@Traductor.T("PORT_REMOVE_MOMENT")">
+                                    <Icon Name="IconName.X" />
+                                </button>
+                            </KmilaTooltip>
+                        </div>
+                    }
+                </div>
+            }
+
+            <button type="button"
+                    class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm port-moment__add"
+                    @onclick="AddMomentAsync"
+                    disabled="@IsRunning">
+                <Icon Name="IconName.PlusCircle" />
+                <span>@Traductor.T("PORT_ADD_MOMENT")</span>
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    #region Parameters
+
+    [Parameter] public Variable? Variable { get; set; }
+    [Parameter] public int LimitTime { get; set; }
+    [Parameter] public TimeScale TimeScale { get; set; } = TimeScale.US;
+    [Parameter] public bool IsRunning { get; set; }
+    [Parameter] public EventCallback<PortMomentConfiguration> OnPortMomentsChanged { get; set; }
+    [Parameter] public PortMomentConfiguration? InitialConfiguration { get; set; }
+
+    #endregion
+
+    /// <summary>A single editable moment. Internal — serialises to PortMomentValue on output.</summary>
+    private class MomentEntry
+    {
+        public int Time { get; set; }
+        public TimeScale Scale { get; set; } = TimeScale.US;
+        public string Value { get; set; } = string.Empty;
+    }
+
+    private bool _isClock;
+    private List<MomentEntry> _moments = new();
+    private PortMomentConfiguration? _appliedInitial;
+
+    /// <summary>
+    /// True when this port is named clk/clock — the system clock auto-wires
+    /// to it regardless of any saved stimulus. Suppresses the moments list
+    /// and replaces the legacy "use as clock" toggle.
+    /// </summary>
+    private bool _isSystemClockPort =>
+        Variable != null &&
+        Kmila.Shared.Services.StimulusBuilder.IsClockPortName(Variable.Name);
+
+    // All scales not coarser than the current simulation scale. US sim → NS/US.
+    private IEnumerable<TimeScale> _availableScales =>
+        Enum.GetValues<TimeScale>().Where(s => (int)s <= (int)TimeScale);
+
+    /// <summary>Pretty label for the port's VHDL type — e.g. "STD_LOGIC_VECTOR".</summary>
+    private string TypeLabel =>
+        Enum.GetName(typeof(DATATYPES), Variable?.Type ?? DATATYPES.UNKNOWN) ?? "UNKNOWN";
+
+    /// <summary>
+    /// Helpful placeholder for the value input, tailored to the port's type.
+    /// Student-friendly — shows an example of what to type.
+    /// </summary>
+    private string ValuePlaceholder => (Variable?.Type ?? DATATYPES.UNKNOWN) switch
+    {
+        DATATYPES.STD_LOGIC        => "'0' · '1' · 'Z' · 'X'",
+        DATATYPES.STD_LOGIC_VECTOR => "\"01010101\"",
+        DATATYPES.BIT              => "'0' · '1'",
+        DATATYPES.INTEGER          => "42",
+        DATATYPES.NATURAL          => "42",
+        DATATYPES.BOOLEAN          => "true · false",
+        DATATYPES.HEX              => "x\"FF\"",
+        _                          => ""
+    };
+
+    protected override void OnParametersSet()
+    {
+        // Restore from a saved configuration the first time it arrives, or whenever
+        // a different instance is passed in (e.g. user loads a different config).
+        if (InitialConfiguration != null && !ReferenceEquals(InitialConfiguration, _appliedInitial))
+        {
+            _appliedInitial = InitialConfiguration;
+            RestoreFromConfiguration(InitialConfiguration);
+        }
+    }
+
+    /// <summary>
+    /// Hydrates internal state from a saved <see cref="PortMomentConfiguration"/>.
+    /// Detects the CLK marker first (flips clock mode); otherwise each value
+    /// becomes a regular moment entry in the list.
+    /// </summary>
+    private void RestoreFromConfiguration(PortMomentConfiguration config)
+    {
+        _isClock = false;
+        _moments.Clear();
+
+        if (config.Values == null) return;
+
+        foreach (var v in config.Values)
+        {
+            if (v.TimeScale == "CLK" && v.Value == "CLOCK")
+            {
+                _isClock = true;
+                continue;
+            }
+            _moments.Add(new MomentEntry
+            {
+                Time  = v.Time,
+                Scale = Enum.TryParse<TimeScale>(v.TimeScale, out var s) ? s : TimeScale,
+                Value = v.Value ?? string.Empty
+            });
+        }
+    }
+
+    private async Task AddMomentAsync()
+    {
+        // Seed new row at the last used time (or 0) + current scale — most users
+        // want to append a later moment, not start over at zero.
+        var last = _moments.LastOrDefault();
+        _moments.Add(new MomentEntry
+        {
+            Time = last?.Time ?? 0,
+            Scale = last?.Scale ?? TimeScale,
+            Value = ""
+        });
+        await NotifyPortMomentsChanged();
+    }
+
+    private async Task RemoveMomentAsync(int index)
+    {
+        if (index < 0 || index >= _moments.Count) return;
+        _moments.RemoveAt(index);
+        await NotifyPortMomentsChanged();
+    }
+
+    private async Task OnTimeChangedAsync(int index, ChangeEventArgs e)
+    {
+        if (index < 0 || index >= _moments.Count) return;
+        if (int.TryParse(e.Value?.ToString(), out var n) && n >= 0)
+        {
+            _moments[index].Time = n;
+            await NotifyPortMomentsChanged();
+        }
+    }
+
+    private async Task OnScaleChangedAsync(int index, ChangeEventArgs e)
+    {
+        if (index < 0 || index >= _moments.Count) return;
+        if (Enum.TryParse<TimeScale>(e.Value?.ToString(), out var s))
+        {
+            _moments[index].Scale = s;
+            await NotifyPortMomentsChanged();
+        }
+    }
+
+    private async Task OnValueChangedAsync(int index, ChangeEventArgs e)
+    {
+        if (index < 0 || index >= _moments.Count) return;
+        // Sanitize per datatype before storing — drops invalid chars, coerces
+        // std_logic values to uppercase so the ProgramBuilder sees clean input.
+        _moments[index].Value = SanitizeValue(e.Value?.ToString() ?? string.Empty);
+        await NotifyPortMomentsChanged();
+    }
+
+    // -------------------------------------------------------------------------
+    // Per-datatype value validation / sanitization
+    //
+    // The goal is to never pass garbage to the ProgramBuilder — users can only
+    // enter values that make sense for the port's declared type.
+    // -------------------------------------------------------------------------
+
+    /// <summary>Legal std_logic values per IEEE 1164. Case-insensitive on input; stored uppercase.</summary>
+    private static readonly HashSet<char> _stdLogicChars = new() { '0', '1', 'Z', 'X', 'U', 'W', 'L', 'H', '-' };
+    private static readonly HashSet<char> _bitChars      = new() { '0', '1' };
+    private static readonly HashSet<char> _hexChars      = new() {
+        '0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F'
+    };
+
+    /// <summary>
+    /// Max characters allowed in the Value input for the current port type.
+    /// For vectors this is <c>Variable.Size</c>; for scalars the natural width.
+    /// </summary>
+    private int MaxValueLength => (Variable?.Type ?? DATATYPES.UNKNOWN) switch
+    {
+        DATATYPES.STD_LOGIC        => 1,
+        DATATYPES.BIT              => 1,
+        DATATYPES.STD_LOGIC_VECTOR => Math.Max(1, Variable?.Size ?? 1),
+        DATATYPES.HEX              => 32, // arbitrary cap — most vectors fit in ≤32 hex digits
+        _                           => 64
+    };
+
+    /// <summary>
+    /// Removes any character that isn't valid for the port's datatype, caps
+    /// length at <see cref="MaxValueLength"/>, and uppercases std_logic /
+    /// hex values for consistency.
+    /// </summary>
+    private string SanitizeValue(string raw)
+    {
+        if (string.IsNullOrEmpty(raw)) return string.Empty;
+        var type = Variable?.Type ?? DATATYPES.UNKNOWN;
+        var maxLen = MaxValueLength;
+
+        switch (type)
+        {
+            case DATATYPES.STD_LOGIC:
+            case DATATYPES.STD_LOGIC_VECTOR:
+                return new string(raw.ToUpperInvariant().Where(c => _stdLogicChars.Contains(c)).Take(maxLen).ToArray());
+            case DATATYPES.BIT:
+                return new string(raw.Where(c => _bitChars.Contains(c)).Take(maxLen).ToArray());
+            case DATATYPES.HEX:
+                return new string(raw.ToUpperInvariant().Where(c => _hexChars.Contains(c)).Take(maxLen).ToArray());
+            case DATATYPES.BOOLEAN:
+                var lower = raw.Trim().ToLowerInvariant();
+                return lower == "true" || lower == "false" ? lower : string.Empty;
+            case DATATYPES.INTEGER:
+                return int.TryParse(raw, out _) ? raw.Trim() : string.Empty;
+            case DATATYPES.NATURAL:
+                return int.TryParse(raw, out var n) && n >= 0 ? raw.Trim() : string.Empty;
+            default:
+                return raw.Length > maxLen ? raw[..maxLen] : raw;
+        }
+    }
+
+    /// <summary>
+    /// A value is "invalid" when the user has typed something but it's not a
+    /// complete, runnable value for the type (e.g. a 5-bit vector needs all 8
+    /// of the 8 bits for an 8-bit port). Empty is neutral — not invalid,
+    /// just not-yet-entered.
+    /// </summary>
+    private bool IsValueInvalid(string value)
+    {
+        if (string.IsNullOrEmpty(value)) return false;
+        return (Variable?.Type ?? DATATYPES.UNKNOWN) switch
+        {
+            DATATYPES.STD_LOGIC_VECTOR => value.Length != MaxValueLength,
+            DATATYPES.STD_LOGIC        => value.Length != 1,
+            DATATYPES.BIT              => value.Length != 1,
+            _                          => false
+        };
+    }
+
+    /// <summary>
+    /// Should the "N/M" counter next to the value input show? Only useful for
+    /// bit-wise types where full length matters.
+    /// </summary>
+    private bool ShowCounter(string value)
+    {
+        var type = Variable?.Type ?? DATATYPES.UNKNOWN;
+        return type == DATATYPES.STD_LOGIC_VECTOR && MaxValueLength > 1;
+    }
+
+    /// <summary>
+    /// Serialises current state to a <see cref="PortMomentConfiguration"/>
+    /// and fires the event callback.
+    ///
+    /// Two subtleties worth knowing:
+    ///
+    /// 1. We set <c>_appliedInitial = config</c> *before* invoking the callback.
+    ///    The parent stores that exact reference in <c>Sim.PortMoments</c> and
+    ///    passes it right back as our <c>InitialConfiguration</c> on the next
+    ///    render. Without this preemption, <see cref="OnParametersSet"/> would
+    ///    see a different reference and run <see cref="RestoreFromConfiguration"/>,
+    ///    nuking any in-flight empty row (e.g. a just-added moment).
+    ///
+    /// 2. Empty-value rows ARE included in the emitted config so the component
+    ///    stays in sync with parent state. The Run-time filter in
+    ///    <see cref="SimulationParameters.GetPortMomentsForRun"/> drops them
+    ///    before handing off to the ProgramBuilder.
+    /// </summary>
+    private async Task NotifyPortMomentsChanged()
+    {
+        var config = new PortMomentConfiguration
+        {
+            PortName = Variable?.Name ?? string.Empty,
+            Values = new List<PortMomentValue>()
+        };
+
+        if (_isClock)
+        {
+            config.Values.Add(new PortMomentValue { Time = 0, TimeScale = "CLK", Value = "CLOCK" });
+        }
+        else
+        {
+            foreach (var m in _moments)
+            {
+                config.Values.Add(new PortMomentValue
+                {
+                    Time = m.Time,
+                    TimeScale = m.Scale.ToString(),
+                    Value = m.Value ?? string.Empty
+                });
+            }
+        }
+
+        _appliedInitial = config;
+        await OnPortMomentsChanged.InvokeAsync(config);
+    }
+
+    /// <summary>
+    /// Normalises a moment's time onto the 0..100 range used by the SVG. When
+    /// the moment's scale is finer than the simulation scale, we convert down
+    /// (e.g. sim=US, moment=NS → moment's time is divided by 1000).
+    /// Returns a double in [0, 100].
+    /// </summary>
+    private double ComputeNormalizedX(MomentEntry m)
+    {
+        if (LimitTime <= 0) return 0;
+
+        // Rough conversion: every step down in scale enum is ×1000 (NS→US→MS→S)
+        // or ×60 (M→H / S→M). For the visual this rough mapping is fine.
+        double scaleFactor = ScaleToNsFactor(m.Scale) / Math.Max(ScaleToNsFactor(TimeScale), 1);
+        double mapped = m.Time * scaleFactor;
+        var pct = mapped / LimitTime * 100.0;
+        return Math.Clamp(pct, 0, 100);
+    }
+
+    private static double ScaleToNsFactor(TimeScale s) => s switch
+    {
+        TimeScale.NS => 1,
+        TimeScale.US => 1_000,
+        TimeScale.MS => 1_000_000,
+        TimeScale.S  => 1_000_000_000,
+        TimeScale.M  => 60_000_000_000,
+        TimeScale.H  => 3_600_000_000_000,
+        _            => 1
+    };
+}

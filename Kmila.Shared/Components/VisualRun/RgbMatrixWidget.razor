@@ -1,0 +1,149 @@
+@namespace Kmila.Shared.Components.VisualRun
+@using Kmila.Shared.Services.VisualRun
+
+@*
+    3×3 RGB LED matrix (FW-1b). Fixed 9-cell grid, three colour channels.
+
+    Two operating modes via the `mode` config key:
+      • "planes" (default) — three 9-bit pins `red`, `green`, `blue`. LSB of
+                             each plane = (row 0, col 0), row-major. The
+                             design drives each colour plane with a single
+                             std_logic_vector(8 downto 0).
+      • "raw"             — 27 pins `{r|g|b}{r}{c}` (r,c ∈ 0..2). Matches a
+                             physical common-cathode RGB matrix wired one
+                             LED-per-colour-per-cell. Row/col multiplex
+                             circuits behave the same as on the board.
+
+    Cell colour is the sum of the three planes: rgb(r ? 255:0, g ? 255:0,
+    b ? 255:0). Off-cell = dark grey. Brightness applies as opacity on the
+    lit colour so students can dim without touching CSS.
+*@
+
+<div class="kviz-widget kviz-matrix-3x3-rgb @(EditMode ? "kviz-matrix-3x3-rgb--edit" : "") @(Selected ? "kviz-widget--selected" : "")"
+     style="--kviz-matrix-on-opacity:@OnOpacity; left:@(Comp.Position.X)px; top:@(Comp.Position.Y)px;"
+     data-component-id="@Comp.Id"
+     data-mode="@Mode"
+     data-red="@RedBits"
+     data-green="@GreenBits"
+     data-blue="@BlueBits"
+     @onpointerdown="HandlePointerDown">
+    <div class="kviz-matrix-3x3-rgb__grid">
+        @for (int r = 0; r < 3; r++)
+        {
+            for (int c = 0; c < 3; c++)
+            {
+                var lr = r; var lc = c;
+                var col = CellColour(lr, lc);
+                var isOn = col is not null;
+                var style = isOn ? $"--cell-color: rgb({col!.Value.R},{col.Value.G},{col.Value.B});" : "";
+                <div class="kviz-matrix-3x3-rgb__cell @(isOn ? "kviz-matrix-3x3-rgb__cell--on" : "")"
+                     style="@style"
+                     data-cell-row="@lr" data-cell-col="@lc"></div>
+            }
+        }
+    </div>
+    <div class="kviz-matrix-3x3-rgb__port">@PortLabel</div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public KvizComponent Comp { get; set; } = default!;
+    [Parameter] public VisualRunCoordinator? Coordinator { get; set; }
+    [Parameter] public bool EditMode { get; set; }
+    [Parameter] public bool Selected { get; set; }
+    [Parameter] public EventCallback<Microsoft.AspNetCore.Components.Web.PointerEventArgs> OnPointerDownExternal { get; set; }
+
+    [CascadingParameter(Name = "FrameVersion")] public int FrameVersion { get; set; }
+
+    private string Mode => Comp.Config.GetString("mode", "planes") == "raw" ? "raw" : "planes";
+
+    private string OnOpacity
+    {
+        get
+        {
+            var b = Math.Clamp(Comp.Config.GetInt("brightness", 100), 0, 100);
+            return (b / 100.0).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+        }
+    }
+
+    // MSB-first bit strings per plane for tests + wire-viz. Reuses CellOn
+    // to keep the encoding in one place.
+    private string RedBits   => PlaneBits('r');
+    private string GreenBits => PlaneBits('g');
+    private string BlueBits  => PlaneBits('b');
+
+    private string PlaneBits(char channel)
+    {
+        var chars = new char[9];
+        for (int r = 0; r < 3; r++)
+            for (int c = 0; c < 3; c++)
+            {
+                int lsb = r * 3 + c;
+                chars[8 - lsb] = ChannelOn(channel, r, c) ? '1' : '0';
+            }
+        return new string(chars);
+    }
+
+    private string PortLabel
+    {
+        get
+        {
+            if (Mode == "planes")
+            {
+                var parts = new List<string>(3);
+                foreach (var name in new[] { "red", "green", "blue" })
+                {
+                    if (Comp.Bindings.TryGetValue(name, out var p) && !string.IsNullOrEmpty(p))
+                        parts.Add(p);
+                }
+                return parts.Count > 0 ? string.Join(" · ", parts) : "(unwired)";
+            }
+            var wired = 0;
+            foreach (var ch in new[] { 'r', 'g', 'b' })
+                for (int r = 0; r < 3; r++)
+                    for (int c = 0; c < 3; c++)
+                        if (Comp.Bindings.TryGetValue($"{ch}{r}{c}", out var pp) && !string.IsNullOrEmpty(pp))
+                            wired++;
+            return $"{wired}/27 wired";
+        }
+    }
+
+    private (byte R, byte G, byte B)? CellColour(int row, int col)
+    {
+        if (Coordinator == null) return null;
+        bool r = ChannelOn('r', row, col);
+        bool g = ChannelOn('g', row, col);
+        bool b = ChannelOn('b', row, col);
+        if (!r && !g && !b) return null;
+        return ((byte)(r ? 255 : 0), (byte)(g ? 255 : 0), (byte)(b ? 255 : 0));
+    }
+
+    private bool ChannelOn(char channel, int row, int col)
+    {
+        if (Coordinator == null) return false;
+        if (Mode == "raw")
+        {
+            if (!Comp.Bindings.TryGetValue($"{channel}{row}{col}", out var port) || string.IsNullOrEmpty(port))
+                return false;
+            var v = Coordinator.LatestSlicedValue(port);
+            if (string.IsNullOrEmpty(v)) return false;
+            return v[^1] == '1';
+        }
+        // Planes mode: read the whole 9-bit vector for this channel and
+        // pick the LSB-numbered bit for (row, col). Row-major: LSB = (0,0).
+        string plane = channel switch { 'r' => "red", 'g' => "green", _ => "blue" };
+        if (!Comp.Bindings.TryGetValue(plane, out var vec) || string.IsNullOrEmpty(vec))
+            return false;
+        var val = Coordinator.LatestSlicedValue(vec);
+        if (string.IsNullOrEmpty(val)) return false;
+        int lsb = row * 3 + col;
+        int idx = val.Length - 1 - lsb;
+        if (idx < 0) return false;
+        return val[idx] == '1';
+    }
+
+    private async Task HandlePointerDown(Microsoft.AspNetCore.Components.Web.PointerEventArgs e)
+    {
+        if (OnPointerDownExternal.HasDelegate)
+            await OnPointerDownExternal.InvokeAsync(e);
+    }
+}

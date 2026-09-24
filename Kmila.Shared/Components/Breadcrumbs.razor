@@ -1,0 +1,191 @@
+@*
+    Breadcrumbs — renders the current route as a trail in the top bar.
+
+    Reads NavigationManager.Uri and the project list to produce human-friendly
+    segments:
+      /                       → [Home]
+      /projects               → [Home] / [Projects]
+      /projects/create        → [Home] / [Projects] / [New project]
+      /editor/{id}            → [Home] / [Projects] / [<project name>]
+
+    Re-renders on navigation (LocationChanged) and on language change.
+*@
+@implements IDisposable
+
+@if (_crumbs.Count > 0)
+{
+    <nav class="kmila-breadcrumbs" aria-label="@Traductor.T("A11Y_BREADCRUMB")">
+        <ol>
+            @for (var i = 0; i < _crumbs.Count; i++)
+            {
+                var crumb = _crumbs[i];
+                var isLast = i == _crumbs.Count - 1;
+                <li class="kmila-breadcrumbs__item @(isLast ? "is-current" : "")">
+                    @if (!isLast && crumb.Href is not null)
+                    {
+                        <a href="@crumb.Href" class="kmila-breadcrumbs__link">
+                            @if (crumb.Icon is not null)
+                            {
+                                <Icon Name="@crumb.Icon.Value" />
+                            }
+                            <span>@crumb.Label</span>
+                        </a>
+                    }
+                    else
+                    {
+                        <span class="kmila-breadcrumbs__current" aria-current="page">
+                            @if (crumb.Icon is not null)
+                            {
+                                <Icon Name="@crumb.Icon.Value" />
+                            }
+                            <span>@crumb.Label</span>
+                        </span>
+                    }
+                    @if (!isLast)
+                    {
+                        <span class="kmila-breadcrumbs__sep" aria-hidden="true">
+                            <Icon Name="IconName.ChevronRight" />
+                        </span>
+                    }
+                </li>
+            }
+        </ol>
+    </nav>
+}
+
+@code {
+    private record Crumb(string Label, string? Href, IconName? Icon);
+
+    private List<Crumb> _crumbs = new();
+    private List<Project> _projects = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        Traductor.StaticOnLangChanged += OnLanguageChanged;
+        NavigationManager.LocationChanged += OnLocationChanged;
+
+        await LoadProjectsAsync();
+        Rebuild();
+    }
+
+    private async Task LoadProjectsAsync()
+    {
+        try { _projects = await Projects.GetListAsync() ?? new(); }
+        catch { _projects = new(); }
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        // When the route reaches /editor/{id} for a project that was created
+        // in this same session, the projects list captured at OnInitialized may
+        // not yet include it — the crumb then degrades to the raw "1" id.
+        // Re-load + rebuild on every navigation so the trail always reflects
+        // current truth.
+        InvokeAsync(async () =>
+        {
+            await LoadProjectsAsync();
+            Rebuild();
+            StateHasChanged();
+        });
+    }
+
+    private void OnLanguageChanged()
+    {
+        Rebuild();
+        InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Walks the current path and builds a crumb list. Routes we don't
+    /// recognise fall back to a single Home crumb, so this never breaks on
+    /// future pages — it just under-represents them.
+    /// </summary>
+    private void Rebuild()
+    {
+        var path = new Uri(NavigationManager.Uri).AbsolutePath.TrimEnd('/');
+        if (string.IsNullOrEmpty(path)) path = "/";
+
+        var crumbs = new List<Crumb>
+        {
+            new(Traductor.T("NAV_HOME"), "/", IconName.House)
+        };
+
+        if (path == "/") { _crumbs = crumbs; return; }
+
+        var segments = path.Trim('/').Split('/');
+
+        switch (segments[0])
+        {
+            case "projects":
+                crumbs.Add(new(Traductor.T("NAV_PROJECTS"), "/projects", IconName.Collection));
+                if (segments.Length >= 2)
+                {
+                    if (segments[1].Equals("create", StringComparison.OrdinalIgnoreCase))
+                    {
+                        crumbs.Add(new(Traductor.T("NAV_CREATE_PROJECT"), null, IconName.PlusCircleFill));
+                    }
+                    else
+                    {
+                        // Unknown sub-route — show the raw segment so users aren't lost
+                        crumbs.Add(new(segments[1], null, null));
+                    }
+                }
+                break;
+
+            case "editor":
+                crumbs.Add(new(Traductor.T("NAV_PROJECTS"), "/projects", IconName.Collection));
+                if (segments.Length >= 2 && int.TryParse(segments[1], out var projectId))
+                {
+                    var name = _projects.FirstOrDefault(p => p.Id == projectId)?.Name ?? segments[1];
+                    crumbs.Add(new(name, null, IconName.FileEarmarkCode));
+                }
+                break;
+
+            // F-092 (R10 2026-08-08) — `/visual/{id}` is a per-project standalone
+            // view. Before this case existed, the switch fell through to `default`
+            // and rendered the literal segment "visual" as the terminal crumb
+            // (untranslated in every language). Mirror the editor pattern so users
+            // see the project name in their language, consistent with `/editor/{id}`.
+            case "visual":
+                crumbs.Add(new(Traductor.T("NAV_PROJECTS"), "/projects", IconName.Collection));
+                if (segments.Length >= 2 && int.TryParse(segments[1], out var visualProjectId))
+                {
+                    var visualName = _projects.FirstOrDefault(p => p.Id == visualProjectId)?.Name ?? segments[1];
+                    crumbs.Add(new(visualName, null, IconName.PuzzleFill));
+                }
+                break;
+
+            case "learn":
+                crumbs.Add(new(Traductor.T("NAV_LEARN"), "/learn", IconName.MortarboardFill));
+                break;
+            case "practice":
+                crumbs.Add(new(Traductor.T("NAV_PRACTICE"), "/practice", IconName.PuzzleFill));
+                break;
+            case "concepts":
+                crumbs.Add(new(Traductor.T("NAV_CONCEPTS"), "/concepts", IconName.Diagram3));
+                break;
+            case "settings":
+                crumbs.Add(new(Traductor.T("NAV_SETTINGS"), null, IconName.Gear));
+                break;
+            case "logs":
+                crumbs.Add(new(Traductor.T("NAV_LOGS"), null, IconName.JournalText));
+                break;
+            case "privacy":
+                crumbs.Add(new(Traductor.T("FOOTER_PRIVACY"), null, IconName.ShieldLock));
+                break;
+
+            default:
+                // Unknown route — just show the first segment as a terminal crumb
+                crumbs.Add(new(segments[0], null, null));
+                break;
+        }
+
+        _crumbs = crumbs;
+    }
+
+    public void Dispose()
+    {
+        Traductor.StaticOnLangChanged -= OnLanguageChanged;
+        NavigationManager.LocationChanged -= OnLocationChanged;
+    }
+}

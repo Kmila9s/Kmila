@@ -1,0 +1,236 @@
+{
+  "viewBox": "0 0 700 320",
+  "states": [
+    {
+      "id": "S0",
+      "label": "S0",
+      "x": 130,
+      "y": 170,
+      "outputs": {
+        "out": "0"
+      }
+    },
+    {
+      "id": "S1",
+      "label": "S1",
+      "x": 350,
+      "y": 170,
+      "outputs": {
+        "out": "0"
+      }
+    },
+    {
+      "id": "S2",
+      "label": "S2",
+      "x": 570,
+      "y": 170,
+      "outputs": {
+        "out": "1"
+      }
+    }
+  ],
+  "transitions": [
+    {
+      "id": "t_s0_s0",
+      "from": "S0",
+      "to": "S0",
+      "condition": "in=0"
+    },
+    {
+      "id": "t_s0_s1",
+      "from": "S0",
+      "to": "S1",
+      "condition": "in=1"
+    },
+    {
+      "id": "t_s1_s0",
+      "from": "S1",
+      "to": "S0",
+      "condition": "in=0"
+    },
+    {
+      "id": "t_s1_s2",
+      "from": "S1",
+      "to": "S2",
+      "condition": "in=1"
+    },
+    {
+      "id": "t_s2_s2",
+      "from": "S2",
+      "to": "S2",
+      "condition": "in=1"
+    },
+    {
+      "id": "t_s2_s0",
+      "from": "S2",
+      "to": "S0",
+      "condition": "in=0"
+    }
+  ],
+  "signalOrder": [
+    "in",
+    "out"
+  ],
+  "steps": [
+    {
+      "t": 0,
+      "state": "S0",
+      "inputs": {
+        "in": "0"
+      },
+      "outputs": {
+        "out": "0"
+      },
+      "transition": "",
+      "note": {
+        "en": "Moore machine that detects two consecutive 1s on the input. We're in S0 with no history yet. Output is 0 — that's S0's Moore output, fixed regardless of in.",
+        "es": "Máquina de Moore que detecta dos 1s seguidos en la entrada. Estamos en S0 sin historia aún. La salida es 0 — esa es la salida Moore de S0, fija sin importar in.",
+        "ar": "آلة Moore تكتشف 1-ينَين متتاليَين على الدخل. نحن في S0 بلا تاريخ بعد. الخرج 0 — تلك هي خرج Moore لـ S0، ثابت بغضِّ النظر عن in.",
+        "ch": "用来检测输入中连续两个 1 的 Moore 状态机。现在处于 S0,还没有任何历史。输出是 0 — 这是 S0 的 Moore 输出,与 in 无关。",
+        "de": "Moore-Automat, der zwei aufeinanderfolgende 1en am Eingang erkennt. Wir sind in S0 ohne Historie. Der Ausgang ist 0 — das ist der Moore-Ausgang von S0, fest unabhängig von in.",
+        "fr": "Machine de Moore qui détecte deux 1 consécutifs en entrée. Nous sommes en S0 sans historique. La sortie est 0 — c'est la sortie Moore de S0, fixée quel que soit in.",
+        "jp": "入力で連続する 2 つの 1 を検出する Moore 機械。まだ履歴のない S0 にいる。出力は 0 — これが S0 の Moore 出力で、in に関係なく固定。"
+      }
+    },
+    {
+      "t": 1,
+      "state": "S0",
+      "inputs": {
+        "in": "0"
+      },
+      "outputs": {
+        "out": "0"
+      },
+      "transition": "t_s0_s0",
+      "note": {
+        "en": "Clock edge with in=0. The self-loop on S0 fires and we stay where we are. Moore outputs only depend on state, so out stays at 0.",
+        "es": "Flanco de reloj con in=0. El auto-lazo de S0 se dispara y nos quedamos donde estamos. Las salidas Moore solo dependen del estado, así que out se queda en 0.",
+        "ar": "حافة ساعة مع in=0. ينطلق الحلقة الذاتيَّة على S0 ونبقى مكاننا. خرج Moore يعتمد على الحالة فقط، فيبقى out عند 0.",
+        "ch": "in=0 时的时钟沿。S0 上的自循环触发,我们留在原地。Moore 输出只依赖状态,所以 out 保持 0。",
+        "de": "Taktflanke mit in=0. Die Selbstschleife an S0 feuert, wir bleiben, wo wir sind. Moore-Ausgänge hängen nur vom Zustand ab, also bleibt out auf 0.",
+        "fr": "Front d'horloge avec in=0. La boucle propre sur S0 s'allume et nous restons sur place. Les sorties de Moore ne dépendent que de l'état, donc out reste à 0.",
+        "jp": "in=0 でのクロックエッジ。S0 の自己ループが発火、その場にとどまる。Moore 出力は状態のみに依存するので out は 0 のまま。"
+      }
+    },
+    {
+      "t": 2,
+      "state": "S1",
+      "inputs": {
+        "in": "1"
+      },
+      "outputs": {
+        "out": "0"
+      },
+      "transition": "t_s0_s1",
+      "note": {
+        "en": "in=1 at the edge — we transition S0→S1. S1 means 'I just saw one 1 — keep watching.' Output is still 0 because we haven't seen TWO 1s yet.",
+        "es": "in=1 en el flanco — transitamos S0→S1. S1 significa 'acabo de ver un 1 — sigo mirando.' La salida sigue en 0 porque aún no he visto DOS 1s.",
+        "ar": "in=1 عند الحافة — ننتقل S0→S1. تعني S1 «رأيت 1 توًّا — أواصل المراقبة.» الخرج لا يزال 0 لأننا لم نرَ اثنَين بعد.",
+        "ch": "在边沿处 in=1 — 转移 S0→S1。S1 意味着“刚刚看到一个 1 — 继续看”。输出仍是 0,因为还没看到两个 1。",
+        "de": "in=1 an der Flanke — wir gehen S0→S1. S1 bedeutet „Ich habe gerade eine 1 gesehen — weiter beobachten.“ Der Ausgang ist immer noch 0, weil wir noch keine ZWEI 1en gesehen haben.",
+        "fr": "in=1 au front — on transitionne S0→S1. S1 signifie « je viens de voir un 1 — je continue à regarder ». La sortie reste à 0 parce que nous n'avons pas encore vu DEUX 1.",
+        "jp": "エッジで in=1 — S0→S1 へ遷移。S1 は「1 を見たばかり — 監視継続」を意味する。まだ 2 つの 1 を見ていないので出力は 0 のまま。"
+      }
+    },
+    {
+      "t": 3,
+      "state": "S2",
+      "inputs": {
+        "in": "1"
+      },
+      "outputs": {
+        "out": "1"
+      },
+      "transition": "t_s1_s2",
+      "note": {
+        "en": "Second 1 in a row. S1→S2 fires. S2's Moore output is 1 — the detector asserts on the NEXT clock edge after seeing the pattern. That one-cycle lag is the price of Moore safety: outputs are always glitch-free.",
+        "es": "Segundo 1 seguido. Se dispara S1→S2. La salida Moore de S2 es 1 — el detector se activa en el SIGUIENTE flanco después de ver el patrón. Ese retraso de un ciclo es el precio de la seguridad Moore: salidas sin glitches.",
+        "ar": "ثاني 1 على التوالي. ينطلق S1→S2. خرج Moore لـ S2 هو 1 — يُؤكِّد الكاشف في الحافة التالية للساعة بعد رؤية النمط. ذلك التأخر بدورة واحدة هو ثمن أمان Moore: الخرجات دائمًا بلا قفزات.",
+        "ch": "连续的第二个 1。S1→S2 触发。S2 的 Moore 输出是 1 — 在看到模式之后,检测器在下一个时钟沿才置起。这一周期的延迟正是 Moore 安全的代价:输出永远没有毛刺。",
+        "de": "Zweite 1 in Folge. S1→S2 feuert. Der Moore-Ausgang von S2 ist 1 — der Detektor meldet beim NÄCHSTEN Taktflanken nach dem Muster. Diese Ein-Zyklus-Verzögerung ist der Preis der Moore-Sicherheit: Ausgänge sind immer glitch-frei.",
+        "fr": "Deuxième 1 d'affilée. S1→S2 s'allume. La sortie Moore de S2 vaut 1 — le détecteur s'affirme au PROCHAIN front d'horloge après avoir vu le motif. Ce décalage d'un cycle est le prix de la sécurité Moore : les sorties sont toujours sans glitch.",
+        "jp": "連続 2 つ目の 1。S1→S2 が発火。S2 の Moore 出力は 1 — 検出器はパターンを見た次のクロックエッジでアサートする。この 1 サイクル遅延が Moore の安全性の代償:出力は常にグリッチフリー。"
+      }
+    },
+    {
+      "t": 4,
+      "state": "S0",
+      "inputs": {
+        "in": "0"
+      },
+      "outputs": {
+        "out": "0"
+      },
+      "transition": "t_s2_s0",
+      "note": {
+        "en": "in drops to 0. S2→S0 fires and we restart the search. Output falls back to 0. A Mealy version of this detector would only need TWO states because it could assert the output in the same cycle as the second 1.",
+        "es": "in baja a 0. Se dispara S2→S0 y reiniciamos la búsqueda. La salida vuelve a 0. Una versión Mealy de este detector solo necesitaría DOS estados porque podría asertar en el mismo ciclo que el segundo 1.",
+        "ar": "in ينزل إلى 0. ينطلق S2→S0 ونعيد البحث. الخرج يعود إلى 0. النسخة Mealy لهذا الكاشف كانت ستحتاج حالتَين فقط لأنها قادرة على تأكيد الخرج في نفس الدورة كالـ 1 الثاني.",
+        "ch": "in 掉到 0。S2→S0 触发,搜索重启。输出回到 0。同样的检测器,Mealy 版本只需要两个状态,因为它能在看到第二个 1 的同一周期里立即置起输出。",
+        "de": "in fällt auf 0. S2→S0 feuert und wir starten die Suche neu. Der Ausgang fällt zurück auf 0. Eine Mealy-Variante dieses Detektors käme mit ZWEI Zuständen aus, weil sie den Ausgang im selben Zyklus wie die zweite 1 setzen könnte.",
+        "fr": "in tombe à 0. S2→S0 s'allume et nous recommençons la recherche. La sortie retombe à 0. Une version Mealy de ce détecteur n'aurait besoin que de DEUX états parce qu'elle pourrait affirmer la sortie dans le même cycle que le second 1.",
+        "jp": "in が 0 に下がる。S2→S0 が発火、検索を再開。出力は 0 に戻る。この検出器の Mealy 版なら 2 状態で済む、なぜなら 2 つ目の 1 と同じサイクルで出力をアサートできるから。"
+      }
+    },
+    {
+      "t": 5,
+      "state": "S1",
+      "inputs": {
+        "in": "1"
+      },
+      "outputs": {
+        "out": "0"
+      },
+      "transition": "t_s0_s1",
+      "note": {
+        "en": "in=1 again. Back to S1 — the machine is patient. It only fires the output after the SECOND consecutive 1.",
+        "es": "in=1 otra vez. De vuelta a S1 — la máquina es paciente. Solo activa la salida después del SEGUNDO 1 seguido.",
+        "ar": "in=1 مجدَّدًا. عودة إلى S1 — الآلة صبورة. تُطلق الخرج فقط بعد ثاني 1 على التوالي.",
+        "ch": "in 再次为 1。回到 S1 — 这台机器很有耐心,只在第二个连续 1 之后才置起输出。",
+        "de": "in=1 erneut. Zurück nach S1 — der Automat ist geduldig. Er feuert den Ausgang erst nach der ZWEITEN aufeinanderfolgenden 1.",
+        "fr": "in=1 à nouveau. Retour à S1 — la machine est patiente. Elle n'allume la sortie qu'après le SECOND 1 consécutif.",
+        "jp": "再び in=1。S1 に戻る — 機械は忍耐強い。連続する 2 つ目の 1 の後でしか出力をアサートしない。"
+      }
+    },
+    {
+      "t": 6,
+      "state": "S2",
+      "inputs": {
+        "in": "1"
+      },
+      "outputs": {
+        "out": "1"
+      },
+      "transition": "t_s1_s2",
+      "note": {
+        "en": "Two 1s again. S2 asserts. out = 1.",
+        "es": "Dos 1s otra vez. S2 se activa. out = 1.",
+        "ar": "اثنا 1 مجدَّدًا. S2 يُؤكِّد. out = 1.",
+        "ch": "又是两个 1。S2 置起。out = 1。",
+        "de": "Wieder zwei 1en. S2 setzt. out = 1.",
+        "fr": "Encore deux 1. S2 s'affirme. out = 1.",
+        "jp": "再び 2 つの 1。S2 アサート。out = 1。"
+      }
+    },
+    {
+      "t": 7,
+      "state": "S2",
+      "inputs": {
+        "in": "1"
+      },
+      "outputs": {
+        "out": "1"
+      },
+      "transition": "t_s2_s2",
+      "note": {
+        "en": "Third 1 in a row. The self-loop on S2 fires — once you're in the 'detected' state, additional 1s keep you there. The output stays high for as long as the run of 1s continues.",
+        "es": "Tercer 1 seguido. El auto-lazo de S2 se dispara — una vez en el estado 'detectado', los 1s extra te mantienen allí. La salida se queda alta mientras dure la racha de 1s.",
+        "ar": "ثالث 1 على التوالي. تنطلق حلقة S2 الذاتيَّة — حالما تكون في حالة «اكتُشف» تبقيك الـ 1-ات الإضافيَّة هناك. يبقى الخرج مرتفعًا ما دامت سلسلة الـ 1-ات مستمرَّة.",
+        "ch": "连续第三个 1。S2 上的自循环触发 — 一旦进入“已检测”状态,后续的 1 让你留在那里。只要 1 的连续串还在,输出就一直是高。",
+        "de": "Dritte 1 in Folge. Die Selbstschleife an S2 feuert — sobald du im „erkannt“-Zustand bist, halten zusätzliche 1en dich dort. Der Ausgang bleibt hoch, solange der 1er-Lauf andauert.",
+        "fr": "Troisième 1 d'affilée. La boucle propre sur S2 s'allume — une fois dans l'état « détecté », les 1 supplémentaires vous y maintiennent. La sortie reste haute tant que la séquence de 1 continue.",
+        "jp": "連続 3 つ目の 1。S2 の自己ループが発火 — 「検出済み」状態に入ると、追加の 1 でそこに留まる。1 の連続が続く限り出力は High を維持。"
+      }
+    }
+  ]
+}

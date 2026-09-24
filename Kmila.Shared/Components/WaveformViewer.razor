@@ -1,0 +1,1627 @@
+@*
+    WaveformViewer — inline-SVG digital-waveform renderer.
+
+    Why SVG instead of Chart.js:
+      • fast signals (a 50 MHz clock on a 40 µs sim) don't alias into a flat
+        line — every transition in the signal history produces a real step in
+        the path;
+      • zoom just changes the SVG's width and the browser repaints the path
+        pixel-accurately — no canvas reinitialization dance;
+      • every row shares the same viewBox-derived time axis, so inputs +
+        outputs line up vertically by construction.
+
+    Each signal gets:
+      • a fixed-width label column (160 px) on the left — direction chip,
+        name, bit width;
+      • a flexible SVG strip on the right that renders a step-function from
+        the signal's WaveformSignal.Transitions list. std_logic signals go
+        low/high; vectors render a constant-level line with the hex/decimal
+        value stamped mid-plateau at each transition.
+
+    A shared time ruler at the bottom marks ~12 labels across the X range.
+*@
+
+@using Kmila.Shared.Models
+@inject Microsoft.Extensions.Logging.ILogger<Kmila.Shared.Components.WaveformViewer> Logger
+@inject Microsoft.JSInterop.IJSRuntime JS
+@inject Kmila.Shared.Services.ReplayState Replay
+@inject Kmila.Shared.Services.SignalCursorBus Cursor
+@implements IDisposable
+
+@if (_compareTracks != null && _compareTracks.Count >= 2)
+{
+    @* Compare mode: union all signals across the selected snapshots, render
+       each as a row with N overlaid step-function traces (one per snapshot,
+       coloured from the shared palette). Signals present in only some runs
+       still get a row — missing traces just drop out, so the viewer never
+       hides a signal the student wants to see. *@
+    // Hoisted so the body element can stamp data-view-end-ns for the JS hover.
+    // Compare mode keeps the old "wide SVG" rendering — width derives from
+    // the same pxPerNs that single-mode uses, capped so the toolbar can't
+    // overshoot the browser's max scroll width when several runs overlay.
+    var compareMaxNs = _compareTracks.Max(t => (long)t.Data.TotalTicks * t.Data.TimescaleNs);
+    var compareTrackWidthPx = (int)Math.Clamp(
+        _pxPerNs * Math.Max(1L, compareMaxNs), 200, 200_000);
+    <section class="waveform-viewer waveform-viewer--compare" aria-label="@Traductor.T("WAVEFORM_VIEWER")">
+        <header class="waveform-viewer__toolbar">
+            <div class="waveform-viewer__title">
+                <Icon Name="IconName.LayersHalf" />
+                <strong>@Traductor.T("WAVEFORM_COMPARE_TITLE")</strong>
+                <span class="waveform-viewer__chip">@_compareTracks.Count</span>
+            </div>
+            <div class="waveform-viewer__actions">
+                <KmilaTooltip TextKey="WAVEFORM_ZOOM_IN"><button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm" @onclick="ZoomIn" aria-label="@Traductor.T("WAVEFORM_ZOOM_IN")"><Icon Name="IconName.ZoomIn" /></button></KmilaTooltip>
+                <KmilaTooltip TextKey="WAVEFORM_ZOOM_OUT"><button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm" @onclick="ZoomOut" aria-label="@Traductor.T("WAVEFORM_ZOOM_OUT")"><Icon Name="IconName.ZoomOut" /></button></KmilaTooltip>
+                <KmilaTooltip TextKey="WAVEFORM_ZOOM_RESET"><button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm" @onclick="ZoomReset" aria-label="@Traductor.T("WAVEFORM_ZOOM_RESET")"><Icon Name="IconName.ArrowCounterclockwise" /></button></KmilaTooltip>
+                <KmilaTooltip TextKey="WAVEFORM_COMPARE_CLOSE">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm" @onclick="() => OnClearCompare.InvokeAsync()">
+                        <Icon Name="IconName.XLg" />
+                        <span>@Traductor.T("WAVEFORM_COMPARE_CLOSE")</span>
+                    </button>
+                </KmilaTooltip>
+            </div>
+        </header>
+
+        @* Legend — one pill per snapshot with its colour swatch. Compact and
+           horizontally scrollable so long compares on narrow viewports stay
+           readable. *@
+        <div class="waveform-viewer__legend">
+            @foreach (var t in _compareTracks)
+            {
+                <span class="waveform-legend-pill">
+                    <span class="waveform-legend-swatch" style="background-color: @t.Colour;"></span>
+                    <span>@t.Label</span>
+                </span>
+            }
+        </div>
+
+        @if (_hiddenSignals.Count > 0)
+        {
+            <div class="waveform-viewer__hidden">
+                <Icon Name="IconName.EyeSlash" />
+                <span class="waveform-viewer__hidden-label">@Traductor.T("WAVEFORM_HIDDEN_PREFIX")</span>
+                @foreach (var hidden in _hiddenSignals.OrderBy(s => s, StringComparer.Ordinal))
+                {
+                    var hiddenName = hidden;
+                    <KmilaTooltip TextKey="WAVEFORM_RESTORE_SIGNAL">
+                        <button type="button" class="waveform-hidden-chip"
+                                @onclick="() => RestoreSignal(hiddenName)">
+                            <span>@hidden</span>
+                            <Icon Name="IconName.XLg" />
+                        </button>
+                    </KmilaTooltip>
+                }
+                <KmilaTooltip TextKey="WAVEFORM_SHOW_ALL_TIP">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--sm"
+                            @onclick="RestoreAllSignals">
+                        @Traductor.T("WAVEFORM_SHOW_ALL")
+                    </button>
+                </KmilaTooltip>
+            </div>
+        }
+
+        <div class="waveform-viewer__body"
+             data-view-start-ns="0"
+             data-view-end-ns="@compareMaxNs"
+             data-label-width="160">
+            <div class="waveform-grid">
+                @{
+                    var trackWidthPx = compareTrackWidthPx;
+                    var maxNs = compareMaxNs;
+                    var signalNames = _compareTracks
+                        .SelectMany(t => t.Data.Signals.Select(s => s.Name))
+                        .Distinct(StringComparer.Ordinal)
+                        .ToList();
+                }
+
+                @foreach (var name in signalNames)
+                {
+                    // Per-signal hide (backlog #9). Hidden set is keyed by
+                    // name so it applies across every snapshot's track here.
+                    if (_hiddenSignals.Contains(name)) continue;
+                    var per = _compareTracks
+                        .Select(t => (Track: t, Sig: t.Data.Signals.FirstOrDefault(s =>
+                            string.Equals(s.Name, name, StringComparison.Ordinal))))
+                        .Where(x => x.Sig != null)
+                        .ToList();
+                    var first = per.First().Sig!;
+                    var signalName = name;
+                    <div class="waveform-row">
+                        <div class="waveform-row__label waveform-row__label--clickable"
+                             @onclick="() => ToggleHidden(signalName)"
+                             role="button"
+                             title="@Traductor.T("WAVEFORM_HIDE_SIGNAL")">
+                            @* label-main wrapper mirrors single mode so the name
+                               gets ellipsis containment + the chip divider. *@
+                            <span class="waveform-row__label-main">
+                                <span class="waveform-signal-chip waveform-signal-chip--@first.PortType.ToLowerInvariant()">@first.PortType</span>
+                                <span class="waveform-signal-name" title="@first.Name">@first.Name</span>
+                                @if (first.BitWidth > 1)
+                                {
+                                    <span class="waveform-signal-width">[@first.BitWidth]</span>
+                                }
+                            </span>
+                            <Icon Name="IconName.EyeSlash" class="waveform-row__label-eye" />
+                        </div>
+                        <div class="waveform-row__track" style="width: @(trackWidthPx)px;">
+                            @((MarkupString)BuildCompareTraceSvg(name, per, trackWidthPx, maxNs))
+                        </div>
+                    </div>
+                }
+
+                <div class="waveform-row waveform-row--ruler">
+                    <div class="waveform-row__label"></div>
+                    <div class="waveform-row__track" style="width: @(trackWidthPx)px;">
+                        @((MarkupString)BuildRulerSvg(trackWidthPx, maxNs))
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+}
+else if (Data != null && Data.Signals.Count > 0)
+{
+    // Virtualised render geometry (see GetViewBounds + OnWaveformWindow):
+    //   contentWidthPx     — total width of the scrollable area
+    //                        (pxPerNs × totalNs). Sets the body's scroll
+    //                        width so native horizontal scroll works.
+    //   visibleTrackPx     — width of the SVG actually rendered per row.
+    //                        Equals the body's clientWidth minus the
+    //                        sticky label column. The path inside is
+    //                        clipped to the current time window so it
+    //                        stays small regardless of total sim length.
+    long maxNs = (long)Data.TotalTicks * Math.Max(1, Data.TimescaleNs);
+    long contentWidthPx = ComputeContentWidthPx(maxNs);
+    int visibleTrackPx = ComputeVisibleTrackPx();
+    var (viewStartNs, viewEndNs) = GetViewBounds(maxNs, visibleTrackPx);
+    <section class="waveform-viewer" aria-label="@Traductor.T("WAVEFORM_VIEWER")">
+        <header class="waveform-viewer__toolbar">
+            <div class="waveform-viewer__title">
+                <Icon Name="IconName.Activity" />
+                <strong>@Traductor.T("WAVEFORM_VIEWER")</strong>
+                <span class="waveform-viewer__chip">@Data.Signals.Count @Traductor.T("WAVEFORM_SIGNALS")</span>
+            </div>
+            @* slot/inline-toolbar — single family (Family-11 .kmila-btn) across the whole
+               row so the baseline stays flat. Was: 3 circular Family-14 zoom buttons
+               mixed with Family-11 clock toggle and Family-11 accent exports. Exports
+               now share the same ghost-primary variant + a slim divider so the row
+               stops fighting for "primary toolbar action" attention. *@
+            <div class="waveform-viewer__actions">
+                @* Zoom controls. In live mode they adjust the trailing-window
+                   duration (zoom in → smaller window → larger transitions);
+                   in static mode they scale the pixels-per-nanosecond ratio
+                   and keep the viewport centred on the previously-visible
+                   time. Reset snaps back to the natural full-range view
+                   (static) or the default 10 µs window (live). *@
+                <KmilaTooltip TextKey="WAVEFORM_ZOOM_IN">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                            @onclick="ZoomIn"
+                            aria-label="@Traductor.T("WAVEFORM_ZOOM_IN")">
+                        <Icon Name="IconName.ZoomIn" />
+                    </button>
+                </KmilaTooltip>
+                <KmilaTooltip TextKey="WAVEFORM_ZOOM_OUT">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                            @onclick="ZoomOut"
+                            aria-label="@Traductor.T("WAVEFORM_ZOOM_OUT")">
+                        <Icon Name="IconName.ZoomOut" />
+                    </button>
+                </KmilaTooltip>
+                <KmilaTooltip TextKey="WAVEFORM_ZOOM_RESET">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                            @onclick="ZoomReset"
+                            aria-label="@Traductor.T("WAVEFORM_ZOOM_RESET")">
+                        <Icon Name="IconName.ArrowCounterclockwise" />
+                    </button>
+                </KmilaTooltip>
+                <KmilaTooltip TextKey="@(_showClock ? "WAVEFORM_HIDE_CLOCK" : "WAVEFORM_SHOW_CLOCK")">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm @(_showClock ? "" : "is-off")"
+                            @onclick="() => _showClock = !_showClock"
+                            aria-pressed="@_showClock">
+                        <Icon Name="@(_showClock ? IconName.EyeFill : IconName.EyeSlash)" />
+                    </button>
+                </KmilaTooltip>
+                @* UX-N-014: Time-breakpoint toggle. Clicking adds a breakpoint
+                   at the END of the currently visible window so the next Run
+                   pauses there. ReplayState fires the pause from
+                   OnLiveFrameEmitted when the engine tick crosses the bp ns. *@
+                <KmilaTooltip TextKey="WAVEFORM_TIME_BP_ADD">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                            @onclick="HandleAddTimeBreakpoint"
+                            aria-label="@Traductor.T("WAVEFORM_TIME_BP_ADD")">
+                        <Icon Name="IconName.RecordCircle" />
+                    </button>
+                </KmilaTooltip>
+
+                <span class="waveform-viewer__divider" aria-hidden="true"></span>
+
+                <KmilaTooltip TextKey="WAVEFORM_EXPORT_IMAGE">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                            @onclick="OpenExportModalAsync" disabled="@IsLive">
+                        <Icon Name="IconName.Image" />
+                        <span>@Traductor.T("WAVEFORM_EXPORT_IMAGE_SHORT")</span>
+                    </button>
+                </KmilaTooltip>
+                <KmilaTooltip TextKey="WAVEFORM_EXPORT_VCD">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                            @onclick="HandleVcdExport">
+                        <Icon Name="IconName.Download" />
+                        <span>VCD</span>
+                    </button>
+                </KmilaTooltip>
+            </div>
+        </header>
+
+        @if (_hiddenSignals.Count > 0)
+        {
+            <div class="waveform-viewer__hidden">
+                <Icon Name="IconName.EyeSlash" />
+                <span class="waveform-viewer__hidden-label">@Traductor.T("WAVEFORM_HIDDEN_PREFIX")</span>
+                @foreach (var hidden in _hiddenSignals.OrderBy(s => s, StringComparer.Ordinal))
+                {
+                    var hiddenName = hidden;
+                    <KmilaTooltip TextKey="WAVEFORM_RESTORE_SIGNAL">
+                        <button type="button" class="waveform-hidden-chip"
+                                @onclick="() => RestoreSignal(hiddenName)">
+                            <span>@hidden</span>
+                            <Icon Name="IconName.XLg" />
+                        </button>
+                    </KmilaTooltip>
+                }
+                <KmilaTooltip TextKey="WAVEFORM_SHOW_ALL_TIP">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--sm"
+                            @onclick="RestoreAllSignals">
+                        @Traductor.T("WAVEFORM_SHOW_ALL")
+                    </button>
+                </KmilaTooltip>
+            </div>
+        }
+
+        <div class="waveform-viewer__body"
+             data-view-start-ns="@viewStartNs"
+             data-view-end-ns="@viewEndNs"
+             data-label-width="160">
+            <div class="waveform-grid">
+                @for (int i = 0; i < Data.Signals.Count; i++)
+                {
+                    var signal = Data.Signals[i];
+                    // Honor the eye toggle: when off, clk / clock rows hide.
+                    // The data remains in Data + the exported VCD.
+                    if (!_showClock && IsClockName(signal.Name)) continue;
+                    // Per-signal hide (backlog #9): click on the label adds
+                    // the name to _hiddenSignals; restore via the toolbar
+                    // chip-bar. VCD export honors the same set.
+                    if (_hiddenSignals.Contains(signal.Name)) continue;
+                    var color  = GetSignalColor(signal);
+                    var signalName = signal.Name;
+                    var valueMode = IsValueMode(signal);
+                    var isVector = signal.BitWidth > 1;
+                    var expanded = isVector && _expandedVectors.Contains(signalName);
+                    <div class="waveform-row">
+                        <div class="waveform-row__label">
+                            @if (isVector)
+                            {
+                                @* Expand/collapse the bus into one std_logic wave
+                                   per bit. stopPropagation so it doesn't also hide. *@
+                                <button type="button" class="waveform-row__expand-toggle"
+                                        @onclick="() => ToggleExpand(signalName)"
+                                        @onclick:stopPropagation="true"
+                                        aria-expanded="@expanded"
+                                        title="@Traductor.T(expanded ? "WAVEFORM_COLLAPSE_BITS" : "WAVEFORM_EXPAND_BITS")">
+                                    @(expanded ? "▾" : "▸")
+                                </button>
+                            }
+                            else
+                            {
+                                <span class="waveform-row__expand-spacer" aria-hidden="true"></span>
+                            }
+                            <span class="waveform-row__label-main waveform-row__label--clickable"
+                                  @onclick="() => ToggleHidden(signalName)"
+                                  role="button"
+                                  title="@Traductor.T("WAVEFORM_HIDE_SIGNAL")">
+                                <span class="waveform-signal-chip waveform-signal-chip--@signal.PortType.ToLowerInvariant()">@signal.PortType</span>
+                                <span class="waveform-signal-name" title="@signal.Name">@signal.Name</span>
+                                @if (signal.BitWidth > 1)
+                                {
+                                    <span class="waveform-signal-width">[@signal.BitWidth]</span>
+                                }
+                            </span>
+                            @* Value-at-cursor readout (non-destructive column) *@
+                            <span class="waveform-signal-value" style="color:@color" title="@Traductor.T("WAVEFORM_VALUE_AT_CURSOR")">@FormatCursorValue(signal)</span>
+                            @* Per-signal waveform↔value toggle *@
+                            <button type="button" class="waveform-row__mode-toggle"
+                                    @onclick="() => ToggleValueMode(signalName)"
+                                    @onclick:stopPropagation="true"
+                                    title="@Traductor.T(valueMode ? "WAVEFORM_SHOW_AS_WAVE" : "WAVEFORM_SHOW_AS_VALUE")">
+                                @(valueMode ? "∿" : "#")
+                            </button>
+                        </div>
+                        <div class="waveform-row__track" style="width: @(contentWidthPx)px;">
+                            <div class="waveform-row__track-view @(valueMode ? "waveform-row__value-track" : "")" style="width: @(visibleTrackPx)px;">
+                                @if (valueMode)
+                                {
+                                    <span class="waveform-value-readout" style="color:@color">@FormatCursorValue(signal)</span>
+                                }
+                                else
+                                {
+                                    @((MarkupString)TraceSvgCached(signal, visibleTrackPx, color, viewStartNs, viewEndNs))
+                                }
+                            </div>
+                        </div>
+                    </div>
+                    @* Expanded bus → one std_logic wave per bit (MSB on top).
+                       Derived, display-only; the parent bus row above is
+                       unchanged. See BitSignalsFor / WaveformTransition.Bits. *@
+                    @if (expanded)
+                    {
+                        var bits = BitSignalsFor(signal);
+                        for (int b = 0; b < bits.Length; b++)
+                        {
+                            var bitSig = bits[b];
+                            var bitLabel = $"{signalName}[{signal.BitWidth - 1 - b}]";
+                            <div class="waveform-row waveform-row--bit">
+                                <div class="waveform-row__label">
+                                    <span class="waveform-row__expand-spacer" aria-hidden="true"></span>
+                                    <span class="waveform-row__bit-name" title="@bitLabel">@bitLabel</span>
+                                    <span class="waveform-signal-value" style="color:@color">@FormatBitCursorValue(bitSig)</span>
+                                </div>
+                                <div class="waveform-row__track" style="width: @(contentWidthPx)px;">
+                                    <div class="waveform-row__track-view" style="width: @(visibleTrackPx)px;">
+                                        @((MarkupString)BitTraceSvgCached(signal, b, visibleTrackPx, color, viewStartNs, viewEndNs))
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    }
+                }
+
+                @* Shared time ruler — last row. UX-N-014 follow-up: clickable
+                   ruler. Tapping a time-position adds a waveform breakpoint
+                   right there. The click handler receives offsetX which we
+                   project back to ns using the current view bounds. *@
+                <div class="waveform-row waveform-row--ruler">
+                    <div class="waveform-row__label"></div>
+                    <div class="waveform-row__track" style="width: @(contentWidthPx)px;">
+                        <div class="waveform-row__track-view" style="width: @(visibleTrackPx)px;"
+                             @onclick="@(e => OnRulerClick(e, visibleTrackPx, viewStartNs, viewEndNs))">
+                            @((MarkupString)BuildRulerSvg(visibleTrackPx, viewStartNs, viewEndNs))
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+}
+
+@* Export modal — shared between live and static modes (only opens in static
+   mode; the toolbar button is disabled while IsLive). Mounted outside the
+   conditional branches above so it survives every render. *@
+<Modal @ref="_exportModal" Title="@Traductor.T("EXPORT_MODAL_TITLE")" Size="ModalSize.Large" />
+
+@code {
+    [Parameter] public WaveformData? Data { get; set; }
+    [Parameter] public EventCallback<string> OnExportVcd { get; set; }
+
+    /// <summary>
+    /// When true, the viewer renders only a trailing time window of fixed
+    /// duration (<see cref="LiveWindowNs"/>) so that as new transitions
+    /// arrive from a running simulation the X-axis stays at a constant
+    /// scale and the trace appears to scroll right — instead of every
+    /// existing transition shrinking to fit a growing total time. Once
+    /// the simulation ends and this flips back to false the viewer drops
+    /// the clip and shows the full run, at which point the zoom / scroll
+    /// controls behave as they always have.
+    /// </summary>
+    [Parameter] public bool IsLive { get; set; }
+
+    /// <summary>
+    /// Default trailing-window length while <see cref="IsLive"/> is true. 10 µs
+    /// fits the sample design's interesting features (the bit6 ripple
+    /// period is ~2.5 µs, and the enable pause window is 5 µs) without
+    /// dropping frame rate when the bottom bits are toggling fast. The user
+    /// can now zoom the trailing window while paused — see
+    /// <see cref="_liveWindowNs"/>.
+    /// </summary>
+    private const long DefaultLiveWindowNs = 10_000;
+
+    /// <summary>
+    /// Min / max trailing-window length the user can zoom to. 200 ns covers
+    /// a handful of delta cycles on the fastest reasonable clocks; 1 s gives
+    /// the user a "show me the whole recent run" view without going so wide
+    /// that the path-coalescing path falls apart.
+    /// </summary>
+    private const long MinLiveWindowNs =       200;
+    private const long MaxLiveWindowNs = 1_000_000_000;
+
+    /// <summary>
+    /// Current trailing-window length, mutated by <see cref="ZoomBy"/> /
+    /// <see cref="ZoomReset"/> while <see cref="IsLive"/> is true. Reset
+    /// back to <see cref="DefaultLiveWindowNs"/> when the sim ends and the
+    /// viewer flips back to static mode (so the next live run starts at
+    /// the default).
+    /// </summary>
+    private long _liveWindowNs = DefaultLiveWindowNs;
+
+    /// <summary>
+    /// Multi-snapshot compare mode. When non-null and populated with ≥2
+    /// entries, each snapshot renders as a separate coloured trace
+    /// overlaid in the same row per signal. Takes precedence over
+    /// <see cref="Data"/>.
+    /// </summary>
+    [Parameter] public List<Kmila.Shared.Models.SimulationSnapshot>? Snapshots { get; set; }
+
+    /// <summary>Parent's "stop comparing" hook — wires the X button on the banner.</summary>
+    [Parameter] public EventCallback OnClearCompare { get; set; }
+
+    /// <summary>
+    /// Pre-materialised compare datasets — one entry per snapshot carrying
+    /// the deserialised waveform + a stable colour. Re-derived on
+    /// parameter change via OnParametersSet, but cache hits by Id avoid
+    /// re-parsing the WaveformJson on every parent re-render (zoom changes,
+    /// language switches, sim-state ticks etc. used to thrash this).
+    /// </summary>
+    private List<CompareTrack>? _compareTracks;
+    private record CompareTrack(int Id, string Label, string Colour, WaveformData Data);
+
+    /// <summary>
+    /// Palette used for compare overlays. Walks in order; N >= 2 needs ≥ 2
+    /// visually distinct colours. Keeps the per-signal base colour for the
+    /// first snapshot so "open one run" and "open two runs with the first
+    /// matching" feel consistent.
+    /// </summary>
+    private static readonly string[] _comparePalette = new[]
+    {
+        "#3c82f6", // brand accent
+        "#ef4444", // red
+        "#10b981", // green
+        "#a855f7", // purple
+        "#f59e0b", // amber
+        "#06b6d4", // cyan
+        "#ec4899"  // pink
+    };
+
+    /// <summary>
+    /// Handle for the JS hover-cursor helper (vertical guide line + time
+    /// chip that follow the mouse over the body). Bound on first render of
+    /// either rendering branch; detached on Dispose.
+    /// </summary>
+    /// <remarks>
+    /// Pan-zoom used to be attached here too (1-finger drag pan, 2-finger
+    /// pinch zoom, ctrl+wheel zoom). It was removed because:
+    /// (a) the body has native overflow scroll on both axes, so pan was
+    ///     duplicated;
+    /// (b) waveform data is row-structured — 2D pan adds nothing over
+    ///     scroll, unlike the schematic/flow canvases;
+    /// (c) the gesture's clampPan cached the natural content size at
+    ///     attach time, so hiding signals (backlog #9) left the bounds
+    ///     stale and the user could drag the grid into empty space.
+    /// Toolbar zoom buttons cover the (rare) need to change ratio.
+    /// </remarks>
+    private int _hoverId = -1;
+
+    // ─── Virtualised rendering state ─────────────────────────────────────
+    //
+    // The previous renderer set a single `_zoomWidth` (int, up to 2.4 M px)
+    // and built the SVG path for the FULL run at that pixel width. That
+    // produced multi-megabyte path strings on every render and forced the
+    // browser to paint a screen-sized SVG element, both of which exploded
+    // RAM on long sims as the user zoomed in.
+    //
+    // The new model splits the two concerns:
+    //   _pxPerNs       — current zoom (px per nanosecond). Sets the OUTER
+    //                    .waveform-row__track width (pxPerNs × totalNs),
+    //                    which drives the body's native horizontal scroll.
+    //   _scrollLeftPx  — pushed by JS via OnWaveformWindow. Combined with
+    //                    pxPerNs to compute the visible time window.
+    //   _viewportWidthPx — pushed by JS. The SVG inside each row is sized
+    //                    to roughly clientWidth − labelWidth and lives in
+    //                    a position:sticky inner div, so the actual
+    //                    rendered path only ever covers the visible time
+    //                    window. Re-renders on scroll are O(visible
+    //                    transitions), not O(total).
+    private double _pxPerNs       = 0.0;
+    private double _scrollLeftPx  = 0.0;
+    private double _viewportWidthPx = 0.0;
+
+    // Per-row label column width — kept in sync with the inline CSS rule
+    // on .waveform-row__label. If the CSS rule changes, update this too;
+    // GetViewBounds / ComputeVisibleTrackPx subtract it from clientWidth
+    // when sizing the windowed SVG.
+    private const int LabelWidthPx = 160;
+
+    // Watchdog so we recompute the initial pxPerNs whenever the WaveformData
+    // instance changes (new sim run, snapshot loaded, etc.). Reference
+    // equality is enough — the live-merge path mutates the same instance,
+    // so it does NOT trip this guard and the user's zoom is preserved.
+    private WaveformData? _lastData;
+
+    // JS-side handle for the scroll/resize observer.
+    private int _windowId = -1;
+    private DotNetObjectReference<WaveformViewer>? _windowDotNetRef;
+
+    // ─── Trace-SVG memoisation ───────────────────────────────────────────
+    // BuildTraceSvg is the render hot path. A trace only changes when the
+    // visible window (start/end/width), the zoom, the colour, or the signal's
+    // transition count changes. Cursor moves (the value column) change NONE of
+    // those, so without a cache every hover would rebuild every row's SVG on
+    // the single-threaded Blazor circuit — re-introducing the freeze. Keyed by
+    // signal name; value is the last inputs + rendered string.
+    private readonly Dictionary<string, (long Start, long End, int Width, int Count, string Color, string Svg)> _traceCache = new();
+
+    private string TraceSvgCached(WaveformSignal signal, int widthPx, string color, long viewStartNs, long viewEndNs)
+    {
+        if (_traceCache.TryGetValue(signal.Name, out var e) &&
+            e.Start == viewStartNs && e.End == viewEndNs && e.Width == widthPx &&
+            e.Count == signal.Transitions.Count && e.Color == color)
+        {
+            return e.Svg;
+        }
+        var svg = BuildTraceSvg(signal, widthPx, color, viewStartNs, viewEndNs);
+        _traceCache[signal.Name] = (viewStartNs, viewEndNs, widthPx, signal.Transitions.Count, color, svg);
+        return svg;
+    }
+
+    // ─── std_logic_vector bit expansion ──────────────────────────────────
+    // A bus row can be expanded (chevron in its label) into one std_logic wave
+    // per bit. The per-bit series is DERIVED for display from the raw bit
+    // string kept on each transition (WaveformTransition.Bits) — which
+    // preserves the U/Z/X states the aggregated numeric Value collapses away.
+    // Purely visual: nothing here touches the simulation data, the value/label
+    // columns, or the VCD/CSV export. Parent bus rows render exactly as before;
+    // the child rows are drawn by reusing the std_logic branch of BuildTraceSvg
+    // on lightweight synthesized signals.
+    private readonly HashSet<string> _expandedVectors = new(StringComparer.Ordinal);
+
+    private void ToggleExpand(string name)
+    {
+        if (!_expandedVectors.Add(name)) _expandedVectors.Remove(name);
+    }
+
+    // Synthesized per-bit signals, cached by parent name and rebuilt only when
+    // the parent's transition count changes (live append / snapshot reload).
+    // Index 0 = the MSB (string is stored MSB-first); the VHDL bit number for
+    // display is BitWidth-1-pos (downto convention).
+    private readonly Dictionary<string, (int Count, WaveformSignal[] Bits)> _bitSignalCache = new();
+
+    private WaveformSignal[] BitSignalsFor(WaveformSignal parent)
+    {
+        if (_bitSignalCache.TryGetValue(parent.Name, out var e) && e.Count == parent.Transitions.Count)
+            return e.Bits;
+
+        int width = Math.Max(1, parent.BitWidth);
+        var result = new WaveformSignal[width];
+        for (int pos = 0; pos < width; pos++)
+        {
+            var trans = new List<WaveformTransition>(parent.Transitions.Count);
+            double? prev = double.NaN; // sentinel → first sample always emits
+            foreach (var t in parent.Transitions)
+            {
+                double? v = null;
+                var bitsStr = t.Bits;
+                if (bitsStr != null && pos < bitsStr.Length)
+                {
+                    char c = bitsStr[pos];
+                    v = c == '1' ? 1.0 : c == '0' ? 0.0 : (double?)null; // U/Z/X → unknown
+                }
+                // Keep only real changes so the step-function list stays compact.
+                if (!Equals(v, prev))
+                {
+                    trans.Add(new WaveformTransition(t.TimeNs, v, null));
+                    prev = v;
+                }
+            }
+            result[pos] = new WaveformSignal
+            {
+                Name = parent.Name,
+                DataType = "std_logic",
+                BitWidth = 1,
+                PortType = parent.PortType,
+                Transitions = trans
+            };
+        }
+        _bitSignalCache[parent.Name] = (parent.Transitions.Count, result);
+        return result;
+    }
+
+    // Mirrors TraceSvgCached but keyed per (parent, bit) so bit rows never
+    // collide in the cache with each other or with the parent bus trace.
+    private readonly Dictionary<string, (long Start, long End, int Width, int Count, string Color, string Svg)> _bitTraceCache = new();
+
+    private string BitTraceSvgCached(WaveformSignal parent, int pos, int widthPx, string color, long viewStartNs, long viewEndNs)
+    {
+        var bitSig = BitSignalsFor(parent)[pos];
+        string key = parent.Name + "#" + pos;
+        if (_bitTraceCache.TryGetValue(key, out var e) &&
+            e.Start == viewStartNs && e.End == viewEndNs && e.Width == widthPx &&
+            e.Count == bitSig.Transitions.Count && e.Color == color)
+        {
+            return e.Svg;
+        }
+        var svg = BuildTraceSvg(bitSig, widthPx, color, viewStartNs, viewEndNs);
+        _bitTraceCache[key] = (viewStartNs, viewEndNs, widthPx, bitSig.Transitions.Count, color, svg);
+        return svg;
+    }
+
+    // Bit's value at the shared cursor (1/0, or X for U/Z/X/undefined).
+    private string FormatBitCursorValue(WaveformSignal bitSig)
+    {
+        if (Data == null) return "—";
+        var (val, _) = Data.ValueAt(bitSig, Cursor.CursorTick);
+        if (val.HasValue) return val.Value >= 0.5 ? "1" : "0";
+        return "X";
+    }
+
+    // ─── Per-signal value/waveform mode ──────────────────────────────────
+    // The "value column" shows every signal's value at the cursor (non-
+    // destructive). Additionally each row can collapse to a value-only track
+    // via the per-row toggle. Numeric signals (integer / multi-bit bus) default
+    // to value-only since a stepped bus is usually read as a number; std_logic
+    // defaults to the waveform. _valueModeOverride records explicit user flips.
+    private readonly Dictionary<string, bool> _valueModeOverride = new();
+
+    private bool IsValueMode(WaveformSignal s)
+        => _valueModeOverride.TryGetValue(s.Name, out var v) ? v : (s.DataType != "std_logic");
+
+    private void ToggleValueMode(string name)
+    {
+        var sig = Data?.Signals.FirstOrDefault(s => s.Name == name);
+        bool current = sig != null && IsValueMode(sig);
+        _valueModeOverride[name] = !current;
+    }
+
+    /// <summary>
+    /// Formats a signal's value at the current cursor for the value column /
+    /// value-only track. Mirrors SchematicViewer's Debug readout: the
+    /// pre-formatted bus label (hex) when present, else 1/0 for std_logic, else
+    /// "X" when the signal has no defined value at the cursor yet.
+    /// </summary>
+    private string FormatCursorValue(WaveformSignal signal)
+    {
+        if (Data == null) return "—";
+        var (val, label) = Data.ValueAt(signal, Cursor.CursorTick);
+        if (!string.IsNullOrEmpty(label)) return label!;
+        if (val.HasValue) return val.Value >= 0.5 ? "1" : "0";
+        return "X";
+    }
+
+    protected override void OnInitialized()
+    {
+        // React when the cursor moves — whether from this viewer's own hover
+        // (via OnCursorHover) or from the schematic clicking a wire. Only the
+        // value column re-reads; the SVG traces are memoised so this stays cheap.
+        Cursor.OnChange += OnCursorChanged;
+    }
+
+    private void OnCursorChanged() => InvokeAsync(StateHasChanged);
+
+    /// <summary>
+    /// JS hover callback: the pointer is over the chart at <paramref name="ns"/>
+    /// nanoseconds. Convert to an absolute tick and publish it on the shared
+    /// cursor bus so the value column (and the schematic) read every signal's
+    /// value at that instant. Throttled on the JS side; a no-op when the tick
+    /// is unchanged (SignalCursorBus.SetCursorTick dedups).
+    /// </summary>
+    [JSInvokable]
+    public void OnCursorHover(double ns)
+    {
+        int scale = Math.Max(1, Data?.TimescaleNs ?? 1);
+        if (ns < 0) ns = 0;
+        Cursor.SetCursorTick((ulong)(ns / scale));
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_hoverId <= 0)
+        {
+            try
+            {
+                // Pass a .NET ref so the hover doubles as the value cursor.
+                _windowDotNetRef ??= DotNetObjectReference.Create(this);
+                _hoverId = await JS.InvokeAsync<int>("kmilaAttachWaveformHover",
+                    ".waveform-viewer__body", _windowDotNetRef);
+            }
+            catch { /* prerender / no JS — hover indicator just doesn't render */ }
+        }
+
+        // Attach the windowing observer on the first render after we have
+        // signals to show. Doing it earlier (when Data is null) would
+        // bind to a body element whose .waveform-grid hasn't materialised
+        // yet, which the observer copes with but adds a no-op fire.
+        if (_windowId <= 0 && Data != null && Data.Signals.Count > 0)
+        {
+            try
+            {
+                _windowDotNetRef ??= DotNetObjectReference.Create(this);
+                _windowId = await JS.InvokeAsync<int>(
+                    "kmilaAttachWaveformWindow",
+                    ".waveform-viewer__body",
+                    _windowDotNetRef);
+                // One-shot viewport read so the very first render frame
+                // has a sensible visible-track width before the observer's
+                // first RAF fires (which can race with Blazor's next
+                // render, leaving the user with a zero-width SVG for a
+                // single frame).
+                var w = await JS.InvokeAsync<double>(
+                    "kmilaWaveformGetViewport", ".waveform-viewer__body");
+                if (w > 0) _viewportWidthPx = w;
+                EnsureInitialZoom();
+                StateHasChanged();
+            }
+            catch { /* JS not ready — observer will retry on next render */ }
+        }
+    }
+
+    /// <summary>
+    /// JS scroll/resize callback. Fires at most once per animation frame
+    /// (the JS side coalesces) with the body's current <c>scrollLeft</c>
+    /// and <c>clientWidth</c>. Drives the windowed render — both the
+    /// visible time bounds and the sticky SVG's pixel width are derived
+    /// from these.
+    /// </summary>
+    [JSInvokable]
+    public Task OnWaveformWindow(double scrollLeft, double clientWidth)
+    {
+        if (clientWidth > 0) _viewportWidthPx = clientWidth;
+        _scrollLeftPx = scrollLeft;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Cursor.OnChange -= OnCursorChanged;
+        if (_hoverId > 0)
+        {
+            try { _ = JS.InvokeVoidAsync("kmilaDetachWaveformHover", _hoverId).AsTask(); }
+            catch { }
+        }
+        if (_windowId > 0)
+        {
+            try { _ = JS.InvokeVoidAsync("kmilaDetachWaveformWindow", _windowId).AsTask(); }
+            catch { }
+        }
+        _windowDotNetRef?.Dispose();
+    }
+
+    protected override void OnParametersSet()
+    {
+        // Detect a fresh WaveformData reference (new sim, loaded snapshot)
+        // and reset zoom + scroll so the user opens on the natural
+        // "everything fits" view. The live-merge path mutates the same
+        // instance so this branch doesn't fire on every progress tick.
+        //
+        // Session 30 (2026-07-24) — SimulationCoordinator reattach: when
+        // Editor rehydrates from a live engine mid-run, Data can become a
+        // NEW reference for the SAME conceptual sim (Editor.razor's
+        // HydrateWaveformFromLiveEngine constructs a fresh WaveformData
+        // each fire). Preserve zoom/scroll in that case — only reset when
+        // the incoming trace is shorter than what we already had (fresh
+        // sim / snapshot switch).
+        if (!ReferenceEquals(_lastData, Data))
+        {
+            int prevLabels = _lastData?.TimeLabels?.Count ?? 0;
+            int nextLabels = Data?.TimeLabels?.Count ?? 0;
+            _lastData = Data;
+            if (nextLabels < prevLabels || nextLabels == 0)
+            {
+                _pxPerNs = 0;        // recomputed on next render via EnsureInitialZoom
+                _scrollLeftPx = 0;
+                _liveWindowNs = DefaultLiveWindowNs;
+                // No DOM scrollTo here — first render will set up fresh content
+                // width and the browser's scrollLeft snaps to 0 by itself.
+            }
+        }
+
+        if (Snapshots != null && Snapshots.Count >= 2)
+        {
+            // Reuse previously-deserialised WaveformData by snapshot Id —
+            // FromJson on multi-MB payloads is the expensive step.
+            var prior = _compareTracks?.ToDictionary(t => t.Id) ?? new Dictionary<int, CompareTrack>();
+            var next = new List<CompareTrack>(Snapshots.Count);
+            for (int i = 0; i < Snapshots.Count; i++)
+            {
+                var s = Snapshots[i];
+                var colour = _comparePalette[i % _comparePalette.Length];
+                if (prior.TryGetValue(s.Id, out var hit))
+                {
+                    // Label and palette slot can shift between renders; keep
+                    // the cached Data and refresh the cheap fields.
+                    next.Add(hit with { Label = s.Label, Colour = colour });
+                    continue;
+                }
+                var wd = Kmila.Shared.Models.WaveformData.FromJson(s.WaveformJson);
+                if (wd == null) continue;
+                next.Add(new CompareTrack(s.Id, s.Label, colour, wd));
+            }
+            _compareTracks = next;
+        }
+        else
+        {
+            _compareTracks = null;
+        }
+    }
+
+    /// <summary>
+    /// Per-signal hide set. Click on a row's label adds the signal name here;
+    /// the toolbar chip-bar lets the user restore individual signals or all
+    /// of them at once. Backlog #9: applies to both view AND VCD export so
+    /// the exported file mirrors what the student is actually looking at.
+    /// </summary>
+    private HashSet<string> _hiddenSignals = new(StringComparer.Ordinal);
+
+    private void ToggleHidden(string name)
+    {
+        if (!_hiddenSignals.Add(name)) _hiddenSignals.Remove(name);
+    }
+    private void RestoreSignal(string name) => _hiddenSignals.Remove(name);
+    private void RestoreAllSignals() => _hiddenSignals.Clear();
+
+    /// <summary>
+    /// When false, clock rows (signals named clk/clock) are hidden from the
+    /// grid. Data is unchanged — VCD export and the underlying snapshot
+    /// still include the clock. Default on.
+    /// </summary>
+    private bool _showClock = true;
+
+    private static bool IsClockName(string name)
+        => Kmila.Shared.Services.StimulusBuilder.IsClockPortName(name);
+
+    // ─── Zoom geometry ──────────────────────────────────────────────────
+    //
+    // pxPerNs ranges are derived per-sim rather than hard-coded because
+    // a "reasonable" zoom level depends on totalNs:
+    //
+    //   floor   = visibleTrackPx / totalNs   → the whole sim fits in the
+    //             viewport with no horizontal scroll. The Reset button
+    //             targets this value.
+    //   ceiling = 256 × floor (or ≥ 10 px/ns, whichever is larger) →
+    //             ~8 doublings from Reset. At 100 MHz × 1 ms (1 µs / 10 ns
+    //             half-period) and a 1200 px viewport, floor is ~0.0012
+    //             px/ns and ceiling ~0.31 px/ns, putting each half-period
+    //             at ~3 px at max zoom (the SVG path now stays bounded
+    //             because we render only the visible window).
+    //
+    // ZoomBy preserves the time-centre of the visible window so zoom-in
+    // doesn't snap to scrollLeft=0 — the user keeps looking at the same
+    // moment in time.
+    private long ContentScrollWidthCap => 33_000_000;  // browser scroll-width safe cap
+
+    private long ComputeContentWidthPx(long maxNs)
+    {
+        if (maxNs <= 0) return Math.Max(1, ComputeVisibleTrackPx());
+        if (_pxPerNs <= 0) return Math.Max(1, ComputeVisibleTrackPx());
+        // Live mode disables horizontal scroll — the SVG renders only the
+        // trailing window, so there's nothing to scroll past. Clamping the
+        // content width to the visible width here keeps the body's
+        // scrollLeft at 0.
+        if (IsLive) return Math.Max(1, ComputeVisibleTrackPx());
+        double raw = _pxPerNs * maxNs;
+        if (raw > ContentScrollWidthCap) raw = ContentScrollWidthCap;
+        if (raw < ComputeVisibleTrackPx()) raw = ComputeVisibleTrackPx();
+        return (long)Math.Ceiling(raw);
+    }
+
+    private int ComputeVisibleTrackPx()
+    {
+        double w = _viewportWidthPx > 0 ? _viewportWidthPx : 1200;
+        int v = (int)Math.Round(w - LabelWidthPx - 2);
+        return Math.Max(50, v);
+    }
+
+    /// <summary>
+    /// Resolves the visible time window for the current render frame.
+    /// Live mode: trailing slice of fixed duration ending at the latest
+    /// observed time. Static mode: derived from the JS-reported
+    /// <c>scrollLeft</c> and <c>clientWidth</c> + the current
+    /// <see cref="_pxPerNs"/> — only the visible time range gets path
+    /// commands emitted, regardless of total sim length.
+    /// </summary>
+    private (long startNs, long endNs) GetViewBounds(long maxNs, int visibleTrackPx)
+    {
+        if (IsLive)
+        {
+            long endNs = Math.Max(maxNs, _liveWindowNs);
+            long startNs = Math.Max(0, endNs - _liveWindowNs);
+            return (startNs, endNs);
+        }
+        if (_pxPerNs <= 0 || maxNs <= 0)
+            return (0, Math.Max(1L, maxNs));
+
+        long visibleNs = (long)Math.Max(1, Math.Round(visibleTrackPx / _pxPerNs));
+        long startNsCalc = (long)Math.Round(_scrollLeftPx / _pxPerNs);
+        long maxStart = Math.Max(0, maxNs - visibleNs);
+        if (startNsCalc < 0) startNsCalc = 0;
+        if (startNsCalc > maxStart) startNsCalc = maxStart;
+        long endNsCalc = Math.Min(maxNs, startNsCalc + visibleNs);
+        if (endNsCalc <= startNsCalc) endNsCalc = startNsCalc + 1;
+        return (startNsCalc, endNsCalc);
+    }
+
+    /// <summary>
+    /// Picks a pxPerNs that fits the entire sim in the viewport with no
+    /// horizontal scroll — i.e. the "Reset" / "show everything" view.
+    /// Called whenever Data changes (see OnParametersSet) so a freshly
+    /// loaded run opens at a sensible default; the toolbar's Reset button
+    /// also routes through here.
+    /// </summary>
+    private void EnsureInitialZoom()
+    {
+        if (_pxPerNs > 0) return;
+        ulong totalTicks = Data?.TotalTicks ?? 0UL;
+        int timescale = Math.Max(1, Data?.TimescaleNs ?? 1);
+        long maxNs = (long)totalTicks * timescale;
+        if (maxNs <= 0) return;
+        int visiblePx = ComputeVisibleTrackPx();
+        _pxPerNs = (double)visiblePx / maxNs;
+    }
+
+    private async Task ZoomIn()  => await ZoomBy(2.0);
+    private async Task ZoomOut() => await ZoomBy(0.5);
+
+    /// <summary>
+    /// Multiplies <see cref="_pxPerNs"/> by <paramref name="factor"/> while
+    /// keeping the visible time centre stable — without this the body's
+    /// scrollLeft snaps to 0 after every zoom click and the user loses
+    /// their place. Clamps to a per-sim floor (everything fits) and
+    /// ceiling (8 doublings above floor).
+    /// </summary>
+    private async Task ZoomBy(double factor)
+    {
+        // Live mode: zoom adjusts the trailing-window duration directly.
+        // factor > 1 → "zoom in" = smaller window = larger transitions on
+        // screen. factor < 1 → "zoom out" = wider window so the user can
+        // see more recent history at once. _pxPerNs is irrelevant here
+        // because ComputeContentWidthPx clamps to viewport width in live
+        // mode (no horizontal scroll); the path simply rescales to fit.
+        if (IsLive)
+        {
+            if (factor <= 0) return;
+            long target = (long)Math.Round(_liveWindowNs / factor);
+            target = Math.Clamp(target, MinLiveWindowNs, MaxLiveWindowNs);
+            if (target == _liveWindowNs) return;
+            _liveWindowNs = target;
+            StateHasChanged();
+            return;
+        }
+
+        ulong totalTicks = Data?.TotalTicks ?? 0UL;
+        int timescale = Math.Max(1, Data?.TimescaleNs ?? 1);
+        long maxNs = (long)totalTicks * timescale;
+        if (maxNs <= 0) return;
+        int visiblePx = ComputeVisibleTrackPx();
+
+        double centreNs = _pxPerNs > 0
+            ? (_scrollLeftPx + visiblePx / 2.0) / _pxPerNs
+            : maxNs / 2.0;
+
+        double floor   = (double)visiblePx / maxNs;        // entire sim fits
+        double ceiling = Math.Max(floor * 256.0, 10.0);    // arbitrary upper bound (10 px/ns ≈ insane)
+        double newPxPerNs = Math.Clamp(_pxPerNs * factor, floor, ceiling);
+        if (Math.Abs(newPxPerNs - _pxPerNs) < 1e-12) return;
+        _pxPerNs = newPxPerNs;
+
+        // Re-centre on the previously-visible time-centre.
+        double newScroll = centreNs * _pxPerNs - visiblePx / 2.0;
+        long newContent = ComputeContentWidthPx(maxNs);
+        if (newScroll < 0) newScroll = 0;
+        double maxScroll = Math.Max(0, newContent - visiblePx);
+        if (newScroll > maxScroll) newScroll = maxScroll;
+        _scrollLeftPx = newScroll;
+
+        StateHasChanged();
+        try
+        {
+            await JS.InvokeVoidAsync(
+                "kmilaWaveformScrollTo", ".waveform-viewer__body", (int)newScroll);
+        }
+        catch { /* prerender / no JS — DOM will sync on next observer fire */ }
+    }
+
+    /// <summary>
+    /// "Show the whole sim, no scroll." Re-reads the viewport width in
+    /// case the panel was resized since the last observer fire, then sets
+    /// <see cref="_pxPerNs"/> to the value that makes content width equal
+    /// visible width. Replaces the old <c>BaseWidth = 1200</c> reset which
+    /// ignored panel size.
+    /// </summary>
+    private async Task ZoomReset()
+    {
+        // Live mode: snap the trailing window back to its default.
+        if (IsLive)
+        {
+            if (_liveWindowNs == DefaultLiveWindowNs) return;
+            _liveWindowNs = DefaultLiveWindowNs;
+            StateHasChanged();
+            return;
+        }
+
+        ulong totalTicks = Data?.TotalTicks ?? 0UL;
+        int timescale = Math.Max(1, Data?.TimescaleNs ?? 1);
+        long maxNs = (long)totalTicks * timescale;
+        if (maxNs <= 0) return;
+        try
+        {
+            var w = await JS.InvokeAsync<double>(
+                "kmilaWaveformGetViewport", ".waveform-viewer__body");
+            if (w > 0) _viewportWidthPx = w;
+        }
+        catch { /* prerender / no JS — fall through with whatever we have */ }
+
+        int visiblePx = ComputeVisibleTrackPx();
+        _pxPerNs = (double)visiblePx / Math.Max(1L, maxNs);
+        _scrollLeftPx = 0;
+        StateHasChanged();
+        try
+        {
+            await JS.InvokeVoidAsync(
+                "kmilaWaveformScrollTo", ".waveform-viewer__body", 0);
+        }
+        catch { /* fine */ }
+    }
+
+    /// <summary>
+    /// Builds the SVG path + optional value labels for a single signal's
+    /// step-function trace, clipped to the visible time window
+    /// [<paramref name="viewStartNs"/>, <paramref name="viewEndNs"/>].
+    /// In live mode that window slides with the simulation; in static
+    /// mode it spans the full run. Transitions outside the window are
+    /// skipped, and the entry-level into the window is taken from the
+    /// most recent transition at or before <paramref name="viewStartNs"/>
+    /// so a partially-clipped signal still starts at its real level
+    /// rather than re-baselining to whatever its first stored transition
+    /// happens to be. Returned as raw HTML so Blazor injects it without
+    /// round-tripping through the component system.
+    /// </summary>
+    private string BuildTraceSvg(WaveformSignal signal, int widthPx, string color, long viewStartNs, long viewEndNs)
+    {
+        const int H = 40;         // row height in SVG units
+        const int PadY = 4;       // vertical padding so strokes don't clip
+        const double ValHi = PadY;
+        const double ValLo = H - PadY;
+        const double ValMid = H / 2.0;
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"<svg class=\"waveform-svg\" viewBox=\"0 0 {widthPx} {H}\" preserveAspectRatio=\"none\" width=\"{widthPx}\" height=\"{H}\">");
+
+        long spanNs = viewEndNs - viewStartNs;
+        if (spanNs <= 0 || signal.Transitions.Count == 0)
+        {
+            // Nothing to draw — render the baseline only so the row still
+            // aligns visually with siblings.
+            sb.Append($"<line x1=\"0\" y1=\"{ValMid}\" x2=\"{widthPx}\" y2=\"{ValMid}\" stroke=\"var(--border-subtle)\" stroke-dasharray=\"2 4\" />");
+            sb.Append("</svg>");
+            return sb.ToString();
+        }
+
+        double X(long ns) => (double)(ns - viewStartNs) / spanNs * widthPx;
+
+        // Windowed + decimated data for this viewport. GetWindow binary-searches
+        // the visible range and returns at most ~widthPx points (one per pixel
+        // column, min/max preserved), plus the entry level (last transition at or
+        // before viewStartNs) so a partially-clipped signal starts at its real
+        // value. This bounds render cost by pixel width instead of history length
+        // and replaces the former O(N) scan-from-0 (and the per-render
+        // Transitions.ToArray()/IndexOf) that stalled long runs. Visual only —
+        // the underlying transition data is untouched.
+        var window = signal.GetWindow(viewStartNs, viewEndNs, widthPx);
+        var pts = window.Points;
+        bool haveEntry = window.HaveEntry;
+        WaveformTransition entry = haveEntry
+            ? window.Entry
+            : (signal.Transitions.Count > 0 ? signal.Transitions[0] : default);
+
+        if (signal.DataType == "std_logic")
+        {
+            // Proper SVG step-function: a single continuous subpath built
+            // from `L` commands only. Horizontal at current level, then
+            // vertical step (same x, new y), then horizontal at new level.
+            //
+            //   M x0 y0
+            //   L x1 y0       -- horizontal
+            //   L x1 y1       -- vertical step
+            //   L x2 y1       -- horizontal
+            //   ...
+            //
+            // The previous version used `M` for vertical steps, which closed
+            // the subpath and left the output literally looking like "-_-_-_"
+            // with no connecting verticals.
+            static double LevelY(double? v) => v.HasValue ? (v.Value >= 0.5 ? 4.0 : 36.0) : 20.0;
+
+            var solid  = new System.Text.StringBuilder();
+            var dashed = new System.Text.StringBuilder();
+
+            bool onDashed = !entry.Value.HasValue;
+            double curY = LevelY(entry.Value);
+            var target  = onDashed ? dashed : solid;
+            target.Append($"M 0 {curY:0.##} ");
+
+            for (int i = 0; i < pts.Count; i++)
+            {
+                var t  = pts[i];
+                double tx = X(t.TimeNs);
+                bool nextDashed = !t.Value.HasValue;
+                double nextY    = LevelY(t.Value);
+
+                // Horizontal segment to the transition's X at current level.
+                target.Append($"L {tx:0.##} {curY:0.##} ");
+
+                // Transition between solid (known) and dashed (unknown):
+                // pen-up on one path, pen-down on the other at the same point.
+                if (nextDashed != onDashed)
+                {
+                    var other = nextDashed ? dashed : solid;
+                    other.Append($"M {tx:0.##} {curY:0.##} ");
+                    target   = other;
+                    onDashed = nextDashed;
+                }
+
+                // Vertical step at the transition's X — same path, new Y.
+                if (!Equals(nextY, curY))
+                {
+                    target.Append($"L {tx:0.##} {nextY:0.##} ");
+                    curY = nextY;
+                }
+            }
+
+            // Extend to the right edge at the last level so the trace fills
+            // the whole row instead of ending mid-chart.
+            target.Append($"L {widthPx} {curY:0.##} ");
+
+            if (solid.Length > 0)
+                sb.Append($"<path d=\"{solid}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"2\" stroke-linejoin=\"miter\" stroke-linecap=\"butt\" />");
+            if (dashed.Length > 0)
+                sb.Append($"<path d=\"{dashed}\" fill=\"none\" stroke=\"#f59e0b\" stroke-width=\"2\" stroke-dasharray=\"4 3\" />");
+        }
+        else
+        {
+            // Multi-bit signal: single horizontal line at mid-row, with
+            // diamond value markers (<===>) and a text label stamped inside
+            // each plateau. Mirrors the way GTKWave renders bus signals.
+            var d = new System.Text.StringBuilder();
+            d.Append($"M 0 {ValMid:0.##} ");
+            for (int i = 0; i < pts.Count; i++)
+            {
+                var t = pts[i];
+                double tx = X(t.TimeNs);
+                // A pinch at every transition (triangle marker).
+                d.Append($"L {tx - 3:0.##} {ValMid:0.##} ");
+                d.Append($"L {tx:0.##} {ValHi:0.##} ");
+                d.Append($"L {tx + 3:0.##} {ValMid:0.##} ");
+            }
+            d.Append($"L {widthPx} {ValMid:0.##}");
+            sb.Append($"<path d=\"{d}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"2\" />");
+
+            // Value text in each plateau (skip if the plateau is too narrow
+            // to fit legibly — SVG text doesn't clip cleanly without extra
+            // clip paths, and a label wider than its plateau just looks wrong).
+            // The leading slice (left edge → first in-window point) uses the
+            // entry-level label; each subsequent point labels its own plateau.
+            static string LabelText(double midX, string label) =>
+                $"<text x=\"{midX:0.##}\" y=\"{20 + 4:0.##}\" text-anchor=\"middle\" font-size=\"10\" font-family=\"ui-monospace, Menlo, monospace\" fill=\"var(--text-strong)\">{System.Net.WebUtility.HtmlEncode(label)}</text>";
+
+            if (haveEntry && !string.IsNullOrEmpty(entry.Label))
+            {
+                double txLead = 0;
+                double nextLead = pts.Count > 0 ? X(pts[0].TimeNs) : widthPx;
+                if (nextLead - txLead >= 24)
+                    sb.Append(LabelText((txLead + nextLead) / 2.0, entry.Label!));
+            }
+            for (int i = 0; i < pts.Count; i++)
+            {
+                var t = pts[i];
+                if (string.IsNullOrEmpty(t.Label)) continue;
+                double tx = X(t.TimeNs);
+                double nextX = (i + 1 < pts.Count) ? X(pts[i + 1].TimeNs) : widthPx;
+                double midX = (tx + nextX) / 2.0;
+                if (nextX - tx < 24) continue; // too narrow
+
+                sb.Append(LabelText(midX, t.Label!));
+            }
+        }
+
+        sb.Append("</svg>");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Shared time ruler across the bottom of the waveform grid. ~12 tick
+    /// labels evenly spaced, rendered in the appropriate unit (ns → µs → ms)
+    /// so the axis stays readable at every zoom level.
+    /// </summary>
+    /// <summary>
+    /// Compare-mode overload: draws each snapshot's trace for a single signal
+    /// as an overlaid step function using the snapshot's palette colour.
+    /// Uses a shared <paramref name="maxNs"/> across all tracks so the X-axis
+    /// aligns even when snapshots had different durations.
+    /// </summary>
+    private string BuildCompareTraceSvg(
+        string signalName,
+        List<(CompareTrack Track, WaveformSignal? Sig)> picks,
+        int widthPx,
+        long maxNs)
+    {
+        const int H = 40;
+        const double ValHi = 4.0, ValLo = 36.0, ValMid = 20.0;
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"<svg class=\"waveform-svg\" viewBox=\"0 0 {widthPx} {H}\" preserveAspectRatio=\"none\" width=\"{widthPx}\" height=\"{H}\">");
+
+        if (maxNs <= 0)
+        {
+            sb.Append($"<line x1=\"0\" y1=\"{ValMid}\" x2=\"{widthPx}\" y2=\"{ValMid}\" stroke=\"#475569\" stroke-dasharray=\"2 4\" />");
+            sb.Append("</svg>");
+            return sb.ToString();
+        }
+
+        double X(long ns) => (double)ns / maxNs * widthPx;
+        static double LevelY(double? v) => v.HasValue ? (v.Value >= 0.5 ? 4.0 : 36.0) : 20.0;
+
+        foreach (var (track, sig) in picks)
+        {
+            if (sig == null || sig.Transitions.Count == 0) continue;
+
+            // Rebuild the same step-function path the single-mode renderer
+            // uses, but with the palette colour and a touch of opacity so
+            // overlapping traces remain visible.
+            var d = new System.Text.StringBuilder();
+            double curY = LevelY(sig.Transitions[0].Value);
+            d.Append($"M 0 {curY:0.##} ");
+
+            foreach (var t in sig.Transitions)
+            {
+                double tx = X(t.TimeNs);
+                double nextY = LevelY(t.Value);
+                d.Append($"L {tx:0.##} {curY:0.##} ");
+                if (!Equals(nextY, curY))
+                {
+                    d.Append($"L {tx:0.##} {nextY:0.##} ");
+                    curY = nextY;
+                }
+            }
+            d.Append($"L {widthPx} {curY:0.##} ");
+
+            sb.Append($"<path d=\"{d}\" fill=\"none\" stroke=\"{track.Colour}\" stroke-width=\"2\" stroke-opacity=\"0.85\" stroke-linejoin=\"miter\" stroke-linecap=\"butt\" />");
+        }
+
+        sb.Append("</svg>");
+        return sb.ToString();
+    }
+
+    private string BuildRulerSvg(int widthPx) =>
+        BuildRulerSvg(widthPx, (long)(Data?.TotalTicks ?? 0) * (Data?.TimescaleNs ?? 1));
+
+    /// <summary>
+    /// Compare-mode / legacy overload: ruler drawn from 0 to
+    /// <paramref name="maxNs"/>. The single-trace path uses the windowed
+    /// overload below so the ruler labels match the trailing-window view
+    /// during a live run.
+    /// </summary>
+    private string BuildRulerSvg(int widthPx, long maxNs)
+        => BuildRulerSvg(widthPx, 0, maxNs);
+
+    private string BuildRulerSvg(int widthPx, long viewStartNs, long viewEndNs)
+    {
+        const int H = 22;
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"<svg class=\"waveform-svg waveform-svg--ruler\" viewBox=\"0 0 {widthPx} {H}\" preserveAspectRatio=\"none\" width=\"{widthPx}\" height=\"{H}\">");
+        long spanNs = viewEndNs - viewStartNs;
+        if (spanNs <= 0) { sb.Append("</svg>"); return sb.ToString(); }
+
+        // Density: aim for ~one label per 80 px so 10-char strings like
+        // "1.23 µs" don't overlap on narrow mobile viewports. Clamp [2..12]
+        // so the ruler still reads as a ruler at extremes.
+        int labelCount = Math.Clamp(widthPx / 80, 2, 12);
+        for (int i = 0; i <= labelCount; i++)
+        {
+            double frac = (double)i / labelCount;
+            double x = frac * widthPx;
+            long ns = viewStartNs + (long)(frac * spanNs);
+            sb.Append($"<line x1=\"{x:0.##}\" y1=\"0\" x2=\"{x:0.##}\" y2=\"5\" stroke=\"var(--text-muted)\" />");
+            var anchor = i == 0 ? "start" : (i == labelCount ? "end" : "middle");
+            sb.Append($"<text x=\"{x:0.##}\" y=\"17\" text-anchor=\"{anchor}\" font-size=\"10\" font-family=\"ui-monospace, Menlo, monospace\" fill=\"var(--text-muted)\">{FormatAxisLabel(ns)}</text>");
+        }
+        sb.Append("</svg>");
+        return sb.ToString();
+    }
+
+    private static string FormatAxisLabel(long ns)
+    {
+        if (Math.Abs(ns) >= 1_000_000_000) return $"{ns / 1_000_000_000.0:0.##} s";
+        if (Math.Abs(ns) >= 1_000_000)     return $"{ns / 1_000_000.0:0.##} ms";
+        if (Math.Abs(ns) >= 1_000)         return $"{ns / 1_000.0:0.##} µs";
+        return $"{ns} ns";
+    }
+
+    /// <summary>Per-signal stroke colour — clock in green, inputs blue, outputs orange, vectors purple.</summary>
+    private static string GetSignalColor(WaveformSignal signal)
+    {
+        if (Kmila.Shared.Services.StimulusBuilder.IsClockPortName(signal.Name))
+            return "#10b981"; // success
+        if (signal.BitWidth > 1) return "#a855f7"; // purple
+        return signal.PortType switch
+        {
+            "IN"  => "#3c82f6", // brand accent
+            "OUT" => "#f59e0b", // warning
+            _     => "#94a3b8"  // muted
+        };
+    }
+
+    private async Task HandleVcdExport()
+    {
+        // Minimal IEEE-1364 VCD emitter built from the transition list. No
+        // Interpreter-side helper exists yet, so we synthesise the same data
+        // the SVG renders from.
+        try
+        {
+            await OnExportVcd.InvokeAsync(BuildVcd());
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError($"[WaveformViewer] VCD export failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// UX-N-014: invoked from the toolbar pin-button. Adds a waveform-time
+    /// breakpoint at the END of the currently visible window so the next
+    /// Run pauses there. ReplayState fires the pause from
+    /// <c>OnLiveFrameEmitted</c> once the engine tick crosses the bp ns.
+    /// Toast lets the user undo with another tap (toggle behaviour).
+    /// </summary>
+    /// <summary>
+    /// UX-N-014 follow-up: click anywhere on the time ruler to toggle a
+    /// waveform breakpoint at that time. Projects mouse/touch X back to ns
+    /// using the visible window bounds.
+    /// </summary>
+    private void OnRulerClick(Microsoft.AspNetCore.Components.Web.MouseEventArgs e,
+                              int widthPx, long viewStartNs, long viewEndNs)
+    {
+        try
+        {
+            long spanNs = viewEndNs - viewStartNs;
+            if (spanNs <= 0 || widthPx <= 0) return;
+            double frac = Math.Clamp(e.OffsetX / widthPx, 0.0, 1.0);
+            long ns = viewStartNs + (long)(frac * spanNs);
+            // Snap to nearest 10 ns (canonical timescale) so the breakpoint
+            // sits exactly on an engine tick boundary — no fuzzy crossings.
+            ns = (ns + 5) / 10 * 10;
+            Replay.ToggleTimeBreakpoint(ns);
+            var added = Replay.TimeBreakpoints.Contains(ns);
+            var msg = string.Format(
+                Traductor.T(added ? "WAVEFORM_TIME_BP_ADDED" : "WAVEFORM_TIME_BP_REMOVED"),
+                FormatAxisLabel(ns));
+            ToastService.Notify(Kmila.Shared.Models.ToastMessages.Message(
+                Traductor.T("WAVEFORM_TIME_BP_TITLE"), msg, ToastType.Info));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError($"[WaveformViewer] Ruler click bp failed: {ex.Message}");
+        }
+    }
+
+    private void HandleAddTimeBreakpoint()
+    {
+        try
+        {
+            // Use the sim's total simulated time as the breakpoint anchor.
+            // A click on the toolbar pin while looking at the post-run wave
+            // marks the END of the current sim — the next Run pauses there.
+            long bpNs = (long)(Data?.TotalTicks ?? 0UL) * (long)(Data?.TimescaleNs ?? 1L);
+            if (bpNs <= 0) return;
+            Replay.ToggleTimeBreakpoint(bpNs);
+            var added = Replay.TimeBreakpoints.Contains(bpNs);
+            var msg = string.Format(
+                Traductor.T(added ? "WAVEFORM_TIME_BP_ADDED" : "WAVEFORM_TIME_BP_REMOVED"),
+                FormatAxisLabel(bpNs));
+            ToastService.Notify(Kmila.Shared.Models.ToastMessages.Message(
+                Traductor.T("WAVEFORM_TIME_BP_TITLE"), msg, ToastType.Info));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError($"[WaveformViewer] Time breakpoint toggle failed: {ex.Message}");
+        }
+    }
+
+    private string BuildVcd()
+    {
+        if (Data == null) return string.Empty;
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("$date ").AppendLine($"  {DateTime.Now:yyyy-MM-dd HH:mm:ss}").AppendLine("$end");
+        sb.AppendLine("$version ").AppendLine("  Kmila-9s waveform exporter").AppendLine("$end");
+        sb.AppendLine($"$timescale {Data.TimescaleNs} ns $end");
+        sb.AppendLine("$scope module top $end");
+
+        // Honor the per-signal hide set so the exported VCD mirrors what the
+        // student is actually looking at (backlog #9). The clock eye toggle
+        // is intentionally NOT applied here — the clock is structural and
+        // most VCD consumers expect it; the hidden set is the explicit one.
+        var exported = Data.Signals
+            .Where(s => !_hiddenSignals.Contains(s.Name))
+            .ToList();
+
+        var ids = new Dictionary<string, string>();
+        int next = 33; // '!' — first printable VCD identifier
+        foreach (var signal in exported)
+        {
+            var id = ((char)next).ToString();
+            ids[signal.Name] = id;
+            next++;
+            sb.AppendLine($"$var wire {signal.BitWidth} {id} {signal.Name} $end");
+        }
+        sb.AppendLine("$upscope $end");
+        sb.AppendLine("$enddefinitions $end");
+
+        // Merge every signal's transitions into one time-sorted stream.
+        var stream = new SortedDictionary<long, List<(string Id, double? V, int W)>>();
+        foreach (var signal in exported)
+        {
+            foreach (var t in signal.Transitions)
+            {
+                if (!stream.TryGetValue(t.TimeNs, out var list))
+                {
+                    list = new(); stream[t.TimeNs] = list;
+                }
+                list.Add((ids[signal.Name], t.Value, signal.BitWidth));
+            }
+        }
+
+        foreach (var kv in stream)
+        {
+            sb.Append('#').AppendLine((kv.Key / Math.Max(1, Data.TimescaleNs)).ToString());
+            foreach (var (id, v, w) in kv.Value)
+            {
+                if (w <= 1)
+                    sb.AppendLine($"{(v == 1.0 ? '1' : v == 0.0 ? '0' : 'x')}{id}");
+                else
+                {
+                    var bits = v.HasValue ? Convert.ToString((long)v.Value, 2).PadLeft(w, '0') : new string('x', w);
+                    sb.AppendLine($"b{bits} {id}");
+                }
+            }
+        }
+        return sb.ToString();
+    }
+
+    // ─── Image export (SVG / PNG, optional multi-page split) ────────────────
+
+    private Modal _exportModal = new();
+
+    /// <summary>
+    /// Opens the export modal with the current waveform's range pre-baked
+    /// in. Disabled while a sim is live — exporting a moving window would
+    /// race the renderer.
+    /// </summary>
+    private async Task OpenExportModalAsync()
+    {
+        if (Data == null || Data.Signals.Count == 0) return;
+        long totalNs = (long)Data.TotalTicks * Math.Max(1, Data.TimescaleNs);
+        var parameters = new Dictionary<string, object>
+        {
+            { "TotalNs", totalNs },
+            { "OnSubmit", EventCallback.Factory.Create<WaveformExportRequest>(this, HandleExportSubmitAsync) },
+            { "OnCancel", EventCallback.Factory.Create(this, () => _exportModal.HideAsync()) }
+        };
+        await _exportModal.ShowAsync<ExportWaveformModal>(
+            Traductor.T("EXPORT_MODAL_TITLE"), null, parameters);
+    }
+
+    /// <summary>
+    /// Receives the validated request from the modal, paginates the range,
+    /// and renders + writes each page through IFileExportService. SVG pages
+    /// go to Documents/Kmila/SVG/; PNG pages are rasterised on the JS side
+    /// (canvas, scale set in the modal) then routed through SaveBytesAsync
+    /// so they land in Documents/Kmila/PNG/ on MAUI or download on Web.
+    /// </summary>
+    private async Task HandleExportSubmitAsync(WaveformExportRequest req)
+    {
+        if (Data == null) return;
+        await _exportModal.HideAsync();
+
+        var pages = WaveformExporter.PaginateRange(req.FromNs, req.ToNs, req.PageSpanNs).ToList();
+        if (pages.Count == 0) return;
+
+        // Filter hidden signals out of the exported SVG/PNG too (backlog #9).
+        // WaveformData.Signals is init-only, so build a thin clone when needed
+        // — the per-signal Transitions lists are shared by reference, no copy.
+        var exportData = _hiddenSignals.Count == 0
+            ? Data
+            : new WaveformData
+            {
+                TotalTicks  = Data.TotalTicks,
+                TimescaleNs = Data.TimescaleNs,
+                Signals     = Data.Signals.Where(s => !_hiddenSignals.Contains(s.Name)).ToList()
+            };
+
+        // Per-page width: mirror the on-screen pxPerNs across the page's
+        // time span, clamped so a single page stays under 1800 px (readable
+        // on a normal screen) and multi-page exports never go below 800 px
+        // per page. We can't reuse the body's visible width anymore — that
+        // shows only a window, not the full export range.
+        long pageSpanNs = Math.Max(1L, req.PageSpanNs ?? 1L);
+        int pageWidthHint = (int)Math.Round(_pxPerNs * pageSpanNs);
+        int pageWidth = pages.Count == 1
+            ? Math.Clamp(pageWidthHint, 800, 1800)
+            : Math.Clamp(pageWidthHint, 800, 1600);
+
+        string baseName = SanitizeFileName($"kmila-waveform_{FormatRangeForFilename(req.FromNs, req.ToNs)}");
+        string ext = req.Format == WaveformExportFormat.Svg ? "svg" : "png";
+
+        FileExportResult? lastResult = null;
+        try
+        {
+            for (int i = 0; i < pages.Count; i++)
+            {
+                var (startNs, endNs) = pages[i];
+                string title = pages.Count == 1
+                    ? $"{FormatRangeForTitle(startNs, endNs)}"
+                    : $"{FormatRangeForTitle(startNs, endNs)}  ·  page {i + 1}/{pages.Count}";
+                string svg = WaveformExporter.BuildSvg(exportData, startNs, endNs, pageWidth, _showClock, title);
+
+                string fileName = pages.Count == 1
+                    ? $"{baseName}.{ext}"
+                    : $"{baseName}_p{i + 1:D2}.{ext}";
+
+                if (req.Format == WaveformExportFormat.Svg)
+                {
+                    lastResult = await Export.SaveTextAsync(ExportCategory.Svg, fileName, "image/svg+xml", svg);
+                }
+                else
+                {
+                    var base64 = await JS.InvokeAsync<string>("kmilaSvgToPngBase64", svg, req.PngScale);
+                    if (string.IsNullOrEmpty(base64))
+                    {
+                        lastResult = FileExportResult.Failure(Traductor.T("WAVEFORM_PNG_RASTER_FAILED"));
+                        continue;
+                    }
+                    var bytes = Convert.FromBase64String(base64);
+                    lastResult = await Export.SaveBytesAsync(ExportCategory.Png, fileName, "image/png", bytes);
+                }
+            }
+
+            if (lastResult is { Saved: true })
+            {
+                var folder = req.Format == WaveformExportFormat.Svg ? "SVG" : "PNG";
+                var msg = lastResult.Path != null
+                    ? (pages.Count == 1
+                        ? Traductor.T("COMMON_SAVED_TO_FMT", lastResult.Path)
+                        : Traductor.T("WAVEFORM_SAVED_PAGES_FMT", pages.Count, folder))
+                    : (pages.Count == 1
+                        ? Traductor.T("WAVEFORM_EXPORT_OK_SINGLE")
+                        : Traductor.T("WAVEFORM_EXPORT_OK_MULTI_FMT", pages.Count));
+                ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), msg, ToastType.Success));
+            }
+            else if (lastResult != null)
+            {
+                ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                    lastResult.Error ?? Traductor.T("COMMON_EXPORT_FAILED"), ToastType.Danger));
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[WaveformViewer] Export failed");
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+    }
+
+    private static string FormatRangeForTitle(long fromNs, long toNs)
+    {
+        return $"{FormatAxisLabel(fromNs)} – {FormatAxisLabel(toNs)}";
+    }
+
+    /// <summary>Filename-friendly range tag (e.g. "10us-30us"). Underscores
+    /// replace spaces and the µ glyph, since some file systems still trip
+    /// on non-ASCII names.</summary>
+    private static string FormatRangeForFilename(long fromNs, long toNs)
+    {
+        string a = FormatAxisLabel(fromNs).Replace(" ", "").Replace("µ", "u");
+        string b = FormatAxisLabel(toNs).Replace(" ", "").Replace("µ", "u");
+        return $"{a}-{b}";
+    }
+
+    private static string SanitizeFileName(string s)
+    {
+        var buf = new System.Text.StringBuilder(s.Length);
+        foreach (var c in s)
+            buf.Append(char.IsLetterOrDigit(c) || c == '_' || c == '-' || c == '.' ? c : '_');
+        return buf.ToString();
+    }
+}

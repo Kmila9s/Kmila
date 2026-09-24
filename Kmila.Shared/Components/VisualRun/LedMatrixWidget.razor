@@ -1,0 +1,150 @@
+@namespace Kmila.Shared.Components.VisualRun
+@using Kmila.Shared.Services.VisualRun
+
+@*
+    3×3 mono LED matrix (FW-1). Fixed 9-cell grid.
+
+    Two operating modes via the `mode` config key:
+      • "raw"   — 18 pins (`a{r}{c}` + `k{r}{c}`, r,c ∈ 0..2). A cell lights
+                  when its anode is '1' AND its cathode is '0' (real
+                  common-anode / common-cathode drive). Row/col multiplex
+                  circuits behave the same as on the physical board.
+      • "value" (default) — 1 pin `value` (9-bit vector). LSB = row0col0
+                  in row-major order (bit 0 = (0,0), bit 1 = (0,1), …,
+                  bit 8 = (2,2)). The design drives the whole grid with a
+                  single std_logic_vector(8 downto 0).
+
+    Color + brightness apply to both modes. Brightness is a 0..100 opacity
+    knob on the "on" cell so students can dim without touching CSS.
+*@
+
+<div class="kviz-widget kviz-matrix-3x3 @(EditMode ? "kviz-matrix-3x3--edit" : "") @(Selected ? "kviz-widget--selected" : "")"
+     style="--kviz-matrix-color:@ColorVar; --kviz-matrix-on-opacity:@OnOpacity; left:@(Comp.Position.X)px; top:@(Comp.Position.Y)px;"
+     data-component-id="@Comp.Id"
+     data-mode="@Mode"
+     data-value="@ValueBits"
+     @onpointerdown="HandlePointerDown">
+    <div class="kviz-matrix-3x3__grid">
+        @for (int r = 0; r < 3; r++)
+        {
+            for (int c = 0; c < 3; c++)
+            {
+                var lr = r; var lc = c;
+                var on = CellOn(lr, lc);
+                <div class="kviz-matrix-3x3__cell @(on ? "kviz-matrix-3x3__cell--on" : "")"
+                     data-cell-row="@lr" data-cell-col="@lc"></div>
+            }
+        }
+    </div>
+    <div class="kviz-matrix-3x3__port">@PortLabel</div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public KvizComponent Comp { get; set; } = default!;
+    [Parameter] public VisualRunCoordinator? Coordinator { get; set; }
+    [Parameter] public bool EditMode { get; set; }
+    [Parameter] public bool Selected { get; set; }
+    [Parameter] public EventCallback<Microsoft.AspNetCore.Components.Web.PointerEventArgs> OnPointerDownExternal { get; set; }
+
+    [CascadingParameter(Name = "FrameVersion")] public int FrameVersion { get; set; }
+
+    private string Mode => Comp.Config.GetString("mode", "value") == "raw" ? "raw" : "value";
+
+    private string ColorVar => Comp.Config.GetString("color", "red") switch
+    {
+        "green" => "#22c55e",
+        "blue"  => "#3b82f6",
+        "white" => "#f8fafc",
+        _       => "#ef4444",
+    };
+
+    // Brightness 0..100 → CSS opacity 0..1 on the --on cell. Clamped so a
+    // stale config value can't push the cell opacity out of range.
+    private string OnOpacity
+    {
+        get
+        {
+            var b = Math.Clamp(Comp.Config.GetInt("brightness", 100), 0, 100);
+            return (b / 100.0).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+        }
+    }
+
+    // Row-major MSB-first bit string, for tests + wire-viz label. Bit at
+    // string[0] is (2,2) MSB; string[8] is (0,0) LSB.
+    private string ValueBits
+    {
+        get
+        {
+            var chars = new char[9];
+            for (int r = 0; r < 3; r++)
+                for (int c = 0; c < 3; c++)
+                {
+                    int lsb = r * 3 + c; // (0,0)=0 … (2,2)=8
+                    chars[8 - lsb] = CellOn(r, c) ? '1' : '0';
+                }
+            return new string(chars);
+        }
+    }
+
+    private string PortLabel
+    {
+        get
+        {
+            if (Mode == "value")
+            {
+                return Comp.Bindings.TryGetValue("value", out var p) && !string.IsNullOrEmpty(p)
+                    ? p
+                    : "(unwired)";
+            }
+            var wired = 0;
+            for (int r = 0; r < 3; r++)
+                for (int c = 0; c < 3; c++)
+                {
+                    if (Comp.Bindings.TryGetValue($"a{r}{c}", out var pa) && !string.IsNullOrEmpty(pa)) wired++;
+                }
+            return $"{wired}/9 wired";
+        }
+    }
+
+    private bool CellOn(int row, int col)
+    {
+        if (Coordinator == null) return false;
+        if (Mode == "raw")
+        {
+            // Real common-cathode board behavior: cell lights when anode=1
+            // AND cathode=0. When a cathode pin is unwired we default to
+            // '0' (grounded) so the widget behaves as if the row is being
+            // held at ground — matches the beginner path where students
+            // only drive anodes and short cathodes to GND on the board.
+            if (!Comp.Bindings.TryGetValue($"a{row}{col}", out var aPort) || string.IsNullOrEmpty(aPort))
+                return false;
+            var av = Coordinator.LatestSlicedValue(aPort);
+            if (string.IsNullOrEmpty(av) || av[^1] != '1') return false;
+
+            char cathode = '0';
+            if (Comp.Bindings.TryGetValue($"k{row}{col}", out var kPort) && !string.IsNullOrEmpty(kPort))
+            {
+                var kv = Coordinator.LatestSlicedValue(kPort);
+                if (!string.IsNullOrEmpty(kv)) cathode = kv[^1];
+            }
+            return cathode == '0';
+        }
+
+        if (!Comp.Bindings.TryGetValue("value", out var port) || string.IsNullOrEmpty(port))
+            return false;
+        var v = Coordinator.LatestSlicedValue(port);
+        if (string.IsNullOrEmpty(v)) return false;
+        // LSB = row0col0. String is MSB-first ⇒ string[len-1] is LSB.
+        int lsb = row * 3 + col; // 0..8
+        int fromRight = lsb;     // bit index from the right side
+        int idx = v.Length - 1 - fromRight;
+        if (idx < 0) return false;
+        return v[idx] == '1';
+    }
+
+    private async Task HandlePointerDown(Microsoft.AspNetCore.Components.Web.PointerEventArgs e)
+    {
+        if (OnPointerDownExternal.HasDelegate)
+            await OnPointerDownExternal.InvokeAsync(e);
+    }
+}

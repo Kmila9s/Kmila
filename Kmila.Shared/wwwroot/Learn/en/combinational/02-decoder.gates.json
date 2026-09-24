@@ -1,0 +1,304 @@
+{
+  "viewBox": "0 0 740 460",
+  "staggerLanes": true,
+  "spotlight": true,
+  "nodes": [
+    {
+      "id": "s1",
+      "kind": "input",
+      "label": "s1",
+      "x": 60,
+      "y": 80
+    },
+    {
+      "id": "s0",
+      "kind": "input",
+      "label": "s0",
+      "x": 60,
+      "y": 240
+    },
+    {
+      "id": "g_not1",
+      "kind": "not",
+      "label": "NOT",
+      "x": 200,
+      "y": 60
+    },
+    {
+      "id": "g_not0",
+      "kind": "not",
+      "label": "NOT",
+      "x": 200,
+      "y": 220
+    },
+    {
+      "id": "g_and0",
+      "kind": "and",
+      "label": "AND",
+      "x": 440,
+      "y": 60
+    },
+    {
+      "id": "g_and1",
+      "kind": "and",
+      "label": "AND",
+      "x": 440,
+      "y": 160
+    },
+    {
+      "id": "g_and2",
+      "kind": "and",
+      "label": "AND",
+      "x": 440,
+      "y": 260
+    },
+    {
+      "id": "g_and3",
+      "kind": "and",
+      "label": "AND",
+      "x": 440,
+      "y": 360
+    },
+    {
+      "id": "y0",
+      "kind": "output",
+      "label": "y0",
+      "x": 640,
+      "y": 88
+    },
+    {
+      "id": "y1",
+      "kind": "output",
+      "label": "y1",
+      "x": 640,
+      "y": 188
+    },
+    {
+      "id": "y2",
+      "kind": "output",
+      "label": "y2",
+      "x": 640,
+      "y": 288
+    },
+    {
+      "id": "y3",
+      "kind": "output",
+      "label": "y3",
+      "x": 640,
+      "y": 388
+    }
+  ],
+  "wires": [
+    {
+      "id": "w_s1_not1",
+      "source": "s1",
+      "from": "s1",
+      "to": "g_not1.in",
+      "activeFor": ["g_not1"]
+    },
+    {
+      "id": "w_s1_and2",
+      "source": "s1",
+      "from": "s1",
+      "to": "g_and2.in1",
+      "activeFor": ["g_and2"]
+    },
+    {
+      "id": "w_s1_and3",
+      "source": "s1",
+      "from": "s1",
+      "to": "g_and3.in1",
+      "activeFor": ["g_and3"]
+    },
+    {
+      "id": "w_s0_not0",
+      "source": "s0",
+      "from": "s0",
+      "to": "g_not0.in",
+      "activeFor": ["g_not0"]
+    },
+    {
+      "id": "w_s0_and1",
+      "source": "s0",
+      "from": "s0",
+      "to": "g_and1.in2",
+      "activeFor": ["g_and1"]
+    },
+    {
+      "id": "w_s0_and3",
+      "source": "s0",
+      "from": "s0",
+      "to": "g_and3.in2",
+      "activeFor": ["g_and3"]
+    },
+    {
+      "id": "w_ns1_and0",
+      "source": "not_s1",
+      "from": "g_not1.out",
+      "to": "g_and0.in1",
+      "activeFor": ["g_and0"]
+    },
+    {
+      "id": "w_ns1_and1",
+      "source": "not_s1",
+      "from": "g_not1.out",
+      "to": "g_and1.in1",
+      "activeFor": ["g_and1"]
+    },
+    {
+      "id": "w_ns0_and0",
+      "source": "not_s0",
+      "from": "g_not0.out",
+      "to": "g_and0.in2",
+      "activeFor": ["g_and0"]
+    },
+    {
+      "id": "w_ns0_and2",
+      "source": "not_s0",
+      "from": "g_not0.out",
+      "to": "g_and2.in2",
+      "activeFor": ["g_and2"]
+    },
+    {
+      "id": "w_y0",
+      "source": "y0",
+      "from": "g_and0.out",
+      "to": "y0"
+    },
+    {
+      "id": "w_y1",
+      "source": "y1",
+      "from": "g_and1.out",
+      "to": "y1"
+    },
+    {
+      "id": "w_y2",
+      "source": "y2",
+      "from": "g_and2.out",
+      "to": "y2"
+    },
+    {
+      "id": "w_y3",
+      "source": "y3",
+      "from": "g_and3.out",
+      "to": "y3"
+    }
+  ],
+  "signalOrder": [
+    "s1",
+    "s0",
+    "y0",
+    "y1",
+    "y2",
+    "y3"
+  ],
+  "steps": [
+    {
+      "t": 0,
+      "values": {
+        "s1": "0",
+        "s0": "0",
+        "not_s1": "1",
+        "not_s0": "1",
+        "y0": "1",
+        "y1": "0",
+        "y2": "0",
+        "y3": "0"
+      },
+      "active": [
+        "g_and0"
+      ],
+      "note": {
+        "en": "sel = 00. Both inverters output 1 — that's why their wires are hot. Only AND0 sees TWO hot inputs, so y0 is the winner. This is the 'one-hot' behaviour: exactly one output is high at a time, and its position spells out the input code in binary.",
+        "es": "sel = 00. Ambos inversores salen en 1 — por eso sus cables están calientes. Solo AND0 ve DOS entradas calientes, así que y0 es el ganador. Este es el comportamiento 'one-hot': exactamente una salida en alto a la vez, y su posición es el código de entrada en binario.",
+        "ar": "sel = 00. كلا المُعكِّسين يُخرج 1 — لذلك تكون أسلاكهما ساخنة. AND0 وحده يرى دخلَين ساخنَين، فيكون y0 هو الفائز. هذا سلوك one-hot: خرج واحد بالضبط مرتفع في كل لحظة، وموقعه يُهجِّي رمز الدخل بالنظام الثنائي.",
+        "ch": "sel = 00。两个反相器都输出 1 — 所以它们的线是热的。只有 AND0 看到两个热输入,因此 y0 获胜。这就是 one-hot 行为:同一时刻恰好一个输出为高,其位置就是输入码的二进制表示。",
+        "de": "sel = 00. Beide Inverter geben 1 aus — deshalb sind ihre Drähte heiß. Nur AND0 sieht ZWEI heiße Eingänge, also gewinnt y0. Das ist das One-Hot-Verhalten: genau ein Ausgang ist gleichzeitig high, und seine Position ergibt den Eingangscode binär.",
+        "fr": "sel = 00. Les deux inverseurs sortent 1 — leurs fils sont donc chauds. Seul AND0 voit DEUX entrées chaudes, donc y0 gagne. C'est le comportement one-hot : exactement une sortie est haute à la fois, et sa position épelle le code d'entrée en binaire.",
+        "jp": "sel = 00。両方のインバータが 1 を出力 — だから線がホット。AND0 だけが両入力ホットを見るので、y0 が勝者。これがワンホット動作:同時にちょうど 1 出力だけが High で、その位置が入力コードを 2 進で示す。"
+      }
+    },
+    {
+      "t": 1,
+      "values": {
+        "s1": "0",
+        "s0": "1",
+        "not_s1": "1",
+        "not_s0": "0",
+        "y0": "0",
+        "y1": "1",
+        "y2": "0",
+        "y3": "0"
+      },
+      "active": [
+        "g_not0",
+        "g_and0",
+        "g_and1"
+      ],
+      "note": {
+        "en": "sel = 01. s0 went hot, so not_s0 went cold (NOT just inverts). AND0 loses because not_s0 dropped. AND1 wins because it wanted not_s1 AND s0 — both now hot. Watch the colour of the s0 / not_s0 wires swap: that's the inverter doing its one job.",
+        "es": "sel = 01. s0 se calienta, así que not_s0 se enfría (NOT solo invierte). AND0 pierde porque not_s0 bajó. AND1 gana porque quería not_s1 AND s0 — ambos ahora calientes. Mira cómo los colores de s0 y not_s0 se intercambian: el inversor haciendo su único trabajo.",
+        "ar": "sel = 01. s0 سخن، فبَرَد not_s0 (NOT يقلب فقط). يخسر AND0 لأن not_s0 سقط. يفوز AND1 لأنه يريد not_s1 AND s0 — وكلاهما الآن ساخن. راقب تبادل ألوان أسلاك s0 و not_s0: هذا هو المُعكِّس يؤدي وظيفته الوحيدة.",
+        "ch": "sel = 01。s0 变热,所以 not_s0 变冷(NOT 只是取反)。AND0 输了,因为 not_s0 掉了。AND1 赢了,因为它要 not_s1 AND s0 — 现在两个都热。看 s0 与 not_s0 的颜色互换:这就是反相器做的唯一一件事。",
+        "de": "sel = 01. s0 wurde heiß, also not_s0 kalt (NOT invertiert nur). AND0 verliert, weil not_s0 abfiel. AND1 gewinnt, weil es not_s1 AND s0 will — beide jetzt heiß. Beobachte, wie die Farben der s0/not_s0-Drähte tauschen: das ist der Inverter bei seiner einzigen Aufgabe.",
+        "fr": "sel = 01. s0 devient chaud, donc not_s0 devient froid (NOT inverse simplement). AND0 perd parce que not_s0 est tombé. AND1 gagne parce qu'il veut not_s1 AND s0 — les deux sont chauds. Regardez les couleurs des fils s0 / not_s0 s'échanger : c'est l'inverseur qui fait son seul travail.",
+        "jp": "sel = 01。s0 がホットになり、not_s0 はコールドに(NOT は反転するだけ)。AND0 は not_s0 が下がったので負け。AND1 は not_s1 AND s0 を欲しがり、両方ホットなので勝ち。s0 と not_s0 の線の色が入れ替わるのを見て:インバータがその唯一の仕事をしている。"
+      }
+    },
+    {
+      "t": 2,
+      "values": {
+        "s1": "1",
+        "s0": "0",
+        "not_s1": "0",
+        "not_s0": "1",
+        "y0": "0",
+        "y1": "0",
+        "y2": "1",
+        "y3": "0"
+      },
+      "active": [
+        "g_not1",
+        "g_not0",
+        "g_and1",
+        "g_and2"
+      ],
+      "note": {
+        "en": "sel = 10. Both inverters flipped this step — not_s1 cold, not_s0 hot. Only AND2 (wants s1 AND not_s0) sees both hot. The 'hot output' just walked from y1 to y2.",
+        "es": "sel = 10. Ambos inversores cambiaron este paso — not_s1 frío, not_s0 caliente. Solo AND2 (quiere s1 AND not_s0) ve ambas entradas calientes. La 'salida caliente' acaba de caminar de y1 a y2.",
+        "ar": "sel = 10. تبدَّل كلا المُعكِّسَين هذه الخطوة — not_s1 بارد، not_s0 ساخن. AND2 وحده (يريد s1 AND not_s0) يرى كليهما ساخنَين. «الخرج الساخن» انتقل توًّا من y1 إلى y2.",
+        "ch": "sel = 10。这一步两个反相器都翻转了 — not_s1 冷,not_s0 热。只有 AND2(要 s1 AND not_s0)看到两个都热。'热输出' 刚刚从 y1 走到了 y2。",
+        "de": "sel = 10. Beide Inverter haben in diesem Schritt gewechselt — not_s1 kalt, not_s0 heiß. Nur AND2 (will s1 AND not_s0) sieht beide heiß. Der „heiße Ausgang“ ist gerade von y1 nach y2 gewandert.",
+        "fr": "sel = 10. Les deux inverseurs se sont retournés à ce pas — not_s1 froid, not_s0 chaud. Seul AND2 (veut s1 AND not_s0) voit les deux chauds. La « sortie chaude » vient de marcher de y1 à y2.",
+        "jp": "sel = 10。このステップで両方のインバータが反転 — not_s1 コールド、not_s0 ホット。AND2(s1 AND not_s0 を欲しがる)だけが両方ホットを見る。「ホットな出力」が y1 から y2 へ歩いた。"
+      }
+    },
+    {
+      "t": 3,
+      "values": {
+        "s1": "1",
+        "s0": "1",
+        "not_s1": "0",
+        "not_s0": "0",
+        "y0": "0",
+        "y1": "0",
+        "y2": "0",
+        "y3": "1"
+      },
+      "active": [
+        "g_not0",
+        "g_and2",
+        "g_and3"
+      ],
+      "note": {
+        "en": "sel = 11. Both inputs hot, both inverters cold. Only AND3 (wants s1 AND s0 — no inversion) wins. Same recipe as the 3-to-8 decoder in the VHDL above: scale up to 3 inputs and you get 8 outputs with 3-input ANDs.",
+        "es": "sel = 11. Ambas entradas calientes, ambos inversores fríos. Solo AND3 (quiere s1 AND s0 — sin invertir) gana. Misma receta que el decodificador 3 a 8 del VHDL arriba: escala a 3 entradas y tienes 8 salidas con ANDs de 3 entradas.",
+        "ar": "sel = 11. كلا الدخلَين ساخن، وكلا المُعكِّسَين بارد. AND3 وحده (يريد s1 AND s0 — بلا قلب) يفوز. الوصفة نفسها لمُفكِّك 3 إلى 8 في VHDL أعلاه: وسِّع إلى 3 دخل ستحصل على 8 خرج بـ ANDs ثلاثيَّة.",
+        "ch": "sel = 11。两个输入都热,两个反相器都冷。只有 AND3(要 s1 AND s0 — 无反相)获胜。和上面 VHDL 的 3-8 解码器同一个套路:扩展到 3 个输入就得到 8 个输出和 3 输入 ANDs。",
+        "de": "sel = 11. Beide Eingänge heiß, beide Inverter kalt. Nur AND3 (will s1 AND s0 — keine Inversion) gewinnt. Gleiche Rezeptur wie der 3-zu-8-Decoder im VHDL oben: skaliere auf 3 Eingänge und du erhältst 8 Ausgänge mit 3-Eingangs-ANDs.",
+        "fr": "sel = 11. Les deux entrées chaudes, les deux inverseurs froids. Seul AND3 (veut s1 AND s0 — sans inversion) gagne. Même recette que le décodeur 3 vers 8 du VHDL ci-dessus : passez à 3 entrées et vous obtenez 8 sorties avec des AND à 3 entrées.",
+        "jp": "sel = 11。両入力ホット、両インバータコールド。AND3(s1 AND s0 を反転なしで欲しがる)だけが勝つ。上の VHDL の 3-8 デコーダと同じレシピ:入力を 3 に拡張すれば 3 入力 AND で 8 出力が得られる。"
+      }
+    }
+  ]
+}

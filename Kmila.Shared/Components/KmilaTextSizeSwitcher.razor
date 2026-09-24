@@ -1,0 +1,85 @@
+@*
+    KmilaTextSizeSwitcher — 5-step text size picker for Settings → Apariencia.
+
+    Renders as a horizontal row of 5 .kmila-btn-tab buttons (Family 15 from
+    the new button system) so the active step shows its underline persistently
+    and hovering an inactive step animates the underline in. Doubles as one
+    of the most visible Family 15 instances in the app.
+
+    Persistence path mirrors the theme switcher so the chosen step survives
+    reloads and applies pre-FOUC:
+      • localStorage['kmila-text-scale']  — read by the inline <head> boot
+                                            script in index.html.
+      • SQLite AppSettings.KEY_TEXT_SCALE — secondary copy for native parity.
+      • document.documentElement.style.setProperty('--user-text-scale', …)
+                                          — immediate visual swap; html's
+                                            calc(16px * var(...)) re-evaluates
+                                            and every rem-based token scales.
+
+    Steps map (kept in sync with kmilaTextScaleMap in index.html):
+      xs · 0.85   Compact
+      sm · 0.92   Reduced
+      md · 1.00   Normal (default)
+      lg · 1.10   Comfortable
+      xl · 1.20   Large
+*@
+@implements IDisposable
+
+<div class="kmila-text-size-row" role="tablist"
+     aria-label="@Traductor.T("SETTINGS_TEXT_SIZE_TITLE")">
+    @foreach (var (code, key) in _steps)
+    {
+        var isActive = code == _step;
+        <button type="button"
+                role="tab"
+                aria-selected="@isActive"
+                class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm @(isActive ? "is-active" : "")"
+                @onclick="() => OnStepClickedAsync(code)">
+            @Traductor.T(key)
+        </button>
+    }
+</div>
+
+@code {
+    // (step-code, translation-key) — order = visual order in the row.
+    private static readonly (string Code, string TranslationKey)[] _steps = new[]
+    {
+        ("xs", "SETTINGS_TEXT_SIZE_XS"),
+        ("sm", "SETTINGS_TEXT_SIZE_SM"),
+        ("md", "SETTINGS_TEXT_SIZE_MD"),
+        ("lg", "SETTINGS_TEXT_SIZE_LG"),
+        ("xl", "SETTINGS_TEXT_SIZE_XL"),
+    };
+
+    private string _step = "md";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Traductor.StaticOnLangChanged += OnLangChanged;
+
+        var stored = await DbContext.GetSettingAsync(AppSettings.KEY_TEXT_SCALE);
+        if (!string.IsNullOrEmpty(stored)) _step = stored;
+    }
+
+    private async Task OnStepClickedAsync(string step)
+    {
+        if (step == _step) return;
+        _step = step;
+
+        // 1. localStorage — boot script reads this on next load.
+        await JS.InvokeVoidAsync("localStorage.setItem", "kmila-text-scale", step);
+
+        // 2. Apply now via the shared helper defined in index.html.
+        await JS.InvokeVoidAsync("kmilaApplyTextScale", step);
+
+        // 3. SQLite copy.
+        await DbContext.SetSettingAsync(AppSettings.KEY_TEXT_SCALE, step);
+    }
+
+    private void OnLangChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Traductor.StaticOnLangChanged -= OnLangChanged;
+    }
+}

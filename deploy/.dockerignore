@@ -1,0 +1,40 @@
+# Build context is the repo root, but the Kmila.Web image only needs:
+#   App/Kmila/Kmila.Web, App/Kmila/Kmila.Shared, Debugger, Interpreter,
+#   LibraryCompiler, Parser, TimeMachine
+# Everything below is excluded to keep the context small and the build
+# reproducible (host bin/obj must never leak into the image).
+
+# Build outputs / IDE / OS cruft
+**/bin/
+**/obj/
+**/.vs/
+**/.vscode/
+**/.idea/
+**/*.user
+**/.DS_Store
+.git/
+**/.git/
+
+# Stale committed SQLite databases (e.g. App/Kmila/Kmila.Web/kmila.db) — the
+# real DB is created at runtime inside the /data volume.
+**/*.db
+**/*.db-shm
+**/*.db-wal
+
+# Projects NOT in the Kmila.Web dependency closure
+App/Kmila/Kmila/
+KmilaWeb/
+KmilaFactorySim/
+Simulator/
+SimulatorBench/
+PracticeValidator/
+RoundTripAudit/
+Tests/
+Modelos3D/
+Documentacion/
+
+# Docker + node artifacts
+**/node_modules/
+Dockerfile
+docker-compose.yml
+.dockerignore

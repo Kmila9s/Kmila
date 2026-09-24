@@ -1,0 +1,1360 @@
+@*
+    GateAnimator — schematic-style sibling to ExecutionPlayer.
+
+    Walks a hand-authored GateAnimationDoc step by step. Each step drives:
+      • the value chips on every node (0/1/U/…),
+      • the wire stroke colour (hot when source value == "1", and — for
+        wires that declare `activeFor` — only when one of those gate ids
+        is also in step.active, so a fan-out can light only the branch
+        that actually fired),
+      • a pulse outline on nodes listed in step.active,
+      • the same tape transport as ExecutionPlayer (play/pause/step±/restart, 0.5×/1×/2×, Space/←/→/R).
+
+    Pure SVG + Blazor — no JS interop needed. CSS lives in pages.css
+    (per project_maui_scoped_css_gap) so the same styling applies on
+    both MAUI and Web hosts.
+*@
+
+@implements IDisposable
+
+<div class="kmila-gate-player" @onkeydown="OnKeyDown" tabindex="0">
+    <div class="kmila-gate-player__stage">
+        @if (Doc != null && !string.IsNullOrEmpty(Doc.ClockSignal))
+        {
+            @* Timing strip: a digital waveform of Doc.ClockSignal across every
+               step, with a cursor at the current step. Pedagogically anchors
+               "rising edge" — the cursor sitting on a 0→1 transition is the
+               moment a DFF captures d. *@
+            <div class="kmila-gate-timing">
+                @RenderTimingStrip(Doc.ClockSignal)
+            </div>
+        }
+
+        <div class="kmila-gate-canvas">
+            <svg viewBox="@(Doc?.ViewBox ?? "0 0 720 480")"
+                 preserveAspectRatio="xMidYMid meet"
+                 xmlns="http://www.w3.org/2000/svg"
+                 role="img"
+                 aria-label="@Traductor.T("CONCEPTS_PLAYER_GATES")">
+                @* Wires render first so node bodies sit on top of them.
+                   Cold wires are emitted BEFORE hot wires so that, when two
+                   share a trunk segment (typical fan-out from the auto-router),
+                   the hot stroke paints on top of the cold one — otherwise the
+                   trunk visually looks cold whenever a later JSON-order wire
+                   happens to be the cold one. *@
+                @foreach (var w in OrderedWires())
+                {
+                    var hot = IsWireHot(w);
+                    var color = ColorOf(w.Source);
+                    var d = string.IsNullOrEmpty(w.Path) ? AutoPath(w.From, w.To, LaneOf(w)) : w.Path;
+                    if (string.IsNullOrEmpty(d)) continue;
+                    <path d="@d"
+                          class="kmila-gate-wire @(hot ? "kmila-gate-wire--hot" : "kmila-gate-wire--cold")"
+                          style="@(hot ? $"stroke: {color};" : "")"
+                          fill="none" />
+                }
+
+                @* Junction dots — render BETWEEN wires and nodes so the dot
+                   sits on top of the wire trunk but underneath any node body
+                   that happens to overlap. Each dot picks up its source's
+                   colour when hot. *@
+                @foreach (var j in JunctionDots())
+                {
+                    var hot = IsHot(ValueOf(j.source));
+                    var col = ColorOf(j.source);
+                    <circle cx="@Fmt(j.x)" cy="@Fmt(j.y)" r="3.6"
+                            class="kmila-gate-junction"
+                            style="@(hot ? $"fill: {col}; stroke: {col};" : "")" />
+                }
+
+                @foreach (var n in Doc?.Nodes ?? new())
+                {
+                    var value = ValueOf(n.Id);
+                    var active = IsActive(n.Id);
+                    var changed = HasChanged(n.Id, value);
+                    var dimmed = Doc?.Spotlight == true && !IsGateLive(n);
+                    var chipColor = IsHot(value) ? ColorOf(n.Id) : string.Empty;
+                    <g class="kmila-gate-node @(active ? "kmila-gate-node--active" : "") @(changed ? "kmila-gate-node--changed" : "") @(dimmed ? "kmila-gate-node--dimmed" : "")"
+                       transform="@($"translate({Fmt(n.X)},{Fmt(n.Y)})")">
+                        @RenderShape(n)
+                        @RenderLabel(n)
+                        @RenderValueChip(n, value, chipColor)
+                    </g>
+                }
+
+                @* Internal-net chips on top of everything so the value always
+                   reads. Authors place these at trunk midpoints to surface
+                   carry / partial-sum / mux-output values without dedicating
+                   a labelled output terminal. *@
+                @foreach (var c in Doc?.Chips ?? new())
+                {
+                    @RenderInternalChip(c)
+                }
+            </svg>
+        </div>
+
+        <div class="kmila-exec-tape" role="group" aria-label="@Traductor.T("CONCEPTS_PLAYER_TAPE_LABEL")">
+            <div class="kmila-exec-tape__progress">
+                <span>@(CurrentIndex + 1) / @TotalSteps</span>
+                <div class="kmila-exec-tape__progress-track">
+                    <div class="kmila-exec-tape__progress-fill" style="width: @ProgressPct%"></div>
+                </div>
+                <span>@StepLabel</span>
+            </div>
+
+            <KmilaTooltip TextKey="CONCEPTS_PLAYER_RESTART">
+                <button type="button" class="kmila-btn-icon"
+                        aria-label="@Traductor.T("CONCEPTS_PLAYER_RESTART")"
+                        @onclick="OnRestart">
+                    <Icon Name="IconName.ArrowCounterclockwise" />
+                </button>
+            </KmilaTooltip>
+            <KmilaTooltip TextKey="CONCEPTS_PLAYER_STEP_BACK">
+                <button type="button" class="kmila-btn-icon"
+                        aria-label="@Traductor.T("CONCEPTS_PLAYER_STEP_BACK")"
+                        disabled="@(CurrentIndex == 0)"
+                        @onclick="OnStepBack">
+                    <Icon Name="IconName.SkipStart" />
+                </button>
+            </KmilaTooltip>
+            @if (_playing)
+            {
+                <KmilaTooltip TextKey="CONCEPTS_PLAYER_PAUSE">
+                    <button type="button" class="kmila-btn-icon kmila-btn-icon--accent"
+                            aria-label="@Traductor.T("CONCEPTS_PLAYER_PAUSE")"
+                            @onclick="OnPause">
+                        <Icon Name="IconName.PauseFill" />
+                    </button>
+                </KmilaTooltip>
+            }
+            else
+            {
+                <KmilaTooltip TextKey="CONCEPTS_PLAYER_PLAY">
+                    <button type="button" class="kmila-btn-icon kmila-btn-icon--accent"
+                            aria-label="@Traductor.T("CONCEPTS_PLAYER_PLAY")"
+                            @onclick="OnPlay">
+                        <Icon Name="IconName.PlayFill" />
+                    </button>
+                </KmilaTooltip>
+            }
+            <KmilaTooltip TextKey="CONCEPTS_PLAYER_STEP_FORWARD">
+                <button type="button" class="kmila-btn-icon"
+                        aria-label="@Traductor.T("CONCEPTS_PLAYER_STEP_FORWARD")"
+                        disabled="@IsAtEnd"
+                        @onclick="OnStepForward">
+                    <Icon Name="IconName.SkipEnd" />
+                </button>
+            </KmilaTooltip>
+
+            <label class="kmila-exec-tape__speed">
+                @Traductor.T("CONCEPTS_PLAYER_SPEED")
+                <select value="@_speedKey" @onchange="OnSpeedChanged">
+                    <option value="0.5">0.5×</option>
+                    <option value="1">1×</option>
+                    <option value="2">2×</option>
+                </select>
+            </label>
+
+            <span class="kmila-exec-tape__hint" aria-hidden="true"
+                  title="@Traductor.T("CONCEPTS_PLAYER_KEYS")">
+                ⌨ Space · ← → · R
+            </span>
+        </div>
+    </div>
+
+    <div class="kmila-exec-player__side">
+        <div class="kmila-exec-signals" aria-label="@Traductor.T("CONCEPTS_PLAYER_SIGNALS")">
+            <div class="kmila-exec-signals__header">@Traductor.T("CONCEPTS_PLAYER_SIGNALS")</div>
+            <table class="kmila-exec-signals__table">
+                <tbody>
+                    @foreach (var id in OrderedSignalIds())
+                    {
+                        var value = ValueOf(id);
+                        var changed = HasChanged(id, value);
+                        var label = LabelOf(id);
+                        <tr>
+                            <th scope="row">@label</th>
+                            <td>
+                                <span class="kmila-exec-signals__value @(changed ? "kmila-exec-signals__value--changed" : "")">
+                                    @(string.IsNullOrEmpty(value) ? "—" : value)
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="kmila-exec-player__note" role="status" aria-live="polite">
+            @if (!string.IsNullOrEmpty(_currentNote))
+            {
+                @_currentNote
+            }
+            else
+            {
+                <span class="kmila-exec-player__note-empty">@Traductor.T("CONCEPTS_PLAYER_NOTE_EMPTY")</span>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    /// <summary>Document to play. Swapping resets to step 0.</summary>
+    [Parameter, EditorRequired] public GateAnimationDoc Doc { get; set; } = new();
+
+    /// <summary>Current UI language — drives which <c>note</c> string we render.</summary>
+    [Parameter] public string Lang { get; set; } = "en";
+
+    /// <summary>Fired once when autoplay reaches the last step.</summary>
+    [Parameter] public EventCallback OnPlaybackComplete { get; set; }
+
+    private const int BaseStepMs = 1100;
+
+    private GateAnimationDoc? _lastLoaded;
+    private int _currentIndex;
+    private bool _playing;
+    private CancellationTokenSource? _playCts;
+    private double _speed = 1.0;
+    private string _speedKey = "1";
+    private Dictionary<string, string> _previousValues = new();
+    private string _currentNote = string.Empty;
+    /// <summary>
+    /// Stable colour per source-id. Generated once when the document
+    /// loads; mirrors <c>SchematicViewer</c>'s port-colour scheme so the
+    /// visual language is identical across the app (each unique signal
+    /// gets a distinct HSL hue, distributed evenly around the wheel).
+    /// </summary>
+    private Dictionary<string, string> _colors = new();
+
+    /// <summary>
+    /// Auto-router lane index per wire. Filled by <see cref="RecomputeLanes"/>
+    /// when <c>Doc.StaggerLanes</c> is true; empty otherwise. Each wire's
+    /// elbow column is pulled inward by <c>lane * LaneSpacing</c> so wires
+    /// converging at the same destination column drop in distinct verticals
+    /// instead of stacking on top of each other.
+    /// </summary>
+    private Dictionary<GateWire, int> _lanes = new();
+    private const double LaneSpacing = 6.0;
+
+    public int CurrentIndex => _currentIndex;
+    private int TotalSteps => Math.Max(Doc?.Steps.Count ?? 0, 1);
+    private bool IsAtEnd => (Doc?.Steps.Count ?? 0) == 0 || _currentIndex >= (Doc!.Steps.Count - 1);
+
+    private int ProgressPct =>
+        (Doc?.Steps.Count ?? 0) <= 1
+            ? 100
+            : (int)Math.Round(100.0 * _currentIndex / (Doc!.Steps.Count - 1));
+
+    private string StepLabel =>
+        (Doc?.Steps.Count ?? 0) == 0 ? string.Empty : $"t = {CurrentStep.T}";
+
+    private GateStep CurrentStep
+    {
+        get
+        {
+            if (Doc == null || Doc.Steps.Count == 0) return new GateStep();
+            var i = Math.Clamp(_currentIndex, 0, Doc.Steps.Count - 1);
+            return Doc.Steps[i];
+        }
+    }
+
+    protected override Task OnParametersSetAsync()
+    {
+        if (!ReferenceEquals(Doc, _lastLoaded))
+        {
+            PauseInternal();
+            _lastLoaded = Doc;
+            _currentIndex = 0;
+            _previousValues = new();
+            RegenerateColors();
+            RecomputeLanes();
+            UpdateCurrentNote();
+        }
+        else
+        {
+            UpdateCurrentNote();
+        }
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Walks the document and assigns each unique source-id its own
+    /// stable HSL hue. Order follows wire-declaration order, then any
+    /// node id not yet covered (so output nodes still get a chip colour
+    /// even when no wire lists them as a source). The starting hue is
+    /// offset 18° so the first signal lands on a warm orange instead of
+    /// pure red — matches the schematic-viewer convention.
+    /// </summary>
+    private void RegenerateColors()
+    {
+        _colors = new(StringComparer.OrdinalIgnoreCase);
+        if (Doc == null) return;
+
+        var order = new List<string>();
+        void Add(string id)
+        {
+            if (string.IsNullOrEmpty(id)) return;
+            if (_colors.ContainsKey(id)) return;
+            _colors[id] = string.Empty; // placeholder so the contains-check works
+            order.Add(id);
+        }
+
+        foreach (var w in Doc.Wires) Add(w.Source);
+        foreach (var n in Doc.Nodes) Add(n.Id);
+
+        var n_ = Math.Max(1, order.Count);
+        for (int i = 0; i < order.Count; i++)
+        {
+            double hue = (18 + i * 360.0 / n_) % 360;
+            _colors[order[i]] =
+                $"hsl({hue.ToString("0", System.Globalization.CultureInfo.InvariantCulture)} 70% 55%)";
+        }
+    }
+
+    private string ColorOf(string id) =>
+        _colors.TryGetValue(id, out var c) && !string.IsNullOrEmpty(c) ? c : "var(--kmila-accent, #4f8cff)";
+
+    /// <summary>
+    /// Groups auto-routed wires by destination column (rounded to the nearest
+    /// 4px) and assigns each one a lane index within its group. Only runs
+    /// when <c>Doc.StaggerLanes</c> opts in — otherwise <see cref="_lanes"/>
+    /// stays empty and every wire falls back to lane 0 (original geometry).
+    /// Groups with a single member also get no lane assignment so the typical
+    /// "one wire per pin" case stays untouched.
+    /// </summary>
+    private void RecomputeLanes()
+    {
+        _lanes = new Dictionary<GateWire, int>();
+        if (Doc == null || !Doc.StaggerLanes) return;
+
+        var byDestX = new Dictionary<int, List<GateWire>>();
+        foreach (var w in Doc.Wires)
+        {
+            if (!string.IsNullOrEmpty(w.Path)) continue; // manual path skips the router
+            var dest = ResolveEndpoint(w.To);
+            if (dest == null) continue;
+            var key = (int)Math.Round(dest.Value.X / 4.0) * 4;
+            if (!byDestX.TryGetValue(key, out var list))
+            {
+                list = new List<GateWire>();
+                byDestX[key] = list;
+            }
+            list.Add(w);
+        }
+        foreach (var kv in byDestX)
+        {
+            if (kv.Value.Count < 2) continue;
+            for (int i = 0; i < kv.Value.Count; i++) _lanes[kv.Value[i]] = i;
+        }
+    }
+
+    private int LaneOf(GateWire w) => _lanes.TryGetValue(w, out var l) ? l : 0;
+
+    // ─── Auto-router ─────────────────────────────────────────────────────
+    // Resolves "nodeId" / "nodeId.port" strings to absolute SVG coords and
+    // emits a two-elbow L-shape that lands 20px before the destination.
+    // Existing manual `path` entries still win — this only fires when the
+    // wire JSON declares from/to instead.
+
+    private (double X, double Y)? ResolveEndpoint(string spec)
+    {
+        if (string.IsNullOrEmpty(spec) || Doc == null) return null;
+        var dot = spec.IndexOf('.');
+        var id = dot < 0 ? spec : spec.Substring(0, dot);
+        var port = dot < 0 ? string.Empty : spec.Substring(dot + 1);
+        var node = Doc.Nodes.FirstOrDefault(n =>
+            string.Equals(n.Id, id, StringComparison.OrdinalIgnoreCase));
+        if (node == null) return null;
+        var offset = PortOffset(node, port);
+        return (node.X + offset.dx, node.Y + offset.dy);
+    }
+
+    /// <summary>
+    /// Resolves <c>"nodeId.port"</c> against the document. Uses each kind's
+    /// declared pin geometry; for the configurable kinds (n-input gates,
+    /// mux, block) the offsets depend on the node's <c>inputCount</c> /
+    /// <c>pins</c> / explicit <c>width</c> + <c>height</c>.
+    /// </summary>
+    private (double dx, double dy) PortOffset(GateNode node, string port)
+    {
+        var k = (node.Kind ?? string.Empty).ToLowerInvariant();
+        var p = (port ?? string.Empty).ToLowerInvariant();
+
+        // Input/output terminals: the dot IS the connection point.
+        if (k == "input" || k == "output") return (0, 0);
+
+        switch (k)
+        {
+            case "and": case "or": case "xor":
+            case "nand": case "nor": case "xnor":
+            {
+                var n = Math.Clamp(node.InputCount <= 0 ? 2 : node.InputCount, 2, 6);
+                var bh = BodyHeight(node);
+                var outX = (k == "nand" || k == "nor" || k == "xnor") ? 66 : 60;
+                if (p == "out" || string.IsNullOrEmpty(p)) return (outX, bh / 2.0);
+
+                if (p.StartsWith("in"))
+                {
+                    var ix = 0;
+                    if (p.Length > 2 && int.TryParse(p.Substring(2), out var parsed))
+                        ix = parsed - 1;
+                    ix = Math.Clamp(ix, 0, n - 1);
+                    var span = bh - 36;
+                    var step = n <= 1 ? 0 : span / (n - 1.0);
+                    return (0, 18 + ix * step);
+                }
+                return (outX, bh / 2.0);
+            }
+            case "not":
+                return p switch
+                {
+                    "in" => (0, 28),
+                    _    => (66, 28),
+                };
+            case "buffer":
+                return p switch
+                {
+                    "in" => (0, 28),
+                    _    => (56, 28),
+                };
+            case "tristate":
+                return p switch
+                {
+                    "in" => (0, 28),
+                    "en" => (28, 0),
+                    _    => (56, 28),
+                };
+            case "dff":
+                return p switch
+                {
+                    "d"     => (0,  22),
+                    "clk"   => (0,  58),
+                    "reset" => (40, 0),
+                    "q"     => (80, 22),
+                    "qbar"  => (80, 58),
+                    _       => (80, 22),
+                };
+            case "latch":
+                return p switch
+                {
+                    "d"    => (0,  22),
+                    "en"   => (0,  58),
+                    "q"    => (80, 22),
+                    "qbar" => (80, 58),
+                    _      => (80, 22),
+                };
+            case "mux":
+            {
+                var n = Math.Clamp(node.DataInputs <= 0 ? 2 : node.DataInputs, 2, 8);
+                var bh = BodyHeight(node);
+                if (p == "out" || string.IsNullOrEmpty(p)) return (60, bh / 2.0);
+                if (p == "sel") return (30, bh);
+                if (p.StartsWith("i"))
+                {
+                    var ix = 0;
+                    if (p.Length > 1 && int.TryParse(p.Substring(1), out var parsed))
+                        ix = parsed;
+                    ix = Math.Clamp(ix, 0, n - 1);
+                    // Pins evenly spaced on the slanted-but-treated-as-vertical
+                    // left edge; staying at x=0 keeps wires clean even though
+                    // the body chamfers in toward the top/bottom.
+                    var step = (bh - 36) / Math.Max(1, n - 1);
+                    return (0, 18 + ix * step);
+                }
+                return (60, bh / 2.0);
+            }
+            case "adder":
+            case "register":
+            case "block":
+            {
+                var bw = BodyWidth(node);
+                var bh = BodyHeight(node);
+                // Custom pin? Look it up.
+                var pin = node.Pins.FirstOrDefault(pp =>
+                    string.Equals(pp.Name, port, StringComparison.OrdinalIgnoreCase));
+                if (pin != null)
+                {
+                    var off = Math.Clamp(pin.Offset, 0.0, 1.0);
+                    return (pin.Side?.ToLowerInvariant() ?? "left") switch
+                    {
+                        "right"  => (bw, bh * off),
+                        "top"    => (bw * off, 0),
+                        "bottom" => (bw * off, bh),
+                        _        => (0, bh * off),
+                    };
+                }
+                // Built-in fallbacks for adder/register so authors don't have
+                // to declare every pin manually.
+                if (k == "adder")
+                {
+                    return p switch
+                    {
+                        "a"    => (0,  bh * 0.30),
+                        "b"    => (0,  bh * 0.70),
+                        "cin"  => (bw * 0.5, bh),
+                        "sum"  => (bw, bh * 0.40),
+                        "cout" => (bw, bh * 0.75),
+                        _      => (bw, bh / 2.0),
+                    };
+                }
+                if (k == "register")
+                {
+                    return p switch
+                    {
+                        "clk"   => (bw * 0.5, bh),
+                        "reset" => (bw * 0.5, 0),
+                        "d"     => (0,  bh / 2.0),
+                        "q"     => (bw, bh / 2.0),
+                        _       => (bw, bh / 2.0),
+                    };
+                }
+                // Plain block: default to centre-right output if no pin matched.
+                return (bw, bh / 2.0);
+            }
+            default:
+                return (30, 20);
+        }
+    }
+
+    /// <summary>
+    /// Per-kind body height in viewBox units. Honours node's explicit
+    /// <c>height</c> when set; falls back to the per-kind default that
+    /// matches the SVG path geometry in <see cref="RenderShape"/>.
+    /// </summary>
+    private double BodyHeight(GateNode n)
+    {
+        if (n.Height > 0) return n.Height;
+        var k = (n.Kind ?? string.Empty).ToLowerInvariant();
+        switch (k)
+        {
+            case "and": case "or": case "xor":
+            case "nand": case "nor": case "xnor":
+            {
+                var ic = Math.Clamp(n.InputCount <= 0 ? 2 : n.InputCount, 2, 6);
+                return ic == 2 ? 56 : 32 + ic * 16;
+            }
+            case "not": case "buffer": case "tristate": return 56;
+            case "dff": case "latch":   return 80;
+            case "mux":
+            {
+                var di = Math.Clamp(n.DataInputs <= 0 ? 2 : n.DataInputs, 2, 8);
+                return 36 + di * 22;
+            }
+            case "adder":    return 80;
+            case "register": return 100;
+            case "block":    return 60;
+            default:         return 40;
+        }
+    }
+
+    private double BodyWidth(GateNode n)
+    {
+        if (n.Width > 0) return n.Width;
+        var k = (n.Kind ?? string.Empty).ToLowerInvariant();
+        return k switch
+        {
+            "block"    => 100,
+            "adder"    => 80,
+            "register" => 80,
+            "mux"      => 60,
+            _          => 60,
+        };
+    }
+
+    private string AutoPath(string from, string to, int lane = 0)
+    {
+        var a = ResolveEndpoint(from);
+        var b = ResolveEndpoint(to);
+        if (a == null || b == null) return string.Empty;
+        var (x1, y1) = a.Value;
+        var (x2, y2) = b.Value;
+
+        // Degenerate cases: straight line.
+        if (Math.Abs(x1 - x2) < 0.5 || Math.Abs(y1 - y2) < 0.5)
+            return $"M{Fmt(x1)},{Fmt(y1)} L{Fmt(x2)},{Fmt(y2)}";
+
+        // Pick an elbow column. Stop 20px before the destination so the wire
+        // approaches the gate body horizontally. If the destination is left
+        // of (or close to) the source, fall back to the midpoint to avoid
+        // backtracking visuals. `lane` (assigned by RecomputeLanes) shifts the
+        // column inward so wires landing at the same dest column drop in
+        // distinct vertical channels instead of stacking.
+        var laneOffset = lane * LaneSpacing;
+        var elbow = x2 - 20 - laneOffset;
+        if (elbow <= x1 + 4) elbow = (x1 + x2) / 2.0 - laneOffset;
+
+        return $"M{Fmt(x1)},{Fmt(y1)} L{Fmt(elbow)},{Fmt(y1)} L{Fmt(elbow)},{Fmt(y2)} L{Fmt(x2)},{Fmt(y2)}";
+    }
+
+    /// <summary>
+    /// Emits the set of junction points: every author-provided
+    /// <see cref="GateAnimationDoc.Junctions"/> entry, plus an auto-detected
+    /// dot at the resolved origin of any <c>from</c>-spec shared by 2+ wires
+    /// (a fan-out branch). Auto-detection works against the auto-router's
+    /// endpoint resolution; trunk-and-stub manual paths need their dots
+    /// declared in <c>junctions</c>.
+    /// </summary>
+    private IEnumerable<(double x, double y, string source)> JunctionDots()
+    {
+        if (Doc == null) yield break;
+
+        foreach (var j in Doc.Junctions)
+            yield return (j.X, j.Y, j.Source);
+
+        var fromCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var w in Doc.Wires)
+        {
+            if (string.IsNullOrEmpty(w.From)) continue;
+            fromCounts.TryGetValue(w.From, out var c);
+            fromCounts[w.From] = c + 1;
+        }
+        foreach (var kv in fromCounts)
+        {
+            if (kv.Value < 2) continue;
+            var pt = ResolveEndpoint(kv.Key);
+            if (pt == null) continue;
+            var src = Doc.Wires.First(w =>
+                string.Equals(w.From, kv.Key, StringComparison.OrdinalIgnoreCase)).Source;
+            yield return (pt.Value.X, pt.Value.Y, src);
+        }
+    }
+
+    /// <summary>
+    /// Renders a thin "timing strip" of a single signal across every step in
+    /// the document, with a vertical cursor at the current step. Anchored
+    /// pedagogically to "rising edge" — the cursor sitting on a 0→1
+    /// transition is the visual moment a DFF captures its input.
+    /// </summary>
+    private RenderFragment RenderTimingStrip(string signal) => __builder =>
+    {
+        if (Doc == null || Doc.Steps.Count == 0) return;
+        var n = Doc.Steps.Count;
+        var stepW = 50;
+        var labelW = 56;
+        var totalW = labelW + stepW * n;
+        var hiY = 6;
+        var loY = 28;
+
+        __builder.OpenElement(0, "svg");
+        __builder.AddAttribute(1, "viewBox", $"0 0 {totalW} 36");
+        __builder.AddAttribute(2, "preserveAspectRatio", "xMidYMid meet");
+        __builder.AddAttribute(3, "class", "kmila-gate-timing__svg");
+        __builder.AddAttribute(4, "role", "img");
+        __builder.AddAttribute(5, "aria-label", $"Timing diagram for {signal}");
+
+        // Signal label on the left.
+        __builder.OpenElement(10, "text");
+        __builder.AddAttribute(11, "x", "6");
+        __builder.AddAttribute(12, "y", "22");
+        __builder.AddAttribute(13, "class", "kmila-gate-timing__label");
+        __builder.AddContent(14, signal);
+        __builder.CloseElement();
+
+        // Build the waveform path. For each step: horizontal segment at hiY
+        // or loY; transitions emit a vertical riser between segments.
+        var sb = new System.Text.StringBuilder();
+        double prevY = -1;
+        for (int i = 0; i < n; i++)
+        {
+            var v = Doc.Steps[i].Values.TryGetValue(signal, out var s) ? s : "0";
+            var y = IsHot(v) ? hiY : loY;
+            var x0 = labelW + i * stepW;
+            var x1 = labelW + (i + 1) * stepW;
+            if (i == 0)
+                sb.Append($"M{x0},{Fmt(y)} L{Fmt(x1)},{Fmt(y)}");
+            else
+            {
+                if (Math.Abs(y - prevY) > 0.5)
+                    sb.Append($" L{Fmt(x0)},{Fmt(prevY)} L{Fmt(x0)},{Fmt(y)}");
+                sb.Append($" L{Fmt(x1)},{Fmt(y)}");
+            }
+            prevY = y;
+        }
+        __builder.OpenElement(20, "path");
+        __builder.AddAttribute(21, "d", sb.ToString());
+        __builder.AddAttribute(22, "class", "kmila-gate-timing__wave");
+        __builder.AddAttribute(23, "fill", "none");
+        __builder.CloseElement();
+
+        // Vertical cursor at the current step.
+        var cursorX = labelW + _currentIndex * stepW + stepW / 2.0;
+        __builder.OpenElement(30, "line");
+        __builder.AddAttribute(31, "x1", Fmt(cursorX));
+        __builder.AddAttribute(32, "y1", "2");
+        __builder.AddAttribute(33, "x2", Fmt(cursorX));
+        __builder.AddAttribute(34, "y2", "34");
+        __builder.AddAttribute(35, "class", "kmila-gate-timing__cursor");
+        __builder.CloseElement();
+
+        __builder.CloseElement();
+    };
+
+    private string ValueOf(string id) =>
+        CurrentStep.Values.TryGetValue(id, out var v) ? v : string.Empty;
+
+    /// <summary>
+    /// True when the value should render "hot" (carry the source colour
+    /// + thicker stroke). Single-bit: <c>1</c> or <c>H</c>. Multi-bit
+    /// vectors (e.g. <c>"0101"</c>): any non-zero bit. Special values
+    /// <c>Z</c>, <c>X</c>, <c>U</c>, <c>-</c> are never hot — they don't
+    /// drive a logic 1.
+    /// </summary>
+    private bool IsHot(string value)
+    {
+        if (string.IsNullOrEmpty(value)) return false;
+        if (value.Length == 1)
+            return value == "1" || string.Equals(value, "H", StringComparison.OrdinalIgnoreCase);
+        // Multi-character: vectors (binary string) or short tokens like "Z".
+        if (string.Equals(value, "Z", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "X", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "U", StringComparison.OrdinalIgnoreCase) ||
+            value == "-")
+            return false;
+        // Treat as a vector — any '1' or 'H' counts as carrying logic.
+        foreach (var c in value)
+        {
+            if (c == '1' || c == 'H' || c == 'h') return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// A node is "active" for visual pulsing when the author marked it in
+    /// <c>step.active</c> AND its current output value is hot (logic 1).
+    /// Drops gates that just fell 1→0: their output net is now cold, no hot
+    /// wires touch them, but the pulse outline implies signal flow — students
+    /// who associate the pulse with "this is firing" get confused (decoder
+    /// step 4: g_and2 was pulsing even though it stopped firing). Authors who
+    /// want falling events surfaced should rely on the lesson note or the
+    /// value-chip transition, not the pulse outline.
+    /// <para>
+    /// Manual-path demos whose wires don't carry a <c>from</c> spec can't be
+    /// resolved by <see cref="GateOutputValue"/> — the resolver returns an
+    /// empty string. We fall back to the pre-filter "pulse whenever in
+    /// step.active" semantic for those cases so the gate highlighting stays
+    /// intact. The filter only narrows where we have enough graph info.
+    /// </para>
+    /// </summary>
+    private bool IsActive(string id)
+    {
+        if (CurrentStep.Active == null) return false;
+        if (!CurrentStep.Active.Contains(id, StringComparer.OrdinalIgnoreCase)) return false;
+        var value = GateOutputValue(id);
+        if (string.IsNullOrEmpty(value)) return true;
+        return IsHot(value);
+    }
+
+    /// <summary>
+    /// Resolves a gate's current output value. Tries <c>step.values[nodeId]</c>
+    /// directly first; if that's empty (the typical case — authors key values
+    /// by the wire's <c>source</c> id like <c>"y0"</c>, not the gate id like
+    /// <c>"g_and0"</c>) it scans wires whose <c>from</c> originates at this
+    /// node and uses the wire's source as the value-table key. Returns the
+    /// empty string when nothing matches — <see cref="IsHot"/> treats that as
+    /// cold, which is the safe default.
+    /// </summary>
+    private string GateOutputValue(string nodeId)
+    {
+        var direct = ValueOf(nodeId);
+        if (!string.IsNullOrEmpty(direct)) return direct;
+        if (Doc == null) return string.Empty;
+        foreach (var w in Doc.Wires)
+        {
+            if (string.IsNullOrEmpty(w.From)) continue;
+            var fromNode = StripPort(w.From);
+            if (string.Equals(fromNode, nodeId, StringComparison.OrdinalIgnoreCase))
+                return ValueOf(w.Source);
+        }
+        return string.Empty;
+    }
+
+    private static string StripPort(string spec)
+    {
+        if (string.IsNullOrEmpty(spec)) return spec;
+        var dot = spec.IndexOf('.');
+        return dot < 0 ? spec : spec.Substring(0, dot);
+    }
+
+    /// <summary>
+    /// Gates a wire's hot state on its optional <c>activeFor</c> set. Empty
+    /// (the default) → unconditional pass: the wire's hotness stays purely
+    /// source-driven (back-compat). Non-empty → the wire is allowed to glow
+    /// only when at least one listed node id is currently active via
+    /// <see cref="IsActive"/>, which means the target gate is both in
+    /// <c>step.active</c> AND outputting logic 1. This stops a wire from
+    /// glowing into a gate that just stopped firing.
+    /// </summary>
+    private bool WireGateOpen(GateWire w)
+    {
+        if (w.ActiveFor == null || w.ActiveFor.Count == 0) return true;
+        foreach (var id in w.ActiveFor)
+        {
+            if (IsActive(id)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>True iff the wire should paint with its source colour this step.</summary>
+    private bool IsWireHot(GateWire w) => IsHot(ValueOf(w.Source)) && WireGateOpen(w);
+
+    /// <summary>
+    /// Spotlight liveness test: a node is "live" this step if (a) it's a
+    /// terminal — those always stay visible as layout anchors — or (b) its
+    /// output is hot, or (c) any incoming wire is hot. Drives the
+    /// <c>kmila-gate-node--dimmed</c> class when <c>Doc.Spotlight</c> is on.
+    /// </summary>
+    private bool IsGateLive(GateNode n)
+    {
+        var kind = (n.Kind ?? string.Empty).ToLowerInvariant();
+        if (kind == "input" || kind == "output") return true;
+        if (IsHot(GateOutputValue(n.Id))) return true;
+        if (Doc == null) return false;
+        foreach (var w in Doc.Wires)
+        {
+            if (!IsWireHot(w)) continue;
+            var toNode = StripPort(w.To);
+            if (string.Equals(toNode, n.Id, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Yields wires in render order: cold first, hot last. SVG paints in
+    /// document order, so emitting hot wires after cold ones guarantees the
+    /// hot stroke wins on any segment two wires share (typical fan-out from
+    /// the auto-router). Inside each band the original JSON order is kept so
+    /// authors can still control overpaint between two hot wires.
+    /// </summary>
+    private IEnumerable<GateWire> OrderedWires()
+    {
+        if (Doc == null) yield break;
+        foreach (var w in Doc.Wires) if (!IsWireHot(w)) yield return w;
+        foreach (var w in Doc.Wires) if (IsWireHot(w))  yield return w;
+    }
+
+    private bool HasChanged(string id, string value)
+    {
+        if (!_previousValues.TryGetValue(id, out var prev)) return false;
+        return !string.Equals(prev, value, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Render order for the side signal table. Honours
+    /// <see cref="GateAnimationDoc.SignalOrder"/> when set; otherwise picks
+    /// every input + output node in declaration order so internal gate
+    /// outputs aren't noisily duplicated next to their downstream nets.
+    /// </summary>
+    private IEnumerable<string> OrderedSignalIds()
+    {
+        if (Doc == null) yield break;
+        if (Doc.SignalOrder != null && Doc.SignalOrder.Count > 0)
+        {
+            foreach (var s in Doc.SignalOrder) yield return s;
+            yield break;
+        }
+        foreach (var n in Doc.Nodes)
+        {
+            if (string.Equals(n.Kind, "input", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(n.Kind, "output", StringComparison.OrdinalIgnoreCase))
+            {
+                yield return n.Id;
+            }
+        }
+    }
+
+    private string LabelOf(string id)
+    {
+        var n = Doc?.Nodes.FirstOrDefault(x =>
+            string.Equals(x.Id, id, StringComparison.OrdinalIgnoreCase));
+        return string.IsNullOrEmpty(n?.Label) ? id : n.Label;
+    }
+
+    private void UpdateCurrentNote()
+    {
+        var notes = CurrentStep.Note;
+        _currentNote = ConceptCatalog.LocalizeWithFallbackWarning(notes, Lang, string.Empty);
+    }
+
+    // ─── Transport ───────────────────────────────────────────────────────
+    private void OnPlay()
+    {
+        if (_playing || Doc == null || Doc.Steps.Count == 0) return;
+        if (IsAtEnd) _currentIndex = 0;
+
+        SnapshotValues();
+        _playing = true;
+        _playCts = new CancellationTokenSource();
+        _ = PlayLoopAsync(_playCts.Token);
+    }
+
+    private void OnPause() => PauseInternal();
+
+    private void PauseInternal()
+    {
+        var cts = _playCts;
+        _playCts = null;
+        _playing = false;
+        if (cts == null) return;
+        try { cts.Cancel(); } catch { }
+        cts.Dispose();
+    }
+
+    private void OnRestart()
+    {
+        PauseInternal();
+        SnapshotValues();
+        _currentIndex = 0;
+        UpdateCurrentNote();
+    }
+
+    private void OnStepForward()
+    {
+        if (Doc == null || Doc.Steps.Count == 0) return;
+        SnapshotValues();
+        if (_currentIndex < Doc.Steps.Count - 1)
+        {
+            _currentIndex++;
+            UpdateCurrentNote();
+        }
+    }
+
+    private void OnStepBack()
+    {
+        if (Doc == null || Doc.Steps.Count == 0) return;
+        SnapshotValues();
+        if (_currentIndex > 0)
+        {
+            _currentIndex--;
+            UpdateCurrentNote();
+        }
+    }
+
+    private void OnSpeedChanged(ChangeEventArgs e)
+    {
+        _speedKey = e.Value?.ToString() ?? "1";
+        if (double.TryParse(_speedKey, System.Globalization.NumberStyles.Any,
+                            System.Globalization.CultureInfo.InvariantCulture, out var x))
+        {
+            _speed = x;
+        }
+    }
+
+    private async Task PlayLoopAsync(CancellationToken token)
+    {
+        try
+        {
+            while (!token.IsCancellationRequested && Doc != null && _currentIndex < Doc.Steps.Count - 1)
+            {
+                var delay = Math.Max(120, (int)(BaseStepMs / Math.Max(0.1, _speed)));
+                try { await Task.Delay(delay, token); }
+                catch (TaskCanceledException) { return; }
+                if (token.IsCancellationRequested) return;
+
+                SnapshotValues();
+                _currentIndex++;
+                UpdateCurrentNote();
+                await InvokeAsync(StateHasChanged);
+            }
+
+            if (!token.IsCancellationRequested)
+            {
+                _playing = false;
+                _playCts = null;
+                await InvokeAsync(StateHasChanged);
+                if (OnPlaybackComplete.HasDelegate)
+                {
+                    await OnPlaybackComplete.InvokeAsync();
+                }
+            }
+        }
+        catch
+        {
+            // Tolerated — playback aborted mid-frame (component disposed).
+        }
+    }
+
+    private void SnapshotValues()
+    {
+        _previousValues = new Dictionary<string, string>(CurrentStep.Values);
+    }
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case " ":
+            case "Spacebar":
+                if (_playing) OnPause(); else OnPlay();
+                break;
+            case "ArrowRight": OnStepForward(); break;
+            case "ArrowLeft":  OnStepBack();    break;
+            case "r":
+            case "R":          OnRestart();     break;
+        }
+    }
+
+    public void Dispose() => PauseInternal();
+
+    // ─── SVG primitives ──────────────────────────────────────────────────
+    // Each shape draws inside an 80×56 box anchored at (0,0); the parent
+    // <g> handles the translate. Output pin sits at x=80, y=28 — wire
+    // authors should land there for clean connections. Input pins sit at
+    // x=0, y=18 (in1) and y=38 (in2) for two-input gates; single-input
+    // (NOT, BUFFER) uses y=28.
+
+    private static string Fmt(double v) => v.ToString("0.##",
+        System.Globalization.CultureInfo.InvariantCulture);
+
+    private RenderFragment RenderShape(GateNode n) => __builder =>
+    {
+        var kind = (n.Kind ?? string.Empty).ToLowerInvariant();
+        switch (kind)
+        {
+            case "input":
+                __builder.OpenElement(0, "circle");
+                __builder.AddAttribute(1, "cx", "0");
+                __builder.AddAttribute(2, "cy", "0");
+                __builder.AddAttribute(3, "r", "10");
+                __builder.AddAttribute(4, "class", "kmila-gate-terminal kmila-gate-terminal--input");
+                __builder.CloseElement();
+                break;
+            case "output":
+                __builder.OpenElement(10, "circle");
+                __builder.AddAttribute(11, "cx", "0");
+                __builder.AddAttribute(12, "cy", "0");
+                __builder.AddAttribute(13, "r", "10");
+                __builder.AddAttribute(14, "class", "kmila-gate-terminal kmila-gate-terminal--output");
+                __builder.CloseElement();
+                break;
+            case "and":
+            case "nand":
+            {
+                var bh = BodyHeight(n);
+                var r  = bh / 2.0;
+                var straightX = 60 - r;       // straight section ends here, arc takes over
+                __builder.OpenElement(20, "path");
+                __builder.AddAttribute(21, "d",
+                    $"M0,0 H{Fmt(straightX)} A{Fmt(r)},{Fmt(r)} 0 0 1 {Fmt(straightX)},{Fmt(bh)} H0 Z");
+                __builder.AddAttribute(22, "class", "kmila-gate-body");
+                __builder.CloseElement();
+                if (kind == "nand") AddBubble(__builder, 25, 62, r);
+                break;
+            }
+            case "or":
+            case "nor":
+            {
+                var bh = BodyHeight(n);
+                var ctrl = bh / 2.0;
+                __builder.OpenElement(30, "path");
+                __builder.AddAttribute(31, "d",
+                    $"M0,0 Q16,{Fmt(ctrl)} 0,{Fmt(bh)} Q34,{Fmt(bh)} 60,{Fmt(ctrl)} Q34,0 0,0 Z");
+                __builder.AddAttribute(32, "class", "kmila-gate-body");
+                __builder.CloseElement();
+                if (kind == "nor") AddBubble(__builder, 35, 62, ctrl);
+                break;
+            }
+            case "xor":
+            case "xnor":
+            {
+                var bh = BodyHeight(n);
+                var ctrl = bh / 2.0;
+                __builder.OpenElement(40, "path");
+                __builder.AddAttribute(41, "d",
+                    $"M-8,0 Q8,{Fmt(ctrl)} -8,{Fmt(bh)}");
+                __builder.AddAttribute(42, "class", "kmila-gate-accent");
+                __builder.AddAttribute(43, "fill", "none");
+                __builder.CloseElement();
+                __builder.OpenElement(44, "path");
+                __builder.AddAttribute(45, "d",
+                    $"M0,0 Q16,{Fmt(ctrl)} 0,{Fmt(bh)} Q34,{Fmt(bh)} 60,{Fmt(ctrl)} Q34,0 0,0 Z");
+                __builder.AddAttribute(46, "class", "kmila-gate-body");
+                __builder.CloseElement();
+                if (kind == "xnor") AddBubble(__builder, 47, 62, ctrl);
+                break;
+            }
+            case "not":
+            case "buffer":
+                __builder.OpenElement(50, "path");
+                __builder.AddAttribute(51, "d", "M0,0 L0,56 L56,28 Z");
+                __builder.AddAttribute(52, "class", "kmila-gate-body");
+                __builder.CloseElement();
+                if (kind == "not") AddBubble(__builder, 55, 62, 28);
+                break;
+            case "tristate":
+                __builder.OpenElement(70, "path");
+                __builder.AddAttribute(71, "d", "M0,0 L0,56 L56,28 Z");
+                __builder.AddAttribute(72, "class", "kmila-gate-body");
+                __builder.CloseElement();
+                // EN stub from the top edge into the body so authors don't
+                // need to author a manual wire bend to land on the triangle's
+                // sloped side. Stub stays at the EN pin's x=28 throughout.
+                __builder.OpenElement(73, "line");
+                __builder.AddAttribute(74, "x1", "28");
+                __builder.AddAttribute(75, "y1", "0");
+                __builder.AddAttribute(76, "x2", "28");
+                __builder.AddAttribute(77, "y2", "14");
+                __builder.AddAttribute(78, "class", "kmila-gate-accent");
+                __builder.CloseElement();
+                AddPinLabel(__builder, 80, "EN", 34, 6);
+                break;
+            case "dff":
+            case "latch":
+                __builder.OpenElement(90, "rect");
+                __builder.AddAttribute(91, "x", "0");
+                __builder.AddAttribute(92, "y", "0");
+                __builder.AddAttribute(93, "width", "80");
+                __builder.AddAttribute(94, "height", "80");
+                __builder.AddAttribute(95, "rx", "4");
+                __builder.AddAttribute(96, "class", "kmila-gate-body");
+                __builder.CloseElement();
+                // Clock-edge wedge — the distinguishing feature of an
+                // edge-triggered DFF vs a level-sensitive latch. The
+                // ">"-shape sits inside the body, anchored at the CLK pin.
+                if (kind == "dff")
+                {
+                    __builder.OpenElement(97, "path");
+                    __builder.AddAttribute(98, "d", "M0,52 L8,58 L0,64");
+                    __builder.AddAttribute(99, "class", "kmila-gate-accent");
+                    __builder.AddAttribute(100, "fill", "none");
+                    __builder.CloseElement();
+                }
+                AddPinLabel(__builder, 110, "D",   8,   26);
+                AddPinLabel(__builder, 113, kind == "dff" ? "CLK" : "EN", 12, 64);
+                AddPinLabel(__builder, 116, "R",   40,  14);
+                AddPinLabel(__builder, 119, "Q",   72,  26);
+                break;
+            case "mux":
+            {
+                var bh = BodyHeight(n);
+                // Trapezoid: full-width top/bottom chamfered 12px so the body
+                // looks like a classic MUX silhouette.
+                __builder.OpenElement(130, "path");
+                __builder.AddAttribute(131, "d",
+                    $"M0,0 L60,12 L60,{Fmt(bh - 12)} L0,{Fmt(bh)} Z");
+                __builder.AddAttribute(132, "class", "kmila-gate-body");
+                __builder.CloseElement();
+                AddPinLabel(__builder, 140, "sel", 22, bh - 4);
+                // Number the data inputs i0, i1, … inside the body for clarity.
+                var di = Math.Clamp(n.DataInputs <= 0 ? 2 : n.DataInputs, 2, 8);
+                var step = (bh - 36) / Math.Max(1, di - 1);
+                for (var ix = 0; ix < di; ix++)
+                {
+                    AddPinLabel(__builder, 150 + ix * 5, $"i{ix}", 8, 18 + ix * step + 4);
+                }
+                break;
+            }
+            case "block":
+            {
+                var bw = BodyWidth(n);
+                var bh = BodyHeight(n);
+                __builder.OpenElement(170, "rect");
+                __builder.AddAttribute(171, "x", "0");
+                __builder.AddAttribute(172, "y", "0");
+                __builder.AddAttribute(173, "width", Fmt(bw));
+                __builder.AddAttribute(174, "height", Fmt(bh));
+                __builder.AddAttribute(175, "rx", "4");
+                __builder.AddAttribute(176, "class", "kmila-gate-body");
+                __builder.CloseElement();
+                break;
+            }
+            case "adder":
+            {
+                var bw = BodyWidth(n);
+                var bh = BodyHeight(n);
+                // Chamfered top corners — gives the adder its classic
+                // "tip on top" silhouette.
+                __builder.OpenElement(180, "path");
+                __builder.AddAttribute(181, "d",
+                    $"M14,0 L{Fmt(bw - 14)},0 L{Fmt(bw)},20 L{Fmt(bw)},{Fmt(bh - 20)} L{Fmt(bw - 14)},{Fmt(bh)} L14,{Fmt(bh)} L0,{Fmt(bh - 20)} L0,20 Z");
+                __builder.AddAttribute(182, "class", "kmila-gate-body");
+                __builder.CloseElement();
+                // Σ glyph at centre.
+                __builder.OpenElement(185, "text");
+                __builder.AddAttribute(186, "x", Fmt(bw / 2.0));
+                __builder.AddAttribute(187, "y", Fmt(bh / 2.0 + 8));
+                __builder.AddAttribute(188, "text-anchor", "middle");
+                __builder.AddAttribute(189, "class", "kmila-gate-label");
+                __builder.AddAttribute(190, "style", "font-size: 22px;");
+                __builder.AddContent(191, "Σ");
+                __builder.CloseElement();
+                break;
+            }
+            case "register":
+            {
+                var bw = BodyWidth(n);
+                var bh = BodyHeight(n);
+                __builder.OpenElement(200, "rect");
+                __builder.AddAttribute(201, "x", "0");
+                __builder.AddAttribute(202, "y", "0");
+                __builder.AddAttribute(203, "width", Fmt(bw));
+                __builder.AddAttribute(204, "height", Fmt(bh));
+                __builder.AddAttribute(205, "rx", "4");
+                __builder.AddAttribute(206, "class", "kmila-gate-body");
+                __builder.CloseElement();
+                // Clock wedge near the bottom-left corner; same shape as the
+                // DFF's, so the visual language stays consistent.
+                __builder.OpenElement(207, "path");
+                __builder.AddAttribute(208, "d", $"M0,{Fmt(bh - 14)} L8,{Fmt(bh - 8)} L0,{Fmt(bh - 2)}");
+                __builder.AddAttribute(209, "class", "kmila-gate-accent");
+                __builder.AddAttribute(210, "fill", "none");
+                __builder.CloseElement();
+                AddPinLabel(__builder, 215, "REG", bw / 2.0 - 10, bh / 2.0 + 4);
+                break;
+            }
+            default:
+                __builder.OpenElement(60, "rect");
+                __builder.AddAttribute(61, "x", "0");
+                __builder.AddAttribute(62, "y", "0");
+                __builder.AddAttribute(63, "width", "60");
+                __builder.AddAttribute(64, "height", "40");
+                __builder.AddAttribute(65, "rx", "4");
+                __builder.AddAttribute(66, "class", "kmila-gate-body");
+                __builder.CloseElement();
+                break;
+        }
+    };
+
+    private static void AddBubble(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder __builder, int seq, double cx, double cy)
+    {
+        __builder.OpenElement(seq, "circle");
+        __builder.AddAttribute(seq + 1, "cx", Fmt(cx));
+        __builder.AddAttribute(seq + 2, "cy", Fmt(cy));
+        __builder.AddAttribute(seq + 3, "r", "4");
+        __builder.AddAttribute(seq + 4, "class", "kmila-gate-bubble");
+        __builder.CloseElement();
+    }
+
+    /// <summary>
+    /// Tiny in-body pin label for DFF/latch/tristate. Plain text in the
+    /// same muted token the gate label uses, but smaller — these are
+    /// schematic-style hints (D, CLK, R, Q, EN), not the gate name.
+    /// </summary>
+    private static void AddPinLabel(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder __builder,
+        int seq, string text, double x, double y)
+    {
+        __builder.OpenElement(seq, "text");
+        __builder.AddAttribute(seq + 1, "x", Fmt(x));
+        __builder.AddAttribute(seq + 2, "y", Fmt(y));
+        __builder.AddAttribute(seq + 3, "class", "kmila-gate-pin-label");
+        __builder.AddContent(seq + 4, text);
+        __builder.CloseElement();
+    }
+
+    private RenderFragment RenderLabel(GateNode n) => __builder =>
+    {
+        var (lx, ly, anchor) = LabelAnchor(n);
+        __builder.OpenElement(70, "text");
+        __builder.AddAttribute(71, "x", Fmt(lx));
+        __builder.AddAttribute(72, "y", Fmt(ly));
+        __builder.AddAttribute(73, "text-anchor", anchor);
+        __builder.AddAttribute(74, "class", "kmila-gate-label");
+        __builder.AddContent(75, n.Label);
+        __builder.CloseElement();
+    };
+
+    /// <summary>
+    /// Position a node's label out of the way of its body. Inputs label to
+    /// the left, outputs to the right, gates centered just above the body.
+    /// </summary>
+    private static (double x, double y, string anchor) LabelAnchor(GateNode n)
+    {
+        var kind = (n.Kind ?? string.Empty).ToLowerInvariant();
+        return kind switch
+        {
+            "input"  => (-16, 4,   "end"),
+            "output" => (0,   -14, "middle"),
+            _        => (30,  -8,  "middle"),
+        };
+    }
+
+    private RenderFragment RenderValueChip(GateNode n, string value, string chipColor) => __builder =>
+    {
+        if (string.IsNullOrEmpty(value)) return;
+        var (cx, cy) = ValueChipAnchor(n);
+        AddChip(__builder, 80, value, chipColor, cx, cy, isVector: value.Length > 1);
+    };
+
+    /// <summary>
+    /// Renders the floating value chip at an absolute viewBox position.
+    /// Used by <see cref="GateChip"/> entries to surface internal-net
+    /// values on the diagram itself (not just in the side table).
+    /// </summary>
+    private RenderFragment RenderInternalChip(GateChip c) => __builder =>
+    {
+        var value = ValueOf(c.Net);
+        if (string.IsNullOrEmpty(value)) return;
+        var hot   = IsHot(value);
+        var color = hot ? ColorOf(c.Net) : string.Empty;
+
+        __builder.OpenElement(220, "g");
+        __builder.AddAttribute(221, "transform", $"translate({Fmt(c.X)},{Fmt(c.Y)})");
+
+        if (!string.IsNullOrEmpty(c.Label))
+        {
+            __builder.OpenElement(222, "text");
+            __builder.AddAttribute(223, "x", "0");
+            __builder.AddAttribute(224, "y", "-12");
+            __builder.AddAttribute(225, "text-anchor", "middle");
+            __builder.AddAttribute(226, "class", "kmila-gate-label");
+            __builder.AddAttribute(227, "style", "font-size: 11px;");
+            __builder.AddContent(228, c.Label);
+            __builder.CloseElement();
+        }
+        AddChip(__builder, 230, value, color, 0, 0, isVector: value.Length > 1);
+        __builder.CloseElement();
+    };
+
+    private static void AddChip(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder __builder,
+        int seq, string value, string chipColor, double cx, double cy, bool isVector)
+    {
+        // Approximate text width — Menlo-ish digit is ~7px at our font size.
+        var width = isVector ? Math.Max(20, 6 + value.Length * 7) : 20;
+        var halfW = width / 2.0;
+
+        __builder.OpenElement(seq, "g");
+        if (Math.Abs(cx) > 0.01 || Math.Abs(cy) > 0.01)
+        {
+            __builder.AddAttribute(seq + 1, "transform", $"translate({Fmt(cx)},{Fmt(cy)})");
+        }
+        var hot = !string.IsNullOrEmpty(chipColor);
+        __builder.AddAttribute(seq + 2, "class",
+            $"kmila-gate-chip {(hot ? "kmila-gate-chip--hot" : "kmila-gate-chip--cold")}");
+
+        __builder.OpenElement(seq + 3, "rect");
+        __builder.AddAttribute(seq + 4, "x", Fmt(-halfW));
+        __builder.AddAttribute(seq + 5, "y", "-9");
+        __builder.AddAttribute(seq + 6, "width", Fmt(width));
+        __builder.AddAttribute(seq + 7, "height", "18");
+        __builder.AddAttribute(seq + 8, "rx", "4");
+        if (hot)
+        {
+            __builder.AddAttribute(seq + 9, "style",
+                $"fill: color-mix(in srgb, {chipColor} 22%, var(--surface-1)); stroke: {chipColor};");
+        }
+        __builder.CloseElement();
+
+        __builder.OpenElement(seq + 10, "text");
+        __builder.AddAttribute(seq + 11, "x", "0");
+        __builder.AddAttribute(seq + 12, "y", "4");
+        __builder.AddAttribute(seq + 13, "text-anchor", "middle");
+        if (hot)
+        {
+            __builder.AddAttribute(seq + 14, "style", $"fill: {chipColor};");
+        }
+        __builder.AddContent(seq + 15, value);
+        __builder.CloseElement();
+
+        __builder.CloseElement();
+    }
+
+    private static (double x, double y) ValueChipAnchor(GateNode n)
+    {
+        var kind = (n.Kind ?? string.Empty).ToLowerInvariant();
+        return kind switch
+        {
+            "input"  => (-32, 0),
+            "output" => (32,  0),
+            _        => (78, -14),
+        };
+    }
+}

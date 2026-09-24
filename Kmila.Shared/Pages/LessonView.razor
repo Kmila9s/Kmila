@@ -1,0 +1,530 @@
+@page "/learn/{ModuleId}/{LessonId}"
+@using Kmila.Shared.Models
+@using Kmila.Shared.Services
+@using Kmila.Shared.Repositories
+@using Microsoft.Extensions.DependencyInjection
+@inject LessonCatalog Catalog
+@inject LessonProgressStore Progress
+@inject Projects Projects
+@inject ProjectFiles ProjectFiles
+@inject ConfigurationService ConfigService
+@inject NavigationManager Nav
+@implements IDisposable
+<PageTitle>@(_lessonTitle ?? Traductor.T("LEARN_TITLE"))</PageTitle>
+
+@*
+    Lesson — Markdown body + optional "Try this sample" CTA + optional
+    fix-the-bug exercise banner + Mark as complete button + prev/next nav.
+
+    Uses BlazorBootstrap's <Markdown> component to render the body. The body
+    Markdown is loaded once per language+lesson via LessonCatalog (cached) and
+    re-fetched when the URL or language changes.
+*@
+
+<section class="lesson-page">
+    <div class="lesson-page__chrome">
+        <a href="/learn" class="lesson-crumb">
+            <Icon Name="IconName.ArrowLeft" />
+            <span>@Traductor.T("LEARN_ALL_LESSONS")</span>
+        </a>
+
+        @if (_module != null && _lesson != null)
+        {
+            <div class="lesson-chip-row">
+                <span class="learn-card__chip learn-card__chip--@LevelClass(_lesson.Level)">@LevelLabel(_lesson.Level)</span>
+                <span class="lesson-chip lesson-chip--kind">
+                    <Icon Name="@KindIcon(_lesson.Kind)" />
+                    @KindLabel(_lesson.Kind)
+                </span>
+                <span class="lesson-chip lesson-chip--time">
+                    <Icon Name="IconName.ClockHistory" />
+                    ~@_lesson.EstimatedMinutes @Traductor.T("LEARN_MINUTES_SHORT")
+                </span>
+                @if (_completed)
+                {
+                    <span class="lesson-chip lesson-chip--done">
+                        <Icon Name="IconName.CheckCircleFill" />
+                        @Traductor.T("LEARN_DONE")
+                    </span>
+                }
+            </div>
+        }
+    </div>
+
+    @if (_loading)
+    {
+        <div class="learn-empty">
+            <Spinner Type="SpinnerType.Border" Color="SpinnerColor.Primary" />
+        </div>
+    }
+    else if (_module == null || _lesson == null)
+    {
+        <div class="learn-empty">
+            <div class="learn-empty__icon"><Icon Name="IconName.FileEarmarkX" /></div>
+            <h2>@Traductor.T("LEARN_LESSON_NOT_FOUND")</h2>
+            <p>@Traductor.T("LEARN_LESSON_NOT_FOUND_BODY")</p>
+            <a class="kmila-btn kmila-btn--accent" href="/learn">@Traductor.T("LEARN_BACK_CATALOG")</a>
+        </div>
+    }
+    else
+    {
+        <article class="lesson-body">
+            @if (_fellBackToEnglish)
+            {
+                @* Lesson doesn't have a translation for the current UI language
+                   — show the English body but make it obvious so the student
+                   isn't confused by the language switch appearing to do nothing. *@
+                <div class="lesson-fallback-banner">
+                    <Icon Name="IconName.Translate" />
+                    <span>@Traductor.T("LEARN_FALLBACK_TO_EN")</span>
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(_body))
+            {
+                @* Rendered via Markdig (UseAdvancedExtensions) — pipe tables,
+                   fenced code blocks, task lists, and ```mermaid diagrams all
+                   render reliably, unlike BlazorBootstrap's regex parser. *@
+                <div class="lesson-markdown">
+                    @MarkdownRenderer.Render(_body)
+                </div>
+            }
+            else
+            {
+                @* Only fires when the body file itself is empty/absent — not
+                   when the (optional) ExecutionPlayer timeline is absent. *@
+                <div class="lesson-missing">
+                    <Icon Name="IconName.ExclamationTriangleFill" />
+                    <span>@Traductor.T("LEARN_LESSON_BODY_MISSING")</span>
+                </div>
+            }
+
+            @if (_timeline != null && _timeline.Steps.Count > 0)
+            {
+                @* Inline ExecutionPlayer — opt-in via Lesson.InlinePlayer in
+                   the manifest. Reuses the Concepts-track component verbatim;
+                   timeline JSON sits alongside the Markdown body at
+                   Learn/{lang}/{moduleId}/{lessonId}.timeline.json. *@
+                <ExecutionPlayer Doc="_timeline" Lang="_lang" />
+            }
+
+            @if (_gates != null && _gates.Steps.Count > 0)
+            {
+                @* Inline GateAnimator — opt-in via Lesson.GateAnimation in
+                   the manifest. Sidecar at
+                   Learn/{lang}/{moduleId}/{lessonId}.gates.json. Independent
+                   of the ExecutionPlayer so a lesson can carry either or both. *@
+                <GateAnimator Doc="_gates" Lang="_lang" />
+            }
+            else if (_lesson.GateAnimation)
+            {
+                @* Flag is set in the manifest but the sidecar didn't load
+                   (missing file, malformed JSON, or empty steps). Surface
+                   a banner instead of silently dropping the animation —
+                   author needs to see the breakage to fix it. *@
+                <div class="lesson-missing lesson-missing--soft">
+                    <Icon Name="IconName.ExclamationTriangleFill" />
+                    <span>@Traductor.T("LEARN_GATE_ANIMATION_MISSING")</span>
+                </div>
+            }
+
+            @if (_fsm != null && _fsm.Steps.Count > 0)
+            {
+                @* Inline FsmAnimator — opt-in via Lesson.FsmAnimation in
+                   the manifest. Sidecar at
+                   Learn/{lang}/{moduleId}/{lessonId}.fsm.json. *@
+                <FsmAnimator Doc="_fsm" Lang="_lang" />
+            }
+            else if (_lesson.FsmAnimation)
+            {
+                <div class="lesson-missing lesson-missing--soft">
+                    <Icon Name="IconName.ExclamationTriangleFill" />
+                    <span>@Traductor.T("LEARN_FSM_ANIMATION_MISSING")</span>
+                </div>
+            }
+
+            @if (_lesson.Sample != null)
+            {
+                <aside class="lesson-sample-cta">
+                    <div class="lesson-sample-cta__icon">
+                        <Icon Name="@(_lesson.Kind == LessonKind.Exercise ? IconName.Wrench : IconName.CodeSlash)" />
+                    </div>
+                    <div class="lesson-sample-cta__body">
+                        <h3>@Traductor.T(_lesson.Kind switch {
+                            LessonKind.Exercise => "LEARN_SAMPLE_FIX_TITLE",
+                            LessonKind.Project  => "LEARN_SAMPLE_PROJECT_TITLE",
+                            _                   => "LEARN_SAMPLE_TRY_TITLE"
+                        })</h3>
+                        <p>@Traductor.T(_lesson.Kind switch {
+                            LessonKind.Exercise => "LEARN_SAMPLE_FIX_BODY",
+                            LessonKind.Project  => "LEARN_SAMPLE_PROJECT_BODY",
+                            _                   => "LEARN_SAMPLE_TRY_BODY"
+                        })</p>
+                    </div>
+                    <KmilaTooltip TextKey="LEARN_OPEN_IN_EDITOR_TIP">
+                        <button type="button" class="kmila-btn kmila-btn--accent lesson-sample-cta__btn"
+                                disabled="@_openingSample"
+                                @onclick="OpenSampleAsync">
+                            @if (_openingSample)
+                            {
+                                <Spinner Type="SpinnerType.Border" Size="SpinnerSize.Small" />
+                            }
+                            else
+                            {
+                                <Icon Name="IconName.BoxArrowUpRight" />
+                            }
+                            <span>@Traductor.T("LEARN_OPEN_IN_EDITOR")</span>
+                        </button>
+                    </KmilaTooltip>
+                </aside>
+            }
+        </article>
+
+        <footer class="lesson-footer">
+            <KmilaTooltip TextKey="@(_completed ? "LEARN_MARK_INCOMPLETE_TIP" : "LEARN_MARK_COMPLETE_TIP")">
+                <button type="button" class="kmila-btn @(_completed ? "kmila-btn--ghost kmila-btn--primary" : "kmila-btn--success")"
+                        @onclick="ToggleCompletedAsync">
+                    <Icon Name="@(_completed ? IconName.ArrowCounterclockwise : IconName.CheckCircleFill)" />
+                    <span>@Traductor.T(_completed ? "LEARN_MARK_INCOMPLETE" : "LEARN_MARK_COMPLETE")</span>
+                </button>
+            </KmilaTooltip>
+
+            <div class="lesson-footer__nav">
+                @if (_prev != null)
+                {
+                    <a class="lesson-nav-btn lesson-nav-btn--prev" href="@PrevHref()">
+                        <Icon Name="IconName.ArrowLeft" />
+                        <div>
+                            <small>@Traductor.T("LEARN_PREV")</small>
+                            <span>@LocalizedLessonTitle(_prev)</span>
+                        </div>
+                    </a>
+                }
+                else
+                {
+                    <span class="lesson-nav-btn lesson-nav-btn--disabled" aria-hidden="true"></span>
+                }
+
+                @if (_next != null)
+                {
+                    <a class="lesson-nav-btn lesson-nav-btn--next" href="@NextHref()">
+                        <div>
+                            <small>@Traductor.T("LEARN_NEXT")</small>
+                            <span>@LocalizedLessonTitle(_next)</span>
+                        </div>
+                        <Icon Name="IconName.ArrowRight" />
+                    </a>
+                }
+                else
+                {
+                    <span class="lesson-nav-btn lesson-nav-btn--disabled" aria-hidden="true"></span>
+                }
+            </div>
+        </footer>
+    }
+</section>
+
+@code {
+    [Parameter] public string ModuleId { get; set; } = string.Empty;
+    [Parameter] public string LessonId { get; set; } = string.Empty;
+
+    private LessonModule? _module;
+    private Lesson? _lesson;
+    private Lesson? _prev;
+    private Lesson? _next;
+    private string? _body;
+    private string? _lessonTitle;
+    private ExecutionTimelineDoc? _timeline;
+    private GateAnimationDoc? _gates;
+    private FsmAnimationDoc? _fsm;
+    private bool _completed;
+    private bool _loading = true;
+    private bool _openingSample;
+    private string _lang = "en";
+    /// <summary>
+    /// True when the lesson body we served came from the English file because
+    /// the requested language didn't have a translation on disk. Drives the
+    /// "showing English translation" banner above the Markdown body.
+    /// </summary>
+    private bool _fellBackToEnglish;
+
+    protected override void OnInitialized()
+    {
+        Traductor.StaticOnLangChanged += OnLangChanged;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await ReloadAsync();
+    }
+
+    /// <summary>
+    /// Kicks Mermaid after every render so ```mermaid fenced blocks in the
+    /// current lesson turn into SVG. No-op when the global isn't loaded yet
+    /// (e.g. prerender), Mermaid's own <c>load</c> handler picks it up then.
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (string.IsNullOrEmpty(_body)) return;
+        try { await JS.InvokeVoidAsync("kmilaMermaidRun"); }
+        catch { /* not available during prerender / WebView boot — fine */ }
+        // Pipe fenced code blocks through Monaco's tokenizer so VHDL snippets
+        // in the body look identical to the Editor. Idempotent — skips blocks
+        // already colorized for the current theme. See lesson-code.js.
+        try { await JS.InvokeVoidAsync("kmilaColorizeLessonCode", ".lesson-markdown"); }
+        catch { /* monaco not loaded yet (prerender) — fine */ }
+    }
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        _lang = Traductor.Lang ?? "en";
+
+        var pair = await Catalog.GetLessonAsync(ModuleId, LessonId);
+        if (pair is null)
+        {
+            _module = null;
+            _lesson = null;
+            _body = null;
+            _loading = false;
+            return;
+        }
+
+        _module = pair.Value.Module;
+        _lesson = pair.Value.Lesson;
+        _lessonTitle = LessonCatalog.Localize(_lesson.Titles, _lang, _lesson.Id);
+
+        var idx = _module.Lessons.FindIndex(l =>
+            string.Equals(l.Id, _lesson.Id, StringComparison.OrdinalIgnoreCase));
+        _prev = idx > 0 ? _module.Lessons[idx - 1] : null;
+        _next = idx >= 0 && idx < _module.Lessons.Count - 1 ? _module.Lessons[idx + 1] : null;
+
+        var bodyInfo = await Catalog.GetLessonBodyWithSourceAsync(_module.Id, _lesson.Id, _lang);
+        _body = bodyInfo.Body;
+        _fellBackToEnglish = bodyInfo.FellBack;
+        _completed = await Progress.IsCompletedAsync(_module.Id, _lesson.Id);
+
+        // Optional inline ExecutionPlayer — only fetch when the lesson opts
+        // in. Skips the I/O entirely for the (current) majority of lessons
+        // that have no timeline JSON next to their Markdown body.
+        _timeline = _lesson.InlinePlayer
+            ? await Catalog.GetTimelineAsync(_module.Id, _lesson.Id, _lang)
+            : null;
+
+        // Optional inline GateAnimator — same opt-in pattern. Loaded
+        // independently so a lesson can carry just one player surface,
+        // or both stacked one above the other.
+        _gates = _lesson.GateAnimation
+            ? await Catalog.GetGateAnimationAsync(_module.Id, _lesson.Id, _lang)
+            : null;
+
+        _fsm = _lesson.FsmAnimation
+            ? await Catalog.GetFsmAnimationAsync(_module.Id, _lesson.Id, _lang)
+            : null;
+
+        // Record this as "last opened" so the catalog's Continue banner can
+        // resume from here next time — fire-and-forget on purpose, the page
+        // doesn't need to wait for the write to finish rendering.
+        _ = Progress.TouchLastOpenedAsync(_module.Id, _lesson.Id);
+
+        _loading = false;
+    }
+
+    private async Task ToggleCompletedAsync()
+    {
+        if (_module == null || _lesson == null) return;
+        if (_completed)
+            await Progress.MarkIncompleteAsync(_module.Id, _lesson.Id);
+        else
+            await Progress.MarkCompletedAsync(_module.Id, _lesson.Id);
+        _completed = !_completed;
+    }
+
+    /// <summary>
+    /// Creates a throw-away project seeded with the lesson's sample VHDL and,
+    /// if supplied, a companion simulation config — then navigates to the
+    /// editor with the config marked as pending so Editor.LoadProjectAsync
+    /// auto-applies it on arrival.
+    /// </summary>
+    private async Task OpenSampleAsync()
+    {
+        if (_openingSample || _module == null || _lesson == null || _lesson.Sample == null) return;
+        _openingSample = true;
+        try
+        {
+            var basePath = ResolveProjectsBasePath();
+            var rawName = $"{LessonCatalog.Localize(_lesson.Titles, _lang, _lesson.Id)}";
+            var name = await FindAvailableNameAsync(rawName);
+
+            // Folder must be unique per project instance — previously all
+            // repeat opens of the same lesson shared one folder, so deleting
+            // the first project wiped the second's disk files too.
+            var folder = SanitizeFolder($"Learn_{_module.Id}_{_lesson.Id}_{name}");
+
+            var project = new Project
+            {
+                Name = name,
+                Description = LessonCatalog.Localize(_lesson.Summaries, _lang, string.Empty),
+                BasePath = Path.Combine(basePath, "Projects", folder)
+            };
+
+            if (!await Projects.CreateAsync(project))
+            {
+                ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), Projects.LastError ?? "Create failed", ToastType.Danger));
+                return;
+            }
+
+            var file = new ProjectFile
+            {
+                Project = project,
+                FileName = string.IsNullOrWhiteSpace(_lesson.Sample.FileName) ? "main.vhd" : _lesson.Sample.FileName,
+                Content = _lesson.Sample.Content ?? string.Empty
+            };
+            if (!await ProjectFiles.CreateAsync(file))
+            {
+                // Surface the error instead of silently creating an empty
+                // project (which the student would read as "the main file
+                // disappeared"). Roll back the project so we don't leak half
+                // a record in the DB.
+                ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                    $"{Traductor.T("LEARN_SAMPLE_FILE_FAILED")}: {ProjectFiles.LastError}",
+                    ToastType.Danger));
+                await Projects.RemoveAsync(project);
+                return;
+            }
+
+            // Optional companion config — save it, then mark it pending so the
+            // Editor applies it after LoadProjectAsync clears the sim state.
+            if (_lesson.Sample.Config != null)
+            {
+                try
+                {
+                    var cfgName = $"{name} · Sample config";
+                    var portMoments = _lesson.Sample.Config.Ports.Select(p =>
+                        new PortMomentConfiguration
+                        {
+                            PortName = p.Name,
+                            Values = p.Clock
+                                ? new List<PortMomentValue> { new() { Time = 0, TimeScale = "CLK", Value = "CLOCK" } }
+                                : p.Values.Select(v => new PortMomentValue { Time = v.Time, TimeScale = v.Scale, Value = v.Value }).ToList()
+                        }).ToList();
+
+                    var cfg = ConfigService.CreateConfiguration(
+                        name: cfgName,
+                        description: $"Auto-generated for lesson: {name}",
+                        fpga: null,
+                        fpgaPath: string.Empty,
+                        timeValue: _lesson.Sample.Config.Time,
+                        timeScale: _lesson.Sample.Config.Scale,
+                        portMoments: portMoments);
+
+                    await ConfigService.SaveConfigurationAsync(cfg);
+
+                    // Hand the config to the Editor via the payload slot on
+                    // SimulationParameters. Payload skips the save/load round
+                    // trip so Unicode-name quirks (e.g. "·" in the config
+                    // name's key-encoding path) can never drop the auto-apply
+                    // silently. We still saved the config above so it shows
+                    // up in the Configurations pill for later reloads.
+                    if (ServiceProvider != null)
+                    {
+                        var sim = ServiceProvider.GetService<SimulationParameters>();
+                        if (sim != null)
+                        {
+                            sim.PendingConfigurationPayload = cfg;
+                            sim.PendingConfigurationName    = cfgName; // fallback
+                        }
+                    }
+                }
+                catch { /* non-fatal — project + file are already in place */ }
+            }
+
+            // Mark the lesson complete on open so progress reflects "student
+            // actually engaged with this one".
+            await Progress.MarkCompletedAsync(_module.Id, _lesson.Id);
+
+            Nav.NavigateTo($"/editor/{project.Id}");
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+        finally
+        {
+            _openingSample = false;
+        }
+    }
+
+    [Inject] private IServiceProvider ServiceProvider { get; set; } = default!;
+
+    private static string SanitizeFolder(string s)
+        => s.Replace(" ", "").Replace("·", "").Replace("/", "_").Replace("-", "_").Replace("..", "_");
+
+    private async Task<string> FindAvailableNameAsync(string baseName)
+    {
+        var existing = (await Projects.GetListAsync() ?? new())
+            .Select(p => p.Name.ToLowerInvariant()).ToHashSet();
+        if (!existing.Contains(baseName.ToLowerInvariant())) return baseName;
+        for (var i = 2; i < 1000; i++)
+        {
+            var c = $"{baseName} ({i})";
+            if (!existing.Contains(c.ToLowerInvariant())) return c;
+        }
+        return $"{baseName} ({DateTime.Now:yyyyMMdd_HHmmss})";
+    }
+
+    private static string ResolveProjectsBasePath()
+    {
+#if WINDOWS || MACCATALYST || ANDROID || IOS
+        return Microsoft.Maui.Storage.FileSystem.AppDataDirectory;
+#else
+        return OperatingSystem.IsBrowser() ? "/kmila" : Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData), "KmilaData");
+#endif
+    }
+
+    private void OnLangChanged()
+    {
+        InvokeAsync(async () =>
+        {
+            await ReloadAsync();
+            StateHasChanged();
+        });
+    }
+
+    private string LocalizedLessonTitle(Lesson l) => LessonCatalog.Localize(l.Titles, _lang, l.Id);
+
+    private string PrevHref() => _prev == null || _module == null ? "/learn" : $"/learn/{_module.Id}/{_prev.Id}";
+    private string NextHref() => _next == null || _module == null ? "/learn" : $"/learn/{_module.Id}/{_next.Id}";
+
+    private string LevelLabel(LessonLevel l) => l switch
+    {
+        LessonLevel.Beginner     => Traductor.T("LEARN_LEVEL_BEGINNER"),
+        LessonLevel.Easy         => Traductor.T("LEARN_LEVEL_EASY"),
+        LessonLevel.Intermediate => Traductor.T("LEARN_LEVEL_INTERMEDIATE"),
+        LessonLevel.Advanced     => Traductor.T("LEARN_LEVEL_ADVANCED"),
+        LessonLevel.Expert       => Traductor.T("LEARN_LEVEL_EXPERT"),
+        _                        => l.ToString()
+    };
+    private string LevelClass(LessonLevel l) => l.ToString().ToLowerInvariant();
+
+    private IconName KindIcon(LessonKind k) => k switch
+    {
+        LessonKind.Reading  => IconName.BookHalf,
+        LessonKind.Sample   => IconName.CodeSlash,
+        LessonKind.Exercise => IconName.Wrench,
+        LessonKind.Project  => IconName.Diagram3Fill,
+        _                   => IconName.BookHalf
+    };
+    private string KindLabel(LessonKind k) => k switch
+    {
+        LessonKind.Reading  => Traductor.T("LEARN_KIND_READING"),
+        LessonKind.Sample   => Traductor.T("LEARN_KIND_SAMPLE"),
+        LessonKind.Exercise => Traductor.T("LEARN_KIND_EXERCISE"),
+        LessonKind.Project  => Traductor.T("LEARN_KIND_PROJECT"),
+        _                   => k.ToString()
+    };
+
+    public void Dispose()
+    {
+        Traductor.StaticOnLangChanged -= OnLangChanged;
+    }
+}

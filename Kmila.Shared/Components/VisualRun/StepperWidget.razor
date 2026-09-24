@@ -1,0 +1,159 @@
+@namespace Kmila.Shared.Components.VisualRun
+@using Kmila.Shared.Services.VisualRun
+
+@*
+    Stepper motor widget. Phase 2.
+
+    4 input pins (phaseA / phaseB / phaseAn / phaseBn) — drives a unipolar
+    or bipolar full-step pattern. The widget interprets the 4-bit phase
+    state {phaseA, phaseB, phaseAn, phaseBn} as a step-index:
+
+      1000 → 0
+      1100 → 1
+      0100 → 2
+      0110 → 3
+      0010 → 4
+      0011 → 5
+      0001 → 6
+      1001 → 7
+
+    Other patterns simply don't move (treated as no step transition).
+    Direction is inferred from the index delta — handles wrap-around so
+    "7 → 0" reads as +1 (cw) and "0 → 7" reads as -1 (ccw). Per-step
+    angle = 360° / stepsPerRev (config; default 200, i.e. 1.8°/step).
+
+    Width-mismatch falls under handoff §3 decision 4 (natural truncation):
+    missing pin → treated as '0'. So a 2-pin bipolar driver can wire just
+    phaseA + phaseB and still see motion on a partial pattern.
+
+    The rotor is a CSS-rotated div — no JS, no canvas. Repaints on every
+    coordinator OnFrame via the FrameVersion cascading parameter.
+*@
+
+<div class="kviz-widget kviz-stepper @(EditMode ? "kviz-stepper--edit" : "") @(Selected ? "kviz-widget--selected" : "")"
+     style="left:@(Comp.Position.X)px; top:@(Comp.Position.Y)px;"
+     data-component-id="@Comp.Id"
+     @onpointerdown="HandlePointerDown">
+    <div class="kviz-stepper-housing">
+        <div class="kviz-stepper-rotor" style="transform: rotate(@(CurrentAngleDeg.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))deg);">
+            <div class="kviz-stepper-rotor__arm"></div>
+        </div>
+        <div class="kviz-stepper-coil kviz-stepper-coil--n @(PhaseBitOn(0) ? "kviz-stepper-coil--lit" : "")">A</div>
+        <div class="kviz-stepper-coil kviz-stepper-coil--e @(PhaseBitOn(1) ? "kviz-stepper-coil--lit" : "")">B</div>
+        <div class="kviz-stepper-coil kviz-stepper-coil--s @(PhaseBitOn(2) ? "kviz-stepper-coil--lit" : "")">Ā</div>
+        <div class="kviz-stepper-coil kviz-stepper-coil--w @(PhaseBitOn(3) ? "kviz-stepper-coil--lit" : "")">B̄</div>
+    </div>
+    <div class="kviz-stepper-meta">
+        <span class="kviz-stepper-angle">@CurrentAngleDeg.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)°</span>
+        <span class="kviz-stepper-steps">@_stepAccumulator</span>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public KvizComponent Comp { get; set; } = default!;
+    [Parameter] public VisualRunCoordinator? Coordinator { get; set; }
+    [Parameter] public bool EditMode { get; set; }
+    [Parameter] public bool Selected { get; set; }
+    [Parameter] public EventCallback<Microsoft.AspNetCore.Components.Web.PointerEventArgs> OnPointerDownExternal { get; set; }
+
+    // FrameVersion is the cheap "did the coordinator emit a frame since
+    // last render?" signal. Every increment forces a re-render, which
+    // re-evaluates ReadPhases() and updates _stepAccumulator / _lastIdx.
+    [CascadingParameter(Name = "FrameVersion")] public int FrameVersion { get; set; }
+
+    private int _stepAccumulator;
+    private int _lastStepIdx = -1;
+
+    private int StepsPerRev =>
+        Math.Clamp(Comp.Config.GetInt("stepsPerRev", 200), 4, 4096);
+
+    // direction config: "cw" / "ccw" forces sign; "auto" (default) infers
+    // from the index delta — handles user-driven Gray-code transitions
+    // either way.
+    private string Direction => Comp.Config.GetString("direction", "auto");
+
+    private double DegreesPerStep => 360.0 / StepsPerRev;
+
+    private double CurrentAngleDeg
+    {
+        get
+        {
+            // Recompute every render — cheap and avoids stale state if
+            // the user changes stepsPerRev mid-run.
+            int idx = CurrentStepIndex();
+            if (idx != _lastStepIdx)
+            {
+                if (_lastStepIdx >= 0)
+                {
+                    int delta = WrappedDelta(_lastStepIdx, idx);
+                    if (Direction == "cw" && delta < 0) delta = -delta;
+                    else if (Direction == "ccw" && delta > 0) delta = -delta;
+                    _stepAccumulator += delta;
+                }
+                _lastStepIdx = idx;
+            }
+            return (_stepAccumulator * DegreesPerStep) % 360.0;
+        }
+    }
+
+    // Reads the 4-bit phase pattern from the bound ports. Each pin is a
+    // single std_logic '0'/'1' — first character of the value (handles
+    // both bare "1" and quoted-string survivals from the engine).
+    private bool PhaseBitOn(int bit)
+    {
+        if (Coordinator == null) return false;
+        string pin = bit switch
+        {
+            0 => "phaseA",
+            1 => "phaseB",
+            2 => "phaseAn",
+            3 => "phaseBn",
+            _ => ""
+        };
+        if (!Comp.Bindings.TryGetValue(pin, out var port) || string.IsNullOrEmpty(port))
+            return false;
+        // Slice-aware so each phase pin can pick a specific bit of a
+        // wider stepper-driver bus (e.g. `phases[3]`).
+        var v = Coordinator.LatestSlicedValue(port);
+        if (string.IsNullOrEmpty(v)) return false;
+        return v[^1] == '1';
+    }
+
+    // Map the 4-bit pattern to a step-index 0..7 in Gray order. Anything
+    // outside the canonical 8-pattern set returns -1 → "no step".
+    private int CurrentStepIndex()
+    {
+        int code = (PhaseBitOn(0) ? 8 : 0)
+                 | (PhaseBitOn(1) ? 4 : 0)
+                 | (PhaseBitOn(2) ? 2 : 0)
+                 | (PhaseBitOn(3) ? 1 : 0);
+        return code switch
+        {
+            0b1000 => 0,
+            0b1100 => 1,
+            0b0100 => 2,
+            0b0110 => 3,
+            0b0010 => 4,
+            0b0011 => 5,
+            0b0001 => 6,
+            0b1001 => 7,
+            _ => -1,
+        };
+    }
+
+    // Signed shortest-arc delta on the 8-step ring. e.g. WrappedDelta(7, 0) = +1.
+    private static int WrappedDelta(int from, int to)
+    {
+        if (from < 0 || to < 0) return 0;
+        int d = (to - from) % 8;
+        if (d > 4) d -= 8;
+        else if (d < -4) d += 8;
+        return d;
+    }
+
+    private async Task HandlePointerDown(Microsoft.AspNetCore.Components.Web.PointerEventArgs e)
+    {
+        if (OnPointerDownExternal.HasDelegate)
+            await OnPointerDownExternal.InvokeAsync(e);
+    }
+}

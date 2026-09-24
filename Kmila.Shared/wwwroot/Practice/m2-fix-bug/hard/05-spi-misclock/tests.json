@@ -1,0 +1,88 @@
+{
+  "tests": [
+    {
+      "id": "t1",
+      "visible": true,
+      "descriptions": { "en": "MISO toggles inside each SCLK period — sample must catch the falling-edge value", "es": "MISO cambia dentro de cada periodo SCLK — sample debe coger el valor en el flanco bajante" },
+      "durationMicros": 3,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "miso", "values": [
+          { "time": 0,    "scale": "NS", "value": "1" },
+          { "time": 110,  "scale": "NS", "value": "0" },
+          { "time": 270,  "scale": "NS", "value": "1" },
+          { "time": 430,  "scale": "NS", "value": "0" },
+          { "time": 590,  "scale": "NS", "value": "1" },
+          { "time": 750,  "scale": "NS", "value": "0" }
+        ]}
+      ]
+    },
+    {
+      "id": "t2",
+      "visible": false,
+      "descriptions": { "en": "MISO held high — sample always 1", "es": "MISO siempre alto — sample siempre 1" },
+      "durationMicros": 3,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "miso", "values": [{ "time": 0, "scale": "NS", "value": "1" }] }
+      ]
+    },
+    {
+      "id": "t3",
+      "visible": false,
+      "descriptions": { "en": "MISO held low — sample always 0", "es": "MISO siempre bajo — sample siempre 0" },
+      "durationMicros": 3,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "miso", "values": [{ "time": 0, "scale": "NS", "value": "0" }] }
+      ]
+    },
+    {
+      "id": "t4",
+      "visible": false,
+      "descriptions": { "en": "Reset asserted mid-stream", "es": "Reset durante la transmisión" },
+      "durationMicros": 3,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,    "scale": "NS", "value": "1" },
+          { "time": 25,   "scale": "NS", "value": "0" },
+          { "time": 600,  "scale": "NS", "value": "1" },
+          { "time": 625,  "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "miso", "values": [{ "time": 0, "scale": "NS", "value": "1" }] }
+      ]
+    },
+    {
+      "id": "t5",
+      "visible": false,
+      "descriptions": { "en": "MISO flips just before each falling SCLK", "es": "MISO cambia justo antes de cada flanco bajante de SCLK" },
+      "durationMicros": 3,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]},
+        { "portName": "miso", "values": [
+          { "time": 0,   "scale": "NS", "value": "0" },
+          { "time": 130, "scale": "NS", "value": "1" },
+          { "time": 290, "scale": "NS", "value": "0" },
+          { "time": 450, "scale": "NS", "value": "1" }
+        ]}
+      ]
+    }
+  ]
+}

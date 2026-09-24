@@ -1,0 +1,119 @@
+{
+  "code": "architecture mixed of demo is\n  signal sum, cout : std_logic;\n  signal count     : unsigned(3 downto 0) := \"0000\";\nbegin\n  -- Concurrent: half-adder\n  sum  <= a xor b;    -- line 7\n  cout <= a and b;    -- line 8\n\n  -- Sequential: 4-bit counter\n  process(clk)\n  begin\n    if rising_edge(clk) then\n      count <= count + 1;\n    end if;\n  end process;\nend architecture;",
+  "language": "vhdl",
+  "signalOrder": ["a", "b", "clk", "sum", "cout", "count"],
+  "steps": [
+    {
+      "t": 0,
+      "highlightLines": [],
+      "signals": { "a": "0", "b": "0", "clk": "0", "sum": "0", "cout": "0", "count": "0000" },
+      "note": {
+        "en": "Cold start. Everything's at 0. Two independent regions: the half-adder block and the counter process.",
+        "es": "Inicio en frío. Todo en 0. Dos regiones independientes: el medio-sumador y el proceso del contador.",
+        "fr": "Démarrage à froid. Tout est à 0. Deux régions indépendantes : le bloc du demi-additionneur et le process du compteur.",
+        "de": "Kaltstart. Alles auf 0. Zwei unabhängige Regionen: der Halbaddierer-Block und der Zähler-process.",
+        "ch": "冷启动。所有信号都是 0。两个独立区域：半加器块和计数器 process。",
+        "jp": "コールドスタート。すべて 0 だ。独立した 2 つの領域がある——半加算器のブロックとカウンターの process。",
+        "ar": "بداية باردة. كل شيء عند 0. منطقتان مستقلّتان: كتلة نصف الجامع وعملية العدّاد process."
+      }
+    },
+    {
+      "t": 1,
+      "highlightLines": [],
+      "signals": { "a": "1", "b": "1", "clk": "0", "sum": "0", "cout": "0", "count": "0000" },
+      "note": {
+        "en": "Inputs a and b change to 1. The half-adder is concurrent code reading a and b, so it activates.",
+        "es": "Las entradas a y b cambian a 1. El medio-sumador es código concurrente que lee a y b, así que se activa.",
+        "fr": "Les entrées a et b passent à 1. Le demi-additionneur est du code concurrent qui lit a et b — il s'active.",
+        "de": "Die Eingänge a und b wechseln auf 1. Der Halbaddierer ist nebenläufiger Code, der a und b liest — er wird aktiv.",
+        "ch": "输入 a 和 b 变为 1。半加器是读取 a 和 b 的并发代码，因此被激活。",
+        "jp": "入力 a と b が 1 に変わる。半加算器は a と b を読む並行コードなので、動きだす。",
+        "ar": "المدخلان a وb يتغيَّران إلى 1. نصف الجامع كود متزامن يقرأ a وb، فيُفعَّل."
+      }
+    },
+    {
+      "t": 2,
+      "highlightLines": [7, 8],
+      "signals": { "a": "1", "b": "1", "clk": "0", "sum": "0", "cout": "0", "count": "0000" },
+      "note": {
+        "en": "Both concurrent assignments fire together: sum <= a xor b (=0), cout <= a and b (=1). Same delta cycle.",
+        "es": "Las dos asignaciones concurrentes se disparan juntas: sum <= a xor b (=0), cout <= a and b (=1). Mismo ciclo delta.",
+        "fr": "Les deux affectations concurrentes se déclenchent ensemble : sum <= a xor b (=0), cout <= a and b (=1). Même cycle delta.",
+        "de": "Beide nebenläufigen Zuweisungen feuern gleichzeitig: sum <= a xor b (=0), cout <= a and b (=1). Derselbe Delta-Zyklus.",
+        "ch": "两个并发赋值一起触发：sum <= a xor b (=0)、cout <= a and b (=1)。同一个 delta 周期。",
+        "jp": "2 つの並行代入が同時に発火する。sum <= a xor b (=0)、cout <= a and b (=1)。同じデルタサイクル。",
+        "ar": "الإسنادان المتزامنان ينطلقان معًا: sum <= a xor b (=0)، وcout <= a and b (=1). نفس دورة الدلتا."
+      }
+    },
+    {
+      "t": 3,
+      "highlightLines": [],
+      "signals": { "a": "1", "b": "1", "clk": "0", "sum": "0", "cout": "1", "count": "0000" },
+      "note": {
+        "en": "Delta closes. sum=0 (1 xor 1), cout=1 (1 and 1). The counter hasn't moved — its process is sensitive to clk, not to a/b.",
+        "es": "Cierra el delta. sum=0 (1 xor 1), cout=1 (1 and 1). El contador no se ha movido — su proceso es sensible a clk, no a a/b.",
+        "fr": "Le delta se ferme. sum=0 (1 xor 1), cout=1 (1 and 1). Le compteur n'a pas bougé — son process est sensible à clk, pas à a/b.",
+        "de": "Delta schließt. sum=0 (1 xor 1), cout=1 (1 and 1). Der Zähler hat sich nicht bewegt — sein process ist auf clk sensitiv, nicht auf a/b.",
+        "ch": "delta 关闭。sum=0（1 xor 1），cout=1（1 and 1）。计数器没有变化——它的 process 只对 clk 敏感，不对 a/b 敏感。",
+        "jp": "デルタが閉じる。sum=0（1 xor 1）、cout=1（1 and 1）。カウンターは動いていない——その process は clk に敏感で、a/b には反応しない。",
+        "ar": "الدلتا تُغلق. sum=0 (1 xor 1)، وcout=1 (1 and 1). العدّاد لم يتحرَّك — عمليته حسّاسة لـ clk، لا لـ a/b."
+      }
+    },
+    {
+      "t": 4,
+      "highlightLines": [10],
+      "signals": { "a": "1", "b": "1", "clk": "1", "sum": "0", "cout": "1", "count": "0000" },
+      "note": {
+        "en": "clk rises from 0 to 1. The counter process wakes — clk is in its sensitivity list.",
+        "es": "clk sube de 0 a 1. El proceso del contador se despierta — clk está en su lista de sensibilidad.",
+        "fr": "clk monte de 0 à 1. Le process du compteur se réveille — clk est dans sa liste de sensibilité.",
+        "de": "clk steigt von 0 auf 1. Der Zähler-process erwacht — clk steht in seiner Sensitivitätsliste.",
+        "ch": "clk 从 0 上升到 1。计数器 process 被唤醒——clk 在它的敏感信号列表里。",
+        "jp": "clk が 0 から 1 へ立ち上がる。カウンター process が目を覚ます——clk が感度リストに入っているからだ。",
+        "ar": "clk يرتفع من 0 إلى 1. عملية العدّاد تستيقظ — clk موجود في قائمة حسّاسيتها."
+      }
+    },
+    {
+      "t": 5,
+      "highlightLines": [12],
+      "signals": { "a": "1", "b": "1", "clk": "1", "sum": "0", "cout": "1", "count": "0000" },
+      "note": {
+        "en": "Line 12: if rising_edge(clk). True — this is a 0→1 transition. We enter the if-body.",
+        "es": "Línea 12: if rising_edge(clk). Cierto — es una transición 0→1. Entramos al cuerpo del if.",
+        "fr": "Ligne 12 : if rising_edge(clk). Vrai — c'est une transition 0→1. On entre dans le corps du if.",
+        "de": "Zeile 12: if rising_edge(clk). Wahr — es ist ein 0→1-Übergang. Wir betreten den if-Körper.",
+        "ch": "第 12 行：if rising_edge(clk)。为真——这是一次 0→1 的跳变。进入 if 的主体。",
+        "jp": "12 行目：if rising_edge(clk)。真だ——0→1 の遷移だからだ。if の本体に入る。",
+        "ar": "السطر 12: if rising_edge(clk). صحيح — إنه انتقال 0→1. ندخل جسم if."
+      }
+    },
+    {
+      "t": 6,
+      "highlightLines": [13],
+      "signals": { "a": "1", "b": "1", "clk": "1", "sum": "0", "cout": "1", "count": "0000" },
+      "note": {
+        "en": "Line 13: count <= count + 1. Schedules the new value. Still 0000 for now — the signal hasn't committed.",
+        "es": "Línea 13: count <= count + 1. Programa el nuevo valor. Sigue en 0000 — la señal aún no se confirma.",
+        "fr": "Ligne 13 : count <= count + 1. Planifie la nouvelle valeur. Toujours 0000 pour l'instant — le signal n'a pas encore été confirmé.",
+        "de": "Zeile 13: count <= count + 1. Plant den neuen Wert ein. Vorerst noch 0000 — das signal ist noch nicht übernommen.",
+        "ch": "第 13 行：count <= count + 1。安排新值。目前仍是 0000——信号还未提交。",
+        "jp": "13 行目：count <= count + 1。新しい値を予約する。今はまだ 0000——信号はまだ確定していない。",
+        "ar": "السطر 13: count <= count + 1. يجدول القيمة الجديدة. لا يزال 0000 حاليًا — الإشارة لم تُثبَّت بعد."
+      }
+    },
+    {
+      "t": 7,
+      "highlightLines": [],
+      "signals": { "a": "1", "b": "1", "clk": "1", "sum": "0", "cout": "1", "count": "0001" },
+      "note": {
+        "en": "Process exits, delta closes. count is now 0001. Sequential model captured one tick; concurrent model already settled.",
+        "es": "El proceso termina, cierra el delta. count ahora es 0001. El modelo secuencial capturó un tick; el concurrente ya se asentó.",
+        "fr": "Le process se termine, le delta se ferme. count vaut maintenant 0001. Le modèle séquentiel a capturé un tick ; le concurrent était déjà stable.",
+        "de": "Der process endet, das Delta schließt. count ist jetzt 0001. Das sequenzielle Modell hat einen Tick eingefangen; das nebenläufige war schon stabil.",
+        "ch": "process 结束，delta 关闭。count 现在是 0001。顺序模型捕获了一个时钟节拍；并发模型早已稳定。",
+        "jp": "process が終了し、デルタが閉じる。count は 0001 になった。順次モデルは 1 ティックを捉え、並行モデルはすでに落ち着いている。",
+        "ar": "تنتهي عملية process، وتُغلق الدلتا. count الآن 0001. النموذج التسلسلي التقط نبضة واحدة؛ أما المتزامن فقد استقرَّ منذ قبل."
+      }
+    }
+  ]
+}

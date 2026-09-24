@@ -1,0 +1,142 @@
+@implements IDisposable
+
+<PageTitle>@Traductor.T("CREATE_FILE_TITLE")</PageTitle>
+@if(Project != null){
+    <EditForm class="row" EditContext="_context" OnValidSubmit="CreateFileAsync">
+        <DataAnnotationsValidator />
+        @if (!string.IsNullOrEmpty(TargetDirectory))
+        {
+            <div class="col-12 mb-2">
+                <small class="text-muted">
+                    <Icon Name="IconName.Folder2" Class="me-1" />
+                    @TargetDirectory
+                </small>
+            </div>
+        }
+        <div class="col-sm-12 col-md-6 my-3">
+            <div class="form-floating mb-3">
+                <input type="text" class="form-control" id="InputProjectFileName"
+                       placeholder="@Traductor.T("CREATE_FILE_NAME_PLACEHOLDER")"
+                       autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                       inputmode="text" enterkeyhint="next"
+                       @bind=_projectFile.FileName>
+                <label for="InputProjectFileName">@Traductor.T("CREATE_FILE_NAME_LABEL")</label>
+                <ValidationMessage For="@(() => _projectFile.FileName)" />
+            </div>
+        </div>
+        <div class="col-sm-12 col-md-6 my-3">
+            <div class="form-floating">
+                <select class="form-control" id="extentionType" aria-label="@Traductor.T("CREATE_FILE_TYPE_LABEL")" required @bind=_extention>
+                    <option selected disabled>@Traductor.T("COMMON_CHOOSE_ONE")</option>
+                    <option value="vhdl">VHDL</option>
+                    <option value="txt">TXT</option>
+                    <option value="md">MD</option>
+                </select>
+                <label for="extentionType">@Traductor.T("CREATE_FILE_TYPE_LABEL")</label>
+            </div>
+        </div>
+
+        @* slot/modal-footer-actions — submit moved out of the form body into a
+           right-aligned action row at the foot of the card, matching the rest of
+           the modals (RunsPanel, ConfigurationModal banners). Family-11 .kmila-btn,
+           size lowered from --lg to --md so it fits the standard footer rhythm. *@
+        <div class="col-12 kmila-slot-modal-footer">
+            <KmilaTooltip TextKey="CREATE_FILE_TOOLTIP">
+                <button type="submit"
+                        class="kmila-btn kmila-btn--success"
+                        disabled="@_creatingFile">
+                    @if (_creatingFile)
+                    {
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    }
+                    <span>@Traductor.T("CREATE_FILE_BUTTON")</span>
+                </button>
+            </KmilaTooltip>
+        </div>
+    </EditForm>
+}else{
+    <p>@Traductor.T("COMMON_PROJECT_NOT_FOUND")</p>
+}
+
+@code{
+    /// <summary>
+    /// Gets or sets the project.
+    /// </summary>
+    [Parameter]
+    public Project Project { get; set; } = null!;
+    /// <summary>
+    /// Gets or sets the event callback for when a project file is created.
+    /// </summary>
+    [Parameter]
+    public EventCallback<Kmila.Shared.Models.ProjectFile> OnProjectFileCreated { get; set; }
+    /// <summary>
+    /// Optional sub-directory inside the project where the new file should be created.
+    /// Empty string (default) means the project root. Forward-slash separated.
+    /// </summary>
+    [Parameter]
+    public string TargetDirectory { get; set; } = string.Empty;
+    /// <summary>
+    /// Gets or sets the content of the editor.
+    /// </summary>
+    [Parameter]
+    public string EditorContent { get; set; } = string.Empty;
+    private ProjectFile _projectFile = new();
+    private EditContext _context = default!;
+    // Default to VHDL: this is a VHDL learning tool, students create .vhdl
+    // files 95% of the time. Saves a tap and pre-selects the matching
+    // <option> in the dropdown.
+    private string _extention = "vhdl";
+    private bool _creatingFile = false;
+
+    protected override void OnInitialized()
+    {
+        Traductor.StaticOnLangChanged += OnLanguageChanged;
+    }
+
+    private void OnLanguageChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Traductor.StaticOnLangChanged -= OnLanguageChanged;
+    }
+
+    /// <summary>
+    /// Method invoked when the component parameters are set.
+    /// </summary>
+    protected override void OnParametersSet(){
+        _context = new(_projectFile);
+    }
+    /// <summary>
+    /// Creates a new project file asynchronously.
+    /// </summary>
+    private async Task CreateFileAsync(){
+        _creatingFile = true;
+        StateHasChanged();
+        try{
+            if(_context.Validate()){
+                _projectFile.Content = EditorContent;
+                _projectFile.Project = Project;
+                _projectFile.DirectoryPath = TargetDirectory ?? string.Empty;
+                _projectFile.FileName = $"{_projectFile.FileName}.{_extention}";
+                var result = await ProjectFiles.CreateAsync(_projectFile);
+                ToastService.Notify(Message(
+                    result ? Traductor.T("CREATE_FILE_SUCCESS") : Traductor.T("COMMON_ERROR"),
+                    result ? $"{Traductor.T("CREATE_FILE_SUCCESS_MSG")} {_projectFile.FileName}" : $"{Traductor.T("CREATE_FILE_ERROR_MSG").Replace("{0}", ProjectFiles.LastError)}",
+                    result ? ToastType.Success : ToastType.Danger
+                ));
+                if(result) await OnProjectFileCreated.InvokeAsync(_projectFile);
+                _projectFile = new();
+            }else{
+                ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), Traductor.T("CREATE_FILE_VALIDATION_ERROR"), ToastType.Danger));
+            }
+        }catch(Exception ex){
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }finally{
+            _creatingFile = false;
+            StateHasChanged();
+        }
+    }
+}

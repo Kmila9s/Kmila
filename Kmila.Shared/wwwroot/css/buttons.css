@@ -1,0 +1,594 @@
+/* ============================================================================
+   Kmila button system — three families
+   ---------------------------------------------------------------------------
+   Loaded AFTER pages.css so this file wins the cascade for migrated surfaces.
+
+     .kmila-btn        Family 11 · animated conic-gradient border (general)
+     .kmila-btn-icon   Family 14 · circular icon-only (cramped spaces)
+     .kmila-btn-tab    Family 15 · underline-on-hover (tabs / segmented rows)
+
+   Animation policy (Family 11):
+     - default              static color ring · gradient fades in on hover/focus
+     - .is-loading          gradient always visible, fast rotation (1s)
+     - .kmila-btn--featured gradient always visible, slow rotation (8s); use
+                            sparingly — at most 1–2 per screen (hero CTAs)
+     `prefers-reduced-motion` zeroes all transitions globally via tokens.css.
+   ============================================================================ */
+
+
+/* ---------------------------------------------------------------------------
+   FAMILY 11 · .kmila-btn (general)
+
+   Anatomy: host has a static colored border at rest. ::before is a giant
+   rotating conic-gradient layer hidden behind the content (z=-2), invisible
+   by default. ::after is a surface-colored inner mask (z=-1) that leaves only
+   a thin ring of ::before showing through — the visible "border" effect.
+   On hover, ::before fades to opaque and reveals the rotating gradient ring.
+   --------------------------------------------------------------------------- */
+
+.kmila-btn {
+    --kmila-btn-color: var(--kmila-accent);
+    --kmila-btn-fill: var(--surface-2);
+    --kmila-btn-text: var(--kmila-btn-color);
+
+    position: relative;
+    isolation: isolate;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
+    border: 1.5px solid var(--kmila-btn-color);
+    border-radius: var(--radius-md);
+    background-color: var(--kmila-btn-fill);
+    color: var(--kmila-btn-text);
+    font: inherit;
+    font-weight: var(--fw-semibold);
+    font-size: var(--fs-sm);
+    line-height: 1.2;
+    text-decoration: none;
+    cursor: pointer;
+    user-select: none;
+    /* Clips the conic-gradient ::before to the button's rounded shape.
+       Without this the rotating layer (inset:-200%) bleeds far past the
+       button outline. The host's own box-shadow (focus ring) still
+       renders outside since `overflow` doesn't clip the element's own
+       shadow — only descendants and pseudo-elements. */
+    overflow: hidden;
+    transition:
+        color var(--duration-fast) var(--ease-standard),
+        transform var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-btn::before {
+    content: "";
+    position: absolute;
+    inset: -200%;
+    /* 60° colored arc — a single rotating "comet" highlight. Tried 180°
+       once; the user found the half-lit ring too aggressive ("animation
+       is too high"). 60° gives a discreet rotating glow that's still
+       visible at every size without dominating the UI. */
+    background: conic-gradient(
+        from 0deg,
+        transparent 0deg,
+        var(--kmila-btn-color) 30deg,
+        transparent 90deg
+    );
+    animation: kmila-btn-spin 3s linear infinite;
+    animation-play-state: paused;
+    opacity: 0;
+    z-index: -2;
+    transition: opacity var(--duration-base) var(--ease-standard);
+    pointer-events: none;
+}
+
+.kmila-btn::after {
+    content: "";
+    position: absolute;
+    inset: 1.5px;
+    background-color: var(--kmila-btn-fill);
+    border-radius: calc(var(--radius-md) - 1.5px);
+    z-index: -1;
+    pointer-events: none;
+}
+
+.kmila-btn:hover,
+.kmila-btn:focus-visible { color: var(--text-strong); }
+.kmila-btn:hover::before,
+.kmila-btn:focus-visible::before {
+    opacity: 1;
+    animation-play-state: running;
+    animation-duration: 1.2s;
+}
+
+.kmila-btn:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+
+.kmila-btn:active { transform: scale(0.97); }
+
+.kmila-btn:disabled,
+.kmila-btn[aria-disabled="true"],
+.kmila-btn.is-disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+}
+.kmila-btn:disabled::before,
+.kmila-btn[aria-disabled="true"]::before,
+.kmila-btn.is-disabled::before { animation: none; opacity: 0; }
+
+
+/* --- Always-on rotation: featured CTAs (rare) and progress signal --------- */
+
+.kmila-btn--featured::before {
+    opacity: 1;
+    animation-play-state: running;
+    animation-duration: 8s;
+}
+.kmila-btn--featured:hover::before,
+.kmila-btn--featured:focus-visible::before { animation-duration: 1.5s; }
+/* Hero CTAs (e.g. "Open your first project") wear --featured. The rotating
+   border alone wasn't reading as clearly higher-weight than secondary
+   buttons in the same row on the audit screenshots — bump weight + size
+   to set a stronger primary/secondary hierarchy (audit 2026-06-14 A-04). */
+.kmila-btn--featured {
+    font-weight: var(--fw-semibold);
+    letter-spacing: 0.01em;
+}
+
+.kmila-btn.is-loading { cursor: progress; }
+.kmila-btn.is-loading::before {
+    opacity: 1;
+    animation-play-state: running;
+    animation-duration: 1s;
+}
+
+@keyframes kmila-btn-spin { to { transform: rotate(1turn); } }
+
+
+/* --- Color variants (set --kmila-btn-color) ------------------------------ */
+
+.kmila-btn--primary { --kmila-btn-color: var(--kmila-primary-light); }
+.kmila-btn--accent  { --kmila-btn-color: var(--kmila-accent); }
+.kmila-btn--success { --kmila-btn-color: var(--success); }
+.kmila-btn--danger  { --kmila-btn-color: var(--danger); }
+
+
+/* --- Ghost variant: transparent fill, gradient border only --------------- */
+
+.kmila-btn--ghost { --kmila-btn-fill: transparent; }
+.kmila-btn--ghost::after { background-color: transparent; }
+
+
+/* --- Sizes --------------------------------------------------------------- */
+
+.kmila-btn--sm {
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--fs-xs);
+}
+.kmila-btn--md {
+    padding: var(--space-2) var(--space-4);
+    font-size: var(--fs-sm);
+}
+.kmila-btn--lg {
+    padding: var(--space-3) var(--space-5);
+    font-size: var(--fs-base);
+}
+
+
+/* ---------------------------------------------------------------------------
+   FAMILY 14 · .kmila-btn-icon (icon-only · cramped spaces)
+   --------------------------------------------------------------------------- */
+
+.kmila-btn-icon {
+    --kmila-icon-bg: var(--surface-3);
+    --kmila-icon-color: var(--text-default);
+    --kmila-icon-bg-hover: var(--kmila-accent);
+    --kmila-icon-color-hover: var(--text-on-accent);
+    --kmila-icon-ring: var(--kmila-accent-soft);
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background-color: var(--kmila-icon-bg);
+    color: var(--kmila-icon-color);
+    font: inherit;
+    font-size: var(--fs-md);
+    line-height: 1;
+    cursor: pointer;
+    user-select: none;
+    transition:
+        background-color var(--duration-fast) var(--ease-standard),
+        color var(--duration-fast) var(--ease-standard),
+        box-shadow var(--duration-base) var(--ease-standard),
+        transform var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-btn-icon:hover,
+.kmila-btn-icon:focus-visible {
+    background-color: var(--kmila-icon-bg-hover);
+    color: var(--kmila-icon-color-hover);
+    transform: scale(1.08);
+    box-shadow: 0 0 0 6px var(--kmila-icon-ring);
+}
+.kmila-btn-icon:focus-visible { outline: none; }
+
+.kmila-btn-icon:active { transform: scale(0.95); }
+
+.kmila-btn-icon:disabled,
+.kmila-btn-icon[aria-disabled="true"],
+.kmila-btn-icon.is-disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+
+/* --- Variants ------------------------------------------------------------ */
+
+.kmila-btn-icon--primary {
+    --kmila-icon-bg-hover: var(--kmila-primary);
+    --kmila-icon-color-hover: var(--text-on-primary);
+    --kmila-icon-ring: var(--surface-3);
+}
+.kmila-btn-icon--accent {
+    --kmila-icon-bg-hover: var(--kmila-accent);
+    --kmila-icon-color-hover: var(--text-on-accent);
+    --kmila-icon-ring: var(--kmila-accent-soft);
+}
+.kmila-btn-icon--success {
+    --kmila-icon-bg-hover: var(--success);
+    --kmila-icon-color-hover: #ffffff;
+    --kmila-icon-ring: var(--success-soft);
+}
+.kmila-btn-icon--danger {
+    --kmila-icon-bg-hover: var(--danger);
+    --kmila-icon-color-hover: #ffffff;
+    --kmila-icon-ring: var(--danger-soft);
+}
+
+/* Ghost: transparent rest state, full color on hover */
+.kmila-btn-icon--ghost { --kmila-icon-bg: transparent; }
+
+
+/* --- Sizes --------------------------------------------------------------- */
+
+.kmila-btn-icon--sm { width: 32px; height: 32px; font-size: var(--fs-sm); }
+.kmila-btn-icon--md { width: 40px; height: 40px; font-size: var(--fs-md); }
+.kmila-btn-icon--lg { width: 52px; height: 52px; font-size: var(--fs-lg); }
+
+
+/* ---------------------------------------------------------------------------
+   FAMILY 15 · .kmila-btn-tab (tabs · segmented rows · sidebar nav)
+
+   Underline grows from 0% to 100% on hover; .is-active keeps it at 100%.
+   The accent color drives both underline and active text.
+   --------------------------------------------------------------------------- */
+
+.kmila-btn-tab {
+    --kmila-tab-color: var(--kmila-accent);
+
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-medium);
+    line-height: 1.3;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    transition:
+        color var(--duration-fast) var(--ease-standard),
+        background-color var(--duration-fast) var(--ease-standard);
+}
+
+.kmila-btn-tab::after {
+    content: "";
+    position: absolute;
+    left: var(--space-3);
+    right: var(--space-3);
+    bottom: 0;
+    height: 2px;
+    background-color: var(--kmila-tab-color);
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform var(--duration-base) var(--ease-standard);
+    pointer-events: none;
+}
+[dir="rtl"] .kmila-btn-tab::after { transform-origin: right center; }
+
+.kmila-btn-tab:hover,
+.kmila-btn-tab:focus-visible { color: var(--text-default); }
+.kmila-btn-tab:hover::after,
+.kmila-btn-tab:focus-visible::after { transform: scaleX(1); }
+.kmila-btn-tab:focus-visible { outline: none; }
+
+.kmila-btn-tab.is-active,
+.kmila-btn-tab[aria-current="page"],
+.kmila-btn-tab[aria-selected="true"] {
+    color: var(--kmila-tab-color);
+    font-weight: var(--fw-semibold);
+}
+.kmila-btn-tab.is-active::after,
+.kmila-btn-tab[aria-current="page"]::after,
+.kmila-btn-tab[aria-selected="true"]::after { transform: scaleX(1); }
+
+.kmila-btn-tab:disabled,
+.kmila-btn-tab[aria-disabled="true"],
+.kmila-btn-tab.is-disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+
+/* --- Color variants ----------------------------------------------------- */
+
+.kmila-btn-tab--primary { --kmila-tab-color: var(--kmila-primary-light); }
+.kmila-btn-tab--accent  { --kmila-tab-color: var(--kmila-accent); }
+.kmila-btn-tab--success { --kmila-tab-color: var(--success); }
+.kmila-btn-tab--danger  { --kmila-tab-color: var(--danger); }
+
+
+/* --- Optional count badge slot ----------------------------------------- */
+
+.kmila-btn-tab__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 18px;
+    padding: 0 6px;
+    background-color: var(--surface-3);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    border-radius: var(--radius-pill);
+    transition:
+        background-color var(--duration-fast) var(--ease-standard),
+        color var(--duration-fast) var(--ease-standard);
+}
+.kmila-btn-tab.is-active .kmila-btn-tab__count,
+.kmila-btn-tab[aria-current="page"] .kmila-btn-tab__count,
+.kmila-btn-tab[aria-selected="true"] .kmila-btn-tab__count {
+    background-color: color-mix(in srgb, var(--kmila-tab-color) 18%, transparent);
+    color: var(--kmila-tab-color);
+}
+
+
+/* --- Sizes ------------------------------------------------------------- */
+
+.kmila-btn-tab--sm {
+    padding: var(--space-1) var(--space-2);
+    font-size: var(--fs-xs);
+}
+.kmila-btn-tab--sm::after { left: var(--space-2); right: var(--space-2); }
+
+.kmila-btn-tab--md {
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--fs-sm);
+}
+.kmila-btn-tab--md::after { left: var(--space-3); right: var(--space-3); }
+
+.kmila-btn-tab--lg {
+    padding: var(--space-3) var(--space-4);
+    font-size: var(--fs-base);
+}
+.kmila-btn-tab--lg::after { left: var(--space-4); right: var(--space-4); }
+
+
+/* ---------------------------------------------------------------------------
+   Convenience layouts for tab-strip containers
+   --------------------------------------------------------------------------- */
+
+/* Settings → Tamaño de letra: row of 5 .kmila-btn-tab buttons.
+   On narrow viewports the row wraps so labels stay readable. */
+.kmila-text-size-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    align-items: center;
+}
+
+
+/* ---------------------------------------------------------------------------
+   Placement slots — proposal 2026-06-28 (button-placement overhaul)
+   ---------------------------------------------------------------------------
+   These containers define WHERE button families sit relative to inputs / text
+   / banners. The button families themselves are unchanged; only the layout
+   grammar is new. See `/tmp/kmila_ui/button-grouping-proposal.html`.
+   --------------------------------------------------------------------------- */
+
+/* slot/input-trailing-action — input absorbs width, button shares the row
+   at matching height. Never drops below. */
+.kmila-slot-input-trailing {
+    display: flex;
+    align-items: stretch;
+    gap: var(--space-1);
+}
+.kmila-slot-input-trailing > input,
+.kmila-slot-input-trailing > select,
+.kmila-slot-input-trailing > .form-control,
+.kmila-slot-input-trailing > .form-select { flex: 1 1 auto; min-width: 0; }
+.kmila-slot-input-trailing > .kmila-btn,
+.kmila-slot-input-trailing > .kmila-btn-icon { flex-shrink: 0; white-space: nowrap; }
+
+/* slot/banner-cta — text + trailing action; text wraps, button never wraps below. */
+.kmila-slot-banner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-3);
+}
+.kmila-slot-banner > .kmila-btn,
+.kmila-slot-banner > .kmila-btn-icon { white-space: nowrap; flex-shrink: 0; }
+
+/* slot/modal-footer-actions — right-aligned action row at the foot of a card body.
+   On phone, stacks reversed so the primary action sits on top for thumb reach. */
+.kmila-slot-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border-subtle);
+}
+@media (max-width: 520px) {
+    .kmila-slot-modal-footer {
+        flex-direction: column-reverse;
+        align-items: stretch;
+    }
+    .kmila-slot-modal-footer > * { width: 100%; justify-content: center; }
+}
+
+/* slot/page-header-tools v2 — filter shelf (search + optional select integrated
+   into one tall bordered container) + actions cluster, separated. Below 768 px
+   the shelf takes a full row and the actions wrap right-aligned. */
+.kmila-slot-header-tools {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: var(--space-3);
+}
+.kmila-slot-header-tools__filter {
+    flex: 1 1 280px;
+    min-width: 0;
+    min-height: 44px;
+    display: flex;
+    align-items: stretch;
+    background: var(--surface-1);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+.kmila-slot-header-tools__filter > * {
+    /* Integrate everything inside the shelf — no inner borders, no inner backgrounds. */
+    border-color: transparent !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+.kmila-slot-header-tools__filter > input,
+.kmila-slot-header-tools__filter > label,
+.kmila-slot-header-tools__filter > .form-control {
+    flex: 1;
+    min-width: 0;
+}
+.kmila-slot-header-tools__filter > .form-select,
+.kmila-slot-header-tools__filter > select {
+    flex: 0 0 auto;
+    width: auto;
+    padding-right: var(--space-4);
+}
+.kmila-slot-header-tools__filter-divider {
+    align-self: stretch;
+    width: 1px;
+    background: var(--border-subtle);
+    margin: var(--space-1) 0;
+    flex-shrink: 0;
+}
+.kmila-slot-header-tools__actions {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    flex-shrink: 0;
+}
+@media (max-width: 768px) {
+    .kmila-slot-header-tools__filter { flex: 1 1 100%; }
+    .kmila-slot-header-tools__actions {
+        width: 100%;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+    /* Phase F fix (phone, 2026-06-28): without flex-wrap, three action buttons
+       collide and their labels clip mid-word ("Probar un ejem...", "Crear nuevo
+       pro..."). Wrap lets each button take its natural width and flow onto a
+       second row if needed. */
+    .kmila-slot-header-tools__actions .kmila-btn {
+        flex-shrink: 0;
+    }
+}
+
+/* slot/segmented-control — pill background unifies a row of .kmila-btn-tab buttons
+   so they read as a single segmented control rather than free-floating chips.
+   The 1 px border is doing the real work in light mode where --surface-3 (slate-100)
+   is too close to --surface-1 (slate-50) for the bg alone to define the group. */
+.kmila-slot-segmented {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 4px;
+    background: var(--surface-3);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+}
+
+/* On phones the wrap onto a second line for one straggler chip (F-070 "Expert"
+   on Learn EN, F-073 "Fill the gap" on Practice EN, F-032 style) is ugly and
+   costs vertical space that's already scarce. Switch to a single-row scroll
+   like the text-size row in Settings (F-032). The `.catalog-filters__row`
+   parent's mask-image fade already signals scrollability on both LTR and
+   RTL, so the affordance is present. Real-device audit 2026-08-05 (F-070 R9). */
+@media (max-width: 480px) {
+    .kmila-slot-segmented {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+    }
+    .kmila-slot-segmented::-webkit-scrollbar { display: none; }
+}
+
+/* F-055 (RTL segmented row) — the DOM-first button (`All` / `الكل`)
+   must render rightmost under `dir="rtl"` so R→L reading order matches
+   DOM order. Real-device audit 2026-08-05 tried candidate (a) explicit
+   `direction: rtl` and candidate (d) `direction: ltr` +
+   `flex-direction: row-reverse` — BOTH were confirmed no-ops on the
+   Xiaomi 13T Pro (Android 15 WebView) with the visible chip order
+   unchanged from the pre-fix baseline. Something in the ancestor chain
+   (possibly `.catalog-filters__row { overflow-x: auto }`, possibly
+   Chromium's flex-item placement under `<html dir="rtl">` on this
+   specific WebView build) is anchoring DOM-0 to the physical left AND
+   reversing DOM 1..N — a pattern no single flex property produces.
+   Left unstyled until DevTools remote-inspect (chrome://inspect on
+   desktop) can reveal the actual computed direction and identify what
+   is anchoring DOM-0. Shipping either candidate as-is risks LTR
+   regressions on other viewport widths for no RTL benefit. */
+
+/* Inline-toolbar / page-header-tools divider — a slim vertical rule that
+   separates one button cluster from another inside a single toolbar row.
+   Also doubles for the WaveformViewer toolbar (zoom/breakpoint vs exports). */
+.waveform-viewer__divider,
+.kmila-slot-toolbar-divider {
+    display: inline-block;
+    width: 1px;
+    align-self: stretch;
+    margin: var(--space-1) var(--space-1);
+    background: var(--border-subtle);
+    flex-shrink: 0;
+}
+
+/* Divider modifier that also acts as an elastic spacer: everything after it
+   in the flex row gets pushed to the row's trailing edge. Used to keep a
+   toolbar's "view controls" cluster hugging the right side even after the
+   primary cluster shrinks (see VisualPanel — after items collapsed into the
+   More dropdown, the row had leftover slack and the primary buttons drifted
+   from the left edge visually). `margin-inline-start` is RTL-aware so
+   Arabic keeps the same visual ordering (leading vs trailing edges swap). */
+.kmila-slot-toolbar-divider--pusher {
+    margin-inline-start: auto;
+}

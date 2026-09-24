@@ -1,0 +1,390 @@
+@page "/learn"
+@using Kmila.Shared.Models
+@using Kmila.Shared.Services
+@inject LessonCatalog Catalog
+@inject LessonProgressStore Progress
+@implements IDisposable
+<PageTitle>@Traductor.T("LEARN_TITLE")</PageTitle>
+
+@*
+    Learn — the curriculum catalog.
+
+    Renders each module from the manifest as a card in a bento grid, grouped by
+    difficulty level (Beginner → Expert). Progress bar shows how many lessons
+    the student has ticked off within the module.
+*@
+
+<section class="learn-page">
+    <header class="learn-hero" aria-labelledby="learn-hero-title">
+        <div class="learn-hero__copy">
+            <span class="home-section__eyebrow">@Traductor.T("LEARN_EYEBROW")</span>
+            <h1 id="learn-hero-title" class="learn-hero__title">@Traductor.T("LEARN_TITLE")</h1>
+            @* F-F-09: visually-hidden separator prevents innerText concatenation
+               like "Aprender0 / 31" when assistive tech reads the whole hero. *@
+            <span class="visually-hidden">. </span>
+            <p class="learn-hero__subtitle">@Traductor.T("LEARN_SUBTITLE")</p>
+
+            <label class="learn-hero__search" aria-label="@Traductor.T("LEARN_SEARCH_LABEL")">
+                <Icon Name="IconName.Search" />
+                <input type="search"
+                       class="form-control"
+                       placeholder="@Traductor.T("LEARN_SEARCH_PLACEHOLDER")"
+                       value="@_filter"
+                       @oninput="OnFilterChanged" />
+                @if (!string.IsNullOrEmpty(_filter))
+                {
+                    <KmilaTooltip TextKey="LEARN_CLEAR_SEARCH_TIP">
+                        <button type="button" class="learn-hero__search-clear"
+                                @onclick="() => { _filter = string.Empty; ApplyFilter(); }"
+                                aria-label="@Traductor.T("COMMON_CLEAR")">
+                            <Icon Name="IconName.XLg" />
+                        </button>
+                    </KmilaTooltip>
+                }
+            </label>
+
+            @if (_continueTarget != null)
+            {
+                <a class="learn-hero__continue"
+                   href="@($"/learn/{_continueTarget.Value.ModuleId}/{_continueTarget.Value.LessonId}")"
+                   aria-label="@Traductor.T("LEARN_CONTINUE_ARIA")">
+                    <span class="learn-hero__continue-icon">
+                        <Icon Name="IconName.ArrowRightCircleFill" />
+                    </span>
+                    <span class="learn-hero__continue-body">
+                        <small>@Traductor.T("LEARN_CONTINUE_EYEBROW")</small>
+                        <strong>@_continueLessonTitle</strong>
+                        @if (!string.IsNullOrEmpty(_continueModuleTitle))
+                        {
+                            <span class="learn-hero__continue-module">@_continueModuleTitle</span>
+                        }
+                    </span>
+                    <Icon Name="IconName.ArrowRight" Class="learn-hero__continue-chevron" />
+                </a>
+            }
+
+            @if (_totalLessons > 0)
+            {
+                var pct = _totalLessons == 0 ? 0 : (int)Math.Round(100.0 * _totalDone / _totalLessons);
+                <div class="learn-hero__progress" role="group" aria-label="@Traductor.T("LEARN_YOUR_PROGRESS")">
+                    <div class="learn-hero__progress-track">
+                        <div class="learn-hero__progress-fill" style="width: @(pct)%"></div>
+                    </div>
+                    <div class="learn-hero__progress-meta">
+                        @* `dir="ltr"` protects the numeric pair against RTL bidi
+                           reordering — without it AR locale shows "31 / 0" instead
+                           of "0 / 31". *@
+                        <span class="learn-hero__progress-count" dir="ltr">@_totalDone / @_totalLessons</span>
+                        <span class="learn-hero__progress-label">@Traductor.T("LEARN_LESSONS_DONE")</span>
+                    </div>
+                </div>
+            }
+        </div>
+    </header>
+
+    @* Quick filters — same pattern as Practice. Tapping the active chip
+       again clears the filter. *@
+    @* slot/segmented-control — chips wrapped in a pill background so the filter
+       reads as one segmented control, not 6 free-floating buttons. *@
+    <div class="catalog-filters" role="group" aria-label="@Traductor.T("CATALOG_FILTERS_LABEL")">
+        <div class="catalog-filters__row">
+            <span class="catalog-filters__label">@Traductor.T("LEARN_FILTER_LEVEL")</span>
+            <div class="kmila-slot-segmented">
+                <button type="button"
+                        class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm filter-chip @(_levelFilter == null ? "filter-chip--active is-active" : "")"
+                        @onclick="() => SetLevel(null)">
+                    @Traductor.T("CATALOG_FILTER_ALL")
+                </button>
+                @foreach (var lvl in _allLevels)
+                {
+                    <button type="button"
+                            class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm filter-chip filter-chip--@LevelClass(lvl) @(_levelFilter == lvl ? "filter-chip--active is-active" : "")"
+                            @onclick="() => SetLevel(lvl)">
+                        @LevelLabel(lvl)
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="learn-empty">
+            <Spinner Type="SpinnerType.Border" Color="SpinnerColor.Primary" />
+        </div>
+    }
+    else if (!_manifest.Modules.Any())
+    {
+        <div class="learn-empty">
+            <div class="learn-empty__icon"><Icon Name="IconName.BookFill" /></div>
+            <h2>@Traductor.T("LEARN_EMPTY_TITLE")</h2>
+            <p>@Traductor.T("LEARN_EMPTY_BODY")</p>
+        </div>
+    }
+    else if (!_grouped.Any() && !string.IsNullOrEmpty(_filter))
+    {
+        <div class="learn-empty">
+            <div class="learn-empty__icon"><Icon Name="IconName.Search" /></div>
+            <h2>@Traductor.T("LEARN_NO_MATCH_TITLE")</h2>
+            <p>@string.Format(Traductor.T("LEARN_NO_MATCH_BODY"), _filter)</p>
+        </div>
+    }
+    else
+    {
+        @foreach (var group in _grouped)
+        {
+            <section class="learn-track" aria-labelledby="@($"track-{group.Level}")">
+                <header class="learn-track__header">
+                    <span class="home-section__eyebrow">@FormatTrackOrdinal(group.Level) &middot; @LevelLabel(group.Level)</span>
+                    <h2 id="@($"track-{group.Level}")">@TrackTitle(group.Level)</h2>
+                    <p>@TrackBlurb(group.Level)</p>
+                </header>
+
+                <div class="learn-grid">
+                    @foreach (var module in group.Modules)
+                    {
+                        var title    = LessonCatalog.Localize(module.Titles, _lang, module.Id);
+                        var summary  = LessonCatalog.Localize(module.Summaries, _lang, string.Empty);
+                        var total    = module.Lessons.Count;
+                        var done     = _moduleCompletion.TryGetValue(module.Id, out var d) ? d : 0;
+                        var firstId  = module.Lessons.FirstOrDefault()?.Id;
+                        var href     = firstId == null ? "/learn" : $"/learn/{module.Id}/{firstId}";
+                        var pct      = total == 0 ? 0 : (int)Math.Round(100.0 * done / total);
+
+                        <a class="learn-card" href="@href" data-testid="@($"learn-card-{module.Id}")">
+                            <div class="learn-card__icon learn-card__icon--@IconVariant(module.Level)">
+                                <Icon Name="@ResolveIcon(module.Icon)" />
+                            </div>
+                            <div class="learn-card__body">
+                                <h3 class="learn-card__title">@title</h3>
+                                <p class="learn-card__summary">@summary</p>
+                                <div class="learn-card__meta">
+                                    <span class="learn-card__chip learn-card__chip--@LevelClass(module.Level)">@LevelLabel(module.Level)</span>
+                                    <span class="learn-card__count">
+                                        <Icon Name="IconName.Book" />
+                                        @total @Traductor.T(total == 1 ? "LEARN_LESSONS_ONE" : "LEARN_LESSONS_MANY")
+                                    </span>
+                                    @if (done > 0)
+                                    {
+                                        <span class="learn-card__progress-chip">
+                                            <Icon Name="IconName.CheckCircleFill" /> @done / @total
+                                        </span>
+                                    }
+                                </div>
+                            </div>
+                            <div class="learn-card__bar" role="presentation">
+                                <div class="learn-card__bar-fill" style="width: @(pct)%"></div>
+                            </div>
+                        </a>
+                    }
+                </div>
+            </section>
+        }
+    }
+</section>
+
+@code {
+    private LessonManifest _manifest = new();
+    private bool _loading = true;
+    private string _lang = "en";
+    private int _totalLessons;
+    private int _totalDone;
+    private Dictionary<string, int> _moduleCompletion = new();
+    private List<(LessonLevel Level, List<LessonModule> Modules)> _grouped = new();
+
+    /// <summary>(module, lesson) to resume, null when nothing's been opened.</summary>
+    private (string ModuleId, string LessonId)? _continueTarget;
+    private string _continueLessonTitle = string.Empty;
+    private string _continueModuleTitle = string.Empty;
+
+    /// <summary>Live filter text. Empty = show everything.</summary>
+    private string _filter = string.Empty;
+
+    /// <summary>Selected level chip; null = "All".</summary>
+    private LessonLevel? _levelFilter;
+
+    // Epoch counter guards LoadAsync against overlapping calls (language switch
+    // or Progress.OnChange firing mid-load). Each invocation captures its own
+    // epoch; if a later invocation bumped the counter, the older one drops its
+    // results instead of clobbering the fresh state — audit F-F-07 (2026-07-09),
+    // Learn.razor follow-up shipped 2026-07-12.
+    private int _loadEpoch;
+
+    private static readonly LessonLevel[] _allLevels = new[]
+    {
+        LessonLevel.Beginner, LessonLevel.Easy, LessonLevel.Intermediate,
+        LessonLevel.Advanced, LessonLevel.Expert
+    };
+
+    private void SetLevel(LessonLevel? l)
+    {
+        _levelFilter = (_levelFilter == l) ? null : l;
+        ApplyFilter();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Traductor.StaticOnLangChanged += OnLangOrProgressChanged;
+        Progress.OnChange += OnLangOrProgressChanged;
+
+        _lang = Traductor.Lang ?? "en";
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var myEpoch = System.Threading.Interlocked.Increment(ref _loadEpoch);
+        _loading = true;
+
+        var manifest = await Catalog.GetManifestAsync();
+        if (myEpoch != _loadEpoch) return;
+
+        var totalLessons = manifest.Modules.Sum(m => m.Lessons.Count);
+        var totalDone = 0;
+        var moduleCompletion = new Dictionary<string, int>(manifest.Modules.Count);
+        foreach (var m in manifest.Modules)
+        {
+            var done = await Progress.CompletedCountAsync(m.Id, m.Lessons.Select(l => l.Id));
+            if (myEpoch != _loadEpoch) return;
+            moduleCompletion[m.Id] = done;
+            totalDone += done;
+        }
+
+        // Resolve the "continue" banner target. If the stored pointer doesn't
+        // match a real lesson anymore (rename/removal), hide the banner
+        // gracefully instead of sending the user to a 404.
+        (string ModuleId, string LessonId)? continueTarget = null;
+        var continueLessonTitle = string.Empty;
+        var continueModuleTitle = string.Empty;
+        var last = await Progress.GetLastOpenedAsync();
+        if (myEpoch != _loadEpoch) return;
+        if (last is { } ptr)
+        {
+            var pair = await Catalog.GetLessonAsync(ptr.ModuleId, ptr.LessonId);
+            if (myEpoch != _loadEpoch) return;
+            if (pair is { } p)
+            {
+                continueTarget = (p.Module.Id, p.Lesson.Id);
+                continueLessonTitle = LessonCatalog.Localize(p.Lesson.Titles, _lang, p.Lesson.Id);
+                continueModuleTitle = LessonCatalog.Localize(p.Module.Titles, _lang, p.Module.Id);
+            }
+        }
+
+        // Atomic swap — no mid-load partial state is ever observable by render.
+        _manifest = manifest;
+        _totalLessons = totalLessons;
+        _totalDone = totalDone;
+        _moduleCompletion = moduleCompletion;
+        _continueTarget = continueTarget;
+        _continueLessonTitle = continueLessonTitle;
+        _continueModuleTitle = continueModuleTitle;
+        ApplyFilter();
+        _loading = false;
+    }
+
+    private void OnLangOrProgressChanged()
+    {
+        _lang = Traductor.Lang ?? "en";
+        InvokeAsync(async () =>
+        {
+            await LoadAsync();
+            StateHasChanged();
+        });
+    }
+
+    private void OnFilterChanged(ChangeEventArgs e)
+    {
+        _filter = e.Value?.ToString() ?? string.Empty;
+        ApplyFilter();
+    }
+
+    /// <summary>
+    /// Re-derives <see cref="_grouped"/> from <see cref="_manifest"/> applying
+    /// the current search <see cref="_filter"/>. Empty filter = show every
+    /// module. Non-empty filter keeps a module if its own title/summary
+    /// matches, or if any of its lessons' titles/summaries match.
+    /// </summary>
+    private void ApplyFilter()
+    {
+        var needle = _filter?.Trim();
+        bool Match(string haystack) =>
+            !string.IsNullOrEmpty(haystack) &&
+            haystack.Contains(needle!, StringComparison.OrdinalIgnoreCase);
+
+        bool ModuleMatches(LessonModule m)
+        {
+            if (string.IsNullOrEmpty(needle)) return true;
+            if (Match(LessonCatalog.Localize(m.Titles, _lang, m.Id))) return true;
+            if (Match(LessonCatalog.Localize(m.Summaries, _lang, string.Empty))) return true;
+            return m.Lessons.Any(l =>
+                Match(LessonCatalog.Localize(l.Titles, _lang, l.Id)) ||
+                Match(LessonCatalog.Localize(l.Summaries, _lang, string.Empty)));
+        }
+
+        _grouped = _manifest.Modules
+            .Where(m => !_levelFilter.HasValue || m.Level == _levelFilter.Value)
+            .Where(ModuleMatches)
+            .OrderBy(m => (int)m.Level)
+            .ThenBy(m => m.Order)
+            .GroupBy(m => m.Level)
+            .Select(g => (g.Key, g.OrderBy(m => m.Order).ToList()))
+            .ToList();
+    }
+
+    /// <summary>Maps a manifest icon name to a concrete <see cref="IconName"/>.</summary>
+    private IconName ResolveIcon(string name)
+    {
+        if (Enum.TryParse<IconName>(name, out var icon)) return icon;
+        return IconName.BookFill;
+    }
+
+    private string LevelLabel(LessonLevel l) => l switch
+    {
+        LessonLevel.Beginner     => Traductor.T("LEARN_LEVEL_BEGINNER"),
+        LessonLevel.Easy         => Traductor.T("LEARN_LEVEL_EASY"),
+        LessonLevel.Intermediate => Traductor.T("LEARN_LEVEL_INTERMEDIATE"),
+        LessonLevel.Advanced     => Traductor.T("LEARN_LEVEL_ADVANCED"),
+        LessonLevel.Expert       => Traductor.T("LEARN_LEVEL_EXPERT"),
+        _                        => l.ToString()
+    };
+
+    private string LevelClass(LessonLevel l) => l.ToString().ToLowerInvariant();
+
+    private string IconVariant(LessonLevel l) => l switch
+    {
+        LessonLevel.Beginner     => "success",
+        LessonLevel.Easy         => "primary",
+        LessonLevel.Intermediate => "info",
+        LessonLevel.Advanced     => "warning",
+        LessonLevel.Expert       => "danger",
+        _                        => "primary"
+    };
+
+    private string FormatTrackOrdinal(LessonLevel l) => ((int)l + 1).ToString("D2");
+
+    private string TrackTitle(LessonLevel l) => l switch
+    {
+        LessonLevel.Beginner     => Traductor.T("LEARN_TRACK_BEGINNER_TITLE"),
+        LessonLevel.Easy         => Traductor.T("LEARN_TRACK_EASY_TITLE"),
+        LessonLevel.Intermediate => Traductor.T("LEARN_TRACK_INTERMEDIATE_TITLE"),
+        LessonLevel.Advanced     => Traductor.T("LEARN_TRACK_ADVANCED_TITLE"),
+        LessonLevel.Expert       => Traductor.T("LEARN_TRACK_EXPERT_TITLE"),
+        _                        => l.ToString()
+    };
+
+    private string TrackBlurb(LessonLevel l) => l switch
+    {
+        LessonLevel.Beginner     => Traductor.T("LEARN_TRACK_BEGINNER_BLURB"),
+        LessonLevel.Easy         => Traductor.T("LEARN_TRACK_EASY_BLURB"),
+        LessonLevel.Intermediate => Traductor.T("LEARN_TRACK_INTERMEDIATE_BLURB"),
+        LessonLevel.Advanced     => Traductor.T("LEARN_TRACK_ADVANCED_BLURB"),
+        LessonLevel.Expert       => Traductor.T("LEARN_TRACK_EXPERT_BLURB"),
+        _                        => string.Empty
+    };
+
+    public void Dispose()
+    {
+        Traductor.StaticOnLangChanged -= OnLangOrProgressChanged;
+        Progress.OnChange -= OnLangOrProgressChanged;
+    }
+}

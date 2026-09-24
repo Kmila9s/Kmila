@@ -1,0 +1,411 @@
+@*
+    ConfigurationModal Component
+
+    A modal for managing Kmila simulation configurations (.k-config files).
+    Allows users to save, load, delete, and export/import configurations.
+
+    Features:
+    - Save current simulation state as a named configuration
+    - Load previously saved configurations
+    - Delete saved configurations
+    - Export configuration to .k-config file
+    - Import configuration from .k-config file
+
+    Dependencies:
+    - ConfigurationService (injected)
+    - ToastService for notifications
+    - BlazorBootstrap components
+*@
+
+@inject Microsoft.Extensions.Logging.ILogger<Kmila.Shared.Modals.ConfigurationModal> Logger
+<Card>
+    <CardHeader Class="bg-body-tertiary">
+        <div class="d-flex align-items-center gap-2">
+            <Icon Name="IconName.GearFill" Class="text-primary" />
+            <strong>@Traductor.T("CONFIG_TITLE")</strong>
+        </div>
+    </CardHeader>
+    <CardBody>
+        <!-- Save Configuration Section -->
+        <div class="mb-4">
+            <h6 class="d-flex align-items-center gap-2 mb-3">
+                <Icon Name="IconName.Save" Class="text-success" />
+                @Traductor.T("CONFIG_SAVE_SECTION")
+            </h6>
+            @* slot/input-trailing-action — name input + Save share the row.
+               Description sits on its own row below as an optional field. *@
+            <div class="d-grid gap-2">
+                <div class="kmila-slot-input-trailing">
+                    <input type="text"
+                           class="form-control form-control-sm"
+                           placeholder="@Traductor.T("CONFIG_NAME_PLACEHOLDER")"
+                           @bind="_newConfigName" />
+                    <KmilaTooltip TextKey="CONFIG_SAVE_TIP">
+                        <button type="button"
+                                class="kmila-btn kmila-btn--success kmila-btn--sm"
+                                disabled="@(string.IsNullOrWhiteSpace(_newConfigName))"
+                                @onclick="SaveConfigurationAsync">
+                            <Icon Name="IconName.Save" />
+                            <span>@Traductor.T("CONFIG_SAVE_BUTTON")</span>
+                        </button>
+                    </KmilaTooltip>
+                </div>
+                <input type="text"
+                       class="form-control form-control-sm"
+                       placeholder="@Traductor.T("CONFIG_DESC_PLACEHOLDER")"
+                       @bind="_newConfigDescription" />
+            </div>
+        </div>
+
+        <hr />
+
+        <!-- Load Configuration Section -->
+        <div class="mb-4">
+            <h6 class="d-flex align-items-center gap-2 mb-3">
+                <Icon Name="IconName.Folder2Open" Class="text-primary" />
+                @Traductor.T("CONFIG_LOAD_SECTION")
+            </h6>
+            @if(_savedConfigs.Any())
+            {
+                <div class="list-group list-group-flush">
+                    @foreach(var configName in _savedConfigs)
+                    {
+                        <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center p-2">
+                            <span class="text-truncate">@configName</span>
+                            @* Family-14 (.kmila-btn-icon) — icon-only row actions
+                               share the same geometry as the rest of the app's
+                               icon buttons (filebar, dock, runbar). *@
+                            <div class="d-inline-flex gap-1">
+                                <KmilaTooltip TextKey="CONFIG_LOAD_TOOLTIP">
+                                    <button type="button"
+                                            class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--sm"
+                                            aria-label="@Traductor.T("CONFIG_LOAD_TOOLTIP")"
+                                            @onclick="() => LoadConfigurationAsync(configName)">
+                                        <Icon Name="IconName.BoxArrowInDown" />
+                                    </button>
+                                </KmilaTooltip>
+                                <KmilaTooltip TextKey="CONFIG_EXPORT_TOOLTIP">
+                                    <button type="button"
+                                            class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--sm"
+                                            aria-label="@Traductor.T("CONFIG_EXPORT_TOOLTIP")"
+                                            @onclick="() => ExportConfigurationAsync(configName)">
+                                        <Icon Name="IconName.Download" />
+                                    </button>
+                                </KmilaTooltip>
+                                <KmilaTooltip TextKey="CONFIG_DELETE_TOOLTIP">
+                                    <button type="button"
+                                            class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--danger kmila-btn-icon--sm"
+                                            aria-label="@Traductor.T("CONFIG_DELETE_TOOLTIP")"
+                                            @onclick="() => DeleteConfigurationAsync(configName)">
+                                        <Icon Name="IconName.Trash" />
+                                    </button>
+                                </KmilaTooltip>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <Alert Color="AlertColor.Light" Class="mb-0">
+                    <Icon Name="IconName.InfoCircle" Class="me-2" />
+                    @Traductor.T("CONFIG_EMPTY_MESSAGE")
+                </Alert>
+            }
+        </div>
+
+        <hr />
+
+        <!-- Import Configuration Section -->
+        <div>
+            <h6 class="d-flex align-items-center gap-2 mb-3">
+                <Icon Name="IconName.Upload" Class="text-warning" />
+                @Traductor.T("CONFIG_IMPORT_SECTION")
+            </h6>
+            <div class="mb-2">
+                <InputFile OnChange="OnFileSelectedAsync"
+                           accept=".k-config,.json,application/json"
+                           class="form-control form-control-sm" />
+            </div>
+            @if(_importedConfig != null)
+            {
+                <Alert Color="AlertColor.Success" Class="mt-2 py-2">
+                    @* slot/banner-cta — grid keeps text + trailing button aligned regardless of text length. *@
+                    <div class="kmila-slot-banner">
+                        <span>
+                            <Icon Name="IconName.CheckCircle" Class="me-2" />
+                            @Traductor.T("CONFIG_READY_TO_LOAD") <strong>@_importedConfig.Name</strong>
+                        </span>
+                        <KmilaTooltip TextKey="CONFIG_LOAD_IMPORTED_TIP">
+                            <button type="button"
+                                    class="kmila-btn kmila-btn--success kmila-btn--sm"
+                                    @onclick="LoadImportedConfigAsync">
+                                <Icon Name="IconName.BoxArrowInDown" />
+                                <span>@Traductor.T("CONFIG_LOAD_NOW")</span>
+                            </button>
+                        </KmilaTooltip>
+                    </div>
+                </Alert>
+            }
+            <small class="text-muted">
+                @Traductor.T("CONFIG_IMPORT_HINT")
+            </small>
+        </div>
+    </CardBody>
+</Card>
+
+<!-- Export Download Helper (hidden) -->
+@if(_showExportDownload)
+{
+    <div class="mt-3">
+        <Alert Color="AlertColor.Success">
+            @* slot/banner-cta *@
+            <div class="kmila-slot-banner">
+                <span>
+                    <Icon Name="IconName.CheckCircle" Class="me-2" />
+                    @Traductor.T("CONFIG_EXPORTED") <strong>@_exportFileName</strong>
+                </span>
+                <KmilaTooltip TextKey="CONFIG_DOWNLOAD_TIP">
+                    <button type="button"
+                            class="kmila-btn kmila-btn--success kmila-btn--sm"
+                            @onclick="DownloadExportAsync">
+                        <Icon Name="IconName.Download" />
+                        <span>@Traductor.T("CONFIG_DOWNLOAD")</span>
+                    </button>
+                </KmilaTooltip>
+            </div>
+        </Alert>
+    </div>
+}
+
+@code{
+    #region Parameters
+
+    /// <summary>
+    /// Event callback when a configuration is loaded.
+    /// </summary>
+    [Parameter]
+    public EventCallback<KmilaConfiguration> OnConfigurationLoaded { get; set; }
+
+    /// <summary>
+    /// The current FPGA selection to include in saved configurations.
+    /// </summary>
+    [Parameter]
+    public FPGA? CurrentFPGA { get; set; }
+
+    /// <summary>
+    /// The current FPGA path to include in saved configurations.
+    /// </summary>
+    [Parameter]
+    public string CurrentFPGAPath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The current simulation time value.
+    /// </summary>
+    [Parameter]
+    public int CurrentTimeValue { get; set; }
+
+    /// <summary>
+    /// The current time scale.
+    /// </summary>
+    [Parameter]
+    public string CurrentTimeScale { get; set; } = "NS";
+
+    /// <summary>
+    /// The current port moment configurations.
+    /// </summary>
+    [Parameter]
+    public List<PortMomentConfiguration>? CurrentPortMoments { get; set; }
+
+    #endregion
+
+    #region Private Fields
+
+    private List<string> _savedConfigs = new();
+    private string _newConfigName = string.Empty;
+    private string _newConfigDescription = string.Empty;
+    private bool _showExportDownload = false;
+    private string _exportFileName = string.Empty;
+    private string _exportContent = string.Empty;
+    private KmilaConfiguration? _importedConfig = null;
+
+    #endregion
+
+    #region Lifecycle
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConfigurationListAsync();
+    }
+
+    #endregion
+
+    #region Private Methods
+
+    private async Task LoadConfigurationListAsync()
+    {
+        _savedConfigs = await ConfigService.GetConfigurationNamesAsync();
+        StateHasChanged();
+    }
+
+    private async Task SaveConfigurationAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newConfigName))
+            return;
+
+        var config = ConfigService.CreateConfiguration(
+            _newConfigName,
+            _newConfigDescription,
+            CurrentFPGA,
+            CurrentFPGAPath,
+            CurrentTimeValue,
+            CurrentTimeScale,
+            CurrentPortMoments
+        );
+
+        var result = await ConfigService.SaveConfigurationAsync(config);
+
+        if (result)
+        {
+            ToastService.Notify(new ToastMessage(ToastType.Success, Traductor.T("CONFIG_SAVED")));
+            _newConfigName = string.Empty;
+            _newConfigDescription = string.Empty;
+            await LoadConfigurationListAsync();
+        }
+        else
+        {
+            ToastService.Notify(new ToastMessage(ToastType.Danger,
+                string.Format(Traductor.T("CONFIG_SAVE_FAILED"), ConfigService.LastError)));
+        }
+    }
+
+    private async Task LoadConfigurationAsync(string name)
+    {
+        var config = await ConfigService.LoadConfigurationAsync(name);
+        if (config != null)
+        {
+            await OnConfigurationLoaded.InvokeAsync(config);
+            ToastService.Notify(new ToastMessage(ToastType.Success,
+                string.Format(Traductor.T("CONFIG_LOADED"), name)));
+        }
+        else
+        {
+            ToastService.Notify(new ToastMessage(ToastType.Danger,
+                string.Format(Traductor.T("CONFIG_LOAD_FAILED"), ConfigService.LastError)));
+        }
+    }
+
+    private async Task DeleteConfigurationAsync(string name)
+    {
+        var result = await ConfigService.DeleteConfigurationAsync(name);
+        if (result)
+        {
+            ToastService.Notify(new ToastMessage(ToastType.Success,
+                string.Format(Traductor.T("CONFIG_DELETED"), name)));
+            await LoadConfigurationListAsync();
+        }
+        else
+        {
+            ToastService.Notify(new ToastMessage(ToastType.Danger,
+                string.Format(Traductor.T("CONFIG_DELETE_FAILED"), ConfigService.LastError)));
+        }
+    }
+
+    private async Task ExportConfigurationAsync(string name)
+    {
+        var config = await ConfigService.LoadConfigurationAsync(name);
+        if (config != null)
+        {
+            _exportContent = ConfigService.ExportConfiguration(config);
+            _exportFileName = $"{name.Replace(" ", "_")}.k-config";
+            _showExportDownload = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task DownloadExportAsync()
+    {
+        try
+        {
+            // Use JS interop to trigger download
+            await JS.InvokeVoidAsync("downloadFile", _exportFileName, _exportContent);
+            _showExportDownload = false;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(new ToastMessage(ToastType.Warning,
+                string.Format(Traductor.T("CONFIG_DOWNLOAD_WARNING"), ex.Message)));
+        }
+    }
+
+    private async Task OnFileSelectedAsync(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            var file = e.File;
+            if (file == null)
+            {
+                Logger.LogWarning("[ConfigurationModal] No file selected");
+                return;
+            }
+
+            Logger.LogInformation($"[ConfigurationModal] File selected: {file.Name}, Size: {file.Size}");
+
+            using var stream = file.OpenReadStream();
+            using var reader = new StreamReader(stream);
+            var content = await reader.ReadToEndAsync();
+
+            Logger.LogInformation($"[ConfigurationModal] File content length: {content.Length}");
+            Logger.LogInformation($"[ConfigurationModal] File content preview: {content.Substring(0, Math.Min(200, content.Length))}...");
+
+            var config = ConfigService.ImportConfiguration(content);
+            if (config != null)
+            {
+                // Set the name from filename if empty
+                if (string.IsNullOrEmpty(config.Name))
+                {
+                    config.Name = System.IO.Path.GetFileNameWithoutExtension(file.Name);
+                }
+
+                // Store the imported config for user to load
+                _importedConfig = config;
+
+                // Also save to database for later use
+                await ConfigService.SaveConfigurationAsync(config);
+                await LoadConfigurationListAsync();
+
+                Logger.LogInformation($"[ConfigurationModal] Config imported: {config.Name}");
+                ToastService.Notify(new ToastMessage(ToastType.Success,
+                    string.Format(Traductor.T("CONFIG_IMPORTED"), config.Name)));
+                StateHasChanged();
+            }
+            else
+            {
+                Logger.LogError($"[ConfigurationModal] Import failed: {ConfigService.LastError}");
+                ToastService.Notify(new ToastMessage(ToastType.Danger,
+                    string.Format(Traductor.T("CONFIG_INVALID_FILE"), ConfigService.LastError)));
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError($"[ConfigurationModal] Import exception: {ex.Message}");
+            ToastService.Notify(new ToastMessage(ToastType.Danger,
+                string.Format(Traductor.T("CONFIG_IMPORT_FAILED"), ex.Message)));
+        }
+    }
+
+    private async Task LoadImportedConfigAsync()
+    {
+        if (_importedConfig != null)
+        {
+            await OnConfigurationLoaded.InvokeAsync(_importedConfig);
+            ToastService.Notify(new ToastMessage(ToastType.Success,
+                string.Format(Traductor.T("CONFIG_LOADED"), _importedConfig.Name)));
+            _importedConfig = null;
+            StateHasChanged();
+        }
+    }
+
+    #endregion
+}

@@ -1,0 +1,51 @@
+{
+  "tests": [
+    { "id": "t1", "visible": true, "descriptions": { "en": "Reset 25 ns then dir=1 — count up", "es": "Reset 25 ns luego dir=1 — cuenta ascendente" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "dir", "values": [
+        { "time": 0, "scale": "NS", "value": "1" }
+      ]}
+    ]},
+    { "id": "t2", "visible": false, "descriptions": { "en": "dir=0 — count down (wraps)", "es": "dir=0 — cuenta descendente (con vuelta)" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "dir", "values": [
+        { "time": 0, "scale": "NS", "value": "0" }
+      ]}
+    ]},
+    { "id": "t3", "visible": false, "descriptions": { "en": "dir flips mid-run", "es": "dir cambia a mitad de ejecución" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "dir", "values": [
+        { "time": 0,    "scale": "NS", "value": "1" },
+        { "time": 800,  "scale": "NS", "value": "0" }
+      ]}
+    ]},
+    { "id": "t4", "visible": false, "descriptions": { "en": "Mid-run reset clears count", "es": "Reset a mitad limpia la cuenta" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,    "scale": "NS", "value": "1" },
+        { "time": 25,   "scale": "NS", "value": "0" },
+        { "time": 600,  "scale": "NS", "value": "1" },
+        { "time": 625,  "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "dir", "values": [
+        { "time": 0, "scale": "NS", "value": "1" }
+      ]}
+    ]},
+    { "id": "t5", "visible": false, "descriptions": { "en": "Held in reset — q stays 0000", "es": "Reset mantenido — q permanece en 0000" }, "durationMicros": 1, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0, "scale": "NS", "value": "1" }
+      ]},
+      { "portName": "dir", "values": [
+        { "time": 0, "scale": "NS", "value": "1" }
+      ]}
+    ]}
+  ]
+}

@@ -1,0 +1,289 @@
+/* ============================================================================
+   Kmila Design Tokens
+   ---------------------------------------------------------------------------
+   Single source of truth for visual primitives: color, type, space, radius,
+   shadow, motion, z-index. All UI styles reference these variables so that
+   light/dark themes stay in sync and palette changes flow app-wide.
+
+   Rules:
+   - Core brand colors are locked: --kmila-primary, --kmila-primary-light,
+     --kmila-primary-dark, --kmila-accent.
+   - Slate tints and neutrals below extend the brand; do not introduce
+     unrelated hues without approval.
+   - Semantic colors (success/warn/error) follow Tailwind's slate-neutral
+     palette to keep hierarchy calm and professional.
+   ============================================================================ */
+
+:root,
+[data-bs-theme="light"] {
+
+    /* ----- Brand (LOCKED) ----- */
+    --kmila-primary: #475569;
+    --kmila-primary-light: #64748b;
+    --kmila-primary-dark: #334155;
+    --kmila-accent: #3c82f6;
+    --kmila-accent-hover: #2563eb;
+    --kmila-accent-soft: #dbeafe;
+
+    /* ----- Slate scale (extension of brand) ----- */
+    --slate-50: #f8fafc;
+    --slate-100: #f1f5f9;
+    --slate-200: #e2e8f0;
+    --slate-300: #cbd5e1;
+    --slate-400: #94a3b8;
+    --slate-500: #64748b;
+    --slate-600: #475569;
+    --slate-700: #334155;
+    --slate-800: #1e293b;
+    --slate-900: #0f172a;
+    --slate-950: #020617;
+
+    /* ----- Semantic state ----- */
+    --success: #059669;
+    --success-soft: #d1fae5;
+    --warning: #d97706;
+    --warning-soft: #fef3c7;
+    --danger: #dc2626;
+    --danger-soft: #fee2e2;
+    --info: var(--kmila-accent);
+    --info-soft: var(--kmila-accent-soft);
+
+    /* ----- Surfaces (light) ----- */
+    --surface-0: #ffffff;             /* page background */
+    --surface-1: var(--slate-50);     /* subtle raised */
+    --surface-2: #ffffff;             /* card */
+    --surface-3: var(--slate-100);    /* muted panels */
+    --surface-inverse: var(--slate-800);
+
+    /* ----- Foreground / text ----- */
+    --text-strong: var(--slate-900);
+    --text-default: var(--slate-700);
+    --text-muted: var(--slate-500);
+    --text-subtle: var(--slate-400);
+    --text-on-primary: #ffffff;
+    --text-on-accent: #ffffff;
+    --text-inverse: var(--slate-50);
+
+    /* ----- Border ----- */
+    --border-subtle: var(--slate-200);
+    --border-default: var(--slate-300);
+    --border-strong: var(--slate-400);
+    --border-focus: var(--kmila-accent);
+
+    /* ----- Elevation (shadows) ----- */
+    --shadow-1: 0 1px 2px 0 rgba(15, 23, 42, 0.04), 0 1px 3px 0 rgba(15, 23, 42, 0.06);
+    --shadow-2: 0 2px 4px -1px rgba(15, 23, 42, 0.06), 0 4px 12px -2px rgba(15, 23, 42, 0.08);
+    --shadow-3: 0 4px 8px -2px rgba(15, 23, 42, 0.08), 0 12px 24px -4px rgba(15, 23, 42, 0.12);
+    --shadow-focus: 0 0 0 3px rgba(60, 130, 246, 0.25);
+
+    /* ----- Signal / waveform colors (data viz) ----- */
+    --signal-clock: #10b981;
+    --signal-input: var(--kmila-accent);
+    --signal-output: #f59e0b;
+    --signal-vector: #8b5cf6;
+    --signal-bus: var(--slate-500);
+}
+
+
+/* ============================================================================
+   Dark theme — activated by <html data-bs-theme="dark">
+   Bootstrap 5.3 ships native dark-mode support that watches this attribute, so
+   flipping it toggles both our tokens and Bootstrap's components in lockstep.
+   ============================================================================ */
+
+[data-bs-theme="dark"] {
+
+    /* Brand stays (locked); accent brightens slightly for contrast on dark */
+    --kmila-primary: #64748b;
+    --kmila-primary-light: #94a3b8;
+    --kmila-primary-dark: #475569;
+    --kmila-accent: #60a5fa;
+    --kmila-accent-hover: #93c5fd;
+    --kmila-accent-soft: rgba(96, 165, 250, 0.15);
+
+    --success: #34d399;
+    --success-soft: rgba(52, 211, 153, 0.15);
+    --warning: #fbbf24;
+    --warning-soft: rgba(251, 191, 36, 0.15);
+    --danger: #f87171;
+    --danger-soft: rgba(248, 113, 113, 0.15);
+    --info: var(--kmila-accent);
+    --info-soft: var(--kmila-accent-soft);
+
+    --surface-0: #0b1220;
+    --surface-1: #111a2e;
+    --surface-2: #162038;
+    --surface-3: #1e293b;
+    --surface-inverse: var(--slate-100);
+
+    --text-strong: var(--slate-50);
+    --text-default: var(--slate-200);
+    --text-muted: var(--slate-400);
+    --text-subtle: var(--slate-500);
+    --text-on-primary: #ffffff;
+    --text-on-accent: #0b1220;
+    --text-inverse: var(--slate-900);
+
+    --border-subtle: rgba(148, 163, 184, 0.15);
+    --border-default: rgba(148, 163, 184, 0.25);
+    --border-strong: rgba(148, 163, 184, 0.4);
+    --border-focus: var(--kmila-accent);
+
+    --shadow-1: 0 1px 2px 0 rgba(0, 0, 0, 0.3), 0 1px 3px 0 rgba(0, 0, 0, 0.2);
+    --shadow-2: 0 2px 4px -1px rgba(0, 0, 0, 0.35), 0 4px 12px -2px rgba(0, 0, 0, 0.35);
+    --shadow-3: 0 4px 8px -2px rgba(0, 0, 0, 0.4), 0 12px 24px -4px rgba(0, 0, 0, 0.45);
+    --shadow-focus: 0 0 0 3px rgba(96, 165, 250, 0.35);
+    --shadow-sticky: 2px 0 4px -2px rgba(0, 0, 0, 0.30);
+
+    --signal-clock: #34d399;
+    --signal-input: #60a5fa;
+    --signal-output: #fbbf24;
+    --signal-vector: #a78bfa;
+    --signal-bus: var(--slate-400);
+}
+
+
+/* ============================================================================
+   Theme-independent tokens
+   ============================================================================ */
+
+:root {
+
+    /* ----- Spacing (8 px grid) ----- */
+    --space-0: 0;
+    --space-1: 0.25rem;   /*  4px */
+    --space-2: 0.5rem;    /*  8px */
+    --space-3: 0.75rem;   /* 12px */
+    --space-4: 1rem;      /* 16px */
+    --space-5: 1.5rem;    /* 24px */
+    --space-6: 2rem;      /* 32px */
+    --space-7: 3rem;      /* 48px */
+    --space-8: 4rem;      /* 64px */
+
+    /* ----- Radius ----- */
+    --radius-xs: 0.25rem;   /* inputs, chips */
+    --radius-sm: 0.375rem;  /* buttons */
+    --radius-md: 0.5rem;    /* cards */
+    --radius-lg: 0.75rem;   /* modals, large cards */
+    --radius-xl: 1rem;      /* feature panels */
+    --radius-pill: 999px;
+
+    /* ----- User text size (5-step scale) -----
+       Multiplier applied to `html { font-size }` so all rem-based --fs-*
+       tokens scale uniformly. Settings → Apariencia → Tamaño de letra
+       persists the chosen step (xs/sm/md/lg/xl) and writes the numeric
+       multiplier here via JS interop. Default = 1 (Normal). */
+    --user-text-scale: 1;
+
+    /* ----- Typography ----- */
+    --font-sans: 'Helvetica Neue', Helvetica, Arial, system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+    /* Fluid type scale — scales smoothly between 360px and 1440px viewports */
+    --fs-2xs:  clamp(0.66rem, 0.64rem + 0.1vw, 0.72rem);
+    --fs-xs:   clamp(0.78rem, 0.76rem + 0.1vw, 0.84rem);
+    --fs-sm:   clamp(0.86rem, 0.84rem + 0.1vw, 0.92rem);
+    --fs-base: clamp(0.94rem, 0.90rem + 0.15vw, 1.00rem);
+    --fs-md:   clamp(1.05rem, 1.00rem + 0.2vw, 1.15rem);
+    --fs-lg:   clamp(1.20rem, 1.10rem + 0.4vw, 1.40rem);
+    --fs-xl:   clamp(1.50rem, 1.30rem + 0.8vw, 1.90rem);
+    --fs-2xl:  clamp(1.90rem, 1.60rem + 1.2vw, 2.55rem);
+    --fs-3xl:  clamp(2.40rem, 2.00rem + 1.8vw, 3.40rem);
+
+    --fw-regular: 400;
+    --fw-medium: 500;
+    --fw-semibold: 600;
+    --fw-bold: 700;
+
+    --lh-tight: 1.2;
+    --lh-snug: 1.35;
+    --lh-normal: 1.5;
+    --lh-relaxed: 1.65;
+
+    --tracking-tight: -0.01em;
+    --tracking-normal: 0;
+    --tracking-wide: 0.04em;
+
+    /* ----- Motion ----- */
+    --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+    --ease-emphasized: cubic-bezier(0.2, 0, 0, 1.4);
+    --ease-decelerate: cubic-bezier(0, 0, 0, 1);
+    --duration-fast: 120ms;
+    --duration-base: 180ms;
+    --duration-slow: 260ms;
+
+    /* ----- Aliases / compatibility ----- */
+    --accent: var(--kmila-accent);
+    --accent-hover: var(--kmila-accent-hover);
+    --accent-soft: var(--kmila-accent-soft);
+
+    /* Sticky shadow for waveform/table labels (soft cue, not a band) */
+    --shadow-sticky: 2px 0 4px -2px rgba(15, 23, 42, 0.10);
+
+    /* ----- Z-index scale ----- */
+    --z-base: 1;
+    --z-sticky: 100;
+    --z-drawer: 1020;
+    --z-sidebar: 1030;
+    --z-dropdown: 1040;
+    --z-modal: 1050;
+    --z-popover: 1060;
+    --z-toast: 1080;
+
+    /* ----- Layout primitives ----- */
+    --sidebar-width: 260px;
+    --topbar-height: 3.5rem;
+    --content-max: 1440px;
+
+    /* ----- Accessibility ----- */
+    --tap-target: 44px;
+
+    /* ----- Visual Runtime widgets (--kviz-*) -----
+       Physical-hardware analogs (LED, button, switch, 7-segment, etc.) keep
+       a consistent "appliance" look across both light + dark app themes — a
+       real LED doesn't change color based on room lighting. Defined here at
+       :root (theme-independent) so widgets are stable in both modes.
+
+       Note: --kviz-7seg-color stays per-widget (each instance picks its own
+       segment color); these tokens are the housing / chassis defaults. */
+    --kviz-housing-dark:        #0b0f14;   /* deep navy chassis interior */
+    --kviz-housing-shadow:      #1f2937;   /* surface lit by ambient */
+    --kviz-housing-ring:        #111111;   /* hardline ring around housing */
+    --kviz-housing-border:      #1f2937;   /* outer border on dark housings */
+
+    --kviz-button-cap-top:      #f8fafc;   /* polymer cap, highlit */
+    --kviz-button-cap-bottom:   #cbd5e1;   /* polymer cap, shadow */
+    --kviz-button-cap-border:   #475569;   /* metal bezel */
+    --kviz-button-label:        #0f172a;   /* engraved label */
+    --kviz-button-bezel:        #475569;   /* extruded bezel (3-d shadow) */
+
+    --kviz-switch-track-off:    #cbd5e1;   /* track at rest */
+    --kviz-switch-track-off-border: #94a3b8;
+    --kviz-switch-track-on:     #22c55e;   /* track engaged (green LED-like) */
+    --kviz-switch-track-on-border: #166534;
+    --kviz-switch-knob-light:   #f8fafc;
+    --kviz-switch-knob-dark:    #e2e8f0;
+    --kviz-switch-knob-border:  #475569;
+
+    --kviz-stepper-rotor-light: #9ca3af;
+    --kviz-stepper-rotor-dark:  #4b5563;
+    --kviz-stepper-coil-light:  #fde68a;   /* warm copper highlight */
+    --kviz-stepper-coil-dark:   #f59e0b;   /* warm copper shadow */
+}
+
+
+/* ----- Respect user motion preference ----- */
+@media (prefers-reduced-motion: reduce) {
+    :root {
+        --duration-fast: 0ms;
+        --duration-base: 0ms;
+        --duration-slow: 0ms;
+    }
+
+    *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+    }
+}

@@ -1,0 +1,156 @@
+{
+  "version": 1,
+  "toolbox": {
+    "kind": "flyoutToolbox",
+    "contents": [
+      { "kind": "block", "type": "kmila_recipe_step" }
+    ]
+  },
+  "compositions": [
+    {
+      "fingerprint": "kmila_recipe_step:STEP=knead|kmila_recipe_step:STEP=sauce|kmila_recipe_step:STEP=cheese|kmila_recipe_step:STEP=bake|kmila_recipe_step:STEP=serve",
+      "label": {
+        "en": "Classic pizza order",
+        "es": "Orden clásica de la pizza"
+      },
+      "timeline": {
+        "code": "1. Knead the dough\n2. Spread the sauce\n3. Add the cheese\n4. Bake at 220°C\n5. Slice and serve",
+        "language": "plaintext",
+        "signalOrder": ["stage", "elapsed"],
+        "steps": [
+          {
+            "t": 0,
+            "highlightLines": [],
+            "signals": { "stage": "raw ingredients", "elapsed": "0 min" },
+            "note": {
+              "en": "Cold start. The kitchen is empty; the chef is about to begin.",
+              "es": "Inicio en frío. La cocina está vacía; el chef está por empezar."
+            }
+          },
+          {
+            "t": 1,
+            "highlightLines": [1],
+            "signals": { "stage": "dough kneaded", "elapsed": "5 min" },
+            "note": {
+              "en": "Step 1 executes. The chef can't move on until this is done — that's what 'sequential' means.",
+              "es": "Se ejecuta el paso 1. El chef no puede avanzar hasta terminarlo — eso es 'secuencial'."
+            }
+          },
+          {
+            "t": 2,
+            "highlightLines": [2],
+            "signals": { "stage": "sauce on dough", "elapsed": "7 min" },
+            "note": {
+              "en": "Step 2 executes. Notice we depend on step 1 having finished — that's why order matters.",
+              "es": "Se ejecuta el paso 2. Observa que depende de que el paso 1 haya terminado — por eso importa el orden."
+            }
+          },
+          {
+            "t": 3,
+            "highlightLines": [3],
+            "signals": { "stage": "cheese on sauce", "elapsed": "8 min" },
+            "note": {
+              "en": "Step 3. Each line waits for the previous one to commit before starting.",
+              "es": "Paso 3. Cada línea espera a que la anterior termine antes de comenzar."
+            }
+          },
+          {
+            "t": 4,
+            "highlightLines": [4],
+            "signals": { "stage": "baking", "elapsed": "20 min" },
+            "note": {
+              "en": "Step 4. The big wait — sequential execution means we burn 12 minutes here doing nothing else.",
+              "es": "Paso 4. La gran espera — la ejecución secuencial significa que gastamos 12 minutos aquí sin hacer nada más."
+            }
+          },
+          {
+            "t": 5,
+            "highlightLines": [5],
+            "signals": { "stage": "served!", "elapsed": "21 min" },
+            "note": {
+              "en": "Step 5. Done. This is exactly what happens inside a VHDL process body — line by line, top to bottom.",
+              "es": "Paso 5. Listo. Esto es exactamente lo que sucede dentro de un proceso VHDL — línea por línea, de arriba abajo."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fingerprint": "kmila_recipe_step:STEP=knead|kmila_recipe_step:STEP=sauce|kmila_recipe_step:STEP=cheese|kmila_recipe_step:STEP=toppings|kmila_recipe_step:STEP=bake|kmila_recipe_step:STEP=serve",
+      "label": {
+        "en": "Loaded pizza (with toppings)",
+        "es": "Pizza completa (con ingredientes)"
+      },
+      "timeline": {
+        "code": "1. Knead the dough\n2. Spread the sauce\n3. Add the cheese\n4. Add the toppings\n5. Bake at 220°C\n6. Slice and serve",
+        "language": "plaintext",
+        "signalOrder": ["stage", "elapsed"],
+        "steps": [
+          {
+            "t": 0,
+            "highlightLines": [],
+            "signals": { "stage": "raw ingredients", "elapsed": "0 min" },
+            "note": {
+              "en": "Same start as the classic order, but you added a toppings step. Sequential execution will pay an extra slot for it.",
+              "es": "Mismo inicio que la orden clásica, pero agregaste un paso de ingredientes. La ejecución secuencial paga un espacio extra por él."
+            }
+          },
+          {
+            "t": 1,
+            "highlightLines": [1],
+            "signals": { "stage": "dough kneaded", "elapsed": "5 min" },
+            "note": {
+              "en": "Step 1 — dough first, same as before.",
+              "es": "Paso 1 — primero la masa, igual que antes."
+            }
+          },
+          {
+            "t": 2,
+            "highlightLines": [2],
+            "signals": { "stage": "sauce on dough", "elapsed": "7 min" },
+            "note": {
+              "en": "Step 2 — sauce.",
+              "es": "Paso 2 — la salsa."
+            }
+          },
+          {
+            "t": 3,
+            "highlightLines": [3],
+            "signals": { "stage": "cheese on sauce", "elapsed": "8 min" },
+            "note": {
+              "en": "Step 3 — cheese.",
+              "es": "Paso 3 — el queso."
+            }
+          },
+          {
+            "t": 4,
+            "highlightLines": [4],
+            "signals": { "stage": "toppings on cheese", "elapsed": "10 min" },
+            "note": {
+              "en": "Step 4 — the new one. Sequential means every step extends the total time.",
+              "es": "Paso 4 — el nuevo. Secuencial significa que cada paso extiende el tiempo total."
+            }
+          },
+          {
+            "t": 5,
+            "highlightLines": [5],
+            "signals": { "stage": "baking", "elapsed": "22 min" },
+            "note": {
+              "en": "Step 5 — bake. Notice we're already at 22 minutes vs 20 in the classic order — the extra step cost two minutes of wall clock.",
+              "es": "Paso 5 — hornear. Fíjate que ya vamos en 22 minutos vs 20 en la orden clásica — el paso extra costó dos minutos reales."
+            }
+          },
+          {
+            "t": 6,
+            "highlightLines": [6],
+            "signals": { "stage": "served!", "elapsed": "23 min" },
+            "note": {
+              "en": "Step 6 — served. In hardware, this same recipe with concurrent assignments would still take ~1 min total. That's the price of sequential semantics.",
+              "es": "Paso 6 — servido. En hardware, esta misma receta con asignaciones concurrentes seguiría tardando ~1 min. Ese es el costo de la semántica secuencial."
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

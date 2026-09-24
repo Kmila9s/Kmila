@@ -1,0 +1,1958 @@
+@*
+    Settings page — currently a placeholder with tokenized section cards so
+    future preferences (autosave, default FPGA, accent override, keyboard
+    shortcuts, etc.) have a natural home. Everything lives under /settings and
+    is reachable from the sidebar's "System" section.
+
+    Each card here is a slot. Wire behavior into the individual cards as
+    features land; the shell + navigation are already in place.
+*@
+@page "/settings"
+@using Kmila.Shared.Services
+@using Kmila.Shared.Repositories
+@using Kmila.Shared.Models
+@inject IServiceProvider Services
+@inject UserAssetStore UserAssets
+@inject LessonProgressStore LearnProgress
+@inject ProjectBundleService Bundles
+@inject UserSampleService UserSamples
+@inject Projects ProjectsRepo
+@inject GitHubAuth GitHubAuth
+@inject LibraryCompiler.Services.LibraryCompiler LibCompiler
+@inject Kmila.Shared.Services.ReplayState Replay
+@inject SelectedFPGA SelectedFPGA
+@implements IDisposable
+
+<PageTitle>@Traductor.T("NAV_SETTINGS")</PageTitle>
+
+<section class="settings-page">
+    <header class="settings-page__header">
+        <span class="home-section__eyebrow">@Traductor.T("SETTINGS_EYEBROW")</span>
+        <h1>@Traductor.T("NAV_SETTINGS")</h1>
+        <p class="settings-page__intro">@Traductor.T("SETTINGS_INTRO")</p>
+    </header>
+
+    <div class="settings-page__grid">
+
+        @* --- Appearance --- *@
+        <article class="settings-card">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--accent">
+                    <Icon Name="IconName.PaletteFill" />
+                </span>
+                <div class="settings-card__head-text">
+                    <h2>@Traductor.T("SETTINGS_APPEARANCE_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("SETTINGS_APPEARANCE_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                <div class="settings-row">
+                    <div class="settings-row__label">
+                        <strong>@Traductor.T("SETTINGS_THEME")</strong>
+                        <small>@Traductor.T("SETTINGS_THEME_HINT")</small>
+                    </div>
+                    <div class="settings-row__control">
+                        <KmilaThemeSwitcher />
+                    </div>
+                </div>
+                <div class="settings-row">
+                    <div class="settings-row__label">
+                        <strong>@Traductor.T("SETTINGS_LANGUAGE")</strong>
+                        <small>@Traductor.T("SETTINGS_LANGUAGE_HINT")</small>
+                    </div>
+                    <div class="settings-row__control">
+                        <LanguageChanger />
+                    </div>
+                </div>
+                <div class="settings-row">
+                    <div class="settings-row__label">
+                        <strong>@Traductor.T("SETTINGS_TEXT_SIZE_TITLE")</strong>
+                        <small>@Traductor.T("SETTINGS_TEXT_SIZE_HINT")</small>
+                    </div>
+                    <div class="settings-row__control">
+                        <KmilaTextSizeSwitcher />
+                    </div>
+                </div>
+
+                @* Welcome tour controls — wipes every kmila.tutorialSeen.* flag
+                   so per-route tours fire again next time the user visits each
+                   view. Useful both for replay and for QA. *@
+                <div class="settings-row">
+                    <div class="settings-row__label">
+                        <strong>@Traductor.T("SETTINGS_TUTORIAL_TITLE")</strong>
+                        <small>@Traductor.T("SETTINGS_TUTORIAL_HINT")</small>
+                    </div>
+                    <div class="settings-row__control">
+                        <KmilaTooltip TextKey="SETTINGS_TUTORIAL_REPLAY_TIP">
+                            <button type="button"
+                                    class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                                    @onclick="ResetTutorialsAsync">
+                                <Icon Name="IconName.ArrowCounterclockwise" />
+                                <span>@Traductor.T("SETTINGS_TUTORIAL_REPLAY")</span>
+                            </button>
+                        </KmilaTooltip>
+                    </div>
+                </div>
+            </div>
+        </article>
+
+        @* --- Editor --- *@
+        <article class="settings-card">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--accent">
+                    <Icon Name="IconName.CodeSquare" />
+                </span>
+                <div class="settings-card__head-text">
+                    <h2>@Traductor.T("SETTINGS_EDITOR_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("SETTINGS_EDITOR_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                <div class="settings-row">
+                    <div class="settings-row__label">
+                        <strong>@Traductor.T("SETTINGS_EDITOR_SYNC_MODE_TITLE")</strong>
+                        <small>@Traductor.T("SETTINGS_EDITOR_SYNC_MODE_HINT")</small>
+                    </div>
+                    <div class="settings-row__control">
+                        <select class="form-select form-select-sm"
+                                value="@_editorSyncMode.ToToken()"
+                                @onchange="OnEditorSyncModeChanged">
+                            <option value="auto">@Traductor.T("SETTINGS_EDITOR_SYNC_MODE_AUTO")</option>
+                            <option value="manual">@Traductor.T("SETTINGS_EDITOR_SYNC_MODE_MANUAL")</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </article>
+
+        @* --- Simulation --- *@
+        <article class="settings-card">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--accent">
+                    <Icon Name="IconName.CpuFill" />
+                </span>
+                <div class="settings-card__head-text">
+                    <h2>@Traductor.T("SETTINGS_SIMULATION_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("SETTINGS_SIMULATION_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                @* F-C-05 (2026-07-12): give the FPGA picker a Settings-level entry
+                   point. Previously the only trigger was inside the profile menu on
+                   the Editor page (3-hop nav). The Change button reuses the shared
+                   `kmilaOpenFpgaPicker` JS glue so the picker itself stays a single
+                   source of truth in ProfileMenu.razor. *@
+                <div class="settings-row" data-testid="settings-sim-fpga-row">
+                    <div class="settings-row__label">
+                        <strong>@Traductor.T("SETTINGS_SIM_FPGA_TITLE")</strong>
+                        <small>@Traductor.T("SETTINGS_SIM_FPGA_HINT")</small>
+                    </div>
+                    <div class="settings-row__control settings-row__control--fpga">
+                        <span class="settings-row__fpga-model">
+                            @if (SelectedFPGA?.FPGA == null || string.IsNullOrEmpty(SelectedFPGA.FPGA.Model))
+                            {
+                                <em class="text-body-secondary">@Traductor.T("SETTINGS_SIM_FPGA_NONE")</em>
+                            }
+                            else
+                            {
+                                @SelectedFPGA.FPGA.Model
+                            }
+                        </span>
+                        <button type="button"
+                                class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                                data-testid="settings-sim-fpga-change"
+                                @onclick="ChangeFpgaAsync">
+                            <Icon Name="IconName.CpuFill" />
+                            <span>@Traductor.T("SETTINGS_SIM_FPGA_CHANGE")</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="settings-row">
+                    <div class="settings-row__label">
+                        <strong>@Traductor.T("SETTINGS_TICK_RES_TITLE")</strong>
+                        <small>@Traductor.T("SETTINGS_TICK_RES_HINT")</small>
+                    </div>
+                    <div class="settings-row__control">
+                        <select class="form-select form-select-sm"
+                                value="@_tickMode.ToToken()"
+                                @onchange="OnTickModeChanged">
+                            <option value="default">@Traductor.T("SETTINGS_TICK_RES_DEFAULT")</option>
+                            <option value="high">@Traductor.T("SETTINGS_TICK_RES_HIGH")</option>
+                            <option value="adaptive">@Traductor.T("SETTINGS_TICK_RES_ADAPTIVE")</option>
+                        </select>
+                    </div>
+                </div>
+                <p class="settings-card__hint">@Traductor.T(_tickMode switch {
+                    TickResolutionMode.HighPrecision => "SETTINGS_TICK_RES_HIGH_DESC",
+                    TickResolutionMode.Adaptive      => "SETTINGS_TICK_RES_ADAPTIVE_DESC",
+                    _                                 => "SETTINGS_TICK_RES_DEFAULT_DESC"
+                })</p>
+
+                <div class="settings-row">
+                    <div class="settings-row__label">
+                        <strong>@Traductor.T("SETTINGS_LIVE_REPLAY_TITLE")</strong>
+                        <small>@Traductor.T("SETTINGS_LIVE_REPLAY_HINT")</small>
+                    </div>
+                    <div class="settings-row__control">
+                        <label class="form-check form-switch mb-0">
+                            <input type="checkbox"
+                                   class="form-check-input"
+                                   role="switch"
+                                   checked="@_liveReplayDuringRun"
+                                   @onchange="OnLiveReplayChanged" />
+                        </label>
+                    </div>
+                </div>
+                @if (_liveReplayDuringRun)
+                {
+                    <p class="settings-card__hint settings-card__hint--warn">
+                        <Icon Name="IconName.ExclamationTriangleFill" />
+                        <span>@Traductor.T("SETTINGS_LIVE_REPLAY_WARN")</span>
+                    </p>
+                }
+
+                <div class="settings-row">
+                    <div class="settings-row__label">
+                        <strong>@Traductor.T("SETTINGS_VISUAL_RING_TITLE")</strong>
+                        <small>@Traductor.T("SETTINGS_VISUAL_RING_HINT")</small>
+                    </div>
+                    <div class="settings-row__control">
+                        <input type="number"
+                               class="form-control form-control-sm"
+                               style="max-width: 8em;"
+                               min="256" max="16384" step="256"
+                               value="@_visualRingBuffer"
+                               @onchange="OnVisualRingBufferChanged" />
+                    </div>
+                </div>
+            </div>
+        </article>
+
+        @* --- Library compilation --- *@
+        <article class="settings-card">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--accent">
+                    <Icon Name="IconName.Layers" />
+                </span>
+                <div class="settings-card__head-text">
+                    <h2>@Traductor.T("SETTINGS_LIB_BUILD_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("SETTINGS_LIB_BUILD_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                <div class="settings-row">
+                    <div class="settings-row__label">
+                        <strong>@Traductor.T("SETTINGS_LIB_BUILD_MODE_TITLE")</strong>
+                        <small>@Traductor.T("SETTINGS_LIB_BUILD_MODE_HINT")</small>
+                    </div>
+                    <div class="settings-row__control">
+                        <select class="form-select form-select-sm"
+                                value="@_libBuildMode.ToToken()"
+                                @onchange="OnLibBuildModeChanged">
+                            <option value="ondemand">@Traductor.T("SETTINGS_LIB_BUILD_ONDEMAND")</option>
+                            <option value="process">@Traductor.T("SETTINGS_LIB_BUILD_PROCESS")</option>
+                            <option value="persistent">@Traductor.T("SETTINGS_LIB_BUILD_PERSISTENT")</option>
+                        </select>
+                    </div>
+                </div>
+                <p class="settings-card__hint">@Traductor.T(_libBuildMode switch {
+                    LibraryCompiler.Services.LibraryBuildMode.OnDemand      => "SETTINGS_LIB_BUILD_ONDEMAND_DESC",
+                    LibraryCompiler.Services.LibraryBuildMode.ProcessCached => "SETTINGS_LIB_BUILD_PROCESS_DESC",
+                    _                                                       => "SETTINGS_LIB_BUILD_PERSISTENT_DESC"
+                })</p>
+
+                <div class="settings-card__actions">
+                    <KmilaTooltip TextKey="SETTINGS_LIB_CACHE_CLEAR_TIP">
+                        <button type="button" class="kmila-btn kmila-btn--danger"
+                                @onclick="ClearLibraryCache">
+                            <Icon Name="IconName.Trash" />
+                            <span>@Traductor.T("SETTINGS_LIB_CACHE_CLEAR")</span>
+                        </button>
+                    </KmilaTooltip>
+                </div>
+            </div>
+        </article>
+
+        @* --- User FPGAs --- *@
+        <article class="settings-card">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--accent">
+                    <Icon Name="IconName.CpuFill" />
+                </span>
+                <div class="settings-card__head-text">
+                    <h2>@Traductor.T("SETTINGS_USER_FPGAS_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("SETTINGS_USER_FPGAS_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                @* slot/section-actions — Import is the headline (accent); Download
+                   ghosts back to secondary so the two filled solids don't compete. *@
+                <div class="settings-card__actions">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary"
+                            @onclick="DownloadFpgaTemplate">
+                        <Icon Name="IconName.Download" />
+                        <span>@Traductor.T("SETTINGS_DOWNLOAD_TEMPLATE")</span>
+                    </button>
+                    <label class="kmila-btn kmila-btn--accent settings-import-btn">
+                        <Icon Name="IconName.FileEarmarkPlus" />
+                        <span>@Traductor.T("SETTINGS_IMPORT_FPGA")</span>
+                        <InputFile OnChange="OnFpgaImportAsync" accept=".json" class="d-none" />
+                    </label>
+                </div>
+
+                @if (_userFpgas.Count == 0)
+                {
+                    <p class="settings-card__placeholder">@Traductor.T("SETTINGS_NO_USER_FPGA")</p>
+                }
+                else
+                {
+                    <ul class="settings-list">
+                        @foreach (var path in _userFpgas)
+                        {
+                            var name = System.IO.Path.GetFileName(path);
+                            <li class="settings-list__item">
+                                <div class="settings-list__info">
+                                    <Icon Name="IconName.FileEarmarkCode" />
+                                    <span class="settings-list__name">@name</span>
+                                </div>
+                                @* slot/list-row-actions — Family-14 icon button fits the row height
+                                   cleanly; --danger reveals destructive intent on hover only. *@
+                                <KmilaTooltip TextKey="COMMON_DELETE">
+                                    <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--danger kmila-btn-icon--sm"
+                                            @onclick="() => DeleteFpga(name)"
+                                            aria-label="@Traductor.T("COMMON_DELETE")">
+                                        <Icon Name="IconName.Trash" />
+                                    </button>
+                                </KmilaTooltip>
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+        </article>
+
+        @* --- User languages --- *@
+        <article class="settings-card">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--accent">
+                    <Icon Name="IconName.Translate" />
+                </span>
+                <div class="settings-card__head-text">
+                    <h2>@Traductor.T("SETTINGS_USER_LANGS_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("SETTINGS_USER_LANGS_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                @* slot/section-actions — Import headline (accent); Download ghosts. *@
+                <div class="settings-card__actions">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary"
+                            @onclick="DownloadLanguageTemplate">
+                        <Icon Name="IconName.Download" />
+                        <span>@Traductor.T("SETTINGS_DOWNLOAD_TEMPLATE")</span>
+                    </button>
+                    <label class="kmila-btn kmila-btn--accent settings-import-btn">
+                        <Icon Name="IconName.FileEarmarkPlus" />
+                        <span>@Traductor.T("SETTINGS_IMPORT_LANG")</span>
+                        <InputFile OnChange="OnLangImportAsync" accept=".json" class="d-none" />
+                    </label>
+                </div>
+
+                @if (_userLangs.Count == 0)
+                {
+                    <p class="settings-card__placeholder">@Traductor.T("SETTINGS_NO_USER_LANG")</p>
+                }
+                else
+                {
+                    <ul class="settings-list">
+                        @foreach (var path in _userLangs)
+                        {
+                            var name = System.IO.Path.GetFileName(path);
+                            var display = UserAssetStore.ReadLanguageDisplayName(path);
+                            <li class="settings-list__item">
+                                <div class="settings-list__info">
+                                    <Icon Name="IconName.Translate" />
+                                    <span class="settings-list__name">@display</span>
+                                    <span class="settings-list__code">@name</span>
+                                </div>
+                                @* slot/list-row-actions — Family-14 icon, danger on hover. *@
+                                <KmilaTooltip TextKey="COMMON_DELETE">
+                                    <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--danger kmila-btn-icon--sm"
+                                            @onclick="() => DeleteLang(name)"
+                                            aria-label="@Traductor.T("COMMON_DELETE")">
+                                        <Icon Name="IconName.Trash" />
+                                    </button>
+                                </KmilaTooltip>
+                            </li>
+                        }
+                    </ul>
+                }
+
+                <p class="settings-card__note">
+                    <Icon Name="IconName.InfoCircle" />
+                    <span>@Traductor.T("SETTINGS_USER_LANGS_NOTE")</span>
+                </p>
+            </div>
+        </article>
+
+        @* --- User VHDL libraries --- *@
+        <article class="settings-card">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--accent">
+                    <Icon Name="IconName.Stack" />
+                </span>
+                <div class="settings-card__head-text">
+                    <h2>@Traductor.T("SETTINGS_USER_LIBS_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("SETTINGS_USER_LIBS_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                <div class="settings-card__actions">
+                    <label class="kmila-btn kmila-btn--accent settings-import-btn">
+                        <Icon Name="IconName.FileEarmarkPlus" />
+                        <span>@Traductor.T("SETTINGS_IMPORT_LIB")</span>
+                        <InputFile OnChange="OnLibraryImportAsync" accept=".vhd,.vhdl" class="d-none" />
+                    </label>
+                </div>
+
+                @if (_userLibs.Count == 0)
+                {
+                    <p class="settings-card__placeholder">@Traductor.T("SETTINGS_NO_USER_LIB")</p>
+                }
+                else
+                {
+                    <ul class="settings-list">
+                        @foreach (var path in _userLibs)
+                        {
+                            var name     = System.IO.Path.GetFileName(path);
+                            var packages = UserAssetStore.ListPackagesInFile(path);
+                            <li class="settings-list__item">
+                                <div class="settings-list__info">
+                                    <Icon Name="IconName.FileEarmarkCode" />
+                                    <span class="settings-list__name">@name</span>
+                                    @if (packages.Count > 0)
+                                    {
+                                        <span class="settings-list__code">
+                                            @string.Join(", ", packages)
+                                        </span>
+                                    }
+                                </div>
+                                @* slot/per-row-icon-pair — Family-14 icons (Eye neutral + Trash danger).
+                                   Family-11 was over-padded for a list-row pair; Family-14 fits the row rhythm. *@
+                                <div class="d-flex gap-1 align-items-center">
+                                    <KmilaTooltip TextKey="SETTINGS_LIB_VIEW">
+                                        <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
+                                                @onclick="() => ViewLibrary(path)"
+                                                aria-label="@Traductor.T("SETTINGS_LIB_VIEW")">
+                                            <Icon Name="IconName.Eye" />
+                                        </button>
+                                    </KmilaTooltip>
+                                    <KmilaTooltip TextKey="COMMON_DELETE">
+                                        <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--danger kmila-btn-icon--sm"
+                                                @onclick="() => DeleteLibrary(name)"
+                                                aria-label="@Traductor.T("COMMON_DELETE")">
+                                            <Icon Name="IconName.Trash" />
+                                        </button>
+                                    </KmilaTooltip>
+                                </div>
+                            </li>
+                        }
+                    </ul>
+                }
+
+                <p class="settings-card__note">
+                    <Icon Name="IconName.InfoCircle" />
+                    <span>@Traductor.T("SETTINGS_USER_LIBS_NOTE")</span>
+                </p>
+            </div>
+        </article>
+
+        @* --- Project bundle export / import --- *@
+        <article class="settings-card">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--accent">
+                    <Icon Name="IconName.BoxArrowUpRight" />
+                </span>
+                <div class="settings-card__head-text">
+                    <h2>@Traductor.T("SETTINGS_BUNDLE_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("SETTINGS_BUNDLE_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                @* slot/section-actions — select + Export form one coupled pair (pick a
+                   project, then export it); Import is the independent headline action. *@
+                <div class="settings-card__actions">
+                    <select class="form-select settings-card__select" @bind="_exportProjectId">
+                        <option value="0">@Traductor.T("SETTINGS_BUNDLE_PICK")</option>
+                        @foreach (var p in _projects)
+                        {
+                            <option value="@p.Id">@p.Name</option>
+                        }
+                    </select>
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary"
+                            data-testid="settings-bundle-export"
+                            disabled="@(_exportProjectId <= 0)"
+                            @onclick="ExportBundleAsync">
+                        <Icon Name="IconName.Download" />
+                        <span>@Traductor.T("SETTINGS_BUNDLE_EXPORT")</span>
+                    </button>
+                    <label class="kmila-btn kmila-btn--accent settings-import-btn"
+                           data-testid="settings-bundle-import">
+                        <Icon Name="IconName.FileEarmarkPlus" />
+                        <span>@Traductor.T("SETTINGS_BUNDLE_IMPORT")</span>
+                        <InputFile OnChange="OnBundleImportAsync" accept=".kmila,.json" class="d-none" />
+                    </label>
+                </div>
+            </div>
+        </article>
+
+        @* --- Learn progress --- *@
+        <article class="settings-card">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--accent">
+                    <Icon Name="IconName.MortarboardFill" />
+                </span>
+                <div class="settings-card__head-text">
+                    <h2>@Traductor.T("SETTINGS_LEARN_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("SETTINGS_LEARN_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                <div class="settings-row">
+                    <div class="settings-row__label">
+                        <strong>@Traductor.T("SETTINGS_LEARN_COMPLETED")</strong>
+                        <small>@string.Format(Traductor.T("SETTINGS_LEARN_COMPLETED_N"), _learnCompleted)</small>
+                    </div>
+                    <div class="settings-row__control">
+                        <KmilaTooltip TextKey="SETTINGS_LEARN_RESET_TIP">
+                            <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--danger kmila-btn--sm"
+                                    @onclick="ResetLearnProgressAsync"
+                                    disabled="@(_learnCompleted == 0)">
+                                <Icon Name="IconName.ArrowCounterclockwise" />
+                                <span>@Traductor.T("SETTINGS_LEARN_RESET")</span>
+                            </button>
+                        </KmilaTooltip>
+                    </div>
+                </div>
+            </div>
+        </article>
+
+        @* --- Diagnostics --- *@
+        <article class="settings-card">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--accent">
+                    <Icon Name="IconName.TerminalFill" />
+                </span>
+                <div class="settings-card__head-text">
+                    <h2>@Traductor.T("SETTINGS_DIAGNOSTICS_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("SETTINGS_DIAGNOSTICS_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                <a href="/logs" class="kmila-btn kmila-btn--primary">
+                    <Icon Name="IconName.JournalText" />
+                    <span>@Traductor.T("SETTINGS_OPEN_LOGS")</span>
+                </a>
+            </div>
+        </article>
+
+        @* --- Privacy --- *@
+        <article class="settings-card">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--accent">
+                    <Icon Name="IconName.ShieldLock" />
+                </span>
+                <div class="settings-card__head-text">
+                    <h2>@Traductor.T("SETTINGS_PRIVACY_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("SETTINGS_PRIVACY_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                <p>@Traductor.T("SETTINGS_PRIVACY_DESC")</p>
+                <div class="settings-card__actions">
+                    <a href="/privacy" class="kmila-btn kmila-btn--primary">
+                        <Icon Name="IconName.ShieldLock" />
+                        <span>@Traductor.T("SETTINGS_PRIVACY_OPEN")</span>
+                    </a>
+                </div>
+            </div>
+        </article>
+
+        @* --- Account (GitHub login, optional) ---
+            Login is OPTIONAL. The card surfaces sign-in / sign-out, the
+            auto-error-report preference, and the privacy declaration in
+            one place. Tier 1+2 fallbacks below stay available either
+            way; only "submit in-app" + auto-reports require auth. *@
+        <article class="settings-card">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--accent">
+                    <Icon Name="IconName.PersonCircle" />
+                </span>
+                <div class="settings-card__head-text">
+                    <h2>@Traductor.T("SETTINGS_ACCOUNT_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("SETTINGS_ACCOUNT_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                @* Version-control scope: opt in to the wider `repo` scope so
+                   source control can use PRIVATE repositories. Takes effect on
+                   the next sign-in (OAuth scope is fixed at authorization time). *@
+                <div class="settings-row">
+                    <div class="settings-row__label">
+                        <strong>@Traductor.T("SETTINGS_VC_PRIVATE_TITLE")</strong>
+                        <small>@Traductor.T("SETTINGS_VC_PRIVATE_HINT")</small>
+                    </div>
+                    <div class="settings-row__control">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox"
+                                   id="vc-private-scope"
+                                   checked="@_privateScopeEnabled"
+                                   @onchange="OnPrivateScopeToggledAsync" />
+                        </div>
+                    </div>
+                </div>
+
+                @if (GitHubAuth.IsLoggedIn && GitHubAuth.Account != null)
+                {
+                    @* Flat row mirroring .settings-list__item — same
+                       visual weight as the FPGA / Languages list rows
+                       elsewhere in this page. No card-within-card. *@
+                    <ul class="settings-list">
+                        <li class="settings-list__item">
+                            <div class="settings-list__info">
+                                @if (!string.IsNullOrEmpty(GitHubAuth.Account.AvatarUrl))
+                                {
+                                    <img src="@GitHubAuth.Account.AvatarUrl" alt=""
+                                         class="settings-account__avatar"
+                                         width="32" height="32" />
+                                }
+                                else
+                                {
+                                    <Icon Name="IconName.PersonCircle" />
+                                }
+                                <span class="settings-list__name">@(GitHubAuth.Account.Name ?? GitHubAuth.Account.Login)</span>
+                                <span class="settings-list__code">@GitHubAuth.Account.Login</span>
+                            </div>
+                            <KmilaTooltip TextKey="TOPBAR_SIGN_OUT">
+                                <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
+                                        @onclick="SignOutAsync"
+                                        aria-label="@Traductor.T("TOPBAR_SIGN_OUT")">
+                                    <Icon Name="IconName.BoxArrowRight" />
+                                </button>
+                            </KmilaTooltip>
+                        </li>
+                    </ul>
+
+                    <div class="settings-row">
+                        <div class="settings-row__label">
+                            <strong>@Traductor.T("SETTINGS_AUTO_REPORT_TITLE")</strong>
+                            <small>@Traductor.T("SETTINGS_AUTO_REPORT_HINT")</small>
+                        </div>
+                        <div class="settings-row__control">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox"
+                                       id="auto-report"
+                                       checked="@_autoReportEnabled"
+                                       @onchange="OnAutoReportToggledAsync" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="settings-card__actions">
+                        <KmilaTooltip TextKey="SETTINGS_ACCOUNT_SEND_REPORT_TIP">
+                            <button type="button"
+                                    class="kmila-btn kmila-btn--accent"
+                                    @onclick="SubmitManualReportAsync"
+                                    disabled="@_submitting">
+                                <Icon Name="IconName.Send" />
+                                <span>@Traductor.T("SETTINGS_ACCOUNT_SEND_REPORT")</span>
+                            </button>
+                        </KmilaTooltip>
+                    </div>
+                    @if (!string.IsNullOrEmpty(_lastReportUrl))
+                    {
+                        <p class="settings-card__note">
+                            <Icon Name="IconName.CheckCircle" />
+                            <span>
+                                @Traductor.T("SETTINGS_ACCOUNT_REPORT_SENT")
+                                <a href="@_lastReportUrl" target="_blank" rel="noopener noreferrer">@_lastReportUrl</a>
+                            </span>
+                        </p>
+                    }
+                }
+                else
+                {
+                    @* Logged-out state. When OAuth Client ID isn't yet
+                       configured, show a 3-step setup form so the
+                       deployer can paste the ID without recompiling. *@
+                    @if (!GitHubAuth.IsConfigured)
+                    {
+                        <p class="settings-card__hint">
+                            <strong>@Traductor.T("SETTINGS_ACCOUNT_SETUP_TITLE")</strong>
+                        </p>
+                        <ol class="settings-account__setup-steps">
+                            <li>
+                                @Traductor.T("SETTINGS_ACCOUNT_SETUP_STEP1_TEXT")
+                                <a href="https://github.com/settings/developers" target="_blank" rel="noopener noreferrer">
+                                    github.com/settings/developers
+                                    <Icon Name="IconName.BoxArrowUpRight" />
+                                </a>
+                            </li>
+                            <li>@Traductor.T("SETTINGS_ACCOUNT_SETUP_STEP2")</li>
+                            <li>@Traductor.T("SETTINGS_ACCOUNT_SETUP_STEP3")</li>
+                        </ol>
+
+                        <div class="settings-row">
+                            <div class="settings-row__label">
+                                <label for="kmila-client-id"><strong>@Traductor.T("SETTINGS_ACCOUNT_CLIENT_ID_LABEL")</strong></label>
+                                <small>@Traductor.T("SETTINGS_ACCOUNT_CLIENT_ID_HINT")</small>
+                            </div>
+                            <div class="settings-row__control">
+                                <input id="kmila-client-id" type="text"
+                                       class="form-control"
+                                       placeholder="@Traductor.T("SETTINGS_GH_TOKEN_PLACEHOLDER")"
+                                       @bind="_clientIdInput" />
+                            </div>
+                        </div>
+
+                        <div class="settings-card__actions">
+                            <button type="button" class="kmila-btn kmila-btn--accent"
+                                    @onclick="SaveClientIdAsync"
+                                    disabled="@string.IsNullOrWhiteSpace(_clientIdInput)">
+                                <Icon Name="IconName.Save" />
+                                <span>@Traductor.T("COMMON_SAVE")</span>
+                            </button>
+                        </div>
+                    }
+                    else if (_demo?.AllowGitHubLogin ?? true)
+                    {
+                        <div class="settings-card__actions">
+                            <button type="button" class="kmila-btn kmila-btn--accent"
+                                    @onclick="OpenLoginAsync">
+                                <Icon Name="IconName.Github" />
+                                <span>@Traductor.T("TOPBAR_SIGN_IN_GITHUB")</span>
+                            </button>
+                        </div>
+                        <p class="settings-card__hint">@Traductor.T("SETTINGS_ACCOUNT_LOGIN_OPTIONAL")</p>
+
+                        @* Optional: change OAuth Client ID. Wrapped in
+                           a <details> using the codebase's standard
+                           rotated-chevron pattern (see .kmila-fpga-picker)
+                           so the disclosure feels native to the app. *@
+                        <details class="settings-card__details">
+                            <summary>
+                                <Icon Name="IconName.Tools" />
+                                <span>@Traductor.T("SETTINGS_ACCOUNT_CHANGE_CLIENT_ID")</span>
+                                <Icon Name="IconName.ChevronDown" Class="settings-card__details-chevron" />
+                            </summary>
+                            <div class="settings-row">
+                                <div class="settings-row__label">
+                                    <label for="kmila-client-id-change"><strong>@Traductor.T("SETTINGS_ACCOUNT_CLIENT_ID_LABEL")</strong></label>
+                                    <small>@Traductor.T("SETTINGS_ACCOUNT_CLIENT_ID_HINT")</small>
+                                </div>
+                                <div class="settings-row__control">
+                                    <input id="kmila-client-id-change" type="text"
+                                           class="form-control"
+                                           placeholder="@GitHubAuth.CurrentClientId"
+                                           @bind="_clientIdInput" />
+                                </div>
+                            </div>
+                            <div class="settings-card__actions">
+                                <button type="button" class="kmila-btn kmila-btn--accent"
+                                        @onclick="SaveClientIdAsync"
+                                        disabled="@string.IsNullOrWhiteSpace(_clientIdInput)">
+                                    <Icon Name="IconName.Save" />
+                                    <span>@Traductor.T("COMMON_SAVE")</span>
+                                </button>
+                                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--danger"
+                                        @onclick="ClearClientIdAsync">
+                                    <Icon Name="IconName.Trash" />
+                                    <span>@Traductor.T("COMMON_CLEAR")</span>
+                                </button>
+                            </div>
+                        </details>
+                    }
+                }
+
+                @* Privacy notice — always visible. Reuses the canonical
+                   .settings-card__note treatment so it reads as a
+                   sibling of every other note in the page (e.g. the
+                   user-languages note in the same section). *@
+                <p class="settings-card__note">
+                    <Icon Name="IconName.ShieldLock" />
+                    <span>@Traductor.T("SETTINGS_ACCOUNT_PRIVACY")</span>
+                </p>
+            </div>
+        </article>
+
+        @* --- Local API (Tier 5.2 Phase B) ---
+           Opt-in Kestrel serving /api/v1 inside the MAUI app process.
+           Card is only rendered when the shared ILocalApiHost is
+           registered (MAUI heads); Kmila.Web already exposes /api/v1
+           natively so it doesn't need the toggle. *@
+        @if (LocalApi is not null)
+        {
+        <article class="settings-card">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--accent">
+                    <Icon Name="IconName.Broadcast" />
+                </span>
+                <div class="settings-card__head-text">
+                    <h2>Local API</h2>
+                    <p class="settings-card__sub">Serve <code>/api/v1</code> from this app so SimulatorBench or curl can drive it.</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                <div class="settings-row">
+                    <div class="settings-row__label">
+                        <strong>Enable local API</strong>
+                        <small>Starts a Kestrel host on 127.0.0.1 (or LAN, see below).</small>
+                    </div>
+                    <div class="settings-row__control">
+                        <label class="form-check form-switch mb-0">
+                            <input type="checkbox"
+                                   class="form-check-input"
+                                   role="switch"
+                                   disabled="@(!LocalApi.IsPlatformSupported)"
+                                   checked="@_localApiEnabled"
+                                   @onchange="OnLocalApiEnabledChanged" />
+                        </label>
+                    </div>
+                </div>
+                @if (!LocalApi.IsPlatformSupported)
+                {
+                    <p class="settings-card__hint settings-card__hint--warn">
+                        <Icon Name="IconName.ExclamationTriangleFill" />
+                        <span>Not available on iOS in this release.</span>
+                    </p>
+                }
+
+                <div class="settings-row">
+                    <div class="settings-row__label">
+                        <strong>Port</strong>
+                        <small>Default 5298 matches SimulatorBench's fallback. Use 0 to let the OS pick.</small>
+                    </div>
+                    <div class="settings-row__control">
+                        <input type="number"
+                               class="form-control form-control-sm"
+                               style="max-width: 8em;"
+                               min="0" max="65535" step="1"
+                               value="@_localApiPort"
+                               @onchange="OnLocalApiPortChanged" />
+                    </div>
+                </div>
+
+                <div class="settings-row">
+                    <div class="settings-row__label">
+                        <strong>Bind on LAN (advanced)</strong>
+                        <small>Binds 0.0.0.0 so other devices on your network can reach the API. Loopback is safer.</small>
+                    </div>
+                    <div class="settings-row__control">
+                        <label class="form-check form-switch mb-0">
+                            <input type="checkbox"
+                                   class="form-check-input"
+                                   role="switch"
+                                   checked="@_localApiBindLan"
+                                   @onchange="OnLocalApiBindLanChanged" />
+                        </label>
+                    </div>
+                </div>
+                @if (_localApiBindLan && string.IsNullOrEmpty(_localApiToken))
+                {
+                    <p class="settings-card__hint settings-card__hint--warn">
+                        <Icon Name="IconName.ExclamationTriangleFill" />
+                        <span>Anyone on your local network can hit this port. Set an auth token below to gate access.</span>
+                    </p>
+                }
+
+                @* --- Bearer token (Phase B follow-up) ---
+                   Empty = wide-open (dev-parity default). Non-empty =
+                   every /api/v1 request must present Authorization: Bearer
+                   or X-Api-Key; /health stays exempt so external reachability
+                   probes still work. *@
+                @if (LocalApiTokens is not null)
+                {
+                    <div class="settings-row">
+                        <div class="settings-row__label">
+                            <strong>Auth token</strong>
+                            <small>Optional bearer token. Empty = unauthenticated (dev default).</small>
+                        </div>
+                        <div class="settings-row__control" style="display:flex; gap:.5rem; flex-wrap:wrap; align-items:center;">
+                            <input type="text"
+                                   class="form-control form-control-sm font-monospace"
+                                   style="min-width:16em; max-width:24em;"
+                                   readonly="readonly"
+                                   placeholder="none — endpoints are open"
+                                   value="@_localApiToken" />
+                            <button type="button"
+                                    class="kmila-btn kmila-btn--ghost kmila-btn--sm"
+                                    @onclick="OnGenerateLocalApiTokenAsync">
+                                <Icon Name="IconName.ArrowRepeat" />
+                                <span>@(string.IsNullOrEmpty(_localApiToken) ? "Generate" : "Regenerate")</span>
+                            </button>
+                            @if (!string.IsNullOrEmpty(_localApiToken))
+                            {
+                                <button type="button"
+                                        class="kmila-btn kmila-btn--ghost kmila-btn--sm"
+                                        @onclick="OnCopyLocalApiTokenAsync">
+                                    <Icon Name="IconName.Clipboard" />
+                                    <span>Copy</span>
+                                </button>
+                                <button type="button"
+                                        class="kmila-btn kmila-btn--ghost kmila-btn--sm"
+                                        @onclick="OnClearLocalApiTokenAsync">
+                                    <Icon Name="IconName.Trash" />
+                                    <span>Clear</span>
+                                </button>
+                            }
+                        </div>
+                    </div>
+                }
+
+                @if (_localApiEnabled && LocalApi.BoundUrl is { } url)
+                {
+                    <div class="settings-row">
+                        <div class="settings-row__label">
+                            <strong>URL</strong>
+                            <small>Point SimulatorBench (<code>--api</code> or <code>KMILA_API</code>) here.</small>
+                        </div>
+                        <div class="settings-row__control" style="display:flex; gap:.5rem; flex-wrap:wrap;">
+                            <input type="text"
+                                   class="form-control form-control-sm"
+                                   style="min-width:16em; max-width:24em;"
+                                   readonly="readonly"
+                                   value="@url.ToString()" />
+                            <button type="button"
+                                    class="kmila-btn kmila-btn--ghost kmila-btn--sm"
+                                    @onclick="() => CopyLocalApiUrlAsync(url.ToString())">
+                                <Icon Name="IconName.Clipboard" />
+                                <span>Copy</span>
+                            </button>
+                        </div>
+                    </div>
+                }
+                @if (!string.IsNullOrEmpty(_localApiError))
+                {
+                    <p class="settings-card__hint settings-card__hint--warn">
+                        <Icon Name="IconName.ExclamationTriangleFill" />
+                        <span>@_localApiError</span>
+                    </p>
+                }
+            </div>
+        </article>
+        }
+
+        @* --- Feedback / Issue reporting ---
+            Tier 1: copy diagnostics to clipboard (offline, no auth).
+            Tier 2: open a pre-filled GitHub issue URL (new tab, no auth).
+            Tier 3 (Device Flow in-app submission) ships in the Account
+            card above — it requires an OAuth Client ID configured in
+            GitHubAuthConfig. *@
+        <article class="settings-card">
+            <header class="settings-card__head">
+                <span class="settings-card__icon settings-card__icon--accent">
+                    <Icon Name="IconName.Github" />
+                </span>
+                <div class="settings-card__head-text">
+                    <h2>@Traductor.T("SETTINGS_FEEDBACK_TITLE")</h2>
+                    <p class="settings-card__sub">@Traductor.T("SETTINGS_FEEDBACK_SUB")</p>
+                </div>
+            </header>
+            <div class="settings-card__body">
+                @* slot/section-actions — Open Issue is the headline (accent);
+                   Copy diagnostics is the diagnostic secondary (ghost-primary). *@
+                <div class="settings-card__actions">
+                    <KmilaTooltip TextKey="SETTINGS_FEEDBACK_COPY_TIP">
+                        <button type="button"
+                                class="kmila-btn kmila-btn--ghost kmila-btn--primary"
+                                @onclick="CopyDiagnosticsAsync">
+                            <Icon Name="IconName.Clipboard2CheckFill" />
+                            <span>@Traductor.T("SETTINGS_FEEDBACK_COPY")</span>
+                        </button>
+                    </KmilaTooltip>
+                    <button type="button"
+                            class="kmila-btn kmila-btn--accent"
+                            @onclick="OpenIssueUrlAsync">
+                        <Icon Name="IconName.BoxArrowUpRight" />
+                        <span>@Traductor.T("SETTINGS_FEEDBACK_OPEN_ISSUE")</span>
+                    </button>
+                    <button type="button"
+                            class="kmila-btn kmila-btn--ghost kmila-btn--primary"
+                            @onclick="OpenKmilaReportAsync">
+                        <Icon Name="IconName.Globe" />
+                        <span>@Traductor.T("SETTINGS_FEEDBACK_KMILA")</span>
+                    </button>
+                </div>
+                <p class="settings-card__hint">@Traductor.T("SETTINGS_FEEDBACK_HINT")</p>
+            </div>
+        </article>
+    </div>
+</section>
+
+<ConfirmDialog @ref="_confirmDialog" />
+<Modal @ref="_accountLoginModal" Title="@Traductor.T("TOPBAR_SIGN_IN_GITHUB")" Size="ModalSize.Small" />
+<Modal @ref="_importModeModal" Title="@Traductor.T("IMPORT_MODE_TITLE")" />
+
+@* Library source viewer — opened from the "View" button on each
+   imported library row. Plain <pre> rendering keeps the VHDL source
+   readable without dragging in a Monaco instance for what's
+   effectively a one-off browse. *@
+<Modal @ref="_libraryViewModal" Title="@_libraryViewName" Size="ModalSize.Large">
+    <BodyTemplate>
+        <pre class="library-source-view"
+             style="max-height:60vh; overflow:auto; white-space:pre; font-family:var(--bs-font-monospace);">@_libraryViewSource</pre>
+    </BodyTemplate>
+</Modal>
+
+@code {
+    // Optional demo-capability gate — null on MAUI/Server (unregistered),
+    // present only on the WASM demo. Resolved via the already-injected
+    // IServiceProvider so an unregistered service returns null (no throw).
+    private IDemoCapabilities? _demo => Services.GetService(typeof(IDemoCapabilities)) as IDemoCapabilities;
+
+    private List<string> _userFpgas = new();
+    private List<string> _userLangs = new();
+    private List<string> _userLibs  = new();
+    private int _learnCompleted;
+    private ConfirmDialog _confirmDialog = default!;
+    private Modal _importModeModal = new();
+    // Bundle JSON held between reading the imported file and the user's
+    // raw-vs-sample choice in the import-mode modal.
+    private string? _pendingImportJson;
+    private string _pendingImportName = string.Empty;
+
+    /// <summary>
+    /// Current simulation tick-resolution mode. Loaded from AppSettings on
+    /// init, written back on change. Default mode is assumed when the
+    /// setting is missing or unreadable so Run never blocks on this.
+    /// </summary>
+    private TickResolutionMode _tickMode = TickResolutionMode.Default;
+
+    /// <summary>
+    /// Current LibraryCompiler build-policy mode. Loaded from AppSettings,
+    /// written back on change, and applied directly to the singleton
+    /// LibraryCompiler so the next Build picks it up without restart.
+    /// </summary>
+    private LibraryCompiler.Services.LibraryBuildMode _libBuildMode =
+        LibraryCompiler.Services.LibraryBuildMode.Persistent;
+
+    /// <summary>
+    /// Current opt-in for live frame-by-frame replay accumulation. Default
+    /// off — see <see cref="ReplayState.LiveReplayDuringRun"/> for the
+    /// memory rationale (per-frame snapshot growth dominates GB-scale leaks
+    /// on long sims).
+    /// </summary>
+    private bool _liveReplayDuringRun;
+
+    /// <summary>
+    /// Phase 2 visual-mode ring-buffer size. Defaults to 2000 if the setting
+    /// is unset or unparseable. The Visual page reads
+    /// <see cref="AppSettings.KEY_VISUAL_RING_BUFFER"/> at Run-start and uses
+    /// it to size the coordinator's FrameRing.
+    /// </summary>
+    private int _visualRingBuffer = 2000;
+
+    /// <summary>
+    /// Cross-editor (Code↔Blocks) sync mode. Auto keeps the two views synced
+    /// on every tab switch (pre-2026-07-06 behavior). Manual defers sync
+    /// until an explicit Save. Loaded from AppSettings on init.
+    /// </summary>
+    private EditorSyncMode _editorSyncMode = EditorSyncMode.Auto;
+
+    // ─── Tier 5.2 Phase B — Local API host toggle ────────────────
+    // ILocalApiHost is only registered by the MAUI head; on Kmila.Web
+    // this stays null and the Settings card is hidden (that host serves
+    // /api/v1 natively). Resolved lazily via IServiceProvider so
+    // Settings.razor compiles clean into both hosts.
+    private Kmila.Shared.Services.Api.ILocalApiHost? LocalApi
+        => Services.GetService(typeof(Kmila.Shared.Services.Api.ILocalApiHost))
+           as Kmila.Shared.Services.Api.ILocalApiHost;
+
+    // Cross-host bearer-token holder — registered by both Kmila.Web
+    // (via AddSimulationApi's TryAddSingleton) and the MAUI head. Kept
+    // lazy so the null-check in the card renders the token row only when
+    // the provider actually exists.
+    private Kmila.Shared.Services.Api.LocalApiTokenProvider? LocalApiTokens
+        => Services.GetService(typeof(Kmila.Shared.Services.Api.LocalApiTokenProvider))
+           as Kmila.Shared.Services.Api.LocalApiTokenProvider;
+
+    private bool   _localApiEnabled;
+    private string _localApiPort   = "5298";
+    private bool   _localApiBindLan;
+    private string _localApiError  = string.Empty;
+    private string _localApiToken  = string.Empty;
+
+    /// <summary>Projects available to export — loaded alongside user assets.</summary>
+    private List<Kmila.Shared.Models.Project> _projects = new();
+    private int _exportProjectId;
+
+    // ─── Account / GitHub login state ────────────────────────────
+    private const string AutoReportSettingKey = "KMILA_AUTO_REPORT_ENABLED";
+    private bool _autoReportEnabled;
+    private bool _privateScopeEnabled;
+    private bool _submitting;
+    private string? _lastReportUrl;
+    private Modal _accountLoginModal = new();
+    private string _clientIdInput = string.Empty;
+
+    // Library source viewer state (View button on each imported library row).
+    private Modal _libraryViewModal = default!;
+    private string _libraryViewName   = string.Empty;
+    private string _libraryViewSource = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Traductor.StaticOnLangChanged += OnLang;
+        UserAssets.OnChange += OnLang;
+        LearnProgress.OnChange += OnLang;
+        SelectedFPGA.OnFPGAChange += OnLang;
+        RefreshLists();
+        _learnCompleted = await LearnProgress.TotalCompletedAsync();
+        _projects = (await ProjectsRepo.GetListAsync()) ?? new();
+
+        // Hydrate the tick-mode dropdown from the persisted setting. Unknown
+        // or missing values resolve to Default — safer than surfacing the
+        // load failure on the Settings page.
+        var raw = await DbContext.GetSettingAsync(AppSettings.KEY_TICK_RESOLUTION_MODE);
+        _tickMode = TickResolutionModeExtensions.ParseToken(raw);
+
+        // Same for the library-build mode. The startup hook in Program.cs
+        // already applied this to the singleton LibraryCompiler — we just
+        // mirror it here so the dropdown shows the right value.
+        var libRaw = await DbContext.GetSettingAsync(AppSettings.KEY_LIBRARY_BUILD_MODE);
+        _libBuildMode = LibraryBuildModeExtensions.ParseToken(libRaw);
+
+        // Live-replay-during-run toggle. The actual setter lives on
+        // ReplayState (mutated below in OnLiveReplayChanged); MainLayout
+        // also reads this key on app boot so the gate is in place before
+        // the first run. Reading from Replay here keeps the UI honest if
+        // the user toggled it from another route in the same session.
+        _liveReplayDuringRun = Replay.LiveReplayDuringRun;
+
+        // Phase 2 visual-mode ring buffer. Unset / unparseable → default 2000.
+        var ringRaw = await DbContext.GetSettingAsync(AppSettings.KEY_VISUAL_RING_BUFFER);
+        if (int.TryParse(ringRaw, out var rb) && rb >= 256 && rb <= 16384)
+            _visualRingBuffer = rb;
+
+        // Editor cross-editor sync mode (2026-07-06). Unset / unknown → Auto
+        // so the pre-2026-07-06 tab-switch-sync behavior is preserved for
+        // every existing user.
+        var syncRaw = await DbContext.GetSettingAsync(AppSettings.KEY_EDITOR_SYNC_MODE);
+        _editorSyncMode = EditorSyncModeExtensions.ParseToken(syncRaw);
+
+        // Account state — restore the cached account from the saved
+        // token (no-op if logged out), then subscribe to the auth
+        // service so sign-in / sign-out from elsewhere (TopBar pill)
+        // re-renders this card too.
+        GitHubAuth.OnChange += OnLang;
+        _ = GitHubAuth.RestoreAsync();
+        var autoRaw = await DbContext.GetSettingAsync(AutoReportSettingKey);
+        _autoReportEnabled = string.Equals(autoRaw, "true", StringComparison.OrdinalIgnoreCase);
+        _privateScopeEnabled = await GitHubAuth.GetPrivateScopeAsync();
+
+        // Tier 5.2 Phase B — hydrate the local-API triple. Only meaningful
+        // when the ILocalApiHost is present (MAUI heads); reading is
+        // harmless on Kmila.Web because the card is hidden anyway.
+        _localApiEnabled = (await DbContext.GetSettingAsync(AppSettings.KEY_LOCAL_API_ENABLED)) == "true";
+        var apiPortRaw   = await DbContext.GetSettingAsync(AppSettings.KEY_LOCAL_API_PORT);
+        if (!string.IsNullOrWhiteSpace(apiPortRaw)) _localApiPort = apiPortRaw;
+        _localApiBindLan = (await DbContext.GetSettingAsync(AppSettings.KEY_LOCAL_API_BIND_LAN)) == "true";
+        _localApiToken   = await DbContext.GetSettingAsync(AppSettings.KEY_LOCAL_API_TOKEN) ?? string.Empty;
+    }
+
+    /// <summary>
+    /// Persist the new mode immediately so the next Run picks it up — no
+    /// Save/Apply button. Writes the token form (not the int) to keep the
+    /// AppSettings value human-readable and version-stable.
+    /// </summary>
+    private async Task OnTickModeChanged(ChangeEventArgs e)
+    {
+        _tickMode = TickResolutionModeExtensions.ParseToken(e.Value?.ToString());
+        await DbContext.SetSettingAsync(AppSettings.KEY_TICK_RESOLUTION_MODE, _tickMode.ToToken());
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Persists the new editor sync mode immediately. Editor.razor re-reads
+    /// this setting on next `LoadProjectAsync`; if a project is already open
+    /// in another circuit, the user will pick up the change on their next
+    /// tab-switch or file re-open.
+    /// </summary>
+    private async Task OnEditorSyncModeChanged(ChangeEventArgs e)
+    {
+        _editorSyncMode = EditorSyncModeExtensions.ParseToken(e.Value?.ToString());
+        await DbContext.SetSettingAsync(AppSettings.KEY_EDITOR_SYNC_MODE, _editorSyncMode.ToToken());
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Persists the new library-build mode AND applies it directly to the
+    /// singleton LibraryCompiler. The next build sees the new policy
+    /// without an app restart; already-cached artifacts stay valid.
+    /// </summary>
+    /// <summary>
+    /// Persists the live-replay toggle and applies it to the scoped
+    /// <see cref="ReplayState"/> immediately so the next Run honours it.
+    /// Already-running sims keep their existing setting until they end —
+    /// the gate is read at <c>AttachLive</c> time.
+    /// </summary>
+    private async Task OnLiveReplayChanged(ChangeEventArgs e)
+    {
+        _liveReplayDuringRun = e.Value is bool b ? b : false;
+        Replay.LiveReplayDuringRun = _liveReplayDuringRun;
+        await DbContext.SetSettingAsync(
+            AppSettings.KEY_LIVE_REPLAY_DURING_RUN,
+            _liveReplayDuringRun ? "true" : "false");
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Tier 5.2 Phase B — flip the embedded Kestrel host on/off and persist
+    /// the choice. Errors (port in use, bind refused) surface in
+    /// <c>_localApiError</c>; the switch state stays synced with what
+    /// actually happened rather than what the user tried.
+    /// </summary>
+    private async Task OnLocalApiEnabledChanged(ChangeEventArgs e)
+    {
+        bool wanted = e.Value is bool b ? b : false;
+        _localApiError = string.Empty;
+
+        if (LocalApi is null || !LocalApi.IsPlatformSupported)
+        {
+            _localApiEnabled = false;
+            return;
+        }
+
+        try
+        {
+            if (wanted)
+            {
+                int port = int.TryParse(_localApiPort, out var p) ? p : 5298;
+                bool lan = _localApiBindLan;
+#if ANDROID
+                // Rev 2 (2026-08-01) — Android 13 (API 33) made
+                // POST_NOTIFICATIONS a runtime permission. Without it, the
+                // foreground service's ongoing notification is silently
+                // suppressed and the user has no visible confirmation the
+                // host is up. Ask before we start; on denial, still start
+                // (service degrades to headless-foreground) but explain in
+                // _localApiError so the Settings card can show why.
+                var permStatus = await Microsoft.Maui.ApplicationModel.Permissions
+                    .CheckStatusAsync<Microsoft.Maui.ApplicationModel.Permissions.PostNotifications>();
+                if (permStatus != Microsoft.Maui.ApplicationModel.PermissionStatus.Granted)
+                {
+                    permStatus = await Microsoft.Maui.ApplicationModel.Permissions
+                        .RequestAsync<Microsoft.Maui.ApplicationModel.Permissions.PostNotifications>();
+                }
+                if (permStatus != Microsoft.Maui.ApplicationModel.PermissionStatus.Granted)
+                {
+                    _localApiError = "Notifications permission denied — the local API is still running, but Android won't show the ongoing status notification.";
+                }
+#endif
+                await LocalApi.StartAsync(port, lan, CancellationToken.None);
+            }
+            else
+            {
+                await LocalApi.StopAsync(CancellationToken.None);
+            }
+            _localApiEnabled = wanted && LocalApi.IsRunning;
+        }
+        catch (Exception ex)
+        {
+            _localApiError   = ex.Message;
+            _localApiEnabled = LocalApi.IsRunning;
+        }
+
+        await DbContext.SetSettingAsync(
+            AppSettings.KEY_LOCAL_API_ENABLED,
+            _localApiEnabled ? "true" : "false");
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Persist the port choice; if the host is currently running, cycle it
+    /// so the new port takes effect immediately.
+    /// </summary>
+    private async Task OnLocalApiPortChanged(ChangeEventArgs e)
+    {
+        _localApiPort = e.Value?.ToString() ?? "5298";
+        await DbContext.SetSettingAsync(AppSettings.KEY_LOCAL_API_PORT, _localApiPort);
+        if (LocalApi is { IsRunning: true })
+        {
+            _localApiError = string.Empty;
+            try
+            {
+                await LocalApi.StopAsync(CancellationToken.None);
+                int port = int.TryParse(_localApiPort, out var p) ? p : 5298;
+                await LocalApi.StartAsync(port, _localApiBindLan, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _localApiError   = ex.Message;
+                _localApiEnabled = LocalApi.IsRunning;
+            }
+        }
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Persist the LAN opt-in; cycles the host if currently running so the
+    /// new bind address takes effect without a second toggle click.
+    /// </summary>
+    private async Task OnLocalApiBindLanChanged(ChangeEventArgs e)
+    {
+        _localApiBindLan = e.Value is bool b ? b : false;
+        await DbContext.SetSettingAsync(
+            AppSettings.KEY_LOCAL_API_BIND_LAN,
+            _localApiBindLan ? "true" : "false");
+        if (LocalApi is { IsRunning: true })
+        {
+            _localApiError = string.Empty;
+            try
+            {
+                await LocalApi.StopAsync(CancellationToken.None);
+                int port = int.TryParse(_localApiPort, out var p) ? p : 5298;
+                await LocalApi.StartAsync(port, _localApiBindLan, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _localApiError   = ex.Message;
+                _localApiEnabled = LocalApi.IsRunning;
+            }
+        }
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Tier 5.2 Phase B follow-up — generate a fresh URL-safe bearer token
+    /// (32 random bytes → base64url), push it to both the AppSettings row
+    /// and the in-memory <c>LocalApiTokenProvider</c> so the change takes
+    /// effect immediately without cycling the host.
+    /// </summary>
+    private async Task OnGenerateLocalApiTokenAsync()
+    {
+        var bytes = new byte[32];
+        System.Security.Cryptography.RandomNumberGenerator.Fill(bytes);
+        _localApiToken = Convert.ToBase64String(bytes)
+            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+        await DbContext.SetSettingAsync(AppSettings.KEY_LOCAL_API_TOKEN, _localApiToken);
+        LocalApiTokens?.Set(_localApiToken);
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Disable auth — writes empty string to AppSettings and clears the
+    /// provider so the host stops requiring credentials on the next request.
+    /// </summary>
+    private async Task OnClearLocalApiTokenAsync()
+    {
+        _localApiToken = string.Empty;
+        await DbContext.SetSettingAsync(AppSettings.KEY_LOCAL_API_TOKEN, string.Empty);
+        LocalApiTokens?.Set(null);
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Copy the token to the clipboard via MAUI's Clipboard where
+    /// available. Web-side this is a no-op (the button is only visible
+    /// when LocalApiTokens is registered, which is true in both hosts,
+    /// but MAUI is where clipboard access is available offline).
+    /// </summary>
+    private async Task OnCopyLocalApiTokenAsync()
+    {
+        if (string.IsNullOrEmpty(_localApiToken)) return;
+        try
+        {
+#if KMILA_MAUI_API
+            await Microsoft.Maui.ApplicationModel.DataTransfer.Clipboard.Default.SetTextAsync(_localApiToken);
+#else
+            await Task.CompletedTask;
+#endif
+        }
+        catch { /* best-effort */ }
+    }
+
+    /// <summary>
+    /// Copy the bound URL to the clipboard using MAUI's Clipboard where
+    /// available; on Kmila.Web this code path is unreachable because the
+    /// card is only rendered when ILocalApiHost is registered.
+    /// </summary>
+    private async Task CopyLocalApiUrlAsync(string url)
+    {
+        try
+        {
+#if KMILA_MAUI_API
+            await Microsoft.Maui.ApplicationModel.DataTransfer.Clipboard.Default.SetTextAsync(url);
+#else
+            await Task.CompletedTask;
+#endif
+        }
+        catch { /* best-effort */ }
+    }
+
+    /// <summary>
+    /// Phase 2: persist the visual-mode ring buffer size. Clamps to
+    /// 256..16384 — anything outside is silently snapped, never throws so
+    /// a typo can't block the page. Next Run on the Visual canvas picks it
+    /// up; in-flight runs keep their existing ring.
+    /// </summary>
+    private async Task OnVisualRingBufferChanged(ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var n)) n = 2000;
+        if (n < 256) n = 256;
+        if (n > 16384) n = 16384;
+        _visualRingBuffer = n;
+        await DbContext.SetSettingAsync(AppSettings.KEY_VISUAL_RING_BUFFER, n.ToString());
+        StateHasChanged();
+    }
+
+    private async Task OnLibBuildModeChanged(ChangeEventArgs e)
+    {
+        _libBuildMode = LibraryBuildModeExtensions.ParseToken(e.Value?.ToString());
+        await DbContext.SetSettingAsync(AppSettings.KEY_LIBRARY_BUILD_MODE, _libBuildMode.ToToken());
+        try
+        {
+            LibCompiler.Orchestrator.Policy = LibraryBuildModeExtensions.ToPolicy(_libBuildMode);
+        }
+        catch (Exception ex)
+        {
+            // Apply errors are extremely unlikely (the property is just a
+            // setter on a singleton) but log so /logs picks it up.
+            Console.WriteLine($"[Settings] Failed to apply library build mode: {ex.Message}");
+        }
+        StateHasChanged();
+    }
+
+    private void OnLang() => InvokeAsync(async () =>
+    {
+        RefreshLists();
+        _learnCompleted = await LearnProgress.TotalCompletedAsync();
+        StateHasChanged();
+    });
+
+    private void RefreshLists()
+    {
+        _userFpgas = UserAssets.ListUserFpgaPaths();
+        _userLangs = UserAssets.ListUserLanguagePaths();
+        _userLibs  = UserAssets.ListUserLibraryPaths();
+    }
+
+    /// <summary>
+    /// Exports the FPGA starter template. Web downloads via the JS helper;
+    /// MAUI writes to Documents/Kmila/Settings/.
+    /// </summary>
+    private async Task DownloadFpgaTemplate()
+    {
+        var result = await Export.SaveTextAsync(ExportCategory.Settings,
+            "fpga-template.json", "application/json",
+            UserAssetStore.BuildFpgaTemplate());
+        NotifyExport(result);
+    }
+
+    private async Task DownloadLanguageTemplate()
+    {
+        var result = await Export.SaveTextAsync(ExportCategory.Languages,
+            "language-template.json", "application/json",
+            UserAssetStore.BuildLanguageTemplate());
+        NotifyExport(result);
+    }
+
+    private void NotifyExport(FileExportResult result)
+    {
+        if (result.Saved)
+        {
+            var msg = result.Path != null ? $"Saved: {result.Path}" : Traductor.T("SETTINGS_TEMPLATE_DOWNLOADED");
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), msg, ToastType.Success));
+        }
+        else
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                result.Error ?? Traductor.T("COMMON_ERROR"), ToastType.Danger));
+        }
+    }
+
+    private async Task OnFpgaImportAsync(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+        // 2 MB cap — FPGA device JSONs are tiny (~2-3 KB), anything larger is
+        // almost certainly wrong and we don't want to buffer unbounded.
+        using var src = file.OpenReadStream(maxAllowedSize: 2 * 1024 * 1024);
+        var saved = await UserAssets.ImportFpgaAsync(src, file.Name);
+        ToastService.Notify(saved != null
+            ? Message(Traductor.T("COMMON_MESSAGE"), Traductor.T("SETTINGS_FPGA_IMPORTED"), ToastType.Success)
+            : Message(Traductor.T("COMMON_ERROR"), Traductor.T("SETTINGS_IMPORT_FAILED"), ToastType.Danger));
+    }
+
+    private async Task OnLangImportAsync(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+        // 512 KB cap — dictionary files are a few hundred keys; very rarely
+        // more than 50 KB even when fully translated.
+        using var src = file.OpenReadStream(maxAllowedSize: 512 * 1024);
+        var saved = await UserAssets.ImportLanguageAsync(src, file.Name);
+        if (saved != null)
+        {
+            // Register the new language into the picker so the user doesn't
+            // have to restart to see it.
+            var code = System.IO.Path.GetFileNameWithoutExtension(saved);
+            var display = UserAssetStore.ReadLanguageDisplayName(saved);
+            Traductor.AddUserLanguage(display, code);
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), Traductor.T("SETTINGS_LANG_IMPORTED"), ToastType.Success));
+        }
+        else
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), Traductor.T("SETTINGS_IMPORT_FAILED"), ToastType.Danger));
+        }
+    }
+
+    private void DeleteFpga(string name)
+    {
+        if (UserAssets.DeleteFpga(name))
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), Traductor.T("SETTINGS_FPGA_REMOVED"), ToastType.Info));
+        }
+    }
+
+    private void DeleteLang(string name)
+    {
+        if (UserAssets.DeleteLanguage(name))
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), Traductor.T("SETTINGS_LANG_REMOVED"), ToastType.Info));
+        }
+    }
+
+    /// <summary>
+    /// Imports a user-supplied <c>.vhd</c> / <c>.vhdl</c> library pack. The
+    /// file lives under <see cref="UserAssetStore.UserLibrariesDir"/>; the
+    /// LibraryCompiler discovers it through
+    /// <see cref="UserAssetStore.ListUserLibrarySources"/> on the next build.
+    /// </summary>
+    private async Task OnLibraryImportAsync(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+        // 4 MB cap — VHDL packages are usually well under 100 KB even when
+        // extensively documented; anything bigger probably isn't a library.
+        using var src = file.OpenReadStream(maxAllowedSize: 4 * 1024 * 1024);
+        var saved = await UserAssets.ImportLibraryAsync(src, file.Name);
+        // Resolver re-sync happens automatically via the
+        // UserAssetStore.OnChange subscription wired up in Program.cs /
+        // MauiProgram.cs — Import / Delete fire OnChange, which calls
+        // SyncResolver, so the next build sees the new state without an
+        // app restart.
+        ToastService.Notify(saved != null
+            ? Message(Traductor.T("COMMON_MESSAGE"), Traductor.T("SETTINGS_LIB_IMPORTED"), ToastType.Success)
+            : Message(Traductor.T("COMMON_ERROR"), Traductor.T("SETTINGS_IMPORT_FAILED"), ToastType.Danger));
+    }
+
+    private void DeleteLibrary(string name)
+    {
+        if (UserAssets.DeleteLibrary(name))
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"), Traductor.T("SETTINGS_LIB_REMOVED"), ToastType.Info));
+        }
+    }
+
+    /// <summary>
+    /// Opens a modal with the raw .vhd contents so the user can inspect
+    /// what's actually in their imported library without leaving the app.
+    /// Reads on demand (no caching) — these files are tiny.
+    /// </summary>
+    private async Task ViewLibrary(string absolutePath)
+    {
+        try
+        {
+            _libraryViewName   = System.IO.Path.GetFileName(absolutePath);
+            _libraryViewSource = System.IO.File.Exists(absolutePath)
+                ? await System.IO.File.ReadAllTextAsync(absolutePath)
+                : string.Empty;
+        }
+        catch (Exception ex)
+        {
+            _libraryViewSource = $"-- Failed to read file: {ex.Message}";
+        }
+        await _libraryViewModal.ShowAsync();
+    }
+
+    /// <summary>
+    /// Wipes the library cache directory AND the orchestrator's in-memory
+    /// snapshot so the next build is a guaranteed cold rebuild. Useful
+    /// when the user suspects a corrupted artifact or just wants to
+    /// reclaim disk space.
+    /// </summary>
+    private void ClearLibraryCache()
+    {
+        try
+        {
+            int removed = UserAssets.ClearLibraryCache();
+            LibCompiler.Orchestrator.Reset();
+            ToastService.Notify(Message(
+                Traductor.T("COMMON_MESSAGE"),
+                string.Format(Traductor.T("SETTINGS_LIB_CACHE_CLEARED"), removed),
+                ToastType.Info));
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+    }
+
+    /// <summary>
+    /// Asks for confirmation, then wipes every <c>learn.done.*</c> entry plus
+    /// the last-opened pointer. The UI re-renders via the <see cref="LessonProgressStore.OnChange"/>
+    /// subscription above, so the completed counter flips to 0 immediately.
+    /// </summary>
+    private async Task ResetLearnProgressAsync()
+    {
+        var options = new ConfirmDialogOptions
+        {
+            YesButtonColor = ButtonColor.Danger,
+            YesButtonText = Traductor.T("SETTINGS_LEARN_RESET"),
+            NoButtonColor = ButtonColor.Secondary,
+            NoButtonText  = Traductor.T("COMMON_CANCEL")
+        };
+        var ok = await _confirmDialog.ShowAsync(
+            title:   Traductor.T("SETTINGS_LEARN_RESET_TITLE"),
+            message1: Traductor.T("SETTINGS_LEARN_RESET_MSG"),
+            confirmDialogOptions: options);
+        if (!ok) return;
+
+        await LearnProgress.ResetAllAsync();
+        ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"),
+            Traductor.T("SETTINGS_LEARN_RESET_DONE"), ToastType.Info));
+    }
+
+    private async Task ExportBundleAsync()
+    {
+        var proj = _projects.FirstOrDefault(p => p.Id == _exportProjectId);
+        if (proj == null) return;
+        try
+        {
+            var json = await Bundles.ExportAsync(proj);
+            var safeName = proj.Name.Replace(' ', '_');
+            var result = await Export.SaveTextAsync(ExportCategory.Projects,
+                $"{safeName}.kmila", "application/json", json);
+            NotifyExport(result);
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+    }
+
+    /// <summary>Reads the chosen bundle file, then opens the import-mode modal
+    /// so the user picks a raw project import or a promote-to-sample save.</summary>
+    private async Task OnBundleImportAsync(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+        try
+        {
+            using var stream = file.OpenReadStream(maxAllowedSize: 50 * 1024 * 1024);
+            using var reader = new StreamReader(stream);
+            _pendingImportJson = await reader.ReadToEndAsync();
+            _pendingImportName = TryReadBundleName(_pendingImportJson);
+
+            var parameters = new Dictionary<string, object>
+            {
+                { "DefaultTitle", _pendingImportName },
+                { "OnConfirm", EventCallback.Factory.Create<ImportModeResult>(this, OnImportModeConfirmedAsync) },
+                { "OnCancel",  EventCallback.Factory.Create(this, OnImportModeCancelledAsync) }
+            };
+            await _importModeModal.ShowAsync<ImportModeModal>(
+                Traductor.T("IMPORT_MODE_TITLE"), null, parameters);
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+    }
+
+    /// <summary>Best-effort peek at the bundle's project name to prefill the
+    /// sample title. Returns empty string on any parse issue.</summary>
+    private static string TryReadBundleName(string json)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("Project", out var p)
+                && p.TryGetProperty("Name", out var n))
+                return n.GetString() ?? string.Empty;
+        }
+        catch { /* fall through to empty */ }
+        return string.Empty;
+    }
+
+    /// <summary>Base path for imports — mirrors the Projects page resolution.</summary>
+    private static string ResolveImportBasePath()
+    {
+#if WINDOWS || MACCATALYST || ANDROID || IOS
+        return Microsoft.Maui.Storage.FileSystem.AppDataDirectory;
+#else
+        return OperatingSystem.IsBrowser()
+            ? "/kmila"
+            : Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData), "KmilaData");
+#endif
+    }
+
+    private async Task OnImportModeCancelledAsync()
+    {
+        _pendingImportJson = null;
+        await _importModeModal.HideAsync();
+    }
+
+    /// <summary>Applies the user's choice: raw import creates a project; sample
+    /// stores the bundle + metadata in the user-sample gallery store.</summary>
+    private async Task OnImportModeConfirmedAsync(ImportModeResult result)
+    {
+        var json = _pendingImportJson;
+        _pendingImportJson = null;
+        await _importModeModal.HideAsync();
+        if (string.IsNullOrWhiteSpace(json)) return;
+
+        try
+        {
+            if (result.AsSample)
+            {
+                var sample = await UserSamples.AddAsync(
+                    string.IsNullOrWhiteSpace(result.Title) ? _pendingImportName : result.Title,
+                    result.Icon, result.Description, json);
+                ToastService.Notify(sample != null
+                    ? Message(Traductor.T("COMMON_MESSAGE"),
+                        string.Format(Traductor.T("SETTINGS_BUNDLE_SAVED_SAMPLE"), sample.Title), ToastType.Success)
+                    : Message(Traductor.T("COMMON_ERROR"),
+                        Traductor.T("SETTINGS_BUNDLE_IMPORT_FAILED"), ToastType.Danger));
+                return;
+            }
+
+            var project = await Bundles.ImportAsync(json, ResolveImportBasePath());
+            ToastService.Notify(project != null
+                ? Message(Traductor.T("COMMON_MESSAGE"),
+                    string.Format(Traductor.T("SETTINGS_BUNDLE_IMPORTED"), project.Name), ToastType.Success)
+                : Message(Traductor.T("COMMON_ERROR"),
+                    Traductor.T("SETTINGS_BUNDLE_IMPORT_FAILED"), ToastType.Danger));
+
+            _projects = (await ProjectsRepo.GetListAsync()) ?? new();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+    }
+
+    /// <summary>Tier 1: copy diagnostics to clipboard. Offline, no auth.</summary>
+    private async Task CopyDiagnosticsAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText",
+                FeedbackHelper.BuildDiagnostics(Traductor.Lang ?? "en"));
+            ToastService.Notify(Message(Traductor.T("COMMON_OK"),
+                Traductor.T("SETTINGS_FEEDBACK_COPIED"), ToastType.Success));
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+    }
+
+    /// <summary>Tier 2: open GitHub's new-issue URL with the diagnostics prefilled.</summary>
+    private async Task OpenIssueUrlAsync()
+    {
+        try
+        {
+            var body = FeedbackHelper.BuildDiagnostics(Traductor.Lang ?? "en");
+            var url  = FeedbackHelper.BuildIssueUrl("[Report] ", body);
+            await JS.InvokeVoidAsync("open", url, "_blank");
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+    }
+
+    /// <summary>Opens the Kmila website bug-report form with diagnostics
+    /// prefilled. Hands off to the browser — the app itself sends nothing,
+    /// preserving the offline / no-telemetry stance.</summary>
+    private async Task OpenKmilaReportAsync()
+    {
+        try
+        {
+            // Opens the Kmila bug-report form with version/platform/timestamp
+            // pre-filled; the user writes the title + description on the page.
+            var url = FeedbackHelper.BuildKmilaReportUrl(
+                Traductor.Lang ?? "en", appVersion: Traductor.T("APP_VERSION"));
+            await JS.InvokeVoidAsync("open", url, "_blank");
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+    }
+
+    // ─── Account handlers ────────────────────────────────────────
+
+    /// <summary>Opens the device-flow modal for sign-in. Routed to
+    /// the Editor's existing multi-use modal pattern through the
+    /// hosting layout's slot — we use the layout-level slot so the
+    /// modal stays visible if the user navigates away mid-flow.</summary>
+    private async Task OpenLoginAsync()
+    {
+        var parameters = new Dictionary<string, object>
+        {
+            { "OnSuccess", EventCallback.Factory.Create(this, () => _accountLoginModal.HideAsync()) },
+            { "OnCancel",  EventCallback.Factory.Create(this, () => _accountLoginModal.HideAsync()) }
+        };
+        await _accountLoginModal.ShowAsync<GitHubLoginModal>(
+            Traductor.T("TOPBAR_SIGN_IN_GITHUB"), null, parameters);
+    }
+
+    private async Task SignOutAsync()
+    {
+        await GitHubAuth.SignOutAsync();
+        _lastReportUrl = null;
+    }
+
+    /// <summary>Persists the user-entered Client ID into the settings
+    /// table. The auth service picks it up immediately so the next
+    /// sign-in attempt uses it.</summary>
+    private async Task SaveClientIdAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_clientIdInput)) return;
+        try
+        {
+            await GitHubAuth.SetClientIdAsync(_clientIdInput);
+            _clientIdInput = string.Empty;
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"),
+                Traductor.T("SETTINGS_ACCOUNT_CLIENT_ID_SAVED"), ToastType.Success));
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+    }
+
+    private async Task ClearClientIdAsync()
+    {
+        try
+        {
+            await GitHubAuth.SetClientIdAsync(null);
+            _clientIdInput = string.Empty;
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"),
+                Traductor.T("SETTINGS_ACCOUNT_CLIENT_ID_CLEARED"), ToastType.Info));
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+    }
+
+    /// <summary>Persists the auto-report toggle. Phase A only saves
+    /// the preference; the actual hook into the error-logging
+    /// pipeline lands in a follow-up so we can review the throttle /
+    /// dedup design separately.</summary>
+    private async Task OnAutoReportToggledAsync(ChangeEventArgs e)
+    {
+        _autoReportEnabled = e.Value is bool b && b;
+        await DbContext.SetSettingAsync(AutoReportSettingKey, _autoReportEnabled ? "true" : "false");
+    }
+
+    /// <summary>Toggles the private-repo (`repo`) scope opt-in for version
+    /// control. Takes effect on the next sign-in — if already signed in, tell
+    /// the user to sign out and back in for it to apply.</summary>
+    private async Task OnPrivateScopeToggledAsync(ChangeEventArgs e)
+    {
+        _privateScopeEnabled = e.Value is bool b && b;
+        await GitHubAuth.SetPrivateScopeAsync(_privateScopeEnabled);
+        if (GitHubAuth.IsLoggedIn)
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"),
+                Traductor.T("SETTINGS_VC_PRIVATE_REAUTH"), ToastType.Warning));
+    }
+
+    /// <summary>One-shot manual report. Posts the same diagnostics the
+    /// Tier 1 / Tier 2 buttons surface, but goes through the GitHub
+    /// API as the logged-in user so the issue is properly attributed.</summary>
+    private async Task SubmitManualReportAsync()
+    {
+        if (_submitting || !GitHubAuth.IsLoggedIn) return;
+        _submitting = true;
+        _lastReportUrl = null;
+        StateHasChanged();
+        try
+        {
+            var lang = await DbContext.GetSettingAsync(AppSettings.KEY_LANGUAGE) ?? "en";
+            var diag = FeedbackHelper.BuildDiagnostics(lang);
+            var url = await GitHubAuth.SubmitIssueAsync(
+                title: "[Kmila] Manual report",
+                body:  diag,
+                labels: new[] { "user-report" });
+            if (url != null)
+            {
+                _lastReportUrl = url;
+                ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"),
+                    Traductor.T("SETTINGS_ACCOUNT_REPORT_SENT"), ToastType.Success));
+            }
+            else
+            {
+                ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                    Traductor.T("SETTINGS_ACCOUNT_REPORT_FAILED"), ToastType.Danger));
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+        finally
+        {
+            _submitting = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Clears every <c>kmila.tutorialSeen.*</c> flag in localStorage so the
+    /// per-route welcome tours fire again on subsequent visits. Fires a
+    /// toast on success; silent fallback if the JS engine is unreachable.
+    /// </summary>
+    private async Task ResetTutorialsAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("kmilaTutorial.reset");
+            ToastService.Notify(Message(
+                Traductor.T("COMMON_MESSAGE"),
+                Traductor.T("SETTINGS_TUTORIAL_RESET_DONE"),
+                ToastType.Info));
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
+        }
+    }
+
+    /// <summary>
+    /// Opens the shared FPGA picker (hosted inside ProfileMenu on the TopBar)
+    /// via the same JS glue the RunBar chip uses. Gives the picker a second,
+    /// discoverable entry point off the Settings page instead of forcing users
+    /// through the profile-menu 3-hop nav on Editor pages — audit F-C-05.
+    /// Silent fallback when the TopBar isn't rendered (e.g. minimal layouts).
+    /// </summary>
+    private async Task ChangeFpgaAsync()
+    {
+        try { await JS.InvokeVoidAsync("kmilaOpenFpgaPicker"); }
+        catch { /* TopBar not present — the profile menu owns the picker */ }
+    }
+
+    public void Dispose()
+    {
+        Traductor.StaticOnLangChanged -= OnLang;
+        UserAssets.OnChange -= OnLang;
+        LearnProgress.OnChange -= OnLang;
+        SelectedFPGA.OnFPGAChange -= OnLang;
+        GitHubAuth.OnChange -= OnLang;
+    }
+}

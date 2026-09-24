@@ -1,0 +1,68 @@
+@namespace Kmila.Shared.Components.VisualRun
+@using Kmila.Shared.Services.VisualRun
+
+<div class="kviz-widget kviz-led @(IsOn ? "kviz-led--on" : "") @(Selected ? "kviz-widget--selected" : "")"
+     style="--kviz-led-color:@ColorVar; left:@(Comp.Position.X)px; top:@(Comp.Position.Y)px;"
+     data-component-id="@Comp.Id"
+     @onpointerdown="HandlePointerDown">
+    <div class="kviz-led-body"></div>
+    @if (ShowLabel)
+    {
+        <div class="kviz-led-label">@PortLabel</div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public KvizComponent Comp { get; set; } = default!;
+    [Parameter] public VisualRunCoordinator? Coordinator { get; set; }
+    [Parameter] public bool EditMode { get; set; }
+    [Parameter] public bool ShowLabel { get; set; } = true;
+    [Parameter] public bool Selected { get; set; }
+    [Parameter] public EventCallback<Microsoft.AspNetCore.Components.Web.PointerEventArgs> OnPointerDownExternal { get; set; }
+
+    [CascadingParameter(Name = "FrameVersion")] public int FrameVersion { get; set; }
+
+    private async Task HandlePointerDown(Microsoft.AspNetCore.Components.Web.PointerEventArgs e)
+    {
+        // LED has no run-mode interaction; just forward so the canvas can
+        // start a drag in edit mode.
+        if (OnPointerDownExternal.HasDelegate)
+            await OnPointerDownExternal.InvokeAsync(e);
+    }
+
+    private string ColorVar => Comp.Config.GetString("color", "red") switch
+    {
+        "green" => "#22c55e",
+        "blue" => "#3b82f6",
+        "yellow" => "#facc15",
+        "white" => "#f8fafc",
+        _ => "#ef4444",
+    };
+
+    private string PortLabel
+    {
+        get
+        {
+            if (Comp.Bindings.TryGetValue("anode", out var p) && !string.IsNullOrEmpty(p))
+                return p;
+            return "(unwired)";
+        }
+    }
+
+    private bool IsOn
+    {
+        get
+        {
+            if (Coordinator == null) return false;
+            if (!Comp.Bindings.TryGetValue("anode", out var port) || string.IsNullOrEmpty(port))
+                return false;
+            // Slice-aware read: "count[3]" → just that bit; "count" → whole
+            // port; the LED reads the LSB of whatever slice came back. A
+            // single-bit slice returns a 1-char string so [^1] is the bit
+            // itself. A whole-port read returns the original LSB.
+            string v = Coordinator.LatestSlicedValue(port);
+            if (string.IsNullOrEmpty(v)) return false;
+            return v[^1] == '1';
+        }
+    }
+}

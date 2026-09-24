@@ -1,0 +1,270 @@
+@namespace Kmila.Shared.Modals
+@using Kmila.Shared.Services.VisualRun
+@using Parser.Models
+@using Interpreter.Services
+@using static Parser.Models.Constants
+
+@* Phase 0 wiring modal — one row per placed-widget pin, each with a
+   single dropdown of compatible entity ports. Slice syntax + warnings
+   for missing ports arrive in Phase 1. *@
+
+@if (!IsOpen) { return; }
+
+<div class="modal-backdrop kviz-wiring-backdrop kviz-wiring-backdrop--open"
+     @onclick="Close">
+    <div class="modal kviz-wiring-modal" @onclick:stopPropagation>
+        <div class="modal-header">
+            <h5>@Title</h5>
+            <button class="kmila-btn-icon" @onclick="Close" aria-label="@Traductor.T("VISUAL_WIRING_CLOSE")">×</button>
+        </div>
+        <div class="modal-body">
+            @if (Doc == null || Entity == null)
+            {
+                <p class="kmila-muted">@Traductor.T("VISUAL_WIRING_NOTHING")</p>
+            }
+            else if (Doc.Components.Count == 0)
+            {
+                <p class="kmila-muted">@Traductor.T("VISUAL_WIRING_ADD_WIDGET")</p>
+            }
+            else
+            {
+                <table class="kviz-wiring-table">
+                    <thead>
+                        <tr>
+                            <th>@Traductor.T("VISUAL_WIRING_COL_COMPONENT")</th>
+                            <th>@Traductor.T("VISUAL_WIRING_COL_PIN")</th>
+                            <th>@Traductor.T("VISUAL_WIRING_COL_PORT")</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var c in Doc.Components)
+                        {
+                            foreach (var pin in KvizWidgetCatalog.PinsOf(c))
+                            {
+                                var localC = c;
+                                var localPin = pin;
+                                <tr>
+                                    <td>@LabelOf(localC)</td>
+                                    <td><code>@localPin.Name</code></td>
+                                    <td>
+                                        <select class="kmila-input"
+                                                value="@CurrentBinding(localC, localPin.Name)"
+                                                @onchange="(e) => SetBinding(localC, localPin.Name, e.Value?.ToString())">
+                                            <option value="">@Traductor.T("VISUAL_UNWIRED")</option>
+                                            @foreach (var opt in CompatibleOptions(localPin))
+                                            {
+                                                <option value="@opt.Binding">@opt.Display</option>
+                                            }
+                                        </select>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+        <div class="modal-footer">
+            <KmilaTooltip TextKey="VISUAL_WIRING_DONE_TIP">
+                <button class="kmila-btn" data-testid="visual-wiring-done" @onclick="Close">@Traductor.T("VISUAL_WIRING_DONE")</button>
+            </KmilaTooltip>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public KvizDoc? Doc { get; set; }
+    [Parameter] public Entity? Entity { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    // PinDir + PinsOf moved to KvizWidgetCatalog so VisualPanel can share
+    // them for direction chips + load-time binding sanitizer (R3-5).
+
+    private string LabelOf(KvizComponent c)
+    {
+        if (c.Type == "led")
+            return string.Format(Traductor.T("VISUAL_WIRING_ROW_LED"), LocalizedColor(c.Config.GetString("color", "red")));
+        if (c.Type == "button")
+            return string.Format(Traductor.T("VISUAL_WIRING_ROW_BUTTON"), c.Config.GetString("label", "BTN"));
+        if (c.Type == "switch")
+            return string.Format(Traductor.T("VISUAL_WIRING_ROW_SWITCH"), c.Config.GetString("label", "SW"));
+        if (c.Type == "led-array")
+            return string.Format(Traductor.T("VISUAL_WIRING_ROW_LED_ARRAY"), c.Config.GetInt("length", 4));
+        if (c.Type == "stepper")
+            return string.Format(Traductor.T("VISUAL_WIRING_ROW_STEPPER"), c.Config.GetInt("stepsPerRev", 200));
+        if (c.Type == "seven-seg")
+            return string.Format(Traductor.T("VISUAL_WIRING_ROW_SEVEN_SEG"), c.Config.GetString("mode", "raw"));
+        return c.Type;
+    }
+
+    private string LocalizedColor(string color) => color switch
+    {
+        "red" => Traductor.T("VISUAL_MATRIX_COLOR_RED"),
+        "green" => Traductor.T("VISUAL_MATRIX_COLOR_GREEN"),
+        "blue" => Traductor.T("VISUAL_MATRIX_COLOR_BLUE"),
+        "yellow" => Traductor.T("VISUAL_MATRIX_COLOR_YELLOW"),
+        "white" => Traductor.T("VISUAL_MATRIX_COLOR_WHITE"),
+        _ => color,
+    };
+
+    private string CurrentBinding(KvizComponent c, string pin)
+        => c.Bindings.TryGetValue(pin, out var v) ? v : "";
+
+    private async Task SetBinding(KvizComponent c, string pin, string? portName)
+    {
+        if (string.IsNullOrEmpty(portName))
+            c.Bindings.Remove(pin);
+        else
+            c.Bindings[pin] = portName;
+        if (OnChanged.HasDelegate) await OnChanged.InvokeAsync();
+    }
+
+    private IEnumerable<Variable> CompatiblePorts(PinDir dir)
+    {
+        if (Entity == null) yield break;
+        foreach (var p in Entity.Ports)
+        {
+            bool ok = dir == PinDir.In
+                ? (p.PortType == PortType.OUT || p.PortType == PortType.BUFFER || p.PortType == PortType.INOUT)
+                : (p.PortType == PortType.IN || p.PortType == PortType.INOUT);
+            if (ok) yield return p;
+        }
+    }
+
+    // A single option in the binding dropdown — Binding is the string
+    // written into the .kviz (port name or port[N]/port[H:L]), Display
+    // is the human-readable text shown in the <option>.
+    private readonly record struct BindOpt(string Binding, string Display);
+
+    /// <summary>
+    /// Slice-aware options for the wiring dropdown. Whenever the design
+    /// port is wider than 1 bit — regardless of widget-pin direction —
+    /// the dropdown offers slice choices in addition to the whole-port
+    /// binding. Single-bit widget pins get per-bit options `[N]`;
+    /// multi-bit widget pins get natural power-of-two splits scaled to
+    /// widths 4 / 8 / 16 / 28 / 32 / 64 / 128 / 256 for the common
+    /// LCD-line, seg-bus, matrix, and byte-vector cases.
+    /// Ring 5 (2026-07-14): read-side and write-side both slice-capable
+    /// now that <see cref="VisualRunCoordinator.SetSlicedInput"/> ships.
+    /// </summary>
+    private IEnumerable<BindOpt> CompatibleOptions(KvizPin pin)
+    {
+        if (Entity == null) yield break;
+        bool widgetIsMultiBit = IsMultiBitPin(pin.Name);
+        foreach (var p in CompatiblePorts(pin.Direction))
+        {
+            int width = p.Size > 0 ? p.Size : 1;
+            yield return new BindOpt(p.Name, $"{p.Name} ({DirText(p.PortType)})");
+            if (width <= 1) continue;
+            if (!widgetIsMultiBit)
+            {
+                // 1-bit widget pin → offer each individual bit.
+                for (int b = width - 1; b >= 0; b--)
+                    yield return new BindOpt($"{p.Name}[{b}]", $"{p.Name}[{b}]");
+            }
+            else
+            {
+                // Multi-bit widget pin on a wider bus → offer natural splits.
+                foreach (var (hi, lo) in NaturalSplits(width))
+                    yield return new BindOpt($"{p.Name}[{hi}:{lo}]", $"{p.Name}[{hi}:{lo}]");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Natural-split enumeration for the wiring modal dropdown. Returns
+    /// (high, low) pairs — call sites format them as `port[H:L]`.
+    /// Widths 4 / 8 offer nibbles, 16 / 32 / 64 / 128 / 256 offer halves,
+    /// 28 / 32 offer digit-quarters (7-bit or 8-bit each — for 7-segment
+    /// digit lanes and byte-packed vectors respectively).
+    /// </summary>
+    private static IEnumerable<(int High, int Low)> NaturalSplits(int width)
+    {
+        switch (width)
+        {
+            case 4:
+                yield return (3, 0);
+                break;
+            case 8:
+                yield return (7, 4);
+                yield return (3, 0);
+                break;
+            case 16:
+                yield return (15, 8);
+                yield return (7, 0);
+                break;
+            case 28:
+                yield return (27, 21);
+                yield return (20, 14);
+                yield return (13, 7);
+                yield return (6, 0);
+                break;
+            case 32:
+                yield return (31, 16);
+                yield return (15, 0);
+                yield return (31, 24);
+                yield return (23, 16);
+                yield return (15, 8);
+                yield return (7, 0);
+                break;
+            case 64:
+                yield return (63, 32);
+                yield return (31, 0);
+                break;
+            case 128:
+                yield return (127, 64);
+                yield return (63, 0);
+                break;
+            case 256:
+                yield return (255, 128);
+                yield return (127, 0);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Returns true when the widget-pin consumes multiple bits at once.
+    /// Used to decide whether to offer per-bit slice options or natural-
+    /// range options in the binding dropdown.
+    /// </summary>
+    private static bool IsMultiBitPin(string pinName)
+    {
+        // Explicit whitelist first — fast-path for the common shapes.
+        switch (pinName)
+        {
+            case "anodes":   // led-array
+            case "value":    // seven-seg decoded, multi-switch vector, matrix-3x3 value, seven-seg-4digit
+            case "seg":      // seven-seg-bank mux packed: shared 7-bit segment bus
+            case "sel":      // seven-seg-bank mux packed: digits-bit digit-select bus
+            case "freq_hz":  // buzzer freq mode
+            case "key":      // keypad decoded
+            case "red":      // matrix-3x3-rgb planes
+            case "green":
+            case "blue":
+                return true;
+        }
+        // LCD text-mode line{N} pins — 128-bit each for a 16-col HD44780.
+        if (pinName.StartsWith("line") && pinName.Length > 4
+            && int.TryParse(pinName.AsSpan(4), out var lineIdx)
+            && lineIdx >= 0 && lineIdx < 8)
+            return true;
+        return false;
+    }
+
+    private static string DirText(PortType t) => t switch
+    {
+        PortType.IN => "in",
+        PortType.OUT => "out",
+        PortType.INOUT => "inout",
+        PortType.BUFFER => "buffer",
+        _ => t.ToString().ToLowerInvariant(),
+    };
+
+    private async Task Close()
+    {
+        if (OnClose.HasDelegate) await OnClose.InvokeAsync();
+    }
+}

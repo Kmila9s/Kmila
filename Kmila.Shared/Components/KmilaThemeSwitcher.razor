@@ -1,0 +1,97 @@
+@*
+    KmilaThemeSwitcher — replaces the Blazor Bootstrap ThemeSwitcher.
+
+    Native <details> popover so there's no JS dependency to break the circuit.
+    Three options — Light / Dark / Auto (follows OS). Current selection gets a
+    check; the trigger shows the icon for the active theme so you can tell what's
+    applied at a glance.
+
+    Persistence path mirrors the old component:
+      • localStorage['kmila-theme']   — read by the inline <head> boot script
+                                        on every page load to avoid FOUC.
+      • SQLite AppSettings.KEY_THEME — secondary copy for native surfaces.
+      • data-bs-theme on <html>       — immediate visual swap (Bootstrap + our tokens).
+      • Monaco editor theme           — kept in sync via Global.SetTheme.
+
+    'Auto' resolves matchMedia at apply time and stores the literal 'auto' string
+    so it keeps tracking OS changes on subsequent loads.
+*@
+@implements IDisposable
+
+<details class="kmila-theme-picker">
+    <summary class="kmila-theme-picker__summary" aria-label="@Traductor.T("SETTINGS_THEME")">
+        <Icon Name="@CurrentIcon" />
+        <Icon Name="IconName.ChevronDown" Class="kmila-theme-picker__chevron" />
+    </summary>
+
+    <div class="kmila-theme-picker__panel" role="menu">
+        <button type="button" role="menuitem"
+                class="kmila-theme-picker__option @(_theme == "light" ? "is-selected" : "")"
+                @onclick='() => SetThemeAsync("light")'>
+            <Icon Name="IconName.SunFill" />
+            <span>@Traductor.T("THEME_LIGHT")</span>
+            @if (_theme == "light") { <Icon Name="IconName.CheckLg" Class="kmila-theme-picker__check" /> }
+        </button>
+
+        <button type="button" role="menuitem"
+                class="kmila-theme-picker__option @(_theme == "dark" ? "is-selected" : "")"
+                @onclick='() => SetThemeAsync("dark")'>
+            <Icon Name="IconName.MoonStarsFill" />
+            <span>@Traductor.T("THEME_DARK")</span>
+            @if (_theme == "dark") { <Icon Name="IconName.CheckLg" Class="kmila-theme-picker__check" /> }
+        </button>
+
+        <button type="button" role="menuitem"
+                class="kmila-theme-picker__option @(_theme == "auto" ? "is-selected" : "")"
+                @onclick='() => SetThemeAsync("auto")'>
+            <Icon Name="IconName.CircleHalf" />
+            <span>@Traductor.T("THEME_AUTO")</span>
+            @if (_theme == "auto") { <Icon Name="IconName.CheckLg" Class="kmila-theme-picker__check" /> }
+        </button>
+    </div>
+</details>
+
+@code {
+    // 'auto' is the default before we've read from storage — renders the Auto
+    // icon which is neutral enough that mis-guessing briefly isn't jarring.
+    private string _theme = "auto";
+
+    private IconName CurrentIcon => _theme switch
+    {
+        "dark" => IconName.MoonStarsFill,
+        "light" => IconName.SunFill,
+        _ => IconName.CircleHalf
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Read what was persisted; if nothing, we stay on 'auto'.
+        var stored = await DbContext.GetSettingAsync(AppSettings.KEY_THEME);
+        if (!string.IsNullOrEmpty(stored)) _theme = stored;
+    }
+
+    private async Task SetThemeAsync(string theme)
+    {
+        _theme = theme;
+
+        // 1. localStorage — read by the <head> boot script on next load.
+        await JS.InvokeVoidAsync("localStorage.setItem", "kmila-theme", theme);
+
+        // 2. Resolve to concrete 'light'/'dark' via the inline <head> helper, then
+        //    apply to <html data-bs-theme=…> so Bootstrap + tokens swap immediately.
+        var effective = await JS.InvokeAsync<string>("kmilaResolveTheme", theme);
+        await JS.InvokeVoidAsync(
+            "document.documentElement.setAttribute", "data-bs-theme", effective);
+
+        // 3. SQLite copy for native surfaces.
+        await DbContext.SetSettingAsync(AppSettings.KEY_THEME, theme);
+
+        // 4. Monaco editor alignment.
+        var monaco = effective == "dark" ? "vs-dark" : "vs";
+        await BlazorMonaco.Editor.Global.SetTheme(JS, monaco);
+
+        StateHasChanged();
+    }
+
+    public void Dispose() { }
+}

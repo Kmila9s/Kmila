@@ -1,0 +1,561 @@
+@*
+    RunBar — horizontal action strip between Monaco and the EditorDock.
+
+    Owns the UX for Build + Run, time + scale, FPGA reference chip, and an
+    overflow menu (Save / New File / Export VCD). Actual behavior lives in
+    the parent Editor.razor: it handles the callbacks, talks to ProgramBuilder,
+    and updates <see cref="SimulationParameters"/> + <see cref="BuildLog"/>
+    which RunBar reads back to render its state machine.
+
+    State machine (see <see cref="SimState"/>):
+
+      Idle / BuiltOk / BuildError / Complete   →  [▶ Run]
+      Building  (auto after Run clicked)       →  [⟳ Building…]  (disabled)
+      Building  (explicit Build click)         →  [▶ Run]  +  Build shows [⟳ …]
+      Running                                  →  [⏸ Pause]      +  [■ Stop]
+      Paused                                   →  [▶ Resume]     +  [■ Stop]
+
+    Progress line under the bar animates while State == Running.
+*@
+@implements IDisposable
+@inject SimulationParameters Sim
+@inject SelectedFPGA SelectedFPGA
+
+<div class="run-bar @(Sim.State == SimState.Running ? "run-bar--running" : "")">
+    <div class="run-bar__row">
+
+      @* Phone-only trigger that consolidates FPGA + duration + clock into one
+         popover so the run-bar stays a single row at ≤520 px container width.
+         The three controls used to fight Run/Stop/burger for the same row;
+         users couldn't tell which input was which (audit 2026-06-16).
+         The trigger summarises the current FPGA model + effective clock so a
+         glance is enough to know what will run. *@
+      <KmilaTooltip TextKey="RUNBAR_CONFIG_OPEN" Placement="Bottom">
+      <button type="button"
+              class="run-bar__config-trigger @(NoFpga ? "run-bar__config-trigger--missing" : "") @(_configOpen ? "is-open" : "")"
+              aria-haspopup="dialog"
+              aria-expanded="@_configOpen"
+              @onclick="ToggleConfig"
+              aria-label="@Traductor.T("RUNBAR_CONFIG_OPEN")">
+          <Icon Name="@(NoFpga ? IconName.ExclamationTriangleFill : IconName.CpuFill)" />
+          @if (!NoFpga)
+          {
+              <span class="run-bar__config-trigger-model">@SelectedFPGA.FPGA.Model</span>
+              <span class="run-bar__config-trigger-sep">·</span>
+              <span class="run-bar__config-trigger-clock">@EffectiveClockMhz MHz</span>
+          }
+          else
+          {
+              @* F-C-04: outer trigger reads "Configure" so it doesn't collide with the
+                 inner FPGA chip's "Elige FPGA" label when the popover opens on phone. *@
+              <span class="run-bar__config-trigger-model">@Traductor.T("RUNBAR_CONFIG_TRIGGER_EMPTY")</span>
+          }
+          <Icon Name="IconName.ChevronDown" Class="run-bar__config-trigger-chevron" />
+      </button>
+      </KmilaTooltip>
+
+      @* Config cluster — what to simulate. Grouped so the responsive ladder
+         (container queries in pages.css) can keep these editable while the
+         action buttons to the right shed labels / fold into the burger as
+         the bar narrows. On phones the cluster turns into a popover anchored
+         to .run-bar__config-trigger above; on desktop it stays inline. *@
+      <div class="run-bar__config @(_configOpen ? "is-open" : "")"
+           role="@(_configOpen ? "dialog" : null)"
+           aria-label="@(_configOpen ? Traductor.T("RUNBAR_CONFIG_OPEN") : null)">
+
+        @* FPGA reference chip. When nothing is selected we flag it in the
+           danger tone so students know this is the blocker for Build/Run.
+           Clicking the chip opens the FPGA picker (Settings → FPGA section
+           gets opened in a modal) — quicker than navigating away from the
+           Editor to switch board. *@
+        <KmilaTooltip TextKey="@(NoFpga ? "RUNBAR_FPGA_REQUIRED" : "RUNBAR_FPGA_CHANGE")">
+        <button type="button"
+                class="run-bar__fpga @(NoFpga ? "run-bar__fpga--missing" : "")"
+                @onclick="() => OnFpgaChipClickedCallback.InvokeAsync()"
+                aria-label="@Traductor.T("RUNBAR_FPGA_CHANGE")">
+            <Icon Name="@(NoFpga ? IconName.ExclamationTriangleFill : IconName.CpuFill)" />
+            @if (!NoFpga)
+            {
+                <span class="run-bar__fpga-model">@SelectedFPGA.FPGA.Model</span>
+            }
+            else
+            {
+                <span class="run-bar__fpga-empty">@Traductor.T("RUNBAR_SELECT_FPGA_FIRST")</span>
+            }
+            <Icon Name="IconName.ChevronDown" Class="run-bar__fpga-chevron" />
+        </button>
+        </KmilaTooltip>
+
+        @* Time input + scale select — simulation duration *@
+        <div class="run-bar__time" role="group" aria-label="@Traductor.T("SIM_DURATION")">
+            <Icon Name="IconName.Clock" Class="run-bar__time-icon" />
+            <input type="number"
+                   class="run-bar__time-input"
+                   min="1"
+                   step="1"
+                   value="@Sim.Time"
+                   disabled="@IsBusy"
+                   @onchange="OnTimeChanged"
+                   aria-label="@Traductor.T("SIM_DURATION")" />
+            <select class="run-bar__scale"
+                    value="@Sim.Scale.ToString()"
+                    disabled="@IsBusy"
+                    @onchange="OnScaleChanged"
+                    aria-label="@Traductor.T("SIM_SCALE")">
+                <option value="NS">NS</option>
+                <option value="US">US</option>
+                <option value="MS">MS</option>
+                <option value="S">S</option>
+                <option value="M">M</option>
+                <option value="H">H</option>
+            </select>
+        </div>
+
+        @* System clock — FPGA-sourced default with optional per-project
+           override. The input field shows the effective MHz. Typing any
+           value other than the FPGA default lights up the warning pill
+           below to explain the runtime / accuracy risk. *@
+        <div class="run-bar__clock @(Sim.ClockIsCustom ? "run-bar__clock--custom" : "")"
+             role="group" aria-label="@Traductor.T("RUNBAR_CLOCK_LABEL")">
+            <Icon Name="IconName.CpuFill" Class="run-bar__time-icon" />
+            <input type="number"
+                   class="run-bar__time-input"
+                   min="1"
+                   step="1"
+                   value="@EffectiveClockMhz"
+                   disabled="@(IsBusy || NoFpga)"
+                   @onchange="OnClockChanged"
+                   aria-label="@Traductor.T("RUNBAR_CLOCK_LABEL")"
+                   title="@(Sim.ClockIsCustom
+                        ? Traductor.T("RUNBAR_CLOCK_CUSTOM_TOOLTIP")
+                        : Traductor.T("RUNBAR_CLOCK_DEFAULT_TOOLTIP"))" />
+            <span class="run-bar__clock-unit">MHz</span>
+            @if (Sim.ClockIsCustom)
+            {
+                <KmilaTooltip TextKey="RUNBAR_CLOCK_RESET">
+                    <button type="button" class="run-bar__clock-reset"
+                            @onclick="ResetClock"
+                            aria-label="@Traductor.T("RUNBAR_CLOCK_RESET")">
+                        <Icon Name="IconName.ArrowCounterclockwise" />
+                    </button>
+                </KmilaTooltip>
+            }
+        </div>
+
+        @* Run mode toggle: Fast (event-driven runner, live visuals off — a
+           progress bar during the run, full waveform at the end) vs Visual
+           (live-updating waveform + step/breakpoints). Fast is for seconds-scale
+           sims where the live redraw is the bottleneck; both give the same
+           final waveform. *@
+        <KmilaTooltip TextKey="@(Sim.FastMode ? "RUNBAR_MODE_FAST_TIP" : "RUNBAR_MODE_VISUAL_TIP")">
+            <button type="button"
+                    class="run-bar__mode @(Sim.FastMode ? "run-bar__mode--fast" : "")"
+                    disabled="@IsBusy"
+                    @onclick="ToggleFastMode"
+                    aria-pressed="@Sim.FastMode"
+                    aria-label="@Traductor.T(Sim.FastMode ? "RUNBAR_MODE_FAST" : "RUNBAR_MODE_VISUAL")">
+                <Icon Name="@(Sim.FastMode ? IconName.LightningChargeFill : IconName.Activity)" />
+                <span class="run-bar__mode-label">@Traductor.T(Sim.FastMode ? "RUNBAR_MODE_FAST" : "RUNBAR_MODE_VISUAL")</span>
+            </button>
+        </KmilaTooltip>
+      </div>@* end .run-bar__config *@
+
+      @* Backdrop closes the popover when the user taps outside on phones.
+         Hidden via CSS on desktop where the cluster is inline. *@
+      @if (_configOpen)
+      {
+          <div class="run-bar__config-backdrop"
+               @onclick="CloseConfig"
+               aria-hidden="true"></div>
+      }
+
+      @* Action cluster — Build / Run / Stop / file actions / overflow. The
+         ladder drops the secondary labels first, then folds Build + Save +
+         New File into the burger; Run + Stop always stay inline. *@
+      <div class="run-bar__actions">
+
+        @* No-FPGA hint chip — makes the "disabled because…" reason visible right
+           next to Build/Run so students on touch (where title tooltips don't
+           surface) still get the cue. Clicking opens the FPGA picker. Only
+           renders while NoFpga. Audit F-E-12 (2026-07-09). *@
+        @if (NoFpga)
+        {
+            <KmilaTooltip TextKey="RUNBAR_FPGA_REQUIRED">
+                <button type="button"
+                        class="run-bar__no-fpga-hint"
+                        @onclick="() => OnFpgaChipClickedCallback.InvokeAsync()"
+                        aria-label="@Traductor.T("RUNBAR_FPGA_REQUIRED")">
+                    <Icon Name="IconName.ExclamationTriangleFill" />
+                    <span class="run-bar__no-fpga-hint-label">@Traductor.T("RUNBAR_FPGA_REQUIRED")</span>
+                </button>
+            </KmilaTooltip>
+        }
+
+        @* Build button (secondary). Shows spinner when explicitly building. *@
+        <KmilaTooltip TextKey="@(NoFpga ? "RUNBAR_FPGA_REQUIRED" : "SIM_BUILD")">
+        <button type="button"
+                class="kmila-btn kmila-btn--primary run-bar__build"
+                disabled="@BuildDisabled"
+                @onclick="OnBuildClickAsync">
+            @if (IsExplicitBuilding)
+            {
+                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                <span class="run-bar__btn-label">@Traductor.T("SIM_BUILDING")</span>
+            }
+            else
+            {
+                <Icon Name="IconName.Tools" />
+                <span class="run-bar__btn-label">@Traductor.T("SIM_BUILD")</span>
+            }
+        </button>
+        </KmilaTooltip>
+
+        @* Run button (primary, state-machine). *@
+        <KmilaTooltip TextKey="@(NoFpga ? "RUNBAR_FPGA_REQUIRED" : "SIM_RUN")">
+        <button type="button"
+                class="kmila-btn kmila-btn--accent run-bar__run"
+                disabled="@RunDisabled"
+                @onclick="OnRunClickAsync">
+            @if (ShowAutoBuildingChip)
+            {
+                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                <span>@Traductor.T("SIM_BUILDING")</span>
+            }
+            else
+            {
+            @switch (Sim.State)
+            {
+                case SimState.Running:
+                    <Icon Name="IconName.PauseFill" />
+                    <span>@Traductor.T("SIM_PAUSE")</span>
+                    break;
+                case SimState.Paused:
+                    <Icon Name="IconName.PlayFill" />
+                    <span>@Traductor.T("SIM_RESUME")</span>
+                    break;
+                case SimState.Complete:
+                    <Icon Name="IconName.ArrowClockwise" />
+                    <span>@Traductor.T("SIM_RUN_AGAIN")</span>
+                    break;
+                default:
+                    <Icon Name="IconName.PlayFill" />
+                    <span>@Traductor.T("SIM_RUN")</span>
+                    break;
+            }
+            }
+        </button>
+        </KmilaTooltip>
+
+        @* Stop button — visible only during Running/Paused *@
+        @if (Sim.State == SimState.Running || Sim.State == SimState.Paused)
+        {
+            <KmilaTooltip TextKey="SIM_STOP">
+                <button type="button"
+                        class="kmila-btn kmila-btn--ghost kmila-btn--primary run-bar__stop"
+                        @onclick="OnStopClickAsync"
+                        aria-label="@Traductor.T("SIM_STOP")">
+                    <Icon Name="IconName.StopFill" />
+                </button>
+            </KmilaTooltip>
+        }
+
+        @* Visible file actions — Save and New file. Styled as outline ghost
+           buttons (matching the Build/Run trio) instead of the previous
+           muted-text variant which felt visually disconnected from the rest
+           of the bar. Hidden on mobile (≤768px); see the overflow burger
+           below, which surfaces Build / Save / New File in a dropdown so
+           the bar doesn't wrap onto three rows on phones. *@
+        <KmilaTooltip TextKey="@(ManualSyncMode ? "EDITOR_SAVE_AND_SYNC" : "EDITOR_SAVE_FILE")">
+            <button type="button"
+                    class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm run-bar__file-btn run-bar__file-btn--save"
+                    @onclick="() => OnSaveClickedCallback.InvokeAsync()"
+                    aria-label="@Traductor.T(ManualSyncMode ? "EDITOR_SAVE_AND_SYNC" : "EDITOR_SAVE_FILE")">
+                <Icon Name="IconName.Floppy2" />
+                <span class="run-bar__file-btn-label">@Traductor.T("EDITOR_SAVE_FILE")</span>
+            </button>
+        </KmilaTooltip>
+        <KmilaTooltip TextKey="EDITOR_NEW_FILE">
+            <button type="button"
+                    class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm run-bar__file-btn run-bar__file-btn--new"
+                    @onclick="() => OnNewFileClickedCallback.InvokeAsync()"
+                    aria-label="@Traductor.T("EDITOR_NEW_FILE")">
+                <Icon Name="IconName.FilePlus" />
+                <span class="run-bar__file-btn-label">@Traductor.T("EDITOR_NEW_FILE")</span>
+            </button>
+        </KmilaTooltip>
+
+        @* Mobile-only burger overflow — surfaces Build + Save + New File so
+           the bar doesn't wrap on small screens. CSS keeps Run (primary CTA)
+           and Stop inline so the user never has to dig through a menu to
+           react to a running simulation. *@
+        <div class="run-bar__overflow @(_overflowOpen ? "is-open" : "")">
+            <KmilaTooltip TextKey="EDITOR_MORE_ACTIONS">
+                <button type="button"
+                        class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm run-bar__overflow-btn"
+                        @onclick="ToggleOverflow"
+                        aria-haspopup="menu"
+                        aria-expanded="@_overflowOpen"
+                        aria-label="@Traductor.T("EDITOR_MORE_ACTIONS")">
+                    <Icon Name="IconName.List" />
+                </button>
+            </KmilaTooltip>
+            @if (_overflowOpen)
+            {
+                <div class="run-bar__overflow-backdrop" @onclick="CloseOverflow" aria-hidden="true"></div>
+                <div class="run-bar__overflow-panel" role="menu">
+                    <button type="button" role="menuitem" class="run-bar__overflow-item"
+                            disabled="@BuildDisabled"
+                            @onclick="OnBuildFromMenuAsync">
+                        <Icon Name="IconName.Tools" />
+                        <span>@Traductor.T("SIM_BUILD")</span>
+                    </button>
+                    <button type="button" role="menuitem" class="run-bar__overflow-item"
+                            @onclick="OnSaveFromMenuAsync">
+                        <Icon Name="IconName.Floppy2" />
+                        <span>@Traductor.T("EDITOR_SAVE_FILE")</span>
+                    </button>
+                    <button type="button" role="menuitem" class="run-bar__overflow-item"
+                            @onclick="OnNewFileFromMenuAsync">
+                        <Icon Name="IconName.FilePlus" />
+                        <span>@Traductor.T("EDITOR_NEW_FILE")</span>
+                    </button>
+                </div>
+            }
+        </div>
+      </div>@* end .run-bar__actions *@
+    </div>
+
+    @* Progress line — only rendered while running, fills left-to-right *@
+    @if (Sim.State == SimState.Running || Sim.State == SimState.Paused)
+    {
+        <div class="run-bar__progress" role="progressbar"
+             aria-valuenow="@Sim.Progress.ToString("F1")"
+             aria-valuemin="0" aria-valuemax="100">
+            <span class="run-bar__progress-fill"
+                  style="width: @Sim.Progress.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)%;"></span>
+        </div>
+        @* Percent + live time estimate. RemainingSeconds is null until the run
+           has enough signal to estimate ("calculating…"). *@
+        <div class="run-bar__progress-meta">
+            <span class="run-bar__progress-pct">@Sim.Progress.ToString("F0")%</span>
+            <span class="run-bar__progress-eta">
+                @if (Sim.State == SimState.Paused)
+                {
+                    @Traductor.T("RUNBAR_ETA_PAUSED")
+                }
+                else if (Sim.RemainingSeconds is { } rem)
+                {
+                    @($"{FormatDuration(rem)} {Traductor.T("RUNBAR_ETA_REMAINING")}")
+                }
+                else
+                {
+                    @Traductor.T("RUNBAR_ETA_CALCULATING")
+                }
+            </span>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public EventCallback OnBuildClicked { get; set; }
+    [Parameter] public EventCallback OnRunClicked { get; set; }
+    [Parameter] public EventCallback OnPauseClicked { get; set; }
+    [Parameter] public EventCallback OnResumeClicked { get; set; }
+    [Parameter] public EventCallback OnStopClicked { get; set; }
+    [Parameter] public EventCallback OnSaveClickedCallback { get; set; }
+    [Parameter] public EventCallback OnNewFileClickedCallback { get; set; }
+    /// <summary>
+    /// True when the user has opted into Manual editor sync mode
+    /// (2026-07-06). Only affects the Save button's tooltip / aria-label —
+    /// swapping "Save file" for "Save and sync to the other view" so the
+    /// student understands the button's expanded effect in Manual mode.
+    /// </summary>
+    [Parameter] public bool ManualSyncMode { get; set; }
+    /// <summary>
+    /// Fires when the user clicks the FPGA chip so the parent can open the
+    /// FPGA picker without forcing a trip to Settings.
+    /// </summary>
+    [Parameter] public EventCallback OnFpgaChipClickedCallback { get; set; }
+
+    /// <summary>
+    /// True when this component triggered the current build as part of Run,
+    /// vs. the user clicking Build directly. Controls which button shows the
+    /// spinner during <see cref="SimState.Building"/>.
+    /// </summary>
+    private bool _autoBuilding;
+
+    /// <summary>
+    /// Hard floor for how long the "Compiling…" chip stays visible after a Run
+    /// click. Cached / sub-100 ms builds otherwise transition Building → Running
+    /// inside a single render and the chip never paints, leaving the user with
+    /// no visual proof a compile happened (audit 2026-06-14 D-05 / E-02).
+    /// </summary>
+    private DateTime _buildingChipHoldUntil = DateTime.MinValue;
+    private bool ShowAutoBuildingChip =>
+        (Sim.State == SimState.Building && _autoBuilding) ||
+        (_autoBuilding && DateTime.UtcNow < _buildingChipHoldUntil);
+
+    /// <summary>
+    /// True until the user has picked an FPGA target in the TopBar. Build and
+    /// Run are both gated on this — no FPGA means no resource validation, and
+    /// we want students to learn that picking a device is step zero of any
+    /// design. The native `disabled` attribute hides the click entirely; the
+    /// tooltip tells them why.
+    /// </summary>
+    private bool NoFpga => SelectedFPGA?.FPGA == null || string.IsNullOrEmpty(SelectedFPGA.FPGA.Model);
+
+    private bool IsBusy => Sim.State is SimState.Building or SimState.Running;
+    private bool BuildDisabled => IsBusy || NoFpga;
+    private bool RunDisabled =>
+        NoFpga ||
+        Sim.State == SimState.Building ||
+        (Sim.State == SimState.Running && _suppressClicks) ||
+        (Sim.State == SimState.Paused  && _suppressClicks);
+
+    private bool IsExplicitBuilding => Sim.State == SimState.Building && !_autoBuilding;
+
+    // Guard against double-click races during transient transitions
+    private bool _suppressClicks;
+
+    // Mobile overflow burger — Blazor-driven so we don't depend on the native
+    // <details> toggle behaviour (which doesn't auto-close when an item is
+    // clicked, and is awkward to drive declaratively from C#).
+    private bool _overflowOpen;
+    private void ToggleOverflow() => _overflowOpen = !_overflowOpen;
+    private void CloseOverflow() => _overflowOpen = false;
+
+    // Phone-only config popover (FPGA + duration + clock). Inline on desktop;
+    // popover anchored to .run-bar__config-trigger on phones. State lives in
+    // C# rather than CSS :focus-within because the inner inputs lose focus on
+    // each commit (number scrub, scale select) and would close the panel.
+    private bool _configOpen;
+    private void ToggleConfig() => _configOpen = !_configOpen;
+    private void CloseConfig() => _configOpen = false;
+
+    private async Task OnBuildFromMenuAsync()
+    {
+        CloseOverflow();
+        await OnBuildClickAsync();
+    }
+
+    private async Task OnSaveFromMenuAsync()
+    {
+        CloseOverflow();
+        await OnSaveClickedCallback.InvokeAsync();
+    }
+
+    private async Task OnNewFileFromMenuAsync()
+    {
+        CloseOverflow();
+        await OnNewFileClickedCallback.InvokeAsync();
+    }
+
+    protected override void OnInitialized()
+    {
+        Sim.OnChange += OnStateChanged;
+        SelectedFPGA.OnFPGAChange += OnStateChanged;
+        Traductor.StaticOnLangChanged += OnStateChanged;
+    }
+
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+
+    private void OnTimeChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var value) && value > 0)
+            Sim.SetTime(value);
+    }
+
+    private void OnScaleChanged(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<TimeScale>(e.Value?.ToString(), out var s))
+            Sim.SetScale(s);
+    }
+
+    /// <summary>Effective clock MHz used by the Run-bar display + sim launch.</summary>
+    private int EffectiveClockMhz
+    {
+        get
+        {
+            var fpgaDefault = SelectedFPGA?.FPGA?.Clocking?.GetDefaultSimClockMhz() ?? 50;
+            return Sim.GetEffectiveClockMhz(fpgaDefault);
+        }
+    }
+
+    private int FpgaDefaultClockMhz
+        => SelectedFPGA?.FPGA?.Clocking?.GetDefaultSimClockMhz() ?? 50;
+
+    private void OnClockChanged(ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var v) || v <= 0) return;
+        Sim.SetClockOverride(v == FpgaDefaultClockMhz ? null : v, FpgaDefaultClockMhz);
+    }
+
+    private void ResetClock()
+        => Sim.SetClockOverride(null, FpgaDefaultClockMhz);
+
+    // Flip Fast ↔ Visual. Read at run start by Editor.OnRunRequested to pick
+    // the runner and whether to skip the live waveform + replay attach.
+    private void ToggleFastMode()
+        => Sim.SetFastMode(!Sim.FastMode);
+
+    // Compact human duration for the run ETA: "<1s", "5s", "1m 20s", "1h 3m".
+    private static string FormatDuration(double seconds)
+    {
+        if (seconds < 1) return "<1s";
+        var ts = TimeSpan.FromSeconds(Math.Round(seconds));
+        if (ts.TotalHours >= 1) return $"{(int)ts.TotalHours}h {ts.Minutes}m";
+        if (ts.TotalMinutes >= 1) return $"{ts.Minutes}m {ts.Seconds}s";
+        return $"{ts.Seconds}s";
+    }
+
+    private async Task OnBuildClickAsync()
+    {
+        _autoBuilding = false;
+        await OnBuildClicked.InvokeAsync();
+    }
+
+    private async Task OnRunClickAsync()
+    {
+        switch (Sim.State)
+        {
+            case SimState.Running:
+                await OnPauseClicked.InvokeAsync();
+                break;
+            case SimState.Paused:
+                await OnResumeClicked.InvokeAsync();
+                break;
+            default:
+                // Idle / BuildError / BuiltOk / Complete → run. Parent decides
+                // whether to auto-build first; we just flag our intent so the
+                // right button shows the spinner during Building.
+                _autoBuilding = Sim.State != SimState.BuiltOk;
+                if (_autoBuilding)
+                {
+                    // Hold the "Compiling…" chip for ~400 ms even if the build
+                    // is a cache-hit and completes inside a single render.
+                    // Without this the user clicks Run, the chip never paints,
+                    // and the bar appears to jump straight to "Running" with
+                    // no visual proof a compile happened (audit D-05 / E-02).
+                    _buildingChipHoldUntil = DateTime.UtcNow.AddMilliseconds(400);
+                    _ = Task.Delay(420).ContinueWith(_ =>
+                        InvokeAsync(StateHasChanged));
+                }
+                await OnRunClicked.InvokeAsync();
+                break;
+        }
+    }
+
+    private async Task OnStopClickAsync()
+    {
+        _suppressClicks = true;
+        try { await OnStopClicked.InvokeAsync(); }
+        finally { _suppressClicks = false; }
+    }
+
+    public void Dispose()
+    {
+        Sim.OnChange -= OnStateChanged;
+        SelectedFPGA.OnFPGAChange -= OnStateChanged;
+        Traductor.StaticOnLangChanged -= OnStateChanged;
+    }
+}

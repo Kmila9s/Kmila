@@ -1,0 +1,70 @@
+{
+  "tests": [
+    {
+      "id": "t1",
+      "visible": true,
+      "descriptions": { "en": "Reset 25 ns then count freely", "es": "Reset 25 ns y luego cuenta libre" },
+      "durationMicros": 4,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,  "scale": "NS", "value": "1" },
+          { "time": 25, "scale": "NS", "value": "0" }
+        ]}
+      ]
+    },
+    {
+      "id": "t2",
+      "visible": false,
+      "descriptions": { "en": "Async reset pulse mid-run", "es": "Pulso de reset asíncrono a mitad de ejecución" },
+      "durationMicros": 4,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,    "scale": "NS", "value": "1" },
+          { "time": 25,   "scale": "NS", "value": "0" },
+          { "time": 1000, "scale": "NS", "value": "1" },
+          { "time": 1025, "scale": "NS", "value": "0" }
+        ]}
+      ]
+    },
+    {
+      "id": "t3",
+      "visible": false,
+      "descriptions": { "en": "Held in reset — q stays 0000", "es": "Reset mantenido — q permanece en 0000" },
+      "durationMicros": 2,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0, "scale": "NS", "value": "1" }
+        ]}
+      ]
+    },
+    {
+      "id": "t4",
+      "visible": false,
+      "descriptions": { "en": "Free run, no reset asserted", "es": "Conteo libre, sin activar reset" },
+      "durationMicros": 4,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0, "scale": "NS", "value": "0" }
+        ]}
+      ]
+    },
+    {
+      "id": "t5",
+      "visible": false,
+      "descriptions": { "en": "Short reset between two clock edges", "es": "Reset corto entre dos flancos de reloj" },
+      "durationMicros": 4,
+      "systemClockMhz": 50,
+      "inputs": [
+        { "portName": "reset", "values": [
+          { "time": 0,   "scale": "NS", "value": "0" },
+          { "time": 205, "scale": "NS", "value": "1" },
+          { "time": 213, "scale": "NS", "value": "0" }
+        ]}
+      ]
+    }
+  ]
+}

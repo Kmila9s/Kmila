@@ -1,0 +1,383 @@
+@page "/concepts"
+@using Kmila.Shared.Models
+@using Kmila.Shared.Services
+@inject ConceptCatalog Catalog
+@inject ConceptProgressStore Progress
+@implements IDisposable
+<PageTitle>@Traductor.T("CONCEPTS_TITLE")</PageTitle>
+
+@*
+    Concepts — execution-models mini-curriculum.
+
+    Sibling to /learn. Renders each ConceptModule from
+    wwwroot/Concepts/manifest.json as a card grouped by ConceptLevel. The
+    layout reuses the .learn-* CSS classes intentionally — pages.css already
+    has the catalog styling and there is no MAUI-friendly way to ship the
+    same look from a scoped stylesheet (see [[project_maui_scoped_css_gap]]).
+*@
+
+<section class="learn-page">
+    <header class="learn-hero" aria-labelledby="concepts-hero-title">
+        <div class="learn-hero__copy">
+            <span class="home-section__eyebrow">@Traductor.T("CONCEPTS_EYEBROW")</span>
+            <h1 id="concepts-hero-title" class="learn-hero__title">@Traductor.T("CONCEPTS_TITLE")</h1>
+            @* F-F-09: visually-hidden separator prevents innerText concatenation
+               like "Conceptos0 / N" when assistive tech reads the whole hero. *@
+            <span class="visually-hidden">. </span>
+            <p class="learn-hero__subtitle">@Traductor.T("CONCEPTS_SUBTITLE")</p>
+
+            <label class="learn-hero__search" aria-label="@Traductor.T("CONCEPTS_SEARCH_LABEL")">
+                <Icon Name="IconName.Search" />
+                <input type="search"
+                       class="form-control"
+                       placeholder="@Traductor.T("CONCEPTS_SEARCH_PLACEHOLDER")"
+                       value="@_filter"
+                       @oninput="OnFilterChanged" />
+                @if (!string.IsNullOrEmpty(_filter))
+                {
+                    <KmilaTooltip TextKey="CONCEPTS_CLEAR_SEARCH_TIP">
+                        <button type="button" class="learn-hero__search-clear"
+                                @onclick="() => { _filter = string.Empty; ApplyFilter(); }"
+                                aria-label="@Traductor.T("COMMON_CLEAR")">
+                            <Icon Name="IconName.XLg" />
+                        </button>
+                    </KmilaTooltip>
+                }
+            </label>
+
+            @if (_continueTarget != null)
+            {
+                <a class="learn-hero__continue"
+                   href="@($"/concepts/{_continueTarget.Value.ModuleId}/{_continueTarget.Value.ConceptId}")"
+                   aria-label="@Traductor.T("CONCEPTS_CONTINUE_ARIA")">
+                    <span class="learn-hero__continue-icon">
+                        <Icon Name="IconName.ArrowRightCircleFill" />
+                    </span>
+                    <span class="learn-hero__continue-body">
+                        <small>@Traductor.T("CONCEPTS_CONTINUE_EYEBROW")</small>
+                        <strong>@_continueLessonTitle</strong>
+                        @if (!string.IsNullOrEmpty(_continueModuleTitle))
+                        {
+                            <span class="learn-hero__continue-module">@_continueModuleTitle</span>
+                        }
+                    </span>
+                    <Icon Name="IconName.ArrowRight" Class="learn-hero__continue-chevron" />
+                </a>
+            }
+
+            @if (_totalLessons > 0)
+            {
+                var pct = _totalLessons == 0 ? 0 : (int)Math.Round(100.0 * _totalDone / _totalLessons);
+                <div class="learn-hero__progress" role="group" aria-label="@Traductor.T("CONCEPTS_YOUR_PROGRESS")">
+                    <div class="learn-hero__progress-track">
+                        <div class="learn-hero__progress-fill" style="width: @(pct)%"></div>
+                    </div>
+                    <div class="learn-hero__progress-meta">
+                        <span class="learn-hero__progress-count" dir="ltr">@_totalDone / @_totalLessons</span>
+                        <span class="learn-hero__progress-label">@Traductor.T("CONCEPTS_LESSONS_DONE")</span>
+                    </div>
+                </div>
+            }
+        </div>
+    </header>
+
+    @if (_loading)
+    {
+        <div class="learn-empty">
+            <Spinner Type="SpinnerType.Border" Color="SpinnerColor.Primary" />
+        </div>
+    }
+    else if (!_manifest.Modules.Any())
+    {
+        <div class="learn-empty">
+            <div class="learn-empty__icon"><Icon Name="IconName.Diagram3" /></div>
+            <h2>@Traductor.T("CONCEPTS_EMPTY_TITLE")</h2>
+            <p>@Traductor.T("CONCEPTS_EMPTY_BODY")</p>
+        </div>
+    }
+    else if (!_grouped.Any() && !string.IsNullOrEmpty(_filter))
+    {
+        <div class="learn-empty">
+            <div class="learn-empty__icon"><Icon Name="IconName.Search" /></div>
+            <h2>@Traductor.T("CONCEPTS_NO_MATCH_TITLE")</h2>
+            <p>@string.Format(Traductor.T("CONCEPTS_NO_MATCH_BODY"), _filter)</p>
+        </div>
+    }
+    else
+    {
+        @foreach (var group in _grouped)
+        {
+            <section class="learn-track" aria-labelledby="@($"concepts-track-{group.Level}")">
+                <header class="learn-track__header">
+                    <span class="home-section__eyebrow">@LevelLabel(group.Level)</span>
+                    <h2 id="@($"concepts-track-{group.Level}")">@TrackTitle(group.Level)</h2>
+                </header>
+
+                <div class="learn-grid">
+                    @foreach (var module in group.Modules)
+                    {
+                        var title    = ConceptCatalog.Localize(module.Titles, _lang, module.Id);
+                        var summary  = ConceptCatalog.Localize(module.Summaries, _lang, string.Empty);
+                        var total    = module.Lessons.Count;
+                        var done     = _moduleCompletion.TryGetValue(module.Id, out var d) ? d : 0;
+                        var firstId  = module.Lessons.FirstOrDefault()?.Id;
+                        var href     = firstId == null ? "/concepts" : $"/concepts/{module.Id}/{firstId}";
+                        var pct      = total == 0 ? 0 : (int)Math.Round(100.0 * done / total);
+
+                        <a class="learn-card" href="@href" data-testid="@($"concepts-card-{module.Id}")">
+                            <div class="learn-card__icon learn-card__icon--@IconVariant(module.Level)">
+                                <Icon Name="@ResolveIcon(module.Icon)" />
+                            </div>
+                            <div class="learn-card__body">
+                                <h3 class="learn-card__title">@title</h3>
+                                <p class="learn-card__summary">@summary</p>
+                                <div class="learn-card__meta">
+                                    <span class="learn-card__chip learn-card__chip--@LevelClass(module.Level)">@LevelLabel(module.Level)</span>
+                                    <span class="learn-card__count">
+                                        <Icon Name="IconName.Diagram3" />
+                                        @total @Traductor.T(total == 1 ? "CONCEPTS_LESSONS_ONE" : "CONCEPTS_LESSONS_MANY")
+                                    </span>
+                                    @if (done > 0)
+                                    {
+                                        <span class="learn-card__progress-chip">
+                                            <Icon Name="IconName.CheckCircleFill" /> @done / @total
+                                        </span>
+                                    }
+                                </div>
+                            </div>
+                            <div class="learn-card__bar" role="presentation">
+                                <div class="learn-card__bar-fill" style="width: @(pct)%"></div>
+                            </div>
+                        </a>
+                    }
+                </div>
+            </section>
+        }
+
+        @* Block-programming exercises — one card per ConceptExercise across
+           every module. Phase 2 ships a small fixed catalog; if the manifest
+           grows them per module we'll group here too. *@
+        @if (_allExercises.Count > 0)
+        {
+            <section class="learn-track" aria-labelledby="concepts-exercises">
+                <header class="learn-track__header">
+                    <span class="home-section__eyebrow">@Traductor.T("CONCEPTS_EXERCISES_EYEBROW")</span>
+                    <h2 id="concepts-exercises">@Traductor.T("CONCEPTS_EXERCISES_TITLE")</h2>
+                    <p>@Traductor.T("CONCEPTS_EXERCISES_BLURB")</p>
+                </header>
+                <div class="learn-grid">
+                    @foreach (var ex in _allExercises)
+                    {
+                        var exTitle   = ConceptCatalog.Localize(ex.Titles, _lang, ex.Id);
+                        var exSummary = ConceptCatalog.Localize(ex.Summaries, _lang, string.Empty);
+                        var done      = _exerciseDone.Contains(ex.Id);
+                        <a class="learn-card" href="@($"/concepts/exercise/{ex.Id}")" data-testid="@($"concepts-exercise-card-{ex.Id}")">
+                            <div class="learn-card__icon learn-card__icon--info">
+                                <Icon Name="IconName.PuzzleFill" />
+                            </div>
+                            <div class="learn-card__body">
+                                <h3 class="learn-card__title">@exTitle</h3>
+                                <p class="learn-card__summary">@exSummary</p>
+                                <div class="learn-card__meta">
+                                    <span class="learn-card__count">
+                                        <Icon Name="IconName.ClockHistory" />
+                                        ~@ex.EstimatedMinutes @Traductor.T("CONCEPTS_MINUTES_SHORT")
+                                    </span>
+                                    @if (done)
+                                    {
+                                        <span class="learn-card__progress-chip">
+                                            <Icon Name="IconName.CheckCircleFill" /> @Traductor.T("CONCEPTS_DONE")
+                                        </span>
+                                    }
+                                </div>
+                            </div>
+                        </a>
+                    }
+                </div>
+            </section>
+        }
+    }
+</section>
+
+@code {
+    private ConceptManifest _manifest = new();
+    private bool _loading = true;
+    private string _lang = "en";
+    private int _totalLessons;
+    private int _totalDone;
+    private Dictionary<string, int> _moduleCompletion = new();
+    private List<(ConceptLevel Level, List<ConceptModule> Modules)> _grouped = new();
+
+    private List<ConceptExercise> _allExercises = new();
+    private HashSet<string> _exerciseDone = new(StringComparer.OrdinalIgnoreCase);
+
+    private (string ModuleId, string ConceptId)? _continueTarget;
+    private string _continueLessonTitle = string.Empty;
+    private string _continueModuleTitle = string.Empty;
+
+    private string _filter = string.Empty;
+
+    // Epoch counter guards LoadAsync against overlapping calls (language switch
+    // or Progress.OnChange firing mid-load). Each invocation captures its own
+    // epoch; if a later invocation bumped the counter, the older one drops its
+    // results instead of clobbering the fresh state — audit F-F-07 (2026-07-09).
+    private int _loadEpoch;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Traductor.StaticOnLangChanged += OnLangOrProgressChanged;
+        Progress.OnChange += OnLangOrProgressChanged;
+
+        _lang = Traductor.Lang ?? "en";
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var myEpoch = System.Threading.Interlocked.Increment(ref _loadEpoch);
+        _loading = true;
+
+        var manifest = await Catalog.GetManifestAsync();
+        if (myEpoch != _loadEpoch) return;
+
+        var totalLessons = manifest.Modules.Sum(m => m.Lessons.Count);
+        var totalDone = 0;
+        var moduleCompletion = new Dictionary<string, int>(manifest.Modules.Count);
+        foreach (var m in manifest.Modules)
+        {
+            var done = await Progress.CompletedCountAsync(m.Id, m.Lessons.Select(l => l.Id));
+            if (myEpoch != _loadEpoch) return;
+            moduleCompletion[m.Id] = done;
+            totalDone += done;
+        }
+
+        // Flatten exercises across every module — the catalog renders them
+        // in their own track at the bottom. Completion state lives under
+        // the synthetic "exercises" moduleId so it doesn't pollute the
+        // per-lesson done counts above.
+        var allExercises = manifest.Modules.SelectMany(m => m.Exercises).ToList();
+        var exerciseDone = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var ex in allExercises)
+        {
+            if (await Progress.IsCompletedAsync("exercises", ex.Id))
+                exerciseDone.Add(ex.Id);
+            if (myEpoch != _loadEpoch) return;
+        }
+
+        (string ModuleId, string ConceptId)? continueTarget = null;
+        var continueLessonTitle = string.Empty;
+        var continueModuleTitle = string.Empty;
+        var last = await Progress.GetLastOpenedAsync();
+        if (myEpoch != _loadEpoch) return;
+        if (last is { } ptr)
+        {
+            var pair = await Catalog.GetConceptAsync(ptr.ModuleId, ptr.ConceptId);
+            if (myEpoch != _loadEpoch) return;
+            if (pair is { } p)
+            {
+                continueTarget = (p.Module.Id, p.Concept.Id);
+                continueLessonTitle = ConceptCatalog.Localize(p.Concept.Titles, _lang, p.Concept.Id);
+                continueModuleTitle = ConceptCatalog.Localize(p.Module.Titles, _lang, p.Module.Id);
+            }
+        }
+
+        // Atomic swap — no mid-load partial state is ever observable by render.
+        _manifest = manifest;
+        _totalLessons = totalLessons;
+        _totalDone = totalDone;
+        _moduleCompletion = moduleCompletion;
+        _allExercises = allExercises;
+        _exerciseDone = exerciseDone;
+        _continueTarget = continueTarget;
+        _continueLessonTitle = continueLessonTitle;
+        _continueModuleTitle = continueModuleTitle;
+        ApplyFilter();
+        _loading = false;
+    }
+
+    private void OnLangOrProgressChanged()
+    {
+        _lang = Traductor.Lang ?? "en";
+        InvokeAsync(async () =>
+        {
+            await LoadAsync();
+            StateHasChanged();
+        });
+    }
+
+    private void OnFilterChanged(ChangeEventArgs e)
+    {
+        _filter = e.Value?.ToString() ?? string.Empty;
+        ApplyFilter();
+    }
+
+    private void ApplyFilter()
+    {
+        var needle = _filter?.Trim();
+        bool Match(string haystack) =>
+            !string.IsNullOrEmpty(haystack) &&
+            haystack.Contains(needle!, StringComparison.OrdinalIgnoreCase);
+
+        bool ModuleMatches(ConceptModule m)
+        {
+            if (string.IsNullOrEmpty(needle)) return true;
+            if (Match(ConceptCatalog.Localize(m.Titles, _lang, m.Id))) return true;
+            if (Match(ConceptCatalog.Localize(m.Summaries, _lang, string.Empty))) return true;
+            return m.Lessons.Any(l =>
+                Match(ConceptCatalog.Localize(l.Titles, _lang, l.Id)) ||
+                Match(ConceptCatalog.Localize(l.Summaries, _lang, string.Empty)));
+        }
+
+        _grouped = _manifest.Modules
+            .Where(ModuleMatches)
+            .OrderBy(m => (int)m.Level)
+            .ThenBy(m => m.Order)
+            .GroupBy(m => m.Level)
+            .Select(g => (g.Key, g.OrderBy(m => m.Order).ToList()))
+            .ToList();
+    }
+
+    private IconName ResolveIcon(string name)
+    {
+        if (Enum.TryParse<IconName>(name, out var icon)) return icon;
+        return IconName.Diagram3;
+    }
+
+    private string LevelLabel(ConceptLevel l) => l switch
+    {
+        ConceptLevel.Beginner     => Traductor.T("LEARN_LEVEL_BEGINNER"),
+        ConceptLevel.Easy         => Traductor.T("LEARN_LEVEL_EASY"),
+        ConceptLevel.Intermediate => Traductor.T("LEARN_LEVEL_INTERMEDIATE"),
+        ConceptLevel.Advanced     => Traductor.T("LEARN_LEVEL_ADVANCED"),
+        ConceptLevel.Expert       => Traductor.T("LEARN_LEVEL_EXPERT"),
+        _                         => l.ToString()
+    };
+
+    private string LevelClass(ConceptLevel l) => l.ToString().ToLowerInvariant();
+
+    private string IconVariant(ConceptLevel l) => l switch
+    {
+        ConceptLevel.Beginner     => "success",
+        ConceptLevel.Easy         => "primary",
+        ConceptLevel.Intermediate => "info",
+        ConceptLevel.Advanced     => "warning",
+        ConceptLevel.Expert       => "danger",
+        _                         => "primary"
+    };
+
+    private string TrackTitle(ConceptLevel l) => l switch
+    {
+        ConceptLevel.Beginner     => Traductor.T("CONCEPTS_TRACK_BEGINNER_TITLE"),
+        ConceptLevel.Easy         => Traductor.T("CONCEPTS_TRACK_EASY_TITLE"),
+        ConceptLevel.Intermediate => Traductor.T("CONCEPTS_TRACK_INTERMEDIATE_TITLE"),
+        ConceptLevel.Advanced     => Traductor.T("CONCEPTS_TRACK_ADVANCED_TITLE"),
+        ConceptLevel.Expert       => Traductor.T("CONCEPTS_TRACK_EXPERT_TITLE"),
+        _                         => l.ToString()
+    };
+
+    public void Dispose()
+    {
+        Traductor.StaticOnLangChanged -= OnLangOrProgressChanged;
+        Progress.OnChange -= OnLangOrProgressChanged;
+    }
+}

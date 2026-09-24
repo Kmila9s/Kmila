@@ -1,0 +1,44 @@
+{
+  "tests": [
+    { "id": "t1", "visible": true,  "descriptions": { "en": "dir=1 — count up from 0", "es": "dir=1 — cuenta hacia arriba desde 0" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "dir", "values": [{ "time": 0, "scale": "NS", "value": "1" }] }
+    ]},
+    { "id": "t2", "visible": false, "descriptions": { "en": "dir=0 — count down from 0 (wraps)", "es": "dir=0 — cuenta hacia abajo desde 0 (wrap)" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "dir", "values": [{ "time": 0, "scale": "NS", "value": "0" }] }
+    ]},
+    { "id": "t3", "visible": false, "descriptions": { "en": "dir flips mid-run", "es": "dir cambia a mitad" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "dir", "values": [
+        { "time": 0,    "scale": "NS", "value": "1" },
+        { "time": 800,  "scale": "NS", "value": "0" }
+      ]}
+    ]},
+    { "id": "t4", "visible": false, "descriptions": { "en": "Mid-run reset returns count to 0", "es": "Reset a mitad regresa a 0" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,    "scale": "NS", "value": "1" },
+        { "time": 25,   "scale": "NS", "value": "0" },
+        { "time": 700,  "scale": "NS", "value": "1" },
+        { "time": 725,  "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "dir", "values": [{ "time": 0, "scale": "NS", "value": "1" }] }
+    ]},
+    { "id": "t5", "visible": false, "descriptions": { "en": "dir held high for entire run", "es": "dir alto durante toda la ejecución" }, "durationMicros": 2, "systemClockMhz": 50, "inputs": [
+      { "portName": "reset", "values": [
+        { "time": 0,  "scale": "NS", "value": "1" },
+        { "time": 25, "scale": "NS", "value": "0" }
+      ]},
+      { "portName": "dir", "values": [{ "time": 0, "scale": "NS", "value": "1" }] }
+    ]}
+  ]
+}
