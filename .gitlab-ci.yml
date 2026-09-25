@@ -1,6 +1,7 @@
 stages:
     - build
     - package
+    - downstream
 
 variables:
     GIT_DEPTH: "20"
@@ -87,3 +88,36 @@ docker-build:
           else
             echo "DOCKERHUB_USER/DOCKERHUB_TOKEN not set -> built images locally, skipping push."
           fi
+
+# =====================================================================
+# Rebuild the KmilaWeb in-browser demo whenever the engine/WASM changes here.
+# KmilaWeb owns its own demo recipe (KmilaWeb/Dockerfile.wasm, used by its compose),
+# so instead of building it here we start KmilaWeb's pipeline with BUILD_WASM=true.
+# That pipeline re-clones this engine at its default branch and rebuilds `kmila-wasm`
+# the way KmilaWeb expects — keeping each repo the owner of its own build.
+#
+# Fires on default-branch pushes and release tags; a manual button otherwise. Only
+# runs once the WASM actually compiled (needs: web-wasm-build).
+#
+# PREREQS:
+#   • In the KmilaWeb project → Settings → CI/CD → Job token permissions, allowlist
+#     THIS project (Kmila), or the trigger is rejected.
+#   • Confirm the downstream path/branch below match KmilaWeb's project path + default
+#     branch (namespace is `$CI_PROJECT_NAMESPACE`, i.e. kmila-9s).
+# `strategy: depend` makes this job mirror KmilaWeb's pipeline status (so a failed
+#   demo build turns this pipeline red too); drop it for fire-and-forget.
+# =====================================================================
+trigger-kmilaweb-wasm:
+    stage: downstream
+    needs: ["web-wasm-build"]
+    variables:
+        BUILD_WASM: "true"
+    trigger:
+        project: kmila-9s/KmilaWeb
+        branch: main
+        strategy: depend
+    rules:
+        - if: '$CI_COMMIT_TAG'
+        - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+        - when: manual
+          allow_failure: true
