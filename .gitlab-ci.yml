@@ -22,7 +22,7 @@ variables:
           for m in Interpreter LibraryCompiler Debugger TimeMachine Parser; do
             rm -rf "../../$m"
             git clone --depth 20 \
-              "http://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}:${CI_SERVER_PORT}/${CI_PROJECT_NAMESPACE}/$m.git" \
+              "http://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}:8083/${CI_PROJECT_NAMESPACE}/$m.git" \
               "../../$m"
           done
 
@@ -76,7 +76,7 @@ docker-build:
         - |
           for m in Debugger Interpreter LibraryCompiler Parser TimeMachine; do
             git clone --depth 20 \
-              "http://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}:${CI_SERVER_PORT}/${CI_PROJECT_NAMESPACE}/$m.git" \
+              "http://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}:8083/${CI_PROJECT_NAMESPACE}/$m.git" \
               "$CTX/$m"
           done
     script:
