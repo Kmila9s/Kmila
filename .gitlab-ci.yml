@@ -117,6 +117,10 @@ docker-build:
 # =====================================================================
 trigger-kmilaweb-wasm:
     stage: downstream
+    # kmilaweb has no .gitlab-ci.yml yet AND Kmila isn't in its job-token allowlist,
+    # so the trigger can't create a downstream pipeline. Keep it non-blocking until
+    # KmilaWeb's CI is set up + Kmila is allowlisted; then this succeeds on its own.
+    allow_failure: true
     needs: ["web-wasm-build"]
     variables:
         BUILD_WASM: "true"
