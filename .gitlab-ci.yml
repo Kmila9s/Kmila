@@ -1,6 +1,11 @@
+include:
+    - project: 'kmila-9s/ci-templates'
+      file: '/auto-merge.yml'
+
 stages:
     - build
     - package
+    - merge
     - downstream
 
 variables:
@@ -89,6 +94,9 @@ docker-build:
             echo "DOCKERHUB_USER/DOCKERHUB_TOKEN not set -> built images locally, skipping push."
           fi
 
+# (auto-merge job comes from the included kmila-9s/ci-templates/auto-merge.yml,
+#  runs in the `merge` stage on vX.Y.Z branches once build + package pass.)
+
 # =====================================================================
 # Rebuild the KmilaWeb in-browser demo whenever the engine/WASM changes here.
 # KmilaWeb owns its own demo recipe (KmilaWeb/Dockerfile.wasm, used by its compose),
@@ -113,7 +121,7 @@ trigger-kmilaweb-wasm:
     variables:
         BUILD_WASM: "true"
     trigger:
-        project: kmila-9s/KmilaWeb
+        project: kmila-9s/kmilaweb
         branch: main
         strategy: depend
     rules:

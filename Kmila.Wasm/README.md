@@ -100,3 +100,18 @@ No volume, no backend, no SignalR/WebSocket proxy. Any static host or CDN works.
   release yet; low risk for a local, single-user, client-side DB.
 - First load downloads the .NET wasm runtime + assemblies (tens of MB in Debug;
   much smaller published/trimmed).
+- **Simulation freezes the page until it finishes.** WASM runs on the browser's
+  single thread, so the CPU-bound delta-cycle loop monopolizes it — `Task.Run`
+  does not offload to a real thread here — and the page can't repaint until the
+  run ends. This is inherent to the browser demo; the MAUI and Blazor-Server
+  heads run the sim off the UI thread and stay responsive. As of v1.27.0 the
+  Editor shows a **demo overlay** while a run is in flight (gated on
+  `OperatingSystem.IsBrowser()`), explaining the pause and linking to the desktop
+  app (`kmila.com.mx/download`); it's painted before the loop starts and its
+  spinner is a CSS animation so it keeps moving on the compositor thread during
+  the freeze. Softening options (cooperative `Task.Yield` in the loop, AOT, real
+  wasm threads) are noted but deferred.
+- **GitHub features are unavailable in the demo.** OAuth login and the per-project
+  version control both talk to GitHub, which is CORS-blocked in the wasm sandbox,
+  so `IDemoCapabilities.AllowGitHubLogin` hides the Source Control tab + sign-in
+  here. They work on the MAUI (native) and Blazor-Server heads.
