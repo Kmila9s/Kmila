@@ -5,10 +5,13 @@
 **Author:** Ulrich Tamayo Daniel
 **Email:** dulricht1700@alumno.ipn.mx
 **Email 2:** danielulrichtamayo@gmail.com
-**Version:** 1.26.1
-**Last Updated:** September 21, 2026
+**Version:** 1.27.0
+**Last Updated:** September 24, 2026
+
+> **Note:** the in-app version string (`APP_VERSION`) currently reads `v1.25.0`; this README tracks `1.27.0`. Pre-existing mismatch — reconcile when convenient.
 
 > **Recent changelog highlights** (full details in [`Documentacion/`](../../Documentacion/)):
+> - **2026-09-23 Feature batch (v1.27.0)** — additive, simulation core untouched (equivalence + **172/172** unit tests green). (1) **Import-as-sample** + a user-sample store (imported `.kmila` bundles promoted to gallery entries) — `Models/UserSample.cs`, `Services/UserSampleService.cs`, `Modals/ImportModeModal.razor`; **bundle schema v2** now preserves `DirectoryPath` (subfolders survive export/import). (2) **Two built-in counter samples** (`contador_9`, `contador_9999`) with raw `.kviz` wiring + pre-loaded testbenches (`Pages/ProjectsView.Counters.cs`; `CLK_FREQ=50` sim-scaled). (3) **Workbench (VHDL testbench) stimulus mode** — a per-run alternative to the port-moment timeline, reusing the existing `SourceElaborator`/`HeadlessSimulator` path (`ProgramBuilder.RunTestbenchAsync` + `OnReport`, `PortsPanel` selector). (4) **Per-project GitHub source control** — a new **Source Control** dock tab (`Components/VersionControl/SourceControlPanel.razor`, `Services/VersionControl/*`, `Models/VersionControl/*`) using GitHub's Git Data API; link/create repo, status/diff, commit→push, pull-fast-forward, history, opt-in per-project auto-commit; scope configurable (`public_repo`/`repo`). (5) **Feedback links** — "Report to Kmila servers" (Settings + Logs) → `kmila.com.mx/bug-report`, and an occasional satisfaction prompt → `/satisfaction`; both are browser hand-offs (no telemetry). (6) **WASM demo sim notice** — an overlay while a simulation runs explains the single-thread freeze and points to the desktop app. (7) A **Website** button on Home → `https://kmila.com.mx`. See `Documentacion/CHANGELOG.md` + `STATUS.md §0`.
 > - **2026-09-21 One-command build/install scripts** — `App/Kmila/build.sh` + `build.ps1` clone all 6 repos into a workspace, force `net9.0` (no MAUI workload), and build native (`dotnet publish`) or Docker; `App/Kmila/install.sh` installs the .NET 9 SDK (or Docker) on Linux and registers a `systemd` service on `:8080`. Container assets moved to `App/Kmila/deploy/`. Verified: native + docker builds on macOS, `install.sh` end-to-end on `ubuntu:24.04`. See §14 + `Documentacion/CHANGELOG.md`.
 > - **2026-09-17 Docker web self-hosting** — `Dockerfile` + `docker-compose.yml` + `.dockerignore` at the repo root run `App/Kmila/Kmila.Web` (Blazor Server) in a container on any Docker host, no local .NET needed. Multi-stage `sdk:9.0`→`aspnet:9.0`, net9.0-only build (**no MAUI workload** — the transitive libs multi-target the MAUI heads, so the build forces `-p:TargetFrameworks=net9.0 -f net9.0`), non-root, SQLite + user assets persisted in a `kmila-data` volume at `/data`, healthcheck + `restart: unless-stopped`. Verified end-to-end (HTTP 200, DB in the volume, healthy, data intact across restart). See **§14** + `Documentacion/CHANGELOG.md`.
 > - **2026-09-17 Logic-schematic redesign (display-only)** — group-aware **swimlane** layout (`LayeredLayout.cs`) + a pre-layout `SchematicSimplifier.SimplifyNetlist` (passthrough-buffer elision, constants as wire chips, `case` → single `ROM_LOOKUP`/N-way-`MUX` collapse) take the `Contador_9999` clean view from **104 → 34 cells** with **zero** overlapping group boxes; MUX trapezoid + ROM memory-block glyphs. Naive stays byte-for-byte literal and simulation output is unchanged (`Synthesizer` untouched). See `Documentacion/CHANGELOG.md`.
@@ -47,7 +50,9 @@ Kmila-9s is a free, open-source, multiplatform academic platform focused on the 
 *   **Dynamic Variable Visualization:** Observe the states of signals, ports, and internal variables at any time via the Waveforms dock tab.
 *   **Visual Runtime Mode (canvas-driven interactive sim):** A fourth editor view-tab alongside **Code · Blocks · Step replay · Visual**. Drop LEDs, Buttons, Switches, LED arrays, Steppers, and 7-segment displays onto a virtual breadboard and wire each pin to a design port (with optional bit-slice syntax like `count[3]` or `bus[7:4]`). Hit Run — the canvas runs infinite-time alongside the simulator, with a runbar exposing speed slider, custom ms/tick override, Pause/Continue, scrub-slider over the frame ring, and tick breakpoints. Optional contact-bounce simulation on Buttons + wire-visualization overlay. Designs persist as a `.kviz` JSON sidecar next to the `.vhd`. See `Documentacion/VISUAL_MODE.md` for the widget contract + `HANDOFF_visual_runtime_2026-06-24.md` for design history.
 *   **VHDL IDE with Monaco intelligence:** Hover for rich documentation on keywords/types/IEEE functions, Ctrl+click to jump to signal / port / entity declarations in the current file, Shift+F12 for references, auto-complete covering the full VHDL keyword set + user declarations + ten ready-to-insert snippets (entity, clocked process, counter, shift register…). Minimap with smart auto-hide on narrow viewports. All keyword docs translate with the UI language.
-*   **Single-surface workbench:** The Editor page is a workbench — Monaco at the top with **four view-tabs** (Code · Blocks · Step replay · Visual), a **Run bar** for build/run/pause/stop with full state machine, a **bottom dock** with seven tabs (Entities · Schematic · Ports · Waveforms · Runs · Files · Output), and a **status bar** showing file info + resource % + sim state. No simulation modal; everything is one scroll.
+*   **Single-surface workbench:** The Editor page is a workbench — Monaco at the top with **four view-tabs** (Code · Blocks · Step replay · Visual), a **Run bar** for build/run/pause/stop with full state machine, a **bottom dock** with tabs (Entities · Schematic · Flow · Ports · Waveforms · Runs · Files · Output · **Source Control**), and a **status bar** showing file info + resource % + sim state. No simulation modal; everything is one scroll.
+*   **Workbench testbench mode (VHDL stimulus):** The Ports dock tab offers a per-run choice of stimulus source — the classic **port-moment timeline** (auto-clock + per-port value events) or a **VHDL testbench**. Testbench mode picks a `*_tb.vhd` file, elaborates it over the design (reusing the interpreter's `SourceElaborator`/headless path), drives the design from the testbench's own clock/reset, and surfaces `report` output in the Output dock tab. Both modes coexist; the selection persists per project.
+*   **Per-project source control (GitHub-backed):** A **Source Control** dock tab links each project to a GitHub repository and provides a VSCode-like flow — changes list (added/modified/deleted vs. a local snapshot), per-file unified diffs, commit → push, pull (fast-forward), history, and an opt-in per-project auto-commit-on-save. Built as our own version-control logic in pure C# over GitHub's Git Data API (no native git / no external libs); the token stays inside `GitHubAuth`. Requested OAuth scope is configurable (`public_repo` → `repo` for private repos) from Settings. Works on the MAUI and Blazor-Server heads; hidden in the WASM demo (GitHub is CORS-blocked there).
 *   **Schematic dock tab:** A new dock tab renders the synthesised netlist for the selected entity (`SchematicViewer.razor`, backed by `Interpreter.Synthesis.Synthesizer` and the `LayeredLayout` placement pass). Lets students cross-reference behavioural VHDL against its inferred structural form.
 *   **Runs history dock tab:** The **Runs** tab lists past simulation runs persisted via `SimulationSnapshotStore`, so students can compare results between code edits without re-running every time.
 *   **Lesson mode:** Two pages — `Learn.razor` (catalog) and `LessonView.razor` (per-lesson reader) — render the bundled lessons sourced from `LessonCatalog`, with progress saved by `LessonProgressStore`.
@@ -59,7 +64,8 @@ Kmila-9s is a free, open-source, multiplatform academic platform focused on the 
 *   **Local headless-simulation API (`/api/v1`) + Swagger:** A local HTTP surface (`Services/Api/`, endpoints `/health`, `/projects`, `/projects/{id}/files`, `/simulate`) lets external tooling drive builds + simulations without the UI. On Web it's mapped in `Kmila.Web/Program.cs` (Minimal API + .NET 9 `AddOpenApi`); on MAUI native heads it's served by an in-process `System.Net.HttpListener` host (`Kmila/Services/EmbeddedApiHost.cs`) sharing the same handler bodies (`SimulationApiHandlers.cs`). A vendored Swagger UI lives under `wwwroot/api-docs/` reading the committed `wwwroot/openapi/v1.json`; `/api-docs` redirects to it.
 *   **FPGA Resource Validation:** Pick a target device in the TopBar chip (searchable across 34 devices — AMD/Xilinx Spartan-6 and Artix-7, Intel/Altera Cyclone IV E, and Lattice iCE40 HX / iCE40 UltraPlus / ECP5; full JSON catalogue under `App/Kmila/Devices/`). Resource chip in the status bar stays green → amber → red as the design grows relative to the selected device. Clickable to jump to the Entities tab.
 *   **Configurations on the fly:** Save / load named simulation setups (FPGA + time + port moments) from a TopBar pill — round-trip through SQLite, no file management needed.
-*   **Examples gallery (4 pre-wired projects):** "Examples" button on the Projects page opens a card grid: **Demo Board** (every visual widget at once — counter, heartbeat LED, 7-seg, stepper, LED array), **Counter Clock** (two decimal 7-segs counting 00 → 99 with overflow LED), **Traffic Light FSM** (3-state Moore), **8-bit Shift Register** (eight individual LEDs each wired to one bit via slice syntax). One click creates the project + drops you onto the Visual tab with the canvas already wired — five clicks total from a fresh install to a running animation.
+*   **Examples gallery + your own samples:** "Examples" button on the Projects page opens a card grid of pre-wired built-ins — **Demo Board** (every visual widget at once), **Contador 0–9** and **Contador 0–9999** (real counters with clock dividers + 7-seg multiplexing, raw `.kviz` pin wiring, each shipping a ready testbench), **Counter Clock** (00 → 99), **Traffic Light FSM**, **8-bit Shift Register**, and more. One click creates the project + drops you onto the Visual tab already wired. You can also **import a project as a sample**: importing a `.kmila` bundle offers "raw import" vs. "save as sample" (title/icon/description), and saved user samples appear in the same gallery (stored in the `UserSample` table).
+*   **Feedback links (no telemetry):** A "Report to Kmila servers" button (Settings + per-error rows in Logs) opens the website bug-report form (`kmila.com.mx/bug-report`) pre-filled with diagnostics, and an occasional satisfaction prompt links to `/satisfaction`. Both are browser hand-offs — the app never POSTs anything itself, preserving the offline stance (the existing GitHub-issue path stays too).
 *   **In-app Logs viewer:** Every `ILogger<T>` write in the app lands in the `/logs` page with filtering, auto-scroll, pause, and level gating. Useful on mobile / MAUI where there's no console to watch.
 *   **Cross-Platform:** Built with .NET 9 and MAUI. Installs on **Windows, macOS, Android, iOS, and iPadOS**. A Blazor Server web version covers **Linux**.
 *   **Multilingual Support:** Full i18n across 7 languages — English, Spanish, French, German, Chinese, Japanese, Arabic (with RTL flipping of layouts, borders and chevrons). VHDL keyword docs translate too (EN + ES currently full; FR / DE / CH / JP / AR fall back to English until translated). Preferences persist via SQLite + `localStorage`.
@@ -436,8 +442,40 @@ erDiagram
         datetime LastModified
     }
 
+    USER_SAMPLES {
+        int Id PK "AutoIncrement"
+        string Title
+        string Icon
+        string Description
+        string BundleJson "exported .kmila bundle"
+        datetime CreatedAt
+    }
+
+    VC_PROJECT_LINK {
+        int Id PK "AutoIncrement"
+        int ProjectId "Unique"
+        string Owner
+        string Repo
+        string Branch
+        string LastSyncedCommitSha
+        bool AutoCommit
+        datetime UpdatedAt
+    }
+
+    VC_SNAPSHOT_FILE {
+        int Id PK "AutoIncrement"
+        int ProjectId "Indexed"
+        string RelativePath
+        string BlobSha
+        string Content
+        datetime UpdatedAt
+    }
+
     PROJECTS ||--o{ PROJECT_FILES : contains
+    PROJECTS ||--o| VC_PROJECT_LINK : "linked repo"
+    PROJECTS ||--o{ VC_SNAPSHOT_FILE : "last-synced mirror"
 ```
+**Version control tables (2026-09-23):** `VC_PROJECT_LINK` holds each project's GitHub remote coordinates + last-synced head + the per-project auto-commit flag; `VC_SNAPSHOT_FILE` is the local mirror of the last push/pull (path → content + git blob sha) that lets status/diff run offline and lets a push upload only changed blobs. `USER_SAMPLES` stores imported `.kmila` bundles promoted to gallery samples. (Alongside these, `SIMULATION_SNAPSHOT` + the Practice tables also exist — see §10.)
 **Note:** The following entities from the original documentation are NOT currently implemented:
 - SIMULATION_CONFIGS (simulation parameters are passed at runtime, not persisted)
 - PORT_CONFIGURATIONS (managed in-memory during simulation)
@@ -804,6 +842,21 @@ graph TD
     InMemLog -.->|captures ILogger writes| AppLog
     Logs     --> AppLog
 ```
+### 10.2.bis Version control, samples & feedback (2026-09-23)
+
+New files added in the v1.27.0 batch (all in `Kmila.Shared` unless noted):
+
+*   **Components/VersionControl/SourceControlPanel.razor** — the **Source Control** dock-tab UI: link/create repo, changes list (A/M/D vs. the local snapshot), per-file unified diff, commit → push, pull, history, and the per-project auto-commit toggle. Gated on GitHub sign-in and hidden in the WASM demo.
+*   **Services/VersionControl/IProjectVersionControl.cs + ProjectVersionControl.cs** — the home-grown VC engine: status/diff (offline, vs. `VcSnapshotFile`), `CommitAndPushAsync` (uploads only changed blobs; full working set defines the tree), `PullAsync` (fast-forward; conflict-guarded), history, link/unlink, `TryAutoCommitAsync`.
+*   **Services/VersionControl/GitHubRemote.cs** — thin GitHub Git Data API layer (blobs → trees → commits → refs, list-commits, create/list repos), all calls routed through `GitHubAuth.SendApiAsync` so the token never leaves `GitHubAuth`.
+*   **Models/VersionControl/{VcProjectLink, VcSnapshotFile, VcTypes}.cs** — the two SQLite tables (see §9) + the shared result/status/commit records.
+*   **GitHubAuth.cs** (extended) — `internal SendApiAsync` authed-request seam + dynamic OAuth scope (`GetPrivateScopeAsync`/`SetPrivateScopeAsync`, `public_repo` ↔ `repo`).
+*   **Services/UserSampleService.cs + Models/UserSample.cs + Modals/ImportModeModal.razor + Models/ImportModeResult.cs** — import-as-sample: the mode chooser (raw project vs. gallery sample) and the writable user-sample store surfaced in the Examples gallery (`ProjectsView`).
+*   **Pages/ProjectsView.Counters.cs** — the two built-in counter samples (`contador_9`, `contador_9999`): VHDL + raw `.kviz` wiring + testbench, injected via `ExampleDef.ExtraFiles`.
+*   **Components/SatisfactionPrompt.razor** — the occasional survey invite (mounted in `MainLayout`); links out to `/satisfaction`; flags persisted in `AppSettings`.
+*   **FeedbackHelper.cs** (extended) — `BuildKmilaReportUrl` (real `kmila.com.mx/bug-report` contract), `SatisfactionUrl`, `DownloadUrl` (all language-aware).
+*   **ProgramBuilder.cs** (extended) — `RunTestbenchAsync` + `OnReport` for Workbench mode (reuses `SourceElaborator`/`HeadlessSimulator`; the port-moment path is unchanged).
+
 ### 10.3 Component Interactions
 
 The core Build → Run loop after the April 2026 redesign. `RunBar` owns the user-facing button state; `Editor` is the orchestrator; `SimulationParameters` and `EditorDockState` are the shared state that makes it all reactive without prop-drilling.
@@ -1472,6 +1525,34 @@ We welcome contributions to Kmila-9s! Please check our GitHub repository for con
 Kmila-9s is released as free and open-source software. Please refer to the LICENSE file in the repository for specific licensing terms.
 
 ## 19. Changelog
+
+### Version 1.27.0 (2026-09-23)
+
+Additive feature batch. **No simulation-core files changed** — the interpreter, runners, `SourceElaborator`, and parser are untouched; the `FastRunnerEquivalence` guard + **172/172** unit tests stay green.
+
+#### Samples & import
+*   **Import-as-sample + user-sample store.** Importing a `.kmila` bundle now opens a mode chooser (`Modals/ImportModeModal.razor`): "raw import" (a new project) or "save as sample" (title/icon/description). Saved samples persist in the new `UserSample` table (`Services/UserSampleService.cs`) and appear in the Examples gallery alongside the built-ins.
+*   **Bundle schema v2.** `ProjectBundleService` now serializes/restores `ProjectFile.DirectoryPath`, so a project's subfolder layout survives an export/import round-trip. v1 bundles still import.
+*   **Two built-in counter samples** — `contador_9` (single 7-seg) and `contador_9999` (4-digit multiplexed bank), with raw `.kviz` pin wiring, frequency dividers, and pre-loaded testbenches (`Pages/ProjectsView.Counters.cs`; `CLK_FREQ=50` sim-scaled so runs advance at seconds scale).
+
+#### Workbench (VHDL testbench) mode
+*   The Ports dock tab gained a per-run **stimulus source** selector — the classic **port-moment timeline** or a **VHDL testbench**. Testbench mode elaborates a `*_tb.vhd` over the design (reusing the interpreter's existing `SourceElaborator`/`HeadlessSimulator` path) and surfaces `report` output in the Output tab. `ProgramBuilder.RunTestbenchAsync` + `OnReport`; selection persists per project (`KMILA_PROJECT_TESTBENCH_{id}`). The port-moment path is byte-for-byte unchanged.
+
+#### Per-project source control (GitHub-backed)
+*   New **Source Control** dock tab (`EditorTab.SourceControl`, `Components/VersionControl/SourceControlPanel.razor`): link/create a repo, changes list, per-file unified diff, commit → push, pull (fast-forward), history, and opt-in per-project auto-commit-on-save. Our own VC logic in pure C# over GitHub's **Git Data API** (`Services/VersionControl/*`, `Models/VersionControl/*`) — no native git, no external libs; the token stays inside `GitHubAuth` (new `SendApiAsync` seam). OAuth scope is configurable from Settings (`public_repo` ↔ `repo`). Works on MAUI + Blazor-Server heads; hidden in the WASM demo (CORS). Merge/branches are a deferred future phase.
+
+#### Feedback links (no telemetry)
+*   "Report to Kmila servers" (Settings + per-error rows in Logs) opens `kmila.com.mx/bug-report` pre-filled (title/message/category/version/platform/timestamp); an occasional `SatisfactionPrompt` links to `/satisfaction`. Both are browser hand-offs — the app POSTs nothing. `Privacy.razor` updated.
+
+#### WASM demo
+*   A **simulation-busy overlay** (`Editor.razor`, gated on `OperatingSystem.IsBrowser()`) explains that the single-threaded browser demo pauses until a run finishes, and links to the desktop app (`/download`). The CSS spinner keeps animating on the compositor thread during the freeze.
+
+#### Misc
+*   **Website** button on Home → `https://kmila.com.mx`.
+
+Header stamped **1.27.0 / September 24, 2026**.
+
+---
 
 ### Version 1.26.1 (2026-09-21)
 

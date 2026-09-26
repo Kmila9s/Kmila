@@ -1,6 +1,12 @@
+include:
+    - project: 'kmila-9s/ci-templates'
+      file: '/auto-merge.yml'
+
 stages:
     - build
     - package
+    - merge
+    - downstream
 
 variables:
     GIT_DEPTH: "20"
@@ -16,7 +22,7 @@ variables:
           for m in Interpreter LibraryCompiler Debugger TimeMachine Parser; do
             rm -rf "../../$m"
             git clone --depth 20 \
-              "http://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}:${CI_SERVER_PORT}/${CI_PROJECT_NAMESPACE}/$m.git" \
+              "http://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}:8083/${CI_PROJECT_NAMESPACE}/$m.git" \
               "../../$m"
           done
 
@@ -70,7 +76,7 @@ docker-build:
         - |
           for m in Debugger Interpreter LibraryCompiler Parser TimeMachine; do
             git clone --depth 20 \
-              "http://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}:${CI_SERVER_PORT}/${CI_PROJECT_NAMESPACE}/$m.git" \
+              "http://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}:8083/${CI_PROJECT_NAMESPACE}/$m.git" \
               "$CTX/$m"
           done
     script:
@@ -87,3 +93,39 @@ docker-build:
           else
             echo "DOCKERHUB_USER/DOCKERHUB_TOKEN not set -> built images locally, skipping push."
           fi
+
+# (auto-merge job comes from the included kmila-9s/ci-templates/auto-merge.yml,
+#  runs in the `merge` stage on vX.Y.Z branches once build + package pass.)
+
+# =====================================================================
+# Rebuild the KmilaWeb in-browser demo whenever the engine/WASM changes here.
+# KmilaWeb owns its own demo recipe (KmilaWeb/Dockerfile.wasm, used by its compose),
+# so instead of building it here we start KmilaWeb's pipeline with BUILD_WASM=true.
+# That pipeline re-clones this engine at its default branch and rebuilds `kmila-wasm`
+# the way KmilaWeb expects — keeping each repo the owner of its own build.
+#
+# Fires on default-branch pushes and release tags; a manual button otherwise. Only
+# runs once the WASM actually compiled (needs: web-wasm-build).
+#
+# PREREQS:
+#   • In the KmilaWeb project → Settings → CI/CD → Job token permissions, allowlist
+#     THIS project (Kmila), or the trigger is rejected.
+#   • Confirm the downstream path/branch below match KmilaWeb's project path + default
+#     branch (namespace is `$CI_PROJECT_NAMESPACE`, i.e. kmila-9s).
+# `strategy: depend` makes this job mirror KmilaWeb's pipeline status (so a failed
+#   demo build turns this pipeline red too); drop it for fire-and-forget.
+# =====================================================================
+trigger-kmilaweb-wasm:
+    stage: downstream
+    needs: ["web-wasm-build"]
+    variables:
+        BUILD_WASM: "true"
+    trigger:
+        project: kmila-9s/kmilaweb
+        branch: main
+        strategy: depend
+    rules:
+        - if: '$CI_COMMIT_TAG'
+        - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+        - when: manual
+          allow_failure: true
