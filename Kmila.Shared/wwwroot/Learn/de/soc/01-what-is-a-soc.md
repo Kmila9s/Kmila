@@ -10,7 +10,7 @@ Jeder SoC, von der erweiterten Kmila-CPU bis zur 5-Millionen-Dollar-Apple-A-Seri
 2. **Speicher** — On-Chip-SRAM, Block-RAM, manchmal externer DDR.
 3. **Ein Interconnect** — die Drähte + Arbitrierung, die (1) mit (2) und mit der Peripherie reden lässt.
 
-Das Interconnect ist der Teil, der aufhört, „nur RTL" zu sein, und architektonisch wird. Es regelt, wer wann reden darf, wie viele Transaktionen gleichzeitig unterwegs sein dürfen und wie schnell eine Anfrage abgeschlossen werden kann.
+Das Interconnect ist der Teil, der aufhört, „nur RTL“ zu sein, und architektonisch wird. Es regelt, wer wann reden darf, wie viele Transaktionen gleichzeitig unterwegs sein dürfen und wie schnell eine Anfrage abgeschlossen werden kann.
 
 ## Gängige Interconnect-Protokolle
 
@@ -41,6 +41,6 @@ Jeder Transfer ist ein Beat. Jeder Kanal hält an, wenn die Gegenseite nicht `re
 
 ## Der Plan im Kmila-Curriculum
 
-Spätere Lektionen in diesem Modul bauen ein AXI4-Lite-Register-Interface von Grund auf, verdrahten es dann zwischen deine 8-Bit-CPU und ein memory-mapped UART, sodass die CPU „drucken" kann, indem sie an eine Adresse schreibt. Das gibt dir das mentale Modell dafür, was in jedem modernen SoC vorgeht — in einer Größe, die du dir wirklich noch merken kannst.
+Spätere Lektionen in diesem Modul bauen ein AXI4-Lite-Register-Interface von Grund auf, verdrahten es dann zwischen deine 8-Bit-CPU und ein memory-mapped UART, sodass die CPU „drucken“ kann, indem sie an eine Adresse schreibt. Das gibt dir das mentale Modell dafür, was in jedem modernen SoC vorgeht — in einer Größe, die du dir wirklich noch merken kannst.
 
 *Weitere Lektionen folgen — dieses Modul ist in aktiver Bearbeitung.*

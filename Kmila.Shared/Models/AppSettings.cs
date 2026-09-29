@@ -194,12 +194,18 @@ public enum EditorSyncMode
 /// </summary>
 public static class EditorSyncModeExtensions
 {
+    /// <summary>Serializes a sync mode to its persisted string token.</summary>
+    /// <param name="mode">The sync mode to convert.</param>
+    /// <returns>"manual" or "auto".</returns>
     public static string ToToken(this EditorSyncMode mode) => mode switch
     {
         EditorSyncMode.Manual => "manual",
         _                     => "auto"
     };
 
+    /// <summary>Parses a persisted token back into a sync mode, defaulting to <see cref="EditorSyncMode.Auto"/>.</summary>
+    /// <param name="token">The stored token, e.g. "manual" or "auto".</param>
+    /// <returns>The parsed <see cref="EditorSyncMode"/>.</returns>
     public static EditorSyncMode ParseToken(string? token) => (token ?? string.Empty).Trim().ToLowerInvariant() switch
     {
         "manual" => EditorSyncMode.Manual,

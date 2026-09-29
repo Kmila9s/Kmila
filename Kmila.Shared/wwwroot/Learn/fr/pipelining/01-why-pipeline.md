@@ -1,14 +1,14 @@
 # Pourquoi pipeliner un CPU ?
 
-Ton CPU 8 bits monocycle du parcours précédent fonctionne — mais il est limité sur une dimension qui compte énormément sur du matériel réel : la **fréquence d'horloge**.
+Votre CPU 8 bits monocycle du parcours précédent fonctionne — mais il est limité sur une dimension qui compte énormément sur du matériel réel : la **fréquence d'horloge**.
 
 ## Le plafond du monocycle
 
-Dans un design monocycle, la période d'horloge doit être assez longue pour que l'instruction au chemin critique le plus long se propage entièrement : fetch → decode → lecture-registre → ALU → mémoire → writeback, le tout en combinatoire. Si le chemin le plus long fait 20 ns, ton horloge max est 50 MHz. Point final.
+Dans un design monocycle, la période d'horloge doit être assez longue pour que l'instruction au chemin critique le plus long se propage entièrement : fetch → decode → lecture-registre → ALU → mémoire → writeback, le tout en combinatoire. Si le chemin le plus long fait 20 ns, votre horloge max est 50 MHz. Point final.
 
 ## Pipeliner = diviser ce chemin
 
-Découpe le chemin en N étages séparés par des registres :
+Découpez le chemin en N étages séparés par des registres :
 
 ```
   [IF] → [ID] → [EX] → [MEM] → [WB]

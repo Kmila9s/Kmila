@@ -126,7 +126,7 @@
         </article>
 
         @* --- Simulation --- *@
-        <article class="settings-card">
+        <article class="settings-card" data-tour="settings-simulation">
             <header class="settings-card__head">
                 <span class="settings-card__icon settings-card__icon--accent">
                     <Icon Name="IconName.CpuFill" />
@@ -798,15 +798,15 @@
                     <Icon Name="IconName.Broadcast" />
                 </span>
                 <div class="settings-card__head-text">
-                    <h2>Local API</h2>
-                    <p class="settings-card__sub">Serve <code>/api/v1</code> from this app so SimulatorBench or curl can drive it.</p>
+                    <h2>@Traductor.T("SETTINGS_LOCALAPI_TITLE")</h2>
+                    <p class="settings-card__sub">@((Microsoft.AspNetCore.Components.MarkupString)Traductor.T("SETTINGS_LOCALAPI_SUB"))</p>
                 </div>
             </header>
             <div class="settings-card__body">
                 <div class="settings-row">
                     <div class="settings-row__label">
-                        <strong>Enable local API</strong>
-                        <small>Starts a Kestrel host on 127.0.0.1 (or LAN, see below).</small>
+                        <strong>@Traductor.T("SETTINGS_LOCALAPI_ENABLE")</strong>
+                        <small>@Traductor.T("SETTINGS_LOCALAPI_ENABLE_HINT")</small>
                     </div>
                     <div class="settings-row__control">
                         <label class="form-check form-switch mb-0">
@@ -823,14 +823,14 @@
                 {
                     <p class="settings-card__hint settings-card__hint--warn">
                         <Icon Name="IconName.ExclamationTriangleFill" />
-                        <span>Not available on iOS in this release.</span>
+                        <span>@Traductor.T("SETTINGS_LOCALAPI_UNSUPPORTED")</span>
                     </p>
                 }
 
                 <div class="settings-row">
                     <div class="settings-row__label">
-                        <strong>Port</strong>
-                        <small>Default 5298 matches SimulatorBench's fallback. Use 0 to let the OS pick.</small>
+                        <strong>@Traductor.T("SETTINGS_LOCALAPI_PORT")</strong>
+                        <small>@Traductor.T("SETTINGS_LOCALAPI_PORT_HINT")</small>
                     </div>
                     <div class="settings-row__control">
                         <input type="number"
@@ -844,8 +844,8 @@
 
                 <div class="settings-row">
                     <div class="settings-row__label">
-                        <strong>Bind on LAN (advanced)</strong>
-                        <small>Binds 0.0.0.0 so other devices on your network can reach the API. Loopback is safer.</small>
+                        <strong>@Traductor.T("SETTINGS_LOCALAPI_LAN")</strong>
+                        <small>@Traductor.T("SETTINGS_LOCALAPI_LAN_HINT")</small>
                     </div>
                     <div class="settings-row__control">
                         <label class="form-check form-switch mb-0">
@@ -861,7 +861,7 @@
                 {
                     <p class="settings-card__hint settings-card__hint--warn">
                         <Icon Name="IconName.ExclamationTriangleFill" />
-                        <span>Anyone on your local network can hit this port. Set an auth token below to gate access.</span>
+                        <span>@Traductor.T("SETTINGS_LOCALAPI_LAN_WARN")</span>
                     </p>
                 }
 
@@ -874,21 +874,21 @@
                 {
                     <div class="settings-row">
                         <div class="settings-row__label">
-                            <strong>Auth token</strong>
-                            <small>Optional bearer token. Empty = unauthenticated (dev default).</small>
+                            <strong>@Traductor.T("SETTINGS_LOCALAPI_TOKEN")</strong>
+                            <small>@Traductor.T("SETTINGS_LOCALAPI_TOKEN_HINT")</small>
                         </div>
                         <div class="settings-row__control" style="display:flex; gap:.5rem; flex-wrap:wrap; align-items:center;">
                             <input type="text"
                                    class="form-control form-control-sm font-monospace"
                                    style="min-width:16em; max-width:24em;"
                                    readonly="readonly"
-                                   placeholder="none — endpoints are open"
+                                   placeholder="@Traductor.T("SETTINGS_LOCALAPI_TOKEN_PLACEHOLDER")"
                                    value="@_localApiToken" />
                             <button type="button"
                                     class="kmila-btn kmila-btn--ghost kmila-btn--sm"
                                     @onclick="OnGenerateLocalApiTokenAsync">
                                 <Icon Name="IconName.ArrowRepeat" />
-                                <span>@(string.IsNullOrEmpty(_localApiToken) ? "Generate" : "Regenerate")</span>
+                                <span>@(string.IsNullOrEmpty(_localApiToken) ? Traductor.T("SETTINGS_LOCALAPI_TOKEN_GENERATE") : Traductor.T("SETTINGS_LOCALAPI_TOKEN_REGENERATE"))</span>
                             </button>
                             @if (!string.IsNullOrEmpty(_localApiToken))
                             {
@@ -896,13 +896,13 @@
                                         class="kmila-btn kmila-btn--ghost kmila-btn--sm"
                                         @onclick="OnCopyLocalApiTokenAsync">
                                     <Icon Name="IconName.Clipboard" />
-                                    <span>Copy</span>
+                                    <span>@Traductor.T("COMMON_COPY")</span>
                                 </button>
                                 <button type="button"
                                         class="kmila-btn kmila-btn--ghost kmila-btn--sm"
                                         @onclick="OnClearLocalApiTokenAsync">
                                     <Icon Name="IconName.Trash" />
-                                    <span>Clear</span>
+                                    <span>@Traductor.T("COMMON_CLEAR")</span>
                                 </button>
                             }
                         </div>
@@ -913,8 +913,8 @@
                 {
                     <div class="settings-row">
                         <div class="settings-row__label">
-                            <strong>URL</strong>
-                            <small>Point SimulatorBench (<code>--api</code> or <code>KMILA_API</code>) here.</small>
+                            <strong>@Traductor.T("SETTINGS_LOCALAPI_URL")</strong>
+                            <small>@((Microsoft.AspNetCore.Components.MarkupString)Traductor.T("SETTINGS_LOCALAPI_URL_HINT"))</small>
                         </div>
                         <div class="settings-row__control" style="display:flex; gap:.5rem; flex-wrap:wrap;">
                             <input type="text"
@@ -926,7 +926,7 @@
                                     class="kmila-btn kmila-btn--ghost kmila-btn--sm"
                                     @onclick="() => CopyLocalApiUrlAsync(url.ToString())">
                                 <Icon Name="IconName.Clipboard" />
-                                <span>Copy</span>
+                                <span>@Traductor.T("COMMON_COPY")</span>
                             </button>
                         </div>
                     </div>

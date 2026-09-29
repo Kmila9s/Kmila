@@ -21,6 +21,9 @@ public class ConceptProgressStore
     private bool _hydrated;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    /// <summary>Creates a new <see cref="ConceptProgressStore"/>.</summary>
+    /// <param name="db">Application database context backing the key-value store.</param>
+    /// <param name="logger">Optional logger; a null logger is used when omitted.</param>
     public ConceptProgressStore(ApplicationDbContext db,
                                 ILogger<ConceptProgressStore>? logger = null)
     {
@@ -28,6 +31,7 @@ public class ConceptProgressStore
         _logger = (ILogger?)logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
     }
 
+    /// <summary>Raised whenever a completion or the last-opened pointer changes.</summary>
     public event Action? OnChange;
 
     private async Task EnsureHydratedAsync()
@@ -59,21 +63,36 @@ public class ConceptProgressStore
         }
     }
 
+    /// <summary>Returns whether the given concept is marked completed, hydrating the cache first.</summary>
+    /// <param name="moduleId">Module identifier.</param>
+    /// <param name="conceptId">Concept identifier.</param>
+    /// <returns>True if the concept is completed.</returns>
     public async Task<bool> IsCompletedAsync(string moduleId, string conceptId)
     {
         await EnsureHydratedAsync();
         return _cache.Contains(BuildKey(moduleId, conceptId));
     }
 
+    /// <summary>Returns whether the given concept is completed using only the in-memory cache (no hydration).</summary>
+    /// <param name="moduleId">Module identifier.</param>
+    /// <param name="conceptId">Concept identifier.</param>
+    /// <returns>True if the concept is currently cached as completed.</returns>
     public bool IsCompletedCached(string moduleId, string conceptId)
         => _cache.Contains(BuildKey(moduleId, conceptId));
 
+    /// <summary>Counts how many of the given concepts in a module are completed.</summary>
+    /// <param name="moduleId">Module identifier.</param>
+    /// <param name="conceptIds">Concept identifiers to check.</param>
+    /// <returns>The number of completed concepts among those supplied.</returns>
     public async Task<int> CompletedCountAsync(string moduleId, IEnumerable<string> conceptIds)
     {
         await EnsureHydratedAsync();
         return conceptIds.Count(id => _cache.Contains(BuildKey(moduleId, id)));
     }
 
+    /// <summary>Marks a concept as completed and persists it.</summary>
+    /// <param name="moduleId">Module identifier.</param>
+    /// <param name="conceptId">Concept identifier.</param>
     public async Task MarkCompletedAsync(string moduleId, string conceptId)
     {
         await EnsureHydratedAsync();
@@ -91,6 +110,9 @@ public class ConceptProgressStore
         }
     }
 
+    /// <summary>Clears a concept's completion mark and persists the change.</summary>
+    /// <param name="moduleId">Module identifier.</param>
+    /// <param name="conceptId">Concept identifier.</param>
     public async Task MarkIncompleteAsync(string moduleId, string conceptId)
     {
         await EnsureHydratedAsync();
@@ -108,12 +130,17 @@ public class ConceptProgressStore
         }
     }
 
+    /// <summary>Returns the total number of completed concepts across all modules.</summary>
+    /// <returns>The count of completed concepts.</returns>
     public async Task<int> TotalCompletedAsync()
     {
         await EnsureHydratedAsync();
         return _cache.Count;
     }
 
+    /// <summary>Records the most recently opened concept as the last-opened pointer.</summary>
+    /// <param name="moduleId">Module identifier.</param>
+    /// <param name="conceptId">Concept identifier.</param>
     public async Task TouchLastOpenedAsync(string moduleId, string conceptId)
     {
         if (string.IsNullOrEmpty(moduleId) || string.IsNullOrEmpty(conceptId)) return;
@@ -129,6 +156,7 @@ public class ConceptProgressStore
         }
     }
 
+    /// <summary>Clears all completions and the last-opened pointer, persisting the reset.</summary>
     public async Task ResetAllAsync()
     {
         await EnsureHydratedAsync();
@@ -151,6 +179,8 @@ public class ConceptProgressStore
         }
     }
 
+    /// <summary>Returns the last-opened concept as a (module, concept) pair, or null if none is recorded.</summary>
+    /// <returns>The last-opened module/concept pair, or null.</returns>
     public async Task<(string ModuleId, string ConceptId)?> GetLastOpenedAsync()
     {
         try

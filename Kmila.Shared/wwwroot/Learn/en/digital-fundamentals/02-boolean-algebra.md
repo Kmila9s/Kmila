@@ -66,7 +66,7 @@ not(A · B) = Ā + B̄
 not(A + B) = Ā · B̄
 ```
 
-De Morgan lets you turn a NAND into "OR of complements", or an NOR into "AND of complements", or cancel long NOT bars. Every FPGA toolchain uses them constantly during optimisation.
+De Morgan lets you turn a NAND into "OR of complements", or a NOR into "AND of complements", or cancel long NOT bars. Every FPGA toolchain uses them constantly during optimisation.
 
 ## A worked simplification
 

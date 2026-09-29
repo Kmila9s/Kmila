@@ -19,11 +19,11 @@ flowchart LR
 
 Bei gegebenem Zustand ist der Ausgang fix. Bist du in `S_GREEN`, dann `green = '1'`. Immer. Egal, wie der Eingang aussieht.
 
-**Pros**
+**Vorteile**
 - Ausgänge ändern sich nur an Taktflanken → keine Glitches.
 - Leicht nachzuvollziehen, leicht zu debuggen, leicht zu verifizieren.
 
-**Cons**
+**Nachteile**
 - Mindestens ein Taktzyklus Latenz zwischen Eingang und Ausgang (der Zustand muss zuerst wechseln).
 - Manchmal brauchst du mehr Zustände, um dasselbe Verhalten wie ein Mealy-Automat zu codieren.
 
@@ -40,11 +40,11 @@ flowchart LR
 
 Ausgänge sind eine Funktion des aktuellen Zustands **und** des aktuellen Eingangs. Sie können sich zwischen Taktflanken ändern.
 
-**Pros**
+**Vorteile**
 - Schneller — Ausgänge können im selben Zyklus auf einen Eingang reagieren, nicht erst im nächsten.
 - Oft weniger Zustände nötig.
 
-**Cons**
+**Nachteile**
 - Ausgänge können glitchen (folgen dem kombinatorischen Eingang).
 - Schwerer zu debuggen, wenn Ausgänge nicht mit Taktflanken zusammenfallen.
 

@@ -81,6 +81,8 @@ public class VhdlBlockEmitter
 
     private int _currentLine;
 
+    /// <summary>Creates the emitter with an optional logger.</summary>
+    /// <param name="logger">Optional logger; a null logger is used when omitted.</param>
     public VhdlBlockEmitter(ILogger<VhdlBlockEmitter>? logger = null)
     {
         _logger = (ILogger?)logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
@@ -1215,7 +1217,7 @@ public class VhdlBlockEmitter
         Track(node);
         var text = GetField(node, "TEXT") ?? string.Empty;
         var pad  = new string(' ', indent * 4);
-        var lines = text.Replace("\r\n", "\n").TrimEnd('\n').Split('\n');
+        var lines = text.Replace("\r\n", "\n", StringComparison.Ordinal).TrimEnd('\n').Split('\n');
 
         // Round-trip fidelity fix (2026-07-06): raw blocks captured from
         // multi-line sources retain the original leading whitespace on

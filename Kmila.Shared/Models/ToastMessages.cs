@@ -4,7 +4,7 @@ namespace Kmila.Shared.Models;
 /// <summary>
 /// A utility class for creating toast messages.
 /// </summary>
-public class ToastMessages
+public static class ToastMessages
 {
     /// <summary>
     /// Creates a new <see cref="ToastMessage"/> with the specified title, message, and type.
@@ -19,6 +19,6 @@ public class ToastMessages
             Title = Title,
             Message = Message,
             Type = Type,
-            HelpText = DateTime.Now.ToString("t")
+            HelpText = DateTime.Now.ToString("t", System.Globalization.CultureInfo.InvariantCulture)
         };
 }

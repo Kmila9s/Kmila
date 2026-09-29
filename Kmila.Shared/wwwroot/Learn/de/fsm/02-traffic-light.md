@@ -1,6 +1,6 @@
 # Beispiel: Ampel-FSM
 
-Eine Ampel ist der kanonische Moore-FSM: drei Zustände (`RED`, `GREEN`, `YELLOW`), ein Ausgang pro Farbe und ein Timer, der sagt „halte jeden Zustand ein paar Zyklen, bevor du weiterziehst".
+Eine Ampel ist der kanonische Moore-FSM: drei Zustände (`RED`, `GREEN`, `YELLOW`), ein Ausgang pro Farbe und ein Timer, der sagt „halte jeden Zustand ein paar Zyklen, bevor du weiterziehst“.
 
 ## Die Struktur
 

@@ -12,6 +12,9 @@ namespace Kmila.Shared.Services;
 /// </summary>
 public static class StimulusBuilder
 {
+    /// <summary>Separators used when tokenising a port name to detect a clock token.</summary>
+    private static readonly char[] ClockNameSeparators = { '_', '-', '.' };
+
     /// <summary>
     /// Builds a SimulationConfig from UI parameters.
     /// </summary>
@@ -19,6 +22,7 @@ public static class StimulusBuilder
     /// <param name="portMoments">Port moment configurations from the UI (may be null).</param>
     /// <param name="duration">Total simulation duration.</param>
     /// <param name="tickResNs">Nanoseconds per tick (default: TimeClock.NS_PER_TICK = 10).</param>
+    /// <param name="systemClockMhz">Effective system clock frequency (MHz) for this run.</param>
     /// <returns>A fully configured <see cref="SimulationConfig"/> ready for execution by SimulationRunner.</returns>
     public static SimulationConfig BuildConfig(
         Entity entity,
@@ -210,7 +214,7 @@ public static class StimulusBuilder
         {
             clocks.Add(new ClockConfig
             {
-                Signal = autoClkPort,
+                Signal = autoClkPort!,
                 HalfPeriodTicks = halfPeriodTicks,
                 InitialHigh = false
             });
@@ -245,14 +249,14 @@ public static class StimulusBuilder
         // Token-based scan — split on common separators and check for a clk /
         // clock token rather than raw substring so "blockade" or "clocking"
         // don't falsely register.
-        foreach (var token in n.Split(new[] { '_', '-', '.' }, StringSplitOptions.RemoveEmptyEntries))
+        foreach (var token in n.Split(ClockNameSeparators, StringSplitOptions.RemoveEmptyEntries))
         {
             if (token == "clk" || token == "clock") return true;
         }
         // Prefixed / suffixed single-token forms: aclk, hclk, pclk, clki,
         // clkn, clkp, clk1, clk2 …
-        if (n.Length >= 4 && n.EndsWith("clk") && n.Length <= 6) return true;
-        if (n.StartsWith("clk") && n.Length <= 6) return true;
+        if (n.Length >= 4 && n.EndsWith("clk", StringComparison.Ordinal) && n.Length <= 6) return true;
+        if (n.StartsWith("clk", StringComparison.Ordinal) && n.Length <= 6) return true;
         return false;
     }
 

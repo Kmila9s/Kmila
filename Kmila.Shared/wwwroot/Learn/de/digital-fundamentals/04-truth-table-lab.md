@@ -4,7 +4,7 @@ Dieses Labor ist das erste Mal, dass du ein echtes VHDL-Design treibst. Die Enti
 
 ## Was passiert, wenn du *Im Editor öffnen* klickst
 
-1. Kmila erstellt ein Wegwerf-Projekt namens „Labor: Wahrheitstabellen-Explorer".
+1. Kmila erstellt ein Wegwerf-Projekt namens „Labor: Wahrheitstabellen-Explorer“.
 2. Er füllt es mit `gates.vhd`, das die sechs nebenläufigen Zuweisungen enthält.
 3. Er lädt eine **Simulationskonfiguration**, die `a` und `b` durch jede Kombination stimuliert.
 4. Die Editor-Werkbank öffnet sich, mit der Config oben im Pill schon ausgewählt.
@@ -32,7 +32,7 @@ Falls eines nicht zu deiner Erwartung passt, öffne den **Output**-Tab — Build
 Sobald das Beispiel läuft, experimentiere:
 
 - Füge der Entity einen dritten Eingang `c` hinzu und berechne `a xor b xor c` (3-Eingang-Parität).
-- Benenne einen Ausgang um und baue neu — der **Ports**-Tab updated sich passend.
+- Benenne einen Ausgang um und baue neu — der **Ports**-Tab aktualisiert sich passend.
 - Füge der Config eine weitere Zeile hinzu: flippe `a` und `b` gleichzeitig und sieh, welche Ausgänge sich ändern.
 
 Je mehr du diese Hebel bewegst, bevor du dein eigenes Design schreibst, desto weniger fühlt sich VHDL wie Raten an.

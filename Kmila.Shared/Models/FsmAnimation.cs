@@ -9,9 +9,11 @@ namespace Kmila.Shared.Models;
 /// </summary>
 public class FsmState
 {
+    /// <summary>Unique state id.</summary>
     [JsonPropertyName("id")]
     public string Id { get; set; } = string.Empty;
 
+    /// <summary>Display label for the state.</summary>
     [JsonPropertyName("label")]
     public string Label { get; set; } = string.Empty;
 
@@ -42,6 +44,7 @@ public class FsmState
 /// </summary>
 public class FsmTransition
 {
+    /// <summary>Unique transition id.</summary>
     [JsonPropertyName("id")]
     public string Id { get; set; } = string.Empty;
 
@@ -69,6 +72,7 @@ public class FsmTransition
 /// </summary>
 public class FsmStep
 {
+    /// <summary>Step index (time position) within the walk.</summary>
     [JsonPropertyName("t")]
     public int T { get; set; }
 
@@ -105,12 +109,15 @@ public class FsmStep
 /// </summary>
 public class FsmAnimationDoc
 {
+    /// <summary>SVG viewBox for the diagram.</summary>
     [JsonPropertyName("viewBox")]
     public string ViewBox { get; set; } = "0 0 720 360";
 
+    /// <summary>State nodes in the diagram.</summary>
     [JsonPropertyName("states")]
     public List<FsmState> States { get; set; } = new();
 
+    /// <summary>Transition edges in the diagram.</summary>
     [JsonPropertyName("transitions")]
     public List<FsmTransition> Transitions { get; set; } = new();
 
@@ -121,6 +128,7 @@ public class FsmAnimationDoc
     [JsonPropertyName("signalOrder")]
     public List<string> SignalOrder { get; set; } = new();
 
+    /// <summary>Ordered animation steps of the FSM walk.</summary>
     [JsonPropertyName("steps")]
     public List<FsmStep> Steps { get; set; } = new();
 }

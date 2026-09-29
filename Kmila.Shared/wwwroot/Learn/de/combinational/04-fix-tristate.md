@@ -10,7 +10,7 @@ Ein Tristate-Buffer ist ein umschaltbarer Ausgang. Wenn das Output-Enable-Signal
 y <= d when oe = '0' else 'Z';
 ```
 
-Lies es laut vor: „`y` ist `d`, **wenn `oe` 0 ist**, sonst `'Z'`." Das ist falsch herum. Du willst, dass der Buffer Daten weitergibt, wenn das Enable **high** ist, und freigibt, wenn es **low** ist.
+Lies es laut vor: „`y` ist `d`, **wenn `oe` 0 ist**, sonst `'Z'`.“ Das ist falsch herum. Du willst, dass der Buffer Daten weitergibt, wenn das Enable **high** ist, und freigibt, wenn es **low** ist.
 
 ## Dein Auftrag
 

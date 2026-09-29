@@ -9,10 +9,15 @@ namespace Kmila.Shared.Models;
 /// </summary>
 public enum ConceptLevel
 {
+    /// <summary>Entry-level content for first-time learners.</summary>
     Beginner,
+    /// <summary>Simple content just above beginner.</summary>
     Easy,
+    /// <summary>Mid-level content assuming the basics.</summary>
     Intermediate,
+    /// <summary>Challenging content for experienced learners.</summary>
     Advanced,
+    /// <summary>The most demanding content.</summary>
     Expert
 }
 
@@ -39,24 +44,31 @@ public enum ConceptKind
 /// </summary>
 public class ConceptModule
 {
+    /// <summary>Stable module identifier.</summary>
     [JsonPropertyName("id")]
     public string Id { get; set; } = string.Empty;
 
+    /// <summary>Icon name used to render the module in the catalog.</summary>
     [JsonPropertyName("icon")]
     public string Icon { get; set; } = "Diagram3";
 
+    /// <summary>Difficulty bucket for the module.</summary>
     [JsonPropertyName("level")]
     public ConceptLevel Level { get; set; } = ConceptLevel.Beginner;
 
+    /// <summary>Sort order of the module within the curriculum.</summary>
     [JsonPropertyName("order")]
     public int Order { get; set; }
 
+    /// <summary>Localized module titles keyed by language code.</summary>
     [JsonPropertyName("titles")]
     public Dictionary<string, string> Titles { get; set; } = new();
 
+    /// <summary>Localized module summaries keyed by language code.</summary>
     [JsonPropertyName("summaries")]
     public Dictionary<string, string> Summaries { get; set; } = new();
 
+    /// <summary>Lessons belonging to this module, in display order.</summary>
     [JsonPropertyName("lessons")]
     public List<Concept> Lessons { get; set; } = new();
 
@@ -77,21 +89,27 @@ public class ConceptModule
 /// </summary>
 public class Concept
 {
+    /// <summary>Stable lesson identifier.</summary>
     [JsonPropertyName("id")]
     public string Id { get; set; } = string.Empty;
 
+    /// <summary>Pedagogical flavor of the lesson (reading vs. embedded player).</summary>
     [JsonPropertyName("kind")]
     public ConceptKind Kind { get; set; } = ConceptKind.Reading;
 
+    /// <summary>Difficulty bucket for the lesson.</summary>
     [JsonPropertyName("level")]
     public ConceptLevel Level { get; set; } = ConceptLevel.Beginner;
 
+    /// <summary>Estimated time to complete the lesson, in minutes.</summary>
     [JsonPropertyName("estimatedMinutes")]
     public int EstimatedMinutes { get; set; } = 8;
 
+    /// <summary>Localized lesson titles keyed by language code.</summary>
     [JsonPropertyName("titles")]
     public Dictionary<string, string> Titles { get; set; } = new();
 
+    /// <summary>Localized lesson summaries keyed by language code.</summary>
     [JsonPropertyName("summaries")]
     public Dictionary<string, string> Summaries { get; set; } = new();
 
@@ -153,9 +171,11 @@ public class ConceptQuizletOption
 /// <summary>Root of the Concepts <c>manifest.json</c> file.</summary>
 public class ConceptManifest
 {
+    /// <summary>Manifest schema version.</summary>
     [JsonPropertyName("version")]
     public int Version { get; set; } = 1;
 
+    /// <summary>All curriculum modules defined by the manifest.</summary>
     [JsonPropertyName("modules")]
     public List<ConceptModule> Modules { get; set; } = new();
 }

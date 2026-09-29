@@ -42,6 +42,7 @@ public class JSONFileReader
     /// </summary>
     /// <param name="env">The web host environment.</param>
     /// <param name="logger">Optional logger.</param>
+    /// <param name="userAssets">Optional store of user-supplied assets, merged on top of bundled FPGA definitions.</param>
     public JSONFileReader(IWebHostEnvironment env,
                           Microsoft.Extensions.Logging.ILogger<JSONFileReader>? logger = null,
                           UserAssetStore? userAssets = null)
@@ -67,6 +68,11 @@ public class JSONFileReader
     /// </summary>
     /// <param name="JsonFile">The path to the JSON file.</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
+    // Intentionally an instance method (not static): the MAUI (#else) build's
+    // counterpart needs instance state, so keeping this instance too lets every
+    // caller use the injected JSONFileReader the same way in both build targets.
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static",
+        Justification = "Kept instance so callers use the same injected API in both build configurations.")]
     public async Task<FPGA?> ReadFPGAJsonFileAsync(string JsonFile)
     {
         try

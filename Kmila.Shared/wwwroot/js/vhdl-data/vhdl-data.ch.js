@@ -118,7 +118,7 @@
             linkage:      { summary: "用于跨语言连接的端口方向。", description: "仅在 VHDL/Verilog 混合流程中相关。" },
             postponed:    { summary: "把 process 或断言推迟到 delta 周期末。", description: "仅用于仿真。" },
             literal:      { summary: "与属性相关的关键字。", description: "罕见。" },
-            unaffected:   { summary: "条件信号赋值中的“什么也不做”占位。", description: "" },
+            unaffected:   { summary: "条件信号赋值中的「什么也不做」占位。", description: "" },
             until:        { summary: "与 `wait until <条件>` 配合使用。", description: "" },
             with:         { summary: "开始一个选择信号赋值。", description: "`with expr select …`。" },
             on:           { summary: "用于 `wait on <信号列表>`。", description: "" }

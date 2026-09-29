@@ -54,14 +54,12 @@ public record PracticeExerciseMeta(
     Dictionary<string, string> Titles,
     Dictionary<string, string> Summaries,
     int TestCaseCount,
-    /// <summary>
-    /// Optional engine-feature gate — when set, the exercise is hidden from
-    /// grading until the simulation engine supports the named feature.
-    /// Currently the only flag used is <c>"numeric_std-sim"</c> for exercises
-    /// that depend on IEEE.NUMERIC_STD arithmetic in the simulator (the
-    /// interpreter's expression evaluator currently underflows on those).
-    /// Null when the exercise is fully runnable.
-    /// </summary>
+    // Optional engine-feature gate — when set, the exercise is hidden from
+    // grading until the simulation engine supports the named feature.
+    // Currently the only flag used is "numeric_std-sim" for exercises
+    // that depend on IEEE.NUMERIC_STD arithmetic in the simulator (the
+    // interpreter's expression evaluator currently underflows on those).
+    // Null when the exercise is fully runnable.
     string? RequiresEngine = null);
 
 /// <summary>
@@ -97,6 +95,16 @@ public record PracticeExercise(
     List<PracticeTestCase> TestCases,
     string? RequiresEngine = null);
 
+/// <summary>Outcome of grading one <see cref="PracticeTestCase"/> against the student's simulation.</summary>
+/// <param name="TestCaseId">Identifier of the test case this result belongs to.</param>
+/// <param name="Passed">True when the student's output matched the expected values for every compared sample.</param>
+/// <param name="ErrorClass">Category of failure (e.g. build/runtime/mismatch/timeout), or null when passed.</param>
+/// <param name="FirstMismatchSignal">Name of the first output signal that diverged, or null when passed.</param>
+/// <param name="FirstMismatchTimeNs">Simulated time in nanoseconds of the first mismatch, or null when passed.</param>
+/// <param name="ExpectedAtMismatch">Expected value at the first mismatch, or null when passed.</param>
+/// <param name="ActualAtMismatch">Actual student value at the first mismatch, or null when passed.</param>
+/// <param name="MismatchCount">Total number of mismatched samples across the compared signals.</param>
+/// <param name="SimulationDurationMs">Wall-clock time in milliseconds spent simulating this test case.</param>
 public record PracticeTestResult(
     string TestCaseId,
     bool Passed,
@@ -108,6 +116,15 @@ public record PracticeTestResult(
     int MismatchCount,
     long SimulationDurationMs);
 
+/// <summary>Overall verdict for one Practice submission: the aggregate outcome plus per-test results.</summary>
+/// <param name="Kind">Aggregate outcome of the attempt (e.g. accepted, wrong answer, build error, timeout).</param>
+/// <param name="ExerciseId">Identifier of the exercise that was attempted.</param>
+/// <param name="SubmittedAt">Timestamp when the attempt was submitted.</param>
+/// <param name="BuildDurationMs">Wall-clock time in milliseconds spent building the student's design.</param>
+/// <param name="TotalDurationMs">Total wall-clock time in milliseconds for the whole attempt (build + all tests).</param>
+/// <param name="BuildErrorMessage">Short build error message, or null when the build succeeded.</param>
+/// <param name="BuildErrorDetail">Detailed build error output, or null when the build succeeded.</param>
+/// <param name="TestResults">Per-test-case results produced while grading the attempt.</param>
 public record PracticeAttemptVerdict(
     PracticeVerdictKind Kind,
     string ExerciseId,

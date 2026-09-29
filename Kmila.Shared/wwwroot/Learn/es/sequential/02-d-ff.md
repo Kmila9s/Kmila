@@ -29,7 +29,7 @@ Línea por línea:
 
 ## Recorrido por la forma de onda
 
-El ejemplo mantiene `reset = '1'` los primeros 5 µs, luego lo libera. `d` alterna en 10, 30 y 50 µs. Cambia a la pestaña de formas de onda tras Run y observa:
+El ejemplo mantiene `reset = '1'` los primeros 5 µs, luego lo libera. `d` alterna en 10, 30 y 50 µs. Cambia a la pestaña de formas de onda tras pulsar Ejecutar y observa:
 
 - Antes de los 5 µs, `q = '0'` (retenido por el reset).
 - Tras liberar el reset, `q` solo cambia en flancos de reloj — el valor de `d` en el flanco queda capturado.
@@ -45,7 +45,7 @@ Dos escuelas:
 
 **Reset síncrono** (`if rising_edge(clk) then if reset = '1'…`):
 - Pros: se comporta como cualquier otra entrada en el flanco; se lleva mejor con el sintetizador.
-- Contras: necesita el reloj corriendo para resetear.
+- Contras: necesita el reloj en marcha para resetear.
 
 Para aprender, el asíncrono es más fácil. Para producción en FPGA, sigue la guía del fabricante.
 

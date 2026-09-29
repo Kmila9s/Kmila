@@ -46,6 +46,15 @@ public sealed class ProjectTemplateService
     private readonly SemaphoreSlim _loadGate = new(1, 1);
     private IReadOnlyList<ProjectTemplate>? _cached;
 
+    /// <summary>Creates the service with its file-open delegate and collaborating stores.</summary>
+    /// <param name="openFileAsync">Delegate that opens a bundled resource stream by path.</param>
+    /// <param name="projects">Project persistence service.</param>
+    /// <param name="projectFiles">Per-project file service.</param>
+    /// <param name="jsonReader">Reader for JSON manifest/metadata resources.</param>
+    /// <param name="selectedFpga">Currently selected FPGA target.</param>
+    /// <param name="sim">Simulation parameters.</param>
+    /// <param name="userAssets">Store for user-registered library assets.</param>
+    /// <param name="logger">Optional logger; a null logger is used when omitted.</param>
     public ProjectTemplateService(
         Func<string, Task<Stream>> openFileAsync,
         Projects projects,
@@ -141,6 +150,9 @@ public sealed class ProjectTemplateService
     /// <summary>
     /// Creates a project on disk + in the DB from <paramref name="template"/>.
     /// </summary>
+    /// <param name="template">The project template to instantiate.</param>
+    /// <param name="projectName">Name for the new project; must be non-empty.</param>
+    /// <param name="description">Optional description stored with the project.</param>
     /// <param name="languageCode">Resolved against the template's available
     /// language folders; falls back to English when missing.</param>
     /// <param name="registerAsLibrary">When the template's
@@ -395,11 +407,11 @@ public sealed class ProjectTemplateService
     {
         if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
         var s = raw.Trim()
-                   .Replace(" ", string.Empty)
-                   .Replace("·", string.Empty)
-                   .Replace("/", "_")
-                   .Replace("\\", "_")
-                   .Replace("-", "_");
+                   .Replace(" ", string.Empty, System.StringComparison.Ordinal)
+                   .Replace("·", string.Empty, System.StringComparison.Ordinal)
+                   .Replace("/", "_", System.StringComparison.Ordinal)
+                   .Replace("\\", "_", System.StringComparison.Ordinal)
+                   .Replace("-", "_", System.StringComparison.Ordinal);
         return s;
     }
 
@@ -408,7 +420,7 @@ public sealed class ProjectTemplateService
         var s = content;
         foreach (var kv in tokens)
         {
-            s = s.Replace("{{" + kv.Key + "}}", kv.Value);
+            s = s.Replace("{{" + kv.Key + "}}", kv.Value, System.StringComparison.Ordinal);
         }
         return s;
     }

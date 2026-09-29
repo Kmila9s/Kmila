@@ -26,11 +26,18 @@ public class PracticeEvaluator
     private readonly SemaphoreSlim _runGate = new(1, 1);
     private readonly Dictionary<string, WaveformData> _expectedCache = new();
 
+    /// <summary>Creates a new <see cref="PracticeEvaluator"/>.</summary>
+    /// <param name="logger">Optional logger; a null logger is used when omitted.</param>
     public PracticeEvaluator(ILogger<PracticeEvaluator>? logger = null)
     {
         _logger = (ILogger?)logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
     }
 
+    /// <summary>Grades candidate code against an exercise by diffing its simulated output against the canonical solution.</summary>
+    /// <param name="exercise">The exercise, including the canonical solution and test cases.</param>
+    /// <param name="candidateCode">The student's submitted VHDL code.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>A verdict summarizing per-test results and overall pass/fail.</returns>
     public async Task<PracticeAttemptVerdict> GradeAsync(PracticeExercise exercise, string candidateCode, CancellationToken ct = default)
     {
         var totalSw = Stopwatch.StartNew();
@@ -280,7 +287,7 @@ public class PracticeEvaluator
                     {
                         if (diag != null)
                         {
-                            trackedCount = diag.GetTrackedSignals()?.Count() ?? 0;
+                            trackedCount = diag.GetTrackedSignals()?.Count ?? 0;
                             totalSamples = diag.TotalSamples;
                         }
                     }
@@ -318,7 +325,7 @@ public class PracticeEvaluator
         WaveformData actual,
         PracticeMatchKind matchKind,
         IReadOnlyList<string> outputPorts,
-        IReadOnlyList<long> sampleTimes,
+        List<long> sampleTimes,
         long simMs)
     {
         IReadOnlyList<long> times = matchKind switch
@@ -405,7 +412,7 @@ public class PracticeEvaluator
     private static string FormatValue(double? v, WaveformSignal sig)
     {
         if (!v.HasValue) return "U";
-        if (sig.DataType == "std_logic") return ((int)Math.Round(v.Value)).ToString();
+        if (sig.DataType == "std_logic") return ((int)Math.Round(v.Value)).ToString(System.Globalization.CultureInfo.InvariantCulture);
         return $"{(long)Math.Round(v.Value)} (0x{(long)Math.Round(v.Value):X})";
     }
 
@@ -414,7 +421,7 @@ public class PracticeEvaluator
     /// fails. Carries optional <see cref="Detail"/> with a parser/synthesis trace
     /// so the caller can render a richer <see cref="PracticeVerdictKind.BuildError"/>.
     /// </summary>
-    private class BuildPhaseException : Exception
+    private sealed class BuildPhaseException : Exception
     {
         /// <summary>Optional detailed error trace (parser output, stack snippet, …).</summary>
         public string? Detail { get; }

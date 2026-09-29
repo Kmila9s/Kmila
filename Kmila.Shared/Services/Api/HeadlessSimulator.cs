@@ -8,17 +8,24 @@ using IModels = Interpreter.Models;
 
 namespace Kmila.Shared.Services.Api;
 
-// Drives the simulator from a sandbox project without going through the
-// UI-coupled ProgramBuilder. Parses the project's VHDL, builds a
-// SimulationConfig via StimulusBuilder, runs SimulationRunner, and returns
-// the VCD text. No events, no progress UI, no toast — strictly request →
-// response.
+/// <summary>
+/// Drives the simulator from a sandbox project without going through the
+/// UI-coupled ProgramBuilder. Parses the project's VHDL, builds a
+/// SimulationConfig via StimulusBuilder, runs SimulationRunner, and returns
+/// the VCD text. No events, no progress UI, no toast — strictly request →
+/// response.
+/// </summary>
 public sealed class HeadlessSimulator
 {
     private readonly SandboxProjectStore _store;
 
+    /// <summary>Creates the headless simulator over the given sandbox project store.</summary>
+    /// <param name="store">Store that resolves sandbox projects by id.</param>
     public HeadlessSimulator(SandboxProjectStore store) { _store = store; }
 
+    /// <summary>Parses, elaborates, and simulates the requested sandbox project, returning the VCD result.</summary>
+    /// <param name="request">The simulation request (project id, files, entry point, stimulus, and timing).</param>
+    /// <returns>The simulation response including the VCD text, diagnostics, and run metadata.</returns>
     public async Task<SimulateResponse> RunAsync(SimulateRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.ProjectId))

@@ -19,12 +19,18 @@ public class EditorSessionStore
     private const string KeyPrefix = "kmila-editor-session-";
     private static string Key(int projectId) => $"{KeyPrefix}{projectId}";
 
+    /// <summary>Creates the store over the given JS runtime for localStorage access.</summary>
+    /// <param name="js">JS runtime used to reach browser localStorage.</param>
+    /// <param name="logger">Optional logger.</param>
     public EditorSessionStore(IJSRuntime js, ILogger<EditorSessionStore>? logger = null)
     {
         _js = js;
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<EditorSessionStore>.Instance;
     }
 
+    /// <summary>Loads the saved editor session for a project, or null if none.</summary>
+    /// <param name="projectId">Project id.</param>
+    /// <returns>The stored session, or null.</returns>
     public async Task<EditorSession?> LoadAsync(int projectId)
     {
         if (projectId <= 0) return null;
@@ -50,6 +56,9 @@ public class EditorSessionStore
         }
     }
 
+    /// <summary>Persists the editor session for a project.</summary>
+    /// <param name="projectId">Project id.</param>
+    /// <param name="session">Session state to persist.</param>
     public async Task SaveAsync(int projectId, EditorSession session)
     {
         if (projectId <= 0 || session == null) return;
@@ -68,6 +77,8 @@ public class EditorSessionStore
         }
     }
 
+    /// <summary>Removes any saved editor session for a project.</summary>
+    /// <param name="projectId">Project id.</param>
     public async Task ClearAsync(int projectId)
     {
         if (projectId <= 0) return;

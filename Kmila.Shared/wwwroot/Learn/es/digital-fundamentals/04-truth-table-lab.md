@@ -11,8 +11,8 @@ Este laboratorio es la primera vez que manejarás un diseño VHDL real. La entid
 
 Desde ahí:
 
-- Pulsa **Build** para parsear y elaborar el diseño.
-- Pulsa **Run** para simular.
+- Pulsa **Compilar** para analizar y elaborar el diseño.
+- Pulsa **Ejecutar** para simular.
 - Cambia a la pestaña **Formas de onda** del dock inferior.
 
 Verás siete filas de ondas cuadradas: tus dos entradas arriba y cada salida reaccionando en tiempo real.
@@ -25,7 +25,7 @@ Usa la barra o el teclado para alinear los flancos de entrada con las transicion
 - `o_nand`: lo contrario. Suele estar alto y baja solo cuando ambas entradas son 1.
 - `o_xor`: alto exactamente cuando las entradas difieren.
 
-Si algo no coincide con lo que esperas, revisa la pestaña **Output** — ahí aparecen las advertencias del build.
+Si algo no coincide con lo que esperas, revisa la pestaña **Salida** — ahí aparecen las advertencias de la compilación.
 
 ## Pruébalo tú
 

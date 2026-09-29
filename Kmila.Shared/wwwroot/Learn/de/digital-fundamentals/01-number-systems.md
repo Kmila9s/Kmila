@@ -1,6 +1,6 @@
 # Zahlensysteme: Bits, Hex, Zweierkomplement
 
-Digitale Schaltungen wissen nichts von „sieben" — sie kennen Reihen von Schaltern, die entweder an oder aus sind. Um mit ihnen zu entwerfen, musst du wohlgeordnet zwischen der Darstellung wechseln können, die Menschen mögen (dezimal), und der, die das Silizium versteht (binär), mit Hexadezimal als nützliches Kürzel dazwischen.
+Digitale Schaltungen wissen nichts von „sieben“ — sie kennen Reihen von Schaltern, die entweder an oder aus sind. Um mit ihnen zu entwerfen, musst du sicher zwischen der Darstellung wechseln können, die Menschen mögen (dezimal), und der, die das Silizium versteht (binär), mit Hexadezimal als nützlichem Kürzel dazwischen.
 
 ## Binär (Basis 2)
 

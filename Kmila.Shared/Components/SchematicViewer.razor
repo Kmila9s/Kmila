@@ -791,6 +791,7 @@ else
     private void RegenerateColours(bool reseed)
     {
         if (_layout == null) return;
+#pragma warning disable CA5394 // Random is non-security here: schematic hue jitter, not cryptographic
         var rng = reseed ? new Random() : new Random(_layout.Netlist.Cells.Count * 7 + 13);
 
         _cellColours = new();
@@ -832,6 +833,7 @@ else
         var inputs = _layout.Netlist.Ports.Where(p => p.Direction is PortDir.In or PortDir.InOut).ToList();
         var outputs = _layout.Netlist.Ports.Where(p => p.Direction is PortDir.Out or PortDir.Buffer).ToList();
         double inBase = rng.NextDouble() * 360;
+#pragma warning restore CA5394
         double outBase = (inBase + 180) % 360;
         for (int i = 0; i < inputs.Count; i++)
         {

@@ -42,6 +42,8 @@ public class UserAssetStore : IDisposable
     private System.Threading.Timer? _watcherDebounce;
     private const int WatcherDebounceMs = 250;
 
+    /// <summary>Creates the store, resolving its root and starting file watchers.</summary>
+    /// <param name="logger">Optional logger.</param>
     public UserAssetStore(ILogger<UserAssetStore>? logger = null)
     {
         _logger = (ILogger?)logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
@@ -53,7 +55,9 @@ public class UserAssetStore : IDisposable
     /// <summary>Fires when a file is imported or deleted so UIs can refresh.</summary>
     public event Action? OnChange;
 
+    /// <summary>Directory holding user-imported device (FPGA) definition files.</summary>
     public string UserDevicesDir       => Path.Combine(_root, "UserAssets", "Devices");
+    /// <summary>Directory holding user-imported language dictionary files.</summary>
     public string UserDictionariesDir  => Path.Combine(_root, "UserAssets", "Dictionaries");
     /// <summary>
     /// User-imported VHDL library packs. Same .vhd / .vhdl files the
@@ -526,7 +530,7 @@ public class UserAssetStore : IDisposable
         // Accept .vhd or .vhdl; default to .vhd if the import had no
         // recognised extension so the file lands somewhere predictable.
         var lower = name.ToLowerInvariant();
-        if (!lower.EndsWith(".vhd") && !lower.EndsWith(".vhdl")) name += ".vhd";
+        if (!lower.EndsWith(".vhd", System.StringComparison.Ordinal) && !lower.EndsWith(".vhdl", System.StringComparison.Ordinal)) name += ".vhd";
         return name;
     }
 
@@ -601,7 +605,7 @@ public class UserAssetStore : IDisposable
     public static (string Path, string? Package) ParseLibrarySourceKey(string sourceKey)
     {
         if (string.IsNullOrEmpty(sourceKey)) return (sourceKey, null);
-        var idx = sourceKey.IndexOf('#');
+        var idx = sourceKey.IndexOf('#', System.StringComparison.Ordinal);
         if (idx < 0) return (sourceKey, null);
 
         var path = sourceKey.Substring(0, idx);
@@ -616,6 +620,8 @@ public class UserAssetStore : IDisposable
     // Templates (downloaded as starter JSON)
     // ------------------------------------------------------------------
 
+    /// <summary>Returns the starter JSON template for a user FPGA device definition.</summary>
+    /// <returns>The template JSON text.</returns>
     public static string BuildFpgaTemplate() => @"{
   ""model"":         ""YOUR-MODEL-ID"",
   ""family"":        ""Your family (e.g. Cyclone IV E)"",
@@ -650,6 +656,8 @@ public class UserAssetStore : IDisposable
 }
 ";
 
+    /// <summary>Returns the starter JSON template for a user language dictionary.</summary>
+    /// <returns>The template JSON text.</returns>
     public static string BuildLanguageTemplate() => @"{
   ""__LANG_NAME__"": ""Your language name (e.g. Klingon)"",
 
@@ -752,6 +760,7 @@ public class UserAssetStore : IDisposable
         _watchers.Clear();
         _watcherDebounce?.Dispose();
         _watcherDebounce = null;
+        GC.SuppressFinalize(this);
     }
 
     private static string ResolveRoot()

@@ -1,6 +1,6 @@
 # Voraussetzungen aus der diskreten Mathematik fürs Digitaldesign
 
-Nicht alle Studierenden bringen denselben mathematischen Hintergrund mit. Diese Lektion ist eine 20-Minuten-Auffrischung der diskret-mathematischen Ideen, die im Digitaldesign ständig auftauchen — damit dich später nichts mehr stoppt, wenn eine Lektion sagt „stell dir das als Menge vor" oder „der Zustandsraum ist das kartesische Produkt von …".
+Nicht alle Studierenden bringen denselben mathematischen Hintergrund mit. Diese Lektion ist eine 20-Minuten-Auffrischung der diskret-mathematischen Ideen, die im Digitaldesign ständig auftauchen — damit dich später nichts mehr stoppt, wenn eine Lektion sagt „stell dir das als Menge vor“ oder „der Zustandsraum ist das kartesische Produkt von …“.
 
 ## Mengen
 
@@ -27,7 +27,7 @@ Drei, auf die du dich stützen wirst:
 
 - **Wahrheitstabellen**: erschöpfende Prüfung. Funktioniert bei kleinen Eingaberäumen; unser Lab 1 nutzt das.
 - **Boolesche Algebra**: symbolische Vereinfachung (De Morgan, Distributivität, Komplement).
-- **Induktion über die Bitbreite**: zeige, dass ein N-Bit-Addierer funktioniert, indem du den 1-Bit-Fall und den Schritt „wenn N geht, geht N+1" beweist. Taucht in rekursiven Generics auf.
+- **Induktion über die Bitbreite**: zeige, dass ein N-Bit-Addierer funktioniert, indem du den 1-Bit-Fall und den Schritt „wenn N geht, geht N+1“ beweist. Taucht in rekursiven Generics auf.
 
 ## Logik
 

@@ -42,7 +42,7 @@ end architecture sim;
 Drei neue Ideen:
 
 1. **`wait`** — Zeit vergeht nur, wenn ein Prozess es sagt.
-2. **`assert … report … severity`** — die Selbstprüfung. Macht aus einer 1000-Zeilen-Wellenform ein „pass" oder „fail".
+2. **`assert … report … severity`** — die Selbstprüfung. Macht aus einer 1000-Zeilen-Wellenform ein „pass“ oder „fail“.
 3. **Entity ohne Ports** — Testbenches sind in sich abgeschlossen; der Simulator instanziiert sie direkt.
 
 ## Warum das wichtig ist

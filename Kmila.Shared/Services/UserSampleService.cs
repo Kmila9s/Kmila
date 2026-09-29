@@ -20,6 +20,10 @@ public class UserSampleService
     /// <summary>Fires after a sample is added or removed so gallery UI can refresh.</summary>
     public event Action? OnChanged;
 
+    /// <summary>Creates the user sample service.</summary>
+    /// <param name="db">Application database used to persist user samples.</param>
+    /// <param name="bundles">Service used to import/export project bundles.</param>
+    /// <param name="logger">Optional logger; a null logger is used when omitted.</param>
     public UserSampleService(
         ApplicationDbContext db,
         ProjectBundleService bundles,

@@ -35,5 +35,9 @@ public interface ISimEndNotifier
 /// <summary>No-op default — registered when no platform notifier is available.</summary>
 public class NoopSimEndNotifier : ISimEndNotifier
 {
+    /// <summary>No-op implementation that completes immediately without notifying.</summary>
+    /// <param name="title">Notification title (ignored).</param>
+    /// <param name="body">Notification body (ignored).</param>
+    /// <returns>A completed task.</returns>
     public Task NotifySimEndAsync(string title, string body) => Task.CompletedTask;
 }

@@ -46,7 +46,7 @@ public class ConfigurationService
     /// <param name="timeScale">The time scale.</param>
     /// <param name="portMoments">The port moment configurations.</param>
     /// <returns>A new KmilaConfiguration instance.</returns>
-    public KmilaConfiguration CreateConfiguration(
+    public static KmilaConfiguration CreateConfiguration(
         string name,
         string? description,
         FPGA? fpga,
@@ -94,7 +94,7 @@ public class ConfigurationService
         {
             config.ModifiedAt = DateTime.UtcNow;
             var json = config.ToJson();
-            var key = $"CONFIG_{config.Name.Replace(" ", "_")}";
+            var key = $"CONFIG_{config.Name.Replace(" ", "_", System.StringComparison.Ordinal)}";
             await _dbContext.SetSettingAsync(key, json);
             await _dbContext.SetSettingAsync(LAST_CONFIG_KEY, key);
             OnConfigurationsChanged?.Invoke();
@@ -116,7 +116,7 @@ public class ConfigurationService
     {
         try
         {
-            var key = $"CONFIG_{name.Replace(" ", "_")}";
+            var key = $"CONFIG_{name.Replace(" ", "_", System.StringComparison.Ordinal)}";
             var json = await _dbContext.GetSettingAsync(key);
             if (string.IsNullOrEmpty(json))
             {
@@ -167,8 +167,8 @@ public class ConfigurationService
         {
             var settings = await _dbContext.Settings.ToListAsync();
             return settings
-                .Where(s => s.Key.StartsWith("CONFIG_"))
-                .Select(s => s.Key.Replace("CONFIG_", "").Replace("_", " "))
+                .Where(s => s.Key.StartsWith("CONFIG_", System.StringComparison.Ordinal))
+                .Select(s => s.Key.Replace("CONFIG_", "", System.StringComparison.Ordinal).Replace("_", " ", System.StringComparison.Ordinal))
                 .OrderBy(n => n)
                 .ToList();
         }
@@ -188,7 +188,7 @@ public class ConfigurationService
     {
         try
         {
-            var key = $"CONFIG_{name.Replace(" ", "_")}";
+            var key = $"CONFIG_{name.Replace(" ", "_", System.StringComparison.Ordinal)}";
             var setting = await _dbContext.Settings.Where(s => s.Key == key).FirstOrDefaultAsync();
             if (setting != null)
             {
@@ -211,7 +211,7 @@ public class ConfigurationService
     /// </summary>
     /// <param name="config">The configuration to export.</param>
     /// <returns>The JSON content for the .k-config file.</returns>
-    public string ExportConfiguration(KmilaConfiguration config)
+    public static string ExportConfiguration(KmilaConfiguration config)
     {
         return config.ToJson();
     }

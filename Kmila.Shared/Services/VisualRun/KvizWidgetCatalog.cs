@@ -7,26 +7,39 @@ namespace Kmila.Shared.Services.VisualRun;
 // Direction chip in the props pane and sanitize stale bindings on load
 // (R3-5, 2026-07-04).
 
+/// <summary>Direction of a single widget pin relative to the design under simulation.</summary>
 public enum PinDir
 {
     // Widget-side direction — In means the widget consumes a signal
     // FROM the design (LED, 7-seg, stepper: design outputs light them
     // up). Out means the widget drives a signal INTO the design
     // (button, switch: user action feeds the FPGA input port).
+    /// <summary>The widget consumes a signal from the design (e.g. LED lit by a design output).</summary>
     In,
+    /// <summary>The widget drives a signal into the design (e.g. button feeding an input port).</summary>
     Out,
 }
 
+/// <summary>Overall I/O role of a widget relative to the design under simulation.</summary>
 public enum WidgetDirection
 {
+    /// <summary>Widget produces stimulus into the design (button, switch).</summary>
     Input,   // widget produces stimulus into the design (button, switch)
+    /// <summary>Widget visualizes design outputs (LED, LED-array, 7-seg, stepper).</summary>
     Output,  // widget visualizes design outputs (LED, LED-array, 7-seg, stepper)
 }
 
+/// <summary>A named widget pin together with its direction.</summary>
+/// <param name="Name">The pin name.</param>
+/// <param name="Direction">The pin's direction relative to the design.</param>
 public readonly record struct KvizPin(string Name, PinDir Direction);
 
+/// <summary>Static catalog describing each Visual-mode widget's pins and I/O direction.</summary>
 public static class KvizWidgetCatalog
 {
+    /// <summary>Returns the pin surface for the given component based on its type and config.</summary>
+    /// <param name="c">The component to inspect.</param>
+    /// <returns>The component's pins.</returns>
     public static IEnumerable<KvizPin> PinsOf(KvizComponent c) => c.Type switch
     {
         "led"       => new[] { new KvizPin("anode",  PinDir.In) },
@@ -62,7 +75,7 @@ public static class KvizWidgetCatalog
         _ => Array.Empty<KvizPin>(),
     };
 
-    private static IEnumerable<KvizPin> SevenSegPins(string mode) => mode == "raw"
+    private static KvizPin[] SevenSegPins(string mode) => mode == "raw"
         ? new[]
         {
             new KvizPin("a",  PinDir.In),
@@ -84,7 +97,7 @@ public static class KvizWidgetCatalog
     // DIP switch), vector collapses to a single N-bit port so the design
     // sees std_logic_vector(count-1 downto 0). Count is clamped to 2..8
     // to match the physical parts Daniel referenced (SPST-2/4/8 banks).
-    private static IEnumerable<KvizPin> MultiSwitchPins(string mode, int count)
+    private static KvizPin[] MultiSwitchPins(string mode, int count)
     {
         var n = Math.Clamp(count, 2, 8);
         if (mode == "vector")
@@ -100,7 +113,7 @@ public static class KvizWidgetCatalog
     // cell so students can wire row/col drive as on a real board (18 pins);
     // value mode collapses to a 9-bit LSB=row0col0 row-major vector so the
     // design can drive the grid with a single std_logic_vector(8 downto 0).
-    private static IEnumerable<KvizPin> LedMatrix33Pins(string mode)
+    private static KvizPin[] LedMatrix33Pins(string mode)
     {
         if (mode == "raw")
         {
@@ -123,7 +136,7 @@ public static class KvizWidgetCatalog
     // exposes all 27 per-cell colour anodes `{r|g|b}{r}{c}`, matching a
     // physical common-cathode RGB matrix wired one LED-per-colour-per-cell.
     // Compact common-cathode-per-row wiring is a later variant per plan.
-    private static IEnumerable<KvizPin> RgbMatrix33Pins(string mode)
+    private static KvizPin[] RgbMatrix33Pins(string mode)
     {
         if (mode == "raw")
         {
@@ -148,7 +161,7 @@ public static class KvizWidgetCatalog
     // exposes a 16-bit unsigned `freq_hz` port + a `enable` gate. The
     // widget parses freq_hz each frame and retunes the Web Audio
     // oscillator when enable = '1'.
-    private static IEnumerable<KvizPin> BuzzerPins(string mode)
+    private static KvizPin[] BuzzerPins(string mode)
     {
         if (mode == "signal") return new[] { new KvizPin("signal", PinDir.In) };
         return new[]
@@ -198,7 +211,7 @@ public static class KvizWidgetCatalog
     //   • "raw-8bit" — same but with `DB0..DB7` (full 8-bit data bus).
     // Rows clamped 2..4; cols clamped 16..20 (2×16 / 2×20 / 4×16 /
     // 4×20 — the four HD44780 variants shipped in real kits).
-    private static IEnumerable<KvizPin> LcdPins(string mode, int rows, int cols)
+    private static List<KvizPin> LcdPins(string mode, int rows, int cols)
     {
         rows = Math.Clamp(rows, 2, 4);
         cols = Math.Clamp(cols, 16, 20);
@@ -260,6 +273,9 @@ public static class KvizWidgetCatalog
     // in raw-scan mode has both. Callers use this to render one chip per
     // direction (Inputs: N / Outputs: M) instead of the single
     // DirectionOf tag.
+    /// <summary>Counts a component's input and output pins separately (for mixed-direction widgets like the keypad).</summary>
+    /// <param name="c">The component to inspect.</param>
+    /// <returns>A tuple of the input pin count and output pin count.</returns>
     public static (int InCount, int OutCount) PinCountsByDir(KvizComponent c)
     {
         int inC = 0, outC = 0;
@@ -271,6 +287,9 @@ public static class KvizWidgetCatalog
         return (inC, outC);
     }
 
+    /// <summary>Returns the overall I/O direction of a widget type, or null for mixed-direction widgets.</summary>
+    /// <param name="widgetType">The widget type name.</param>
+    /// <returns>The widget's direction, or null when it mixes directions (e.g. keypad-matrix).</returns>
     public static WidgetDirection? DirectionOf(string widgetType) => widgetType switch
     {
         "button" or "switch" or "multi-switch"                                                                                                 => WidgetDirection.Input,
@@ -286,6 +305,9 @@ public static class KvizWidgetCatalog
     // future refactor where a pin gets renamed. Returns the number of
     // bindings dropped so the caller can log a translation-pending
     // notice if desired.
+    /// <summary>Drops bindings whose pin key is no longer valid for each component's current type and config.</summary>
+    /// <param name="doc">The document whose component bindings are sanitized in place.</param>
+    /// <returns>The number of stale bindings removed.</returns>
     public static int Sanitize(KvizDoc doc)
     {
         if (doc?.Components == null) return 0;

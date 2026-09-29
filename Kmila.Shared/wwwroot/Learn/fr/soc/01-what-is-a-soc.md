@@ -1,6 +1,6 @@
 # Qu'est-ce qu'un System-on-Chip ?
 
-Ton CPU 8 bits du parcours précédent fonctionne en autonomie. Il calcule, mais ne parle pas au monde. Un **System-on-Chip** est l'échelle supérieure : un CPU plus une poignée de périphériques plus le tissu qui leur permet de se parler, le tout sur le même die.
+Votre CPU 8 bits du parcours précédent fonctionne en autonomie. Il calcule, mais ne parle pas au monde. Un **System-on-Chip** est l'échelle supérieure : un CPU plus une poignée de périphériques plus le tissu qui leur permet de se parler, le tout sur le même die.
 
 ## Trois pièces obligatoires
 
@@ -27,7 +27,7 @@ Tous se réduisent aux mêmes trois voies : un **canal d'adresse**, un **canal d
 
 ## Ce qu'est vraiment AXI4-Lite
 
-Le membre le plus simple de la famille AXI. Enlève tout ce qui touche aux bursts, out-of-order et QoS, et tu obtiens cinq canaux indépendants, chacun avec un handshake `valid`/`ready` :
+Le membre le plus simple de la famille AXI. Enlevez tout ce qui touche aux bursts, out-of-order et QoS, et vous obtenez cinq canaux indépendants, chacun avec un handshake `valid`/`ready` :
 
 ```
   AW  (adresse écriture)
@@ -41,6 +41,6 @@ Chaque transfert est un beat. Chaque canal s'arrête quand l'autre n'est pas `re
 
 ## Le plan du cursus Kmila
 
-Les leçons suivantes de ce module construisent une interface registre AXI4-Lite depuis zéro, puis la branchent entre ton CPU 8 bits et un UART memory-mapped pour que le CPU puisse « imprimer » en écrivant à une adresse. Ça te donne le modèle mental de ce qui se passe dans tout SoC moderne, à une taille que tu peux vraiment tenir en tête.
+Les leçons suivantes de ce module construisent une interface registre AXI4-Lite depuis zéro, puis la branchent entre votre CPU 8 bits et un UART memory-mapped pour que le CPU puisse « imprimer » en écrivant à une adresse. Ça vous donne le modèle mental de ce qui se passe dans tout SoC moderne, à une taille que vous pouvez vraiment tenir en tête.
 
 *D'autres leçons à venir — ce module est en cours d'écriture.*

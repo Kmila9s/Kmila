@@ -35,14 +35,14 @@ Literale:
 
 ```vhdl
 data <= "10101010";     -- Binärliteral, 1 Zeichen pro Bit
-data <= x"AA";          -- Hex-Literal (Vielfaches von 4 Bit)
+addr <= x"CAFE";        -- Hex-Literal (Vielfaches von 4 Bit)
 data <= (others => '0');-- Kurzschreibweise für nur-Nullen
 data <= (0 => '1', others => '0'); -- nur LSB high
 ```
 
 ## `unsigned` / `signed` — Vektoren, auf denen du rechnen kannst
 
-`std_logic_vector` ist „nur ein Sack Bits". Hat keine numerische Bedeutung. Zum Addieren oder Subtrahieren brauchst du `unsigned` oder `signed`:
+`std_logic_vector` ist „nur ein Sack Bits“. Hat keine numerische Bedeutung. Zum Addieren oder Subtrahieren brauchst du `unsigned` oder `signed`:
 
 ```vhdl
 use IEEE.NUMERIC_STD.ALL;

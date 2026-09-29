@@ -71,100 +71,132 @@ public static class GateDocumentation
         string? VhdlExample,
         string? NoteKey = null);
 
+    private static readonly string[][] AndTruthTable = new string[][]
+    {
+        new[]{"a","b","y"},
+        new[]{"0","0","0"},
+        new[]{"0","1","0"},
+        new[]{"1","0","0"},
+        new[]{"1","1","1"},
+    };
+
+    private static readonly string[][] NandTruthTable = new string[][]
+    {
+        new[]{"a","b","y"},
+        new[]{"0","0","1"},
+        new[]{"0","1","1"},
+        new[]{"1","0","1"},
+        new[]{"1","1","0"},
+    };
+
+    private static readonly string[][] OrTruthTable = new string[][]
+    {
+        new[]{"a","b","y"},
+        new[]{"0","0","0"},
+        new[]{"0","1","1"},
+        new[]{"1","0","1"},
+        new[]{"1","1","1"},
+    };
+
+    private static readonly string[][] NorTruthTable = new string[][]
+    {
+        new[]{"a","b","y"},
+        new[]{"0","0","1"},
+        new[]{"0","1","0"},
+        new[]{"1","0","0"},
+        new[]{"1","1","0"},
+    };
+
+    private static readonly string[][] XorTruthTable = new string[][]
+    {
+        new[]{"a","b","y"},
+        new[]{"0","0","0"},
+        new[]{"0","1","1"},
+        new[]{"1","0","1"},
+        new[]{"1","1","0"},
+    };
+
+    private static readonly string[][] XnorTruthTable = new string[][]
+    {
+        new[]{"a","b","y"},
+        new[]{"0","0","1"},
+        new[]{"0","1","0"},
+        new[]{"1","0","0"},
+        new[]{"1","1","1"},
+    };
+
+    private static readonly string[][] NotTruthTable = new string[][]
+    {
+        new[]{"a","y"},
+        new[]{"0","1"},
+        new[]{"1","0"},
+    };
+
+    private static readonly string[][] BufTruthTable = new string[][]
+    {
+        new[]{"a","y"},
+        new[]{"0","0"},
+        new[]{"1","1"},
+    };
+
+    private static readonly string[][] MuxTruthTable = new string[][]
+    {
+        new[]{"s","d0","d1","y"},
+        new[]{"0", "x","-","d0"},
+        new[]{"1", "-","x","d1"},
+    };
+
+    private static readonly string[][] EqTruthTable = new string[][]
+    {
+        new[]{"a","b","y"},
+        new[]{"0","0","1"},
+        new[]{"0","1","0"},
+        new[]{"1","0","0"},
+        new[]{"1","1","1"},
+    };
+
     private static readonly Dictionary<CellKind, Entry> _entries = new()
     {
         // ─── Combinational primitives ───────────────────────────
 
         [CellKind.AND] = new Entry(
             "GATE_AND_TITLE", "GATE_AND_SUMMARY", "GATE_AND_DESC",
-            new string[][]
-            {
-                new[]{"a","b","y"},
-                new[]{"0","0","0"},
-                new[]{"0","1","0"},
-                new[]{"1","0","0"},
-                new[]{"1","1","1"},
-            },
+            AndTruthTable,
             "y <= a and b;"
         ),
         [CellKind.NAND] = new Entry(
             "GATE_NAND_TITLE", "GATE_NAND_SUMMARY", "GATE_NAND_DESC",
-            new string[][]
-            {
-                new[]{"a","b","y"},
-                new[]{"0","0","1"},
-                new[]{"0","1","1"},
-                new[]{"1","0","1"},
-                new[]{"1","1","0"},
-            },
+            NandTruthTable,
             "y <= a nand b;"
         ),
         [CellKind.OR] = new Entry(
             "GATE_OR_TITLE", "GATE_OR_SUMMARY", "GATE_OR_DESC",
-            new string[][]
-            {
-                new[]{"a","b","y"},
-                new[]{"0","0","0"},
-                new[]{"0","1","1"},
-                new[]{"1","0","1"},
-                new[]{"1","1","1"},
-            },
+            OrTruthTable,
             "y <= a or b;"
         ),
         [CellKind.NOR] = new Entry(
             "GATE_NOR_TITLE", "GATE_NOR_SUMMARY", "GATE_NOR_DESC",
-            new string[][]
-            {
-                new[]{"a","b","y"},
-                new[]{"0","0","1"},
-                new[]{"0","1","0"},
-                new[]{"1","0","0"},
-                new[]{"1","1","0"},
-            },
+            NorTruthTable,
             "y <= a nor b;"
         ),
         [CellKind.XOR] = new Entry(
             "GATE_XOR_TITLE", "GATE_XOR_SUMMARY", "GATE_XOR_DESC",
-            new string[][]
-            {
-                new[]{"a","b","y"},
-                new[]{"0","0","0"},
-                new[]{"0","1","1"},
-                new[]{"1","0","1"},
-                new[]{"1","1","0"},
-            },
+            XorTruthTable,
             "y <= a xor b;"
         ),
         [CellKind.XNOR] = new Entry(
             "GATE_XNOR_TITLE", "GATE_XNOR_SUMMARY", "GATE_XNOR_DESC",
-            new string[][]
-            {
-                new[]{"a","b","y"},
-                new[]{"0","0","1"},
-                new[]{"0","1","0"},
-                new[]{"1","0","0"},
-                new[]{"1","1","1"},
-            },
+            XnorTruthTable,
             "y <= a xnor b;"
         ),
         [CellKind.NOT] = new Entry(
             "GATE_NOT_TITLE", "GATE_NOT_SUMMARY", "GATE_NOT_DESC",
-            new string[][]
-            {
-                new[]{"a","y"},
-                new[]{"0","1"},
-                new[]{"1","0"},
-            },
+            NotTruthTable,
             "y <= not a;"
         ),
         [CellKind.BUF] = new Entry(
             "GATE_BUF_TITLE", "GATE_BUF_SUMMARY", "GATE_BUF_DESC",
-            new string[][]
-            {
-                new[]{"a","y"},
-                new[]{"0","0"},
-                new[]{"1","1"},
-            },
+            BufTruthTable,
             "y <= a;",
             "GATE_BUF_NOTE"
         ),
@@ -173,12 +205,7 @@ public static class GateDocumentation
 
         [CellKind.MUX] = new Entry(
             "GATE_MUX_TITLE", "GATE_MUX_SUMMARY", "GATE_MUX_DESC",
-            new string[][]
-            {
-                new[]{"s","d0","d1","y"},
-                new[]{"0", "x","-","d0"},
-                new[]{"1", "-","x","d1"},
-            },
+            MuxTruthTable,
             "y <= d1 when s = '1' else d0;"
         ),
         [CellKind.DFF] = new Entry(
@@ -243,14 +270,7 @@ public static class GateDocumentation
 
         [CellKind.EQ] = new Entry(
             "GATE_EQ_TITLE", "GATE_EQ_SUMMARY", "GATE_EQ_DESC",
-            new string[][]
-            {
-                new[]{"a","b","y"},
-                new[]{"0","0","1"},
-                new[]{"0","1","0"},
-                new[]{"1","0","0"},
-                new[]{"1","1","1"},
-            },
+            EqTruthTable,
             "y <= '1' when a = b else '0';"
         ),
         [CellKind.NEQ] = new Entry(

@@ -20,6 +20,9 @@ public class GitHubRemote
 
     private const string ApiBase = "https://api.github.com";
 
+    /// <summary>Creates the remote client over the given GitHub auth provider.</summary>
+    /// <param name="auth">GitHub authentication provider.</param>
+    /// <param name="logger">Optional logger.</param>
     public GitHubRemote(GitHubAuth auth, ILogger<GitHubRemote>? logger = null)
     {
         _auth = auth;
@@ -97,7 +100,7 @@ public class GitHubRemote
         var raw = c.GetString() ?? string.Empty;
         if (enc == "base64")
         {
-            try { return Encoding.UTF8.GetString(Convert.FromBase64String(raw.Replace("\n", ""))); }
+            try { return Encoding.UTF8.GetString(Convert.FromBase64String(raw.Replace("\n", "", System.StringComparison.Ordinal))); }
             catch { return raw; }
         }
         return raw;
@@ -135,7 +138,7 @@ public class GitHubRemote
         {
             ["name"]  = _auth.Account?.Name ?? _auth.Account?.Login ?? "Kmila user",
             ["email"] = $"{_auth.Account?.Login ?? "kmila"}@users.noreply.github.com",
-            ["date"]  = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+            ["date"]  = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture)
         };
         var payload = new Dictionary<string, object?>
         {

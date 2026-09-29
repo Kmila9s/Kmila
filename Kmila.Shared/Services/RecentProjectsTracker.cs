@@ -16,7 +16,9 @@ namespace Kmila.Shared.Services;
 /// </remarks>
 public class RecentProjectsTracker
 {
+    /// <summary>Maximum number of recent project ids stored.</summary>
     public const int Capacity = 20;    // stored
+    /// <summary>Maximum number of recent projects rendered in the sidebar.</summary>
     public const int SidebarLimit = 10; // rendered in the sidebar
 
     private const string SettingKey = "recent.projects";
@@ -27,6 +29,9 @@ public class RecentProjectsTracker
     private List<int> _cache = new();
     private bool _hydrated;
 
+    /// <summary>Creates the tracker over the given database.</summary>
+    /// <param name="db">Application database used to persist the recent-projects list.</param>
+    /// <param name="logger">Optional logger; a null logger is used when omitted.</param>
     public RecentProjectsTracker(ApplicationDbContext db,
                                  ILogger<RecentProjectsTracker>? logger = null)
     {

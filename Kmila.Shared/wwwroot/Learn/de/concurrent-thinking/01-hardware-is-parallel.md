@@ -1,6 +1,6 @@
 # Hardware ist parallel
 
-Studierende, die aus C, Python oder JavaScript kommen, haben alle dasselbe mentale Modell verinnerlicht: „Code läuft von oben nach unten, eine Anweisung nach der anderen." VHDL wird dich für diese Annahme bestrafen, bis du das richtige Modell aufgebaut hast.
+Studierende, die aus C, Python oder JavaScript kommen, haben alle dasselbe mentale Modell verinnerlicht: „Code läuft von oben nach unten, eine Anweisung nach der anderen.“ VHDL wird dich für diese Annahme bestrafen, bis du das richtige Modell aufgebaut hast.
 
 ## Der große Umschalter
 
@@ -30,21 +30,21 @@ flowchart LR
     XOR --> Y3([y3])
 ```
 
-Alle drei Gatter sind gleichzeitig unter Strom. Wenn sich `a` oder `b` ändert, pegelt sich `y3` nach einer kleinen Laufzeitverzögerung über den längsten Pfad neu ein. Es gibt kein „erstes" und „zweites".
+Alle drei Gatter sind gleichzeitig unter Strom. Wenn sich `a` oder `b` ändert, pegelt sich `y3` nach einer kleinen Laufzeitverzögerung über den längsten Pfad neu ein. Es gibt kein „erstes“ und „zweites“.
 
 ## Warum die Reihenfolge egal ist
 
 Du könntest die drei Zeilen in beliebiger Reihenfolge schreiben:
 
 ```vhdl
-y3 <= y1 xor y2;   -- Referenz vor der „Deklaration"?
+y3 <= y1 xor y2;   -- Referenz vor der „Deklaration“?
 y1 <= a and b;
 y2 <= a or  b;
 ```
 
 Das ist immer noch gültiges VHDL. Die drei Zuweisungen beschreiben drei Drähte, und Drähten ist es egal, in welcher Reihenfolge du den Schaltplan gezeichnet hast. Das Tool liest alle drei und verkabelt.
 
-## Wo „sequenziell" wieder reinrutscht
+## Wo „sequenziell“ wieder reinrutscht
 
 Innerhalb eines `process` ist die Ausführung **sehr wohl** sequenziell — eine Anweisung nach der anderen, von oben nach unten. Aber ein Prozess als Ganzes ist trotzdem nur eine weitere nebenläufige Einheit neben den anderen.
 
@@ -84,12 +84,12 @@ begin
 end architecture wrong;
 ```
 
-Als Software gelesen sieht das aus wie „setze `a` auf not-b, dann setze `b` auf not-a" — kein Problem. Als Hardware gelesen sind das zwei Inverter, in einer Schleife verdrahtet. Das ist ein **Oszillator** — eine Rückkopplungsschleife, die nie zur Ruhe kommt. Die Simulation meckert, die Synthese optimiert es (manchmal) weg, das Board glitcht unvorhersehbar.
+Als Software gelesen sieht das aus wie „setze `a` auf not-b, dann setze `b` auf not-a“ — kein Problem. Als Hardware gelesen sind das zwei Inverter, in einer Schleife verdrahtet. Das ist ein **Oszillator** — eine Rückkopplungsschleife, die nie zur Ruhe kommt. Die Simulation meckert, die Synthese optimiert es (manchmal) weg, das Board glitcht unvorhersehbar.
 
 ## Die Umverdrahtung in deinem Kopf
 
-- Hör auf zu denken „was läuft zuerst?"
-- Fang an zu denken „welche Drähte existieren?"
-- Innerhalb eines Prozesses ist das alte „eines nach dem anderen"-Modell wieder zurück — aber nur dort drin.
+- Hör auf zu denken „was läuft zuerst?“
+- Fang an zu denken „welche Drähte existieren?“
+- Innerhalb eines Prozesses ist das alte „eines nach dem anderen“-Modell wieder zurück — aber nur dort drin.
 
-Sobald das klickt, hört VHDL auf, gegen dich zu kämpfen. Du liest eine Architektur und siehst sofort den Schaltplan, den sie repräsentiert, statt der „Programm-Ausführung", die du dir früher vorgestellt hast.
+Sobald das klickt, hört VHDL auf, gegen dich zu kämpfen. Du liest eine Architektur und siehst sofort den Schaltplan, den sie repräsentiert, statt der „Programm-Ausführung“, die du dir früher vorgestellt hast.

@@ -29,7 +29,7 @@ Ligne par ligne :
 
 ## Parcours du chronogramme
 
-L'exemple pilote `reset = '1'` pendant les 5 premières µs, puis le relâche. `d` bascule à 10, 30 et 50 µs. Passe à l'onglet Waveforms après Run et observe :
+L'exemple pilote `reset = '1'` pendant les 5 premières µs, puis le relâche. `d` bascule à 10, 30 et 50 µs. Passez à l'onglet Formes d'onde après Exécuter et observez :
 
 - Avant 5 µs, `q = '0'` (maintenu par le reset).
 - Après le relâchement du reset, `q` ne change qu'aux fronts montants — la valeur de `d` au front est capturée.
@@ -47,10 +47,10 @@ Deux écoles de pensée :
 - Pour : se comporte comme tout autre signal au front ; s'entend bien avec le synthétiseur.
 - Contre : il faut que l'horloge tourne pour reset.
 
-Pour apprendre, l'async est plus facile à raisonner. En production, lis les guidelines de ton vendeur.
+Pour apprendre, l'async est plus facile à raisonner. En production, lisez les guidelines de votre vendeur.
 
-## À toi de jouer
+## À vous de jouer
 
-- Ajoute une entrée **enable**. `q` ne se met à jour que sur front montant quand `enable = '1'`.
-- Fais-en un **registre 4 bits** au lieu d'un seul bit. Change `d` et `q` en `std_logic_vector(3 downto 0)` et ajuste la valeur de reset en `(others => '0')`.
-- Ajoute une sortie `q_not` qui est toujours l'inverse de `q`. Bonus : reboucle `q_not` sur `d` et regarde apparaître une horloge divisée par deux.
+- Ajoutez une entrée **enable**. `q` ne se met à jour que sur front montant quand `enable = '1'`.
+- Faites-en un **registre 4 bits** au lieu d'un seul bit. Changez `d` et `q` en `std_logic_vector(3 downto 0)` et ajustez la valeur de reset en `(others => '0')`.
+- Ajoutez une sortie `q_not` qui est toujours l'inverse de `q`. Bonus : rebouclez `q_not` sur `d` et regardez apparaître une horloge divisée par deux.

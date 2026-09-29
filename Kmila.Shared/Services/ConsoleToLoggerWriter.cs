@@ -24,14 +24,20 @@ public sealed class ConsoleToLoggerWriter : TextWriter
     private readonly StringBuilder _buffer = new();
     private readonly object _gate = new();
 
+    /// <summary>Creates a writer that forwards completed lines to the given logger.</summary>
+    /// <param name="logger">Logger that receives one entry per completed line.</param>
+    /// <param name="level">Log level used for each forwarded line.</param>
     public ConsoleToLoggerWriter(ILogger logger, LogLevel level = LogLevel.Debug)
     {
         _logger = logger;
         _level = level;
     }
 
+    /// <summary>The writer's character encoding (UTF-8).</summary>
     public override Encoding Encoding => Encoding.UTF8;
 
+    /// <summary>Writes one character, flushing the buffer as a log entry on newline.</summary>
+    /// <param name="value">The character to write.</param>
     public override void Write(char value)
     {
         lock (_gate)
@@ -41,6 +47,8 @@ public sealed class ConsoleToLoggerWriter : TextWriter
         }
     }
 
+    /// <summary>Writes a string, flushing a log entry at each embedded newline.</summary>
+    /// <param name="value">The string to write.</param>
     public override void Write(string? value)
     {
         if (string.IsNullOrEmpty(value)) return;
@@ -54,17 +62,21 @@ public sealed class ConsoleToLoggerWriter : TextWriter
         }
     }
 
+    /// <summary>Writes a string and forces a line flush, emitting one log entry.</summary>
+    /// <param name="value">The string to write.</param>
     public override void WriteLine(string? value)
     {
         Write(value);
         lock (_gate) Flush();
     }
 
+    /// <summary>Flushes the current buffer as a log entry.</summary>
     public override void WriteLine()
     {
         lock (_gate) Flush();
     }
 
+    /// <summary>Flushes any buffered text as a single log entry.</summary>
     public override void Flush()
     {
         // Caller already holds _gate when this runs from the writer, but

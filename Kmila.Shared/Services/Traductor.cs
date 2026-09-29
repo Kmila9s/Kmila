@@ -108,7 +108,7 @@ public class Traductor : IDisposable
 
     private Dictionary<string, string> _languageKeys = new();
     private string _lang = DEFAULT_LANGUAGE;
-    private bool _isInitialized = false;
+    private bool _isInitialized;
     private readonly Func<string, Task<Stream>> _fileReader;
     private readonly CancellationTokenSource _cts = new();
     private Func<string, Task<string?>>? _settingsReader;
@@ -259,7 +259,7 @@ public class Traductor : IDisposable
         var translation = GetTraduction(key);
         try
         {
-            return string.Format(translation, args);
+            return string.Format(System.Globalization.CultureInfo.InvariantCulture, translation, args);
         }
         catch
         {
@@ -446,6 +446,7 @@ public class Traductor : IDisposable
     /// </summary>
     private async Task<Stream> DefaultFileReader(string path)
     {
+        await Task.CompletedTask;
         var fullPath = Path.Combine("wwwroot", path);
         if (File.Exists(fullPath))
         {
@@ -467,6 +468,7 @@ public class Traductor : IDisposable
         _cts?.Cancel();
         _cts?.Dispose();
         OnLangChanged = null;
+        GC.SuppressFinalize(this);
     }
 
     #endregion

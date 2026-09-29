@@ -4,7 +4,7 @@ Alles in VHDL außerhalb eines Prozesses ist nebenläufig — Drähte und Gatter
 
 ## Was ein Prozess ist
 
-Ein `process` ist ein Block sequentiellen Codes innerhalb einer VHDL-Architektur. Seine Zeilen werden von oben nach unten gelesen, wie Software. Aber der Prozess selbst „läuft" nur, wenn sich etwas in seiner **Sensitivitätsliste** ändert.
+Ein `process` ist ein Block sequentiellen Codes innerhalb einer VHDL-Architektur. Seine Zeilen werden von oben nach unten gelesen, wie Software. Aber der Prozess selbst „läuft“ nur, wenn sich etwas in seiner **Sensitivitätsliste** ändert.
 
 ```vhdl
 process(clk, reset)
@@ -17,7 +17,7 @@ begin
 end process;
 ```
 
-Dieser Block bedeutet: „wann immer `clk` oder `reset` sich ändert, werte meinen Body neu aus."
+Dieser Block bedeutet: „wann immer `clk` oder `reset` sich ändert, werte meinen Body neu aus.“
 
 ## Zwei Formen, die du in 99 % der Fälle siehst
 

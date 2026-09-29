@@ -3,7 +3,15 @@ using SQLite;
 namespace Kmila.Shared.Models.Practice;
 
 /// <summary>Aggregate progress for a given exercise — what the catalog renders as a status chip.</summary>
-public enum PracticeStatus { NotStarted, InProgress, Solved }
+public enum PracticeStatus
+{
+    /// <summary>No attempt has been made yet.</summary>
+    NotStarted,
+    /// <summary>Attempted but not yet solved.</summary>
+    InProgress,
+    /// <summary>At least one attempt has passed all tests.</summary>
+    Solved
+}
 
 /// <summary>
 /// One row per submission. Stores the full code snapshot so the user can
@@ -12,6 +20,7 @@ public enum PracticeStatus { NotStarted, InProgress, Solved }
 /// </summary>
 public class PracticeAttempt
 {
+    /// <summary>Auto-incrementing primary key.</summary>
     [PrimaryKey, AutoIncrement]
     public int Id { get; set; }
 
@@ -19,11 +28,13 @@ public class PracticeAttempt
     [Indexed]
     public string ExerciseId { get; set; } = string.Empty;
 
+    /// <summary>UTC timestamp when the attempt was submitted.</summary>
     public DateTime SubmittedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>Full text of what the user submitted — kept verbatim for diffing.</summary>
     public string CodeSnapshot { get; set; } = string.Empty;
 
+    /// <summary>Overall verdict for this attempt.</summary>
     public PracticeVerdictKind Verdict { get; set; }
 
     /// <summary>End-to-end grade duration: build + N test simulations + comparison.</summary>
@@ -34,6 +45,7 @@ public class PracticeAttempt
 
     /// <summary>Build-error class and detail, populated only when <see cref="Verdict"/> is BuildError.</summary>
     public string? BuildErrorMessage { get; set; }
+    /// <summary>Detailed build-error text, populated only on a build failure.</summary>
     public string? BuildErrorDetail { get; set; }
 
     /// <summary>
@@ -51,6 +63,7 @@ public class PracticeAttempt
 /// </summary>
 public class PracticeAttemptTestResult
 {
+    /// <summary>Auto-incrementing primary key.</summary>
     [PrimaryKey, AutoIncrement]
     public int Id { get; set; }
 
@@ -58,16 +71,22 @@ public class PracticeAttemptTestResult
     [Indexed]
     public int AttemptId { get; set; }
 
+    /// <summary>Id of the test case this result corresponds to.</summary>
     public string TestCaseId { get; set; } = string.Empty;
 
+    /// <summary>Whether this test case passed.</summary>
     public bool Passed { get; set; }
 
     /// <summary>Free-form classifier: <c>value-mismatch</c> / <c>build</c> / <c>runtime</c> / <c>expected-empty</c>.</summary>
     public string? ErrorClass { get; set; }
 
+    /// <summary>Name of the first signal that diverged from the expected output.</summary>
     public string? FirstMismatchSignal { get; set; }
+    /// <summary>Simulation time (ns) of the first mismatch.</summary>
     public long? FirstMismatchTimeNs { get; set; }
+    /// <summary>Expected value at the first mismatch.</summary>
     public string? ExpectedAtMismatch { get; set; }
+    /// <summary>Actual value at the first mismatch.</summary>
     public string? ActualAtMismatch { get; set; }
 
     /// <summary>How many sample points across all output ports diverged.</summary>
@@ -85,18 +104,22 @@ public class PracticeAttemptTestResult
 /// </summary>
 public class PracticeProgress
 {
+    /// <summary>Stable exercise id (primary key).</summary>
     [PrimaryKey]
     public string ExerciseId { get; set; } = string.Empty;
 
+    /// <summary>Current aggregate status for the exercise.</summary>
     public PracticeStatus Status { get; set; }
 
     /// <summary>Timestamp of the first attempt that reached <see cref="PracticeVerdictKind.Solved"/>; null until then.</summary>
     public DateTime? FirstSolvedAt { get; set; }
 
+    /// <summary>Total number of attempts made for this exercise.</summary>
     public int AttemptCount { get; set; }
 
     /// <summary>Fastest Solved attempt's total duration. Zero until first solve.</summary>
     public long BestSolveTimeMs { get; set; }
 
+    /// <summary>UTC timestamp of the most recent attempt.</summary>
     public DateTime LastAttemptAt { get; set; } = DateTime.UtcNow;
 }

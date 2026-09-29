@@ -13,8 +13,11 @@ namespace Kmila.Shared.Models;
 /// </summary>
 public enum ConceptExerciseKind
 {
+    /// <summary>Vertical stack of named steps (E1, E2).</summary>
     Recipe,
+    /// <summary>Value-block tree feeding output assignments (E3).</summary>
     Logic,
+    /// <summary>Wrapper "on rising_edge" with a body (E4).</summary>
     Clocked
 }
 
@@ -26,18 +29,23 @@ public enum ConceptExerciseKind
 /// </summary>
 public class ConceptExercise
 {
+    /// <summary>Unique exercise identifier, matching its payload file name.</summary>
     [JsonPropertyName("id")]
     public string Id { get; set; } = string.Empty;
 
+    /// <summary>Pedagogical flavor of the exercise.</summary>
     [JsonPropertyName("kind")]
     public ConceptExerciseKind Kind { get; set; } = ConceptExerciseKind.Recipe;
 
+    /// <summary>Estimated time to complete, in minutes.</summary>
     [JsonPropertyName("estimatedMinutes")]
     public int EstimatedMinutes { get; set; } = 10;
 
+    /// <summary>Localized titles keyed by culture code.</summary>
     [JsonPropertyName("titles")]
     public Dictionary<string, string> Titles { get; set; } = new();
 
+    /// <summary>Localized summaries keyed by culture code.</summary>
     [JsonPropertyName("summaries")]
     public Dictionary<string, string> Summaries { get; set; } = new();
 }
@@ -75,6 +83,7 @@ public class ExerciseComposition
 /// </summary>
 public class ExercisePayload
 {
+    /// <summary>Schema version of this exercise payload.</summary>
     [JsonPropertyName("version")]
     public int Version { get; set; } = 1;
 

@@ -15,7 +15,7 @@
             body:         { summary: "Mitad de implementación de un package.", description: "`package body` contiene las implementaciones de los subprogramas declarados en `package`." },
 
             // --- Librerías y cláusulas use ---
-            library:      { summary: "Hace visible una librería.", description: "Importa una librería VHDL. `ieee` es la que casi siempre se quiere para `std_logic_1164` y `numeric_std`.", example: "library ieee;" },
+            library:      { summary: "Hace visible una biblioteca.", description: "Importa una biblioteca VHDL. `ieee` es la que casi siempre se quiere para `std_logic_1164` y `numeric_std`.", example: "library ieee;" },
             use:          { summary: "Hace visible el contenido de un package.", description: "Importa nombres desde un package para usarlos sin cualificar.", example: "use ieee.std_logic_1164.all;\nuse ieee.numeric_std.all;" },
 
             // --- Puertos y genéricos ---

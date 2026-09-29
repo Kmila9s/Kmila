@@ -8,7 +8,9 @@ namespace Kmila.Shared.Models;
 /// </summary>
 public enum SchematicExportFormat
 {
+    /// <summary>Vector SVG output.</summary>
     Svg,
+    /// <summary>Rasterised PNG output.</summary>
     Png,
 }
 
@@ -51,7 +53,7 @@ public enum SchematicExportScope
 
     /// <summary>All cells of one specific kind (e.g. every AND gate)
     /// + their connecting wires. The kind comes from
-    /// <see cref="ByKind"/>.</summary>
+    /// <see cref="SchematicExportRequest.ByKind"/>.</summary>
     Kind,
 }
 
@@ -62,8 +64,11 @@ public enum SchematicExportScope
 /// </summary>
 public class SchematicExportRequest
 {
+    /// <summary>Output file format for the export.</summary>
     public SchematicExportFormat Format { get; set; } = SchematicExportFormat.Svg;
+    /// <summary>Rasterisation scale factor applied when exporting as PNG.</summary>
     public int PngScale { get; set; } = 2;
+    /// <summary>Which elements of the diagram to include.</summary>
     public SchematicExportScope Scope { get; set; } = SchematicExportScope.Full;
 
     /// <summary>Cell-kind filter, used when <see cref="Scope"/> is
@@ -149,6 +154,8 @@ public enum SchematicExportBackground
 /// </summary>
 public enum SchematicExportColorMode
 {
+    /// <summary>Flat grayscale output, ideal for print.</summary>
     Monochrome,
+    /// <summary>Preserves the on-screen colour palette.</summary>
     Color,
 }

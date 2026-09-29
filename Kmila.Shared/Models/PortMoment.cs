@@ -13,11 +13,11 @@ public class PortMoment
     /// <summary>
     /// Gets or sets the time input for this port moment.
     /// </summary>
-    public int TimeInput { get; set; } = 0;
+    public int TimeInput { get; set; }
     /// <summary>
     /// Gets or sets a value indicating whether this port moment represents a clock signal.
     /// </summary>
-    public bool IsClock { get; set; } = false;
+    public bool IsClock { get; set; }
     /// <summary>
     /// Gets or sets the value of the port at this moment.
     /// </summary>

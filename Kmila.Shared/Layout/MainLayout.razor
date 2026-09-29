@@ -191,28 +191,58 @@ else
 
         try
         {
-            var seen = await JS.InvokeAsync<bool>("kmilaTutorial.hasSeen", tour.StorageKey);
-            if (seen) return;
+            var normalized = path.TrimEnd('/');
+            if (normalized.Length == 0) normalized = "/";
+            var isHome = normalized == "/";
+
+            var routeSeen   = await JS.InvokeAsync<bool>("kmilaTutorial.hasSeen", tour.StorageKey);
+            var welcomeSeen = await JS.InvokeAsync<bool>("kmilaTutorial.hasSeen", TourCatalog.WelcomeStorageKey);
+
+            // First-run orientation. A user who opens the app directly on a
+            // non-Home route (e.g. a shared /editor/... link) still gets a
+            // one-time "Welcome to Kmila" card, prepended to that view's tour so
+            // it flows straight into the view walkthrough. On Home the Home tour
+            // already opens with the welcome, so we just record it as delivered.
+            IReadOnlyList<TourStep> steps = tour.Steps;
+            if (!welcomeSeen)
+            {
+                if (isHome)
+                {
+                    await MarkTourSeenAsync(TourCatalog.WelcomeStorageKey);
+                }
+                else if (!routeSeen)
+                {
+                    var welcome = TourCatalog.Welcome(Traductor.T).Steps;
+                    var combined = new List<TourStep>(welcome.Count + tour.Steps.Count);
+                    combined.AddRange(welcome);
+                    combined.AddRange(tour.Steps);
+                    steps = combined;
+                    await MarkTourSeenAsync(TourCatalog.WelcomeStorageKey);
+                }
+            }
+
+            if (routeSeen) return; // this view has already introduced itself
 
             // Brief delay so the route's components have a moment to mount
             // before the engine starts polling for the first selector. The
             // engine's own startWhenReady retries for ~1.5 s on top of this.
             await Task.Delay(200);
 
-            var stepsPayload = new object[tour.Steps.Count];
-            for (int i = 0; i < tour.Steps.Count; i++)
+            var stepsPayload = new object[steps.Count];
+            for (int i = 0; i < steps.Count; i++)
             {
-                var s = tour.Steps[i];
+                var s = steps[i];
                 stepsPayload[i] = new { target = s.Target, title = s.Title, body = s.Body };
             }
 
             var labels = new
             {
-                next   = Traductor.T("TUTORIAL_NEXT"),
-                back   = Traductor.T("TUTORIAL_BACK"),
-                skip   = Traductor.T("TUTORIAL_SKIP"),
-                finish = Traductor.T("TUTORIAL_FINISH"),
-                stepOf = Traductor.T("TUTORIAL_STEP_OF"),
+                next    = Traductor.T("TUTORIAL_NEXT"),
+                back    = Traductor.T("TUTORIAL_BACK"),
+                skip    = Traductor.T("TUTORIAL_SKIP"),
+                finish  = Traductor.T("TUTORIAL_FINISH"),
+                stepOf  = Traductor.T("TUTORIAL_STEP_OF"),
+                disable = Traductor.T("TUTORIAL_DISABLE"),
             };
             var options = new { storageKey = tour.StorageKey };
 
@@ -223,6 +253,15 @@ else
         {
             // Tour engine not loaded, JS interop blocked, etc. Silent.
         }
+    }
+
+    /// <summary>Records a tour's per-route flag as seen without opening it —
+    /// used to mark the one-time welcome delivered. Mirrors the localStorage key
+    /// the JS engine owns; silent if storage is unavailable.</summary>
+    private async Task MarkTourSeenAsync(string storageKey)
+    {
+        try { await JS.InvokeVoidAsync("localStorage.setItem", storageKey, "1"); }
+        catch { /* storage blocked — the session-level fallback still de-dupes */ }
     }
 
 

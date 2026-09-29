@@ -11,6 +11,7 @@
 @inject Kmila.Shared.Services.ReplayState Replay
 @inject Kmila.Shared.Services.VersionControl.IProjectVersionControl Vc
 @inject Microsoft.AspNetCore.Components.NavigationManager NavigationManager
+@inject Kmila.Shared.Repositories.JSONFileReader JsonReader
 <PageTitle>@string.Format(Traductor.T("EDITOR_PAGE_TITLE"), _project?.Name ?? string.Empty)</PageTitle>
 @*
     The outer `<section class="editor-page">` wraps the route unconditionally
@@ -1297,7 +1298,7 @@
             {
                 try
                 {
-                    var fpga = await JSONFileReader.ReadFPGAJsonFileAsync(config.FPGA.Path);
+                    var fpga = await JsonReader.ReadFPGAJsonFileAsync(config.FPGA.Path);
                     if (fpga != null) SelectedFPGA.SetFPGA(fpga, config.FPGA.Path);
                 }
                 catch { /* non-fatal */ }
@@ -1346,7 +1347,7 @@
             {
                 try
                 {
-                    var fpga = await JSONFileReader.ReadFPGAJsonFileAsync(config.FPGA.Path);
+                    var fpga = await JsonReader.ReadFPGAJsonFileAsync(config.FPGA.Path);
                     if (fpga != null) SelectedFPGA.SetFPGA(fpga, config.FPGA.Path);
                 }
                 catch { /* non-fatal */ }
@@ -1364,7 +1365,7 @@
 
     /// <summary>
     /// Builder.OnSimulationEnded fires off the simulation thread. Marshal back
-    /// to the UI thread, update <see cref="Sim.State"/>, append to the log,
+    /// to the UI thread, update <c>Sim.State</c>, append to the log,
     /// and auto-focus the Waveforms tab so the result is visible.
     /// </summary>
     private void OnSimulationEnded(bool ended)
@@ -1490,7 +1491,7 @@
     /// <summary>
     /// Internal build routine. Returns whether the build succeeded so callers
     /// (e.g. <see cref="OnRunRequested"/>) can decide whether to continue into
-    /// a simulation. Updates <see cref="Sim.State"/>, appends to the log, and
+    /// a simulation. Updates <c>Sim.State</c>, appends to the log, and
     /// focuses the appropriate dock tab.
     /// </summary>
     /// <summary>
@@ -1960,7 +1961,7 @@
                 {
                     foreach (var p in entityPorts)
                     {
-                        if (p == null) continue;
+                        if (p is null) continue;
                         if (p.PortType != global::Parser.Models.Constants.PortType.IN) continue;
                         if (Kmila.Shared.Services.StimulusBuilder.IsClockPortName(p.Name))
                         {
@@ -2015,7 +2016,7 @@
             {
                 if (useTestbench)
                 {
-                    await Builder.RunTestbenchAsync(
+                    await Builder!.RunTestbenchAsync(
                         projectBasePath ?? string.Empty,
                         testbenchFile!,
                         duration,
@@ -2025,7 +2026,7 @@
                 }
                 else
                 {
-                    await Builder.RunSimulationAsync(ports, duration,
+                    await Builder!.RunSimulationAsync(ports, duration,
                         systemClockMhz: effectiveClockMhz,
                         tickResNs: tickResNs,
                         fastRun: Sim.FastMode);
@@ -2740,7 +2741,7 @@ end architecture behavioral;",
     /// Replay state's OnLiveChanged ticks the editor-card tab's badge
     /// (running / paused) — wired in <see cref="OnInitialized"/>.
     ///
-    /// Also mirrors the engine's pause/resume state into <see cref="Sim.State"/>
+    /// Also mirrors the engine's pause/resume state into <c>Sim.State</c>
     /// so the RunBar reflects the real state when the engine self-pauses at
     /// a breakpoint (no RunBar button click involved). Deliberately does
     /// NOT call <c>Builder.PauseTimer/ContinueTimer</c> — pausing
@@ -3454,7 +3455,7 @@ end architecture behavioral;",
     /// debounce window collapse into one write. Idempotent in failure —
     /// a localStorage hiccup logs a warning but never disturbs the UI.
     /// Skipped entirely during prerender (JS unavailable); the post-
-    /// firstRender call to <see cref="ApplyPendingSessionRestoreAsync"/>
+    /// firstRender call to <c>ApplyPendingSessionRestoreAsync</c>
     /// re-syncs storage with the in-memory state.
     /// </summary>
     private void RequestSaveSession()

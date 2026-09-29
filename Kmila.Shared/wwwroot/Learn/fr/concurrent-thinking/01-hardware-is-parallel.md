@@ -1,10 +1,10 @@
 # Le matériel est parallèle
 
-Les étudiants venant de C, Python ou JavaScript ont tous intériorisé le même modèle mental : « le code s'exécute de haut en bas, une instruction à la fois ». VHDL te punira pour cette hypothèse jusqu'à ce que tu construises le bon modèle.
+Les étudiants venant de C, Python ou JavaScript ont tous intériorisé le même modèle mental : « le code s'exécute de haut en bas, une instruction à la fois ». VHDL vous punira pour cette hypothèse jusqu'à ce que vous construisiez le bon modèle.
 
 ## Le grand basculement
 
-Regarde cette architecture :
+Regardez cette architecture :
 
 ```vhdl
 architecture rtl of demo is
@@ -15,7 +15,7 @@ begin
 end architecture rtl;
 ```
 
-En langage logiciel, tu lis ça comme trois étapes séquentielles. En VHDL, les trois lignes décrivent **des fils qui existent simultanément**. Ils ne s'exécutent pas en ordre — ils existent.
+En langage logiciel, vous lisez ça comme trois étapes séquentielles. En VHDL, les trois lignes décrivent **des fils qui existent simultanément**. Ils ne s'exécutent pas en ordre — ils existent.
 
 Le synthétiseur construit :
 
@@ -34,7 +34,7 @@ Les trois portes sont alimentées en même temps. Quand `a` ou `b` change, la so
 
 ## Pourquoi l'ordre n'importe pas
 
-Tu peux écrire les trois lignes dans n'importe quel ordre :
+Vous pouvez écrire les trois lignes dans n'importe quel ordre :
 
 ```vhdl
 y3 <= y1 xor y2;   -- référence avant « déclaration » ?
@@ -42,7 +42,7 @@ y1 <= a and b;
 y2 <= a or  b;
 ```
 
-C'est toujours du VHDL valide. Les trois affectations décrivent trois fils, et les fils se moquent de l'ordre dans lequel tu as dessiné le schéma. L'outil lit les trois et câble.
+C'est toujours du VHDL valide. Les trois affectations décrivent trois fils, et les fils se moquent de l'ordre dans lequel vous avez dessiné le schéma. L'outil lit les trois et câble.
 
 ## Là où le « séquentiel » revient en douce
 
@@ -86,10 +86,10 @@ end architecture wrong;
 
 Lu comme du logiciel, ça ressemble à « mets `a` à not-b, puis mets `b` à not-a » — pas de souci. Lu comme du matériel, c'est deux inverseurs câblés en boucle. C'est un **oscillateur** — un anneau de feedback qui ne peut jamais se stabiliser. La simulation râle, la synthèse (parfois) l'optimise, et la carte glitche imprévisiblement.
 
-## Le recâblage dans ta tête
+## Le recâblage dans votre tête
 
-- Arrête de penser « qu'est-ce qui s'exécute en premier ? »
-- Commence à penser « quels fils existent ? »
+- Arrêtez de penser « qu'est-ce qui s'exécute en premier ? »
+- Commencez à penser « quels fils existent ? »
 - À l'intérieur d'un process, l'ancien modèle « un à la fois » revient — mais seulement là.
 
-Une fois que ça clique, VHDL arrête de se battre contre toi. Tu liras une architecture et tu verras tout de suite le schéma qu'elle représente, plus l'« exécution du programme » que tu imaginais avant.
+Une fois que ça clique, VHDL arrête de se battre contre vous. Vous lirez une architecture et vous verrez tout de suite le schéma qu'elle représente, plus l'« exécution du programme » que vous imaginiez avant.

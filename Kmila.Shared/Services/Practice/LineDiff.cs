@@ -122,6 +122,6 @@ internal static class LineDiff
     private static string[] SplitLines(string text)
     {
         if (text.Length == 0) return Array.Empty<string>();
-        return text.Replace("\r\n", "\n").Split('\n');
+        return text.Replace("\r\n", "\n", System.StringComparison.Ordinal).Split('\n');
     }
 }

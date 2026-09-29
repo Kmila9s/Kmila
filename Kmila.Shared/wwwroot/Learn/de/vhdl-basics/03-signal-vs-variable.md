@@ -1,6 +1,6 @@
 # Signal vs. Variable
 
-Das ist die am meisten missverstandene Unterscheidung in VHDL. Studierende lesen „eine Variable ist wie eine lokale Variable in C" und spurten in die falsche Richtung. Wir bringen es auf den Boden.
+Das ist die am meisten missverstandene Unterscheidung in VHDL. Studierende lesen „eine Variable ist wie eine lokale Variable in C“ und spurten in die falsche Richtung. Wir bringen es auf den Boden.
 
 ## Zwei Arten von Namen in VHDL
 
@@ -11,7 +11,7 @@ VHDL hat **Signale** (auf Architektur-Ebene mit `signal` deklariert) und **Varia
 - **Signal-Zuweisungen passieren am Ende des aktuellen Simulationsticks.**
 - **Variablen-Zuweisungen passieren sofort, im Prozess.**
 
-Das war's. Jedes „Gotcha" zwischen Signalen und Variablen ist eine Neuformulierung dieser Regel.
+Das war's. Jedes „Gotcha“ zwischen Signalen und Variablen ist eine Neuformulierung dieser Regel.
 
 ## Die Demo
 
@@ -30,7 +30,7 @@ begin
 end architecture demo;
 ```
 
-Nach Abschluss der Taktflanke wird `s` zu **2** (nur die letzte Zuweisung „gewinnt", wenn mehrere im selben Tick passieren). Innerhalb des Prozesses, nach beiden Zuweisungen, ist `s` immer noch `0` — weil der neue Wert sich nicht ausbreitet, bis der Prozess fertig ist.
+Nach Abschluss der Taktflanke wird `s` zu **2** (nur die letzte Zuweisung „gewinnt“, wenn mehrere im selben Tick passieren). Innerhalb des Prozesses, nach beiden Zuweisungen, ist `s` immer noch `0` — weil der neue Wert sich nicht ausbreitet, bis der Prozess fertig ist.
 
 Jetzt mit einer Variable:
 
@@ -74,7 +74,7 @@ process(clk)
 begin
   if rising_edge(clk) then
     a <= b;    -- Register 1
-    b <= a;    -- Register 2 — „tauscht" a und b
+    b <= a;    -- Register 2 — „tauscht“ a und b
   end if;
 end process;
 ```

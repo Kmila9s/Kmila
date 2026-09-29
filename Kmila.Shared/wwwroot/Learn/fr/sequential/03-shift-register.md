@@ -39,17 +39,17 @@ Comme c'est une affectation de signal dans un process cadencé, le décalage a l
 
 ## Parcours du chronogramme
 
-La config de sim pilote `din` selon un motif : `1, 0, 1, 1, 0, 1, 0, 1`. Regarde `q` au fil du temps :
+La config de sim pilote `din` selon un motif : `1, 0, 1, 1, 0, 1, 0, 1`. Regardez `q` au fil du temps :
 
 - Après le premier tick : `q = 00000001`
 - Après le deuxième : `q = 00000010`
 - Après le troisième : `q = 00000101`
 - … et ainsi de suite. Le nouveau bit atterrit en LSB ; les bits plus anciens marchent vers le MSB.
 
-Si tu dézoomes, le bit de poids fort (bit 7) reçoit la première valeur de `din` exactement 8 cycles plus tard. C'est la latence aller-retour d'un registre 8 bits.
+Si vous dézoomez, le bit de poids fort (bit 7) reçoit la première valeur de `din` exactement 8 cycles plus tard. C'est la latence aller-retour d'un registre 8 bits.
 
-## À toi de jouer
+## À vous de jouer
 
-- **Décale à droite** au lieu de gauche. Inverse la concaténation : `r <= din & r(7 downto 1);`.
+- **Décalez à droite** au lieu de gauche. Inversez la concaténation : `r <= din & r(7 downto 1);`.
 - **Chargement parallèle.** Ajoute une entrée `load` et un bus `din_parallel`. Quand `load = '1'` au front d'horloge, le registre prend tout le bus d'un coup au lieu de décaler.
 - **Sortie série.** Ajoute `dout <= r(7);`. C'est devenu un registre série-in, série-out (SISO) — le premier bit envoyé sur `din` apparaît sur `dout` 8 cycles plus tard. C'est comme ça que le délai bit-par-bit du RX UART fonctionne.

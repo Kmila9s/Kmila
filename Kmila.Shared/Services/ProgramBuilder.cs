@@ -80,7 +80,7 @@ public class ProgramBuilder : IDisposable
     /// <summary>
     /// Gets whether a build is currently in progress.
     /// </summary>
-    public bool IsBuilding { get; private set; } = false;
+    public bool IsBuilding { get; private set; }
     /// <summary>
     /// Gets the signal history from the last simulation run.
     /// </summary>
@@ -213,6 +213,7 @@ public class ProgramBuilder : IDisposable
     /// Builds the program from the specified project file.
     /// </summary>
     /// <param name="file">The project file to build.</param>
+    /// <param name="ct">Token to cooperatively cancel the build.</param>
     /// <returns>True if the build was successful, otherwise false.</returns>
     /// <exception cref="OperationCanceledException">Thrown when the build is cancelled by the user.</exception>
     /// <remarks>
@@ -246,7 +247,7 @@ public class ProgramBuilder : IDisposable
             // tooling). The Parser treats them identically — this is just an
             // input gate.
             if (ext != ".vhdl" && ext != ".vhd")
-                throw new Exception($"File not valid: {Path.GetFileName(filePath)}");
+                throw new InvalidOperationException($"File not valid: {Path.GetFileName(filePath)}");
 
             // Check for cancellation before starting parse
             ProgressReporter.Instance.ThrowIfCancellationRequested();
@@ -264,13 +265,13 @@ public class ProgramBuilder : IDisposable
                 .ConfigureAwait(false);
 
             Parser = new(filePath);
-            Parser.ParseFile();
+            Parser.ParseFile(CancellationToken.None);
 
             // Check for cancellation after parse
             ProgressReporter.Instance.ThrowIfCancellationRequested();
 
-            if (!Parser.Entities.Any())
-                throw new Exception("File not valid");
+            if (Parser.Entities.Count == 0)
+                throw new InvalidOperationException("File not valid");
 
             return true;
         }
@@ -296,6 +297,8 @@ public class ProgramBuilder : IDisposable
     /// Defaults to 50 MHz when the caller didn't compute one (kept for
     /// call sites that predate the FPGA-sourced clock).
     /// </param>
+    /// <param name="tickResNs">Tick resolution in nanoseconds for the simulation clock.</param>
+    /// <param name="fastRun">When true, runs without per-tick throttling for maximum speed.</param>
     public async Task RunSimulationAsync(
         List<PortMomentConfiguration>? portMoments,
         TimeSpan duration,
@@ -349,7 +352,7 @@ public class ProgramBuilder : IDisposable
             Console.WriteLine($"[Sim.Diag] failed: {diagEx.Message}");
         }
 
-        await RunConfigAsync(config, fastRun);
+        await RunConfigAsync(config!, fastRun);
     }
 
     /// <summary>
@@ -497,6 +500,10 @@ public class ProgramBuilder : IDisposable
     /// </summary>
     /// <param name="projectBasePath">Absolute project root (holds the .vhd files on disk).</param>
     /// <param name="testbenchRelativePath">Project-relative path of the chosen testbench file.</param>
+    /// <param name="duration">Total simulation duration.</param>
+    /// <param name="systemClockMhz">Effective system clock frequency (MHz) for this run.</param>
+    /// <param name="tickResNs">Tick resolution in nanoseconds for the simulation clock.</param>
+    /// <param name="fastRun">When true, runs without per-tick throttling for maximum speed.</param>
     public async Task RunTestbenchAsync(
         string projectBasePath,
         string testbenchRelativePath,
@@ -571,7 +578,7 @@ public class ProgramBuilder : IDisposable
 
         Parser = new Debugger.Repositories.Parser(parsePath);
         Parser.ParseFile();
-        if (!Parser.Entities.Any())
+        if (Parser.Entities.Count == 0)
             throw new InvalidOperationException("Testbench produced no entities.");
 
         var entity = Parser.Entities.FirstOrDefault(e =>
@@ -762,7 +769,7 @@ public class ProgramBuilder : IDisposable
         if (missingLibraryDecl.Count > 0)
         {
             var first = missingLibraryDecl[0];
-            throw new Exception(
+            throw new InvalidOperationException(
                 $"`use {first}.…` is missing its `library {first};` declaration. " +
                 "Add the declaration before the `use` clause, or remove the " +
                 "`use` clause if it isn't needed.");
@@ -786,7 +793,7 @@ public class ProgramBuilder : IDisposable
             // wrote a non-IEEE clause; that's what they'll search for in
             // the editor when they go fix the import.
             var blame = declaredLibs.Contains(first) ? first : first;
-            throw new Exception(
+            throw new InvalidOperationException(
                 $"Library '{blame}' not found. Import it under " +
                 $"Settings → Libraries before building, or remove the " +
                 $"corresponding `use {blame}.…` clause.");
@@ -876,5 +883,7 @@ public class ProgramBuilder : IDisposable
         _simulationRunner?.Dispose();
         _cts.Cancel();
         _cts?.Dispose();
+        _timeMachine.Dispose();
+        GC.SuppressFinalize(this);
     }
 }

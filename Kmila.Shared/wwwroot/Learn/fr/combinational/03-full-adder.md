@@ -1,6 +1,6 @@
 # Exemple : additionneur 4 bits à propagation de retenue
 
-Ajouter deux nombres binaires est le « hello world » de l'arithmétique numérique. Cet exemple construit un additionneur 4 bits avec retenue entrante et sortante — exactement la cellule que tu carrelerais dans une ALU plus grosse ou dans la logique d'incrémentation d'adresse d'un CPU.
+Ajouter deux nombres binaires est le « hello world » de l'arithmétique numérique. Cet exemple construit un additionneur 4 bits avec retenue entrante et sortante — exactement la cellule que vous carrèleriez dans une ALU plus grosse ou dans la logique d'incrémentation d'adresse d'un CPU.
 
 ## Interface
 
@@ -39,8 +39,8 @@ Additionner deux nombres 4 bits avec une retenue entrante peut produire un résu
 
 La config de sim pilote `a` et `b` à travers quatre motifs (`3+5 = 8`, puis un `10 + 6 = 16` qui génère une retenue, puis `10 + 15 = 25` …). Le chronogramme montre `sum` et `cout` qui changent en combinatoire — pas d'horloge nécessaire puisque ce design n'a pas de registres.
 
-## À toi de jouer
+## À vous de jouer
 
-- **Rends-le paramétrique.** Ajoute un `generic (N : integer := 4)` à l'entity et utilise `N` partout où apparaît le 4. Tu as un `adder_N` instantiable à n'importe quelle largeur.
-- **Construis un soustracteur.** Inverse `b` et ajoute un `+1` — c'est la soustraction en complément à deux. Pas de matériel en plus à part un NOT par bit.
-- **Câble-en deux ensemble.** Un pour le quartet bas, un pour le quartet haut, et tu as un additionneur 8 bits à propagation entre eux.
+- **Rendez-le paramétrique.** Ajoutez un `generic (N : integer := 4)` à l'entity et utilisez `N` partout où apparaît le 4. Vous avez un `adder_N` instantiable à n'importe quelle largeur.
+- **Construisez un soustracteur.** Inversez `b` et ajoutez un `+1` — c'est la soustraction en complément à deux. Pas de matériel en plus à part un NOT par bit.
+- **Câblez-en deux ensemble.** Un pour le quartet bas, un pour le quartet haut, et vous avez un additionneur 8 bits à propagation entre eux.

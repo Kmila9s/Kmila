@@ -7,9 +7,14 @@ namespace Kmila.Shared.Services.VisualRun;
 // A "pattern" is an int whose low 7 bits say which segments glow, bit order
 // g f e d c b a (low→high) — i.e. bit 0 = segment a, bit 6 = segment g.
 // E.g. '0' = abcdef on, g off → 0b0111111 = 0x3F.
+/// <summary>
+/// Shared 7-segment decode tables and helpers used by the single-digit and
+/// multi-digit seven-segment widgets. A pattern's low 7 bits map to segments
+/// a..g (bit 0 = a, bit 6 = g).
+/// </summary>
 public static class SevenSegPatterns
 {
-    // Canonical segment patterns for 0..F (see bit-order note above).
+    /// <summary>Canonical segment patterns for the hex digits 0..F, indexed by value.</summary>
     public static readonly int[] HexPatterns = new[]
     {
         0x3F, // 0
@@ -34,6 +39,14 @@ public static class SevenSegPatterns
     // mode. Returns the numeric value 0..15, or -1 to mean "blank the digit":
     // any non-0/1 char (U/X/Z) blanks, and in "dec" mode a value > 9 blanks
     // too (matching what a real BCD decoder IC does on out-of-range inputs).
+    /// <summary>
+    /// Decodes a 4-bit MSB-first bit string into its numeric value 0..15.
+    /// Returns -1 to signal a blank digit: any non-0/1 char (U/X/Z) blanks,
+    /// and in "dec" mode a value greater than 9 also blanks.
+    /// </summary>
+    /// <param name="bits4">Bit string (MSB-first); the low 4 bits are used.</param>
+    /// <param name="mode">"hex" or "dec" decoding mode.</param>
+    /// <returns>The decoded value 0..15, or -1 to blank the digit.</returns>
     public static int DecodeNibble(string? bits4, string mode)
     {
         if (string.IsNullOrEmpty(bits4)) return -1;
@@ -50,6 +63,10 @@ public static class SevenSegPatterns
     }
 
     // True when the given segment (a..g) is lit in `pattern`.
+    /// <summary>Returns whether the given segment (a..g) is lit in the pattern.</summary>
+    /// <param name="pattern">Segment bit pattern.</param>
+    /// <param name="segment">Segment letter, 'a' through 'g'.</param>
+    /// <returns>True if the segment bit is set; false for an unknown segment.</returns>
     public static bool SegmentLit(int pattern, char segment)
     {
         int idx = segment switch

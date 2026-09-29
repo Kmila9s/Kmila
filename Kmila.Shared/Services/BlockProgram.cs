@@ -25,6 +25,8 @@ public class BlockProgram
 {
     private readonly ILogger _logger;
 
+    /// <summary>Creates the service.</summary>
+    /// <param name="logger">Optional logger.</param>
     public BlockProgram(ILogger<BlockProgram>? logger = null)
     {
         _logger = (ILogger?)logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
@@ -137,7 +139,7 @@ public class BlockProgram
     /// callers should render a friendly "I don't know how to run this
     /// combo yet" outcome.
     /// </summary>
-    public ExerciseComposition? FindMatch(ExercisePayload payload, string fingerprint)
+    public static ExerciseComposition? FindMatch(ExercisePayload payload, string fingerprint)
     {
         if (payload == null || string.IsNullOrEmpty(fingerprint)) return null;
         return payload.Compositions.FirstOrDefault(c =>

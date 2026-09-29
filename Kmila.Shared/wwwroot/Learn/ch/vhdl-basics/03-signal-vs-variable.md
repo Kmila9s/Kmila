@@ -1,6 +1,6 @@
 # signal 与 variable
 
-这是 VHDL 中最容易被误解的区别。学生看到 “variable 像 C 里的局部变量" 就一路跑偏。我们把它讲透。
+这是 VHDL 中最容易被误解的区别。学生看到 “variable 像 C 里的局部变量” 就一路跑偏。我们把它讲透。
 
 ## VHDL 里的两类名字
 
@@ -11,7 +11,7 @@ VHDL 有 **signal**(在 architecture 层用 `signal` 声明)和 **variable**(在
 - **signal 赋值发生在当前仿真 tick 的末尾。**
 - **variable 赋值立刻发生,就在 process 内部。**
 
-就这么一句。signal vs variable 的所有 “坑" 都不过是这条规则的复述。
+就这么一句。signal vs variable 的所有 “坑” 都不过是这条规则的复述。
 
 ## 演示
 
@@ -30,7 +30,7 @@ begin
 end architecture demo;
 ```
 
-时钟沿完成之后,`s` 变成 **2**(同一 tick 里多次赋值,只有最后一次 “胜出")。在 process 内部,两次赋值之后,`s` 仍是 `0` —— 因为新值要等到 process 结束才传播。
+时钟沿完成之后,`s` 变成 **2**(同一 tick 里多次赋值,只有最后一次 “胜出”)。在 process 内部,两次赋值之后,`s` 仍是 `0` —— 因为新值要等到 process 结束才传播。
 
 换成 variable:
 
@@ -74,7 +74,7 @@ process(clk)
 begin
   if rising_edge(clk) then
     a <= b;    -- 寄存器 1
-    b <= a;    -- 寄存器 2 —— “交换" a 与 b
+    b <= a;    -- 寄存器 2 —— “交换” a 与 b
   end if;
 end process;
 ```

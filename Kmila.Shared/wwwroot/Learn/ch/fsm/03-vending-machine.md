@@ -6,8 +6,8 @@
 
 一个跟踪顾客投入的金额、累计到 25¢ 就出货(`dispense` 单一脉冲)的 FSM。输入:
 
-- `nickel` —— 1 周期脉冲,表示 “刚投入一枚 5¢"
-- `dime` —— 1 周期脉冲,表示 “刚投入一枚 10¢"
+- `nickel` —— 1 周期脉冲,表示 “刚投入一枚 5¢”
+- `dime` —— 1 周期脉冲,表示 “刚投入一枚 10¢”
 - `clk`、`reset`
 
 输出:
@@ -50,7 +50,7 @@ change   <= '0';  -- TODO
 2. **让 `dispense` 拉高恰好一个周期**。诀窍:检测到出售时,设一个标志信号,把 `total` 清零。这个标志只活一个周期。
 3. **计算 `change`**。如果出售那一刻的总额 > 25,也把 `change` 拉高一个周期。
 
-提示:把 “下一拍 total" 算成一个本地信号(或 process 内部 `variable`)会更顺:
+提示:把 “下一拍 total” 算成一个本地信号(或 process 内部 `variable`)会更顺:
 
 ```vhdl
 variable next_total : unsigned(5 downto 0);

@@ -1,15 +1,24 @@
 namespace Kmila.Shared.Services.VisualRun;
 
+/// <summary>Discrete playback speed presets for the Visual Run mode.</summary>
 public enum VisualSpeed
 {
+    /// <summary>Half speed (0.5x).</summary>
     Half,
+    /// <summary>Normal speed (1x).</summary>
     Normal,
+    /// <summary>Fast speed (10x).</summary>
     Fast,
+    /// <summary>Unthrottled — run as fast as the scheduler allows.</summary>
     Free,
 }
 
+/// <summary>Helpers mapping <see cref="VisualSpeed"/> presets to tick delays, labels, and slider indices.</summary>
 public static class VisualSpeedExtensions
 {
+    /// <summary>Returns the per-tick delay in milliseconds for the given speed preset.</summary>
+    /// <param name="s">The speed preset.</param>
+    /// <returns>The per-tick delay in milliseconds (0 for <see cref="VisualSpeed.Free"/>).</returns>
     public static int TickDelayMs(this VisualSpeed s) => s switch
     {
         VisualSpeed.Half => 32,
@@ -19,6 +28,9 @@ public static class VisualSpeedExtensions
         _ => 16,
     };
 
+    /// <summary>Returns the short human-readable label (e.g. "1x") for the given speed preset.</summary>
+    /// <param name="s">The speed preset.</param>
+    /// <returns>The display label.</returns>
     public static string DisplayLabel(this VisualSpeed s) => s switch
     {
         VisualSpeed.Half => "0.5x",
@@ -28,8 +40,12 @@ public static class VisualSpeedExtensions
         _ => "1x",
     };
 
-    // Phase 2: slider-index mapping. 0..3 ↔ Half/Normal/Fast/Free. Out-of-range
-    // collapses to Normal — never throws, the UI sets the slider via this.
+    /// <summary>
+    /// Maps a slider index (0..3 ↔ Half/Normal/Fast/Free) to a speed preset.
+    /// Out-of-range values collapse to <see cref="VisualSpeed.Normal"/> — never throws.
+    /// </summary>
+    /// <param name="i">The slider index.</param>
+    /// <returns>The corresponding speed preset.</returns>
     public static VisualSpeed FromSliderIndex(int i) => i switch
     {
         0 => VisualSpeed.Half,
@@ -39,6 +55,9 @@ public static class VisualSpeedExtensions
         _ => VisualSpeed.Normal,
     };
 
+    /// <summary>Maps a speed preset to its slider index (0..3).</summary>
+    /// <param name="s">The speed preset.</param>
+    /// <returns>The slider index.</returns>
     public static int ToSliderIndex(this VisualSpeed s) => s switch
     {
         VisualSpeed.Half => 0,
@@ -61,13 +80,22 @@ public static class VisualSpeedExtensions
 // The runtime already consumes an arbitrary delay via
 // VisualRunCoordinator.CustomTickDelayMs (0 = Free), so this class only owns
 // the slider<->delay mapping and the human-readable label.
+/// <summary>
+/// Continuous full-range speed scale for the Visual Run playback slider, mapping
+/// slider positions to per-tick delays (logarithmically) and back, plus a readout label.
+/// </summary>
 public static class VisualSpeedScale
 {
+    /// <summary>Maximum slider position; this position means "Free" (0 ms/tick).</summary>
     public const int SliderMax = 100;
+    /// <summary>Far-left finite per-tick delay in milliseconds (~1 tick/s).</summary>
     public const int SlowestMs = 1000; // far-left finite delay (~1 tick/s)
+    /// <summary>Fastest finite per-tick delay in milliseconds (just before Free).</summary>
     public const int FastestMs = 1;    // just-before-Free finite delay
 
-    // Slider position (0..SliderMax) → per-tick delay in ms. SliderMax → 0 (Free).
+    /// <summary>Converts a slider position (0..<see cref="SliderMax"/>) to a per-tick delay in ms; <see cref="SliderMax"/> yields 0 (Free).</summary>
+    /// <param name="pos">The slider position.</param>
+    /// <returns>The per-tick delay in milliseconds.</returns>
     public static int DelayFromSlider(int pos)
     {
         pos = Math.Clamp(pos, 0, SliderMax);
@@ -77,7 +105,9 @@ public static class VisualSpeedScale
         return Math.Max(FastestMs, (int)Math.Round(delay));
     }
 
-    // Per-tick delay in ms → nearest slider position. 0/negative (Free) → SliderMax.
+    /// <summary>Converts a per-tick delay in ms to the nearest slider position; 0 or negative (Free) yields <see cref="SliderMax"/>.</summary>
+    /// <param name="delayMs">The per-tick delay in milliseconds.</param>
+    /// <returns>The nearest slider position.</returns>
     public static int SliderFromDelay(int delayMs)
     {
         if (delayMs <= 0) return SliderMax; // Free
@@ -88,8 +118,13 @@ public static class VisualSpeedScale
         return Math.Clamp(pos, 0, SliderMax - 1);
     }
 
-    // Readout label. null / 0 → the caller supplies the localized "Free" text;
-    // any positive delay renders as "{d} ms/tick · ~{n}/s".
+    /// <summary>
+    /// Builds the readout label for a per-tick delay. Null or 0 returns the caller-supplied
+    /// localized "Free" text; any positive delay renders as "{d} ms/tick · ~{n}/s".
+    /// </summary>
+    /// <param name="delayMs">The per-tick delay in milliseconds, or null for Free.</param>
+    /// <param name="freeText">Localized text to return when the delay represents Free.</param>
+    /// <returns>The readout label.</returns>
     public static string DelayLabel(int? delayMs, string freeText)
     {
         if (delayMs is null || delayMs <= 0) return freeText;

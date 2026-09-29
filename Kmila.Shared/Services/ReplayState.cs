@@ -164,6 +164,8 @@ public class ReplayState
     /// <summary>Fired whenever a breakpoint (line or time) is toggled — UI redraws.</summary>
     public event Action? OnBreakpointsChanged;
 
+    /// <summary>Toggles a source-line breakpoint at the given line number.</summary>
+    /// <param name="line">1-based source line number.</param>
     public void ToggleBreakpoint(int line)
     {
         if (!Breakpoints.Remove(line)) Breakpoints.Add(line);
@@ -285,7 +287,7 @@ public class ReplayState
     /// <see cref="LiveDocFrameCap"/> entries with FIFO eviction so a runaway
     /// simulation can't OOM the browser tab.
     /// </remarks>
-    public bool LiveReplayDuringRun { get; set; } = false;
+    public bool LiveReplayDuringRun { get; set; }
 
     /// <summary>
     /// Hard cap on the number of <see cref="TimelineStep"/> entries kept in
@@ -608,7 +610,7 @@ public class ReplayState
         // the source is blank (line-highlight column just stays empty).
         var map = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
         if (string.IsNullOrEmpty(source)) return map;
-        var lines = source.Replace("\r\n", "\n").Split('\n');
+        var lines = source.Replace("\r\n", "\n", System.StringComparison.Ordinal).Split('\n');
         // Pass 18 (2026-07-30): use OperationsRegex.BalancedIndexSuffix
         // so nested-paren LHS shapes surface in the live-line map.
         var assignRx = new System.Text.RegularExpressions.Regex(
@@ -654,7 +656,7 @@ public class ReplayState
     {
         var set = new HashSet<int>();
         if (string.IsNullOrEmpty(source)) return set;
-        var lines = source.Replace("\r\n", "\n").Split('\n');
+        var lines = source.Replace("\r\n", "\n", System.StringComparison.Ordinal).Split('\n');
         // Leading-keyword match: `if` / `elsif` / `when` at the start of the
         // (trimmed) line. Excludes `end if` / `end case` since those don't lead
         // with the keyword. Conditional-assignment `when` lines also carry a

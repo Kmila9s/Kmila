@@ -33,6 +33,9 @@ public class PracticeCatalog
     private Dictionary<string, ManifestEntry>? _manifestRaw;
     private readonly Dictionary<string, PracticeExercise> _exerciseCache = new();
 
+    /// <summary>Creates the catalog with a delegate for opening bundled files.</summary>
+    /// <param name="openFileAsync">Opens a bundled asset by relative path.</param>
+    /// <param name="logger">Optional logger.</param>
     public PracticeCatalog(Func<string, Task<Stream>> openFileAsync,
                            ILogger<PracticeCatalog>? logger = null)
     {
@@ -291,7 +294,7 @@ public class PracticeCatalog
     // ────────────────────────────────────────────────────────────────────
 
     /// <summary>Root document shape of <c>Practice/manifest.json</c>: schema version + exercise entries.</summary>
-    private class ManifestRoot
+    private sealed class ManifestRoot
     {
         /// <summary>Manifest schema version number; bumped when the on-disk shape changes.</summary>
         public int Version { get; set; }
@@ -300,7 +303,7 @@ public class PracticeCatalog
     }
 
     /// <summary>One exercise entry inside <see cref="ManifestRoot.Exercises"/>; later projected into the public <c>PracticeExerciseMeta</c>.</summary>
-    private class ManifestEntry
+    private sealed class ManifestEntry
     {
         public string? Id { get; set; }
         public string? Modality { get; set; }
@@ -316,14 +319,14 @@ public class PracticeCatalog
     }
 
     /// <summary>Root document shape of an exercise's <c>tests.json</c> file.</summary>
-    private class TestsJson
+    private sealed class TestsJson
     {
         /// <summary>List of test cases declared by the file.</summary>
         public List<TestJsonItem>? Tests { get; set; }
     }
 
     /// <summary>One test case inside <see cref="TestsJson.Tests"/>: id, visibility, descriptions, duration/clock parameters, and inputs.</summary>
-    private class TestJsonItem
+    private sealed class TestJsonItem
     {
         public string? Id { get; set; }
         public bool Visible { get; set; }
@@ -334,14 +337,14 @@ public class PracticeCatalog
     }
 
     /// <summary>Time-stamped input sequence applied to a single port during a test case.</summary>
-    private class PortInputJson
+    private sealed class PortInputJson
     {
         public string? PortName { get; set; }
         public List<PortValueJson>? Values { get; set; }
     }
 
     /// <summary>One <c>(time, scale, value)</c> tuple inside <see cref="PortInputJson.Values"/>.</summary>
-    private class PortValueJson
+    private sealed class PortValueJson
     {
         /// <summary>Numeric time value (interpreted in the unit named by <see cref="Scale"/>).</summary>
         public int Time { get; set; }

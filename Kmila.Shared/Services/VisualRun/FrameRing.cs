@@ -4,10 +4,14 @@ namespace Kmila.Shared.Services.VisualRun;
 // retain every tick — older entries evict; scrubbing is limited to the
 // ring window. Phase 0 uses this only as a thin record store; scrub UI
 // arrives in Phase 2.
+/// <summary>A single captured visual-mode frame: a simulation tick and its port values.</summary>
+/// <param name="Tick">Simulation tick this frame was captured at.</param>
+/// <param name="PortValues">Port name to value snapshot at this tick.</param>
 public readonly record struct VisualFrame(
     ulong Tick,
     IReadOnlyDictionary<string, string> PortValues);
 
+/// <summary>Bounded ring buffer of <see cref="VisualFrame"/> entries for visual-mode playback and scrubbing.</summary>
 public sealed class FrameRing
 {
     private readonly VisualFrame[] _buf;
@@ -15,8 +19,11 @@ public sealed class FrameRing
     private long _count;
     private readonly object _gate = new();
 
+    /// <summary>Maximum number of frames retained in the ring.</summary>
     public int Capacity { get; }
 
+    /// <summary>Creates a ring buffer with the given capacity (minimum 1).</summary>
+    /// <param name="capacity">Maximum number of frames to retain.</param>
     public FrameRing(int capacity = 2000)
     {
         if (capacity < 1) capacity = 1;
@@ -24,8 +31,10 @@ public sealed class FrameRing
         _buf = new VisualFrame[capacity];
     }
 
+    /// <summary>Number of frames currently held in the ring.</summary>
     public long Count { get { lock (_gate) return _count; } }
 
+    /// <summary>Tick of the most recently pushed frame, or 0 when empty.</summary>
     public ulong NewestTick
     {
         get
@@ -38,6 +47,7 @@ public sealed class FrameRing
         }
     }
 
+    /// <summary>Tick of the oldest frame still retained, or 0 when empty.</summary>
     public ulong OldestTick
     {
         get
@@ -51,6 +61,8 @@ public sealed class FrameRing
         }
     }
 
+    /// <summary>Appends a frame, evicting the oldest once capacity is reached.</summary>
+    /// <param name="f">Frame to append.</param>
     public void Push(VisualFrame f)
     {
         lock (_gate)
@@ -61,6 +73,8 @@ public sealed class FrameRing
         }
     }
 
+    /// <summary>Returns the most recently pushed frame, or null when empty.</summary>
+    /// <returns>The newest frame, or null.</returns>
     public VisualFrame? Latest()
     {
         lock (_gate)
@@ -118,6 +132,7 @@ public sealed class FrameRing
 
     private static ulong AbsDiff(ulong a, ulong b) => a > b ? a - b : b - a;
 
+    /// <summary>Removes all frames from the ring.</summary>
     public void Clear()
     {
         lock (_gate) { _head = 0; _count = 0; }

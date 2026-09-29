@@ -34,6 +34,9 @@ public class PracticeAttemptStore
     private readonly ApplicationDbContext _db;
     private readonly ILogger _logger;
 
+    /// <summary>Creates the practice attempt store.</summary>
+    /// <param name="db">Application database used to persist practice attempts.</param>
+    /// <param name="logger">Optional logger; a null logger is used when omitted.</param>
     public PracticeAttemptStore(ApplicationDbContext db,
                                 ILogger<PracticeAttemptStore>? logger = null)
     {

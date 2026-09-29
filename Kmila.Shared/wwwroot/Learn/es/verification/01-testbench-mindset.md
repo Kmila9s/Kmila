@@ -1,6 +1,6 @@
 # La mentalidad del testbench
 
-En cada lección hasta aquí, Kmila ha sido tu testbench — arrastrabas estímulos en la pestaña Ports, Run ejecutaba el diseño y tú mirabas la waveform. Para aprender está bien. Pero no es así como se trabaja en diseño digital profesional.
+En cada lección hasta aquí, Kmila ha sido tu testbench — arrastrabas estímulos en la pestaña Puertos, pulsabas Ejecutar para simular el diseño y mirabas la forma de onda. Para aprender está bien. Pero no es así como se trabaja en diseño digital profesional.
 
 ## Qué es un testbench real
 
@@ -42,14 +42,14 @@ end architecture sim;
 Tres ideas nuevas:
 
 1. **`wait`** — el tiempo avanza solo cuando un proceso lo dice.
-2. **`assert … report … severity`** — la auto-verificación. Convierte una waveform de mil líneas en un "pass" o "fail".
+2. **`assert … report … severity`** — la auto-verificación. Convierte una forma de onda de mil líneas en un «pasa» o «falla».
 3. **Entidad sin puertos** — los testbenches son auto-contenidos; el simulador los instancia directamente.
 
 ## Por qué importa
 
-- **Regresión**: un testbench que escribiste ayer sigue corriendo hoy. Una waveform que miraste ayer ya no existe.
+- **Regresión**: un testbench que escribiste ayer sigue ejecutándose hoy. Una forma de onda que miraste ayer ya no existe.
 - **Cobertura**: puedes aplicar patrones de estímulo que una sesión interactiva nunca alcanzará (entradas aleatorias, casos límite, frecuencias extremas).
-- **Automatización**: un sistema de CI ejecuta tu testbench en cada commit. Las waveforms no caben en CI.
+- **Automatización**: un sistema de CI ejecuta tu testbench en cada commit. Las formas de onda no caben en CI.
 
 ## Límites actuales de Kmila
 

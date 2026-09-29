@@ -21,7 +21,7 @@ namespace Kmila.Shared.Services;
 /// folder layout.
 ///
 /// This class is platform-agnostic: hand it
-/// <see cref="Microsoft.Maui.Storage.FileSystem.AppDataDirectory"/> on
+/// <c>Microsoft.Maui.Storage.FileSystem.AppDataDirectory</c> on
 /// MAUI or an <c>ApplicationData/KmilaData</c>-derived path on the Web
 /// build and it'll behave the same.
 /// </remarks>

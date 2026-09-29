@@ -14,6 +14,10 @@ namespace Kmila.Shared.Services;
 /// </summary>
 public static class LibraryCompilerFactory
 {
+    /// <summary>Builds a <see cref="LibraryCompiler.Services.LibraryCompiler"/> wired to a disk-backed cache rooted at the user asset store's library cache directory.</summary>
+    /// <param name="userAssets">Provides the library cache directory and any user-supplied library sources.</param>
+    /// <param name="blobLogger">Optional logger for the underlying <see cref="FileSystemBlobStore"/>.</param>
+    /// <returns>A configured library compiler instance.</returns>
     public static LibraryCompiler.Services.LibraryCompiler Create(
         UserAssetStore userAssets,
         ILogger<FileSystemBlobStore>? blobLogger = null)

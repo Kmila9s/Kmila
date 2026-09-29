@@ -33,7 +33,9 @@ public enum SimState
 /// </summary>
 public enum SimMode
 {
+    /// <summary>Signal-only run driven by ProgramBuilder + SimulationCoordinator.</summary>
     Signal,
+    /// <summary>Visual run driven by VisualRunCoordinator.</summary>
     Visual
 }
 
@@ -46,7 +48,9 @@ public enum SimMode
 /// </summary>
 public enum StimulusSource
 {
+    /// <summary>Classic UI-authored timeline (auto-clock + per-port value events).</summary>
     PortMoments,
+    /// <summary>Workbench mode — a user-written VHDL testbench supplies clock/reset and stimulus.</summary>
     Testbench
 }
 
@@ -111,7 +115,7 @@ public class SimulationParameters
     public SimState State { get; private set; } = SimState.Idle;
 
     /// <summary>0..100 — only meaningful while <see cref="State"/> is Running.</summary>
-    public double Progress { get; private set; } = 0;
+    public double Progress { get; private set; }
 
     /// <summary>
     /// Estimated wall-clock seconds remaining for the running sim, or <c>null</c>
@@ -285,6 +289,7 @@ public class SimulationParameters
         return wave != null;
     }
 
+    /// <summary>Raised whenever a tracked configuration value changes.</summary>
     public event Action? OnChange;
 
     /// <summary>

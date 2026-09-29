@@ -13,7 +13,7 @@ namespace Kmila.Shared.Services;
 /// the browser), and the user never has to paste a personal access
 /// token. The trade-off is the two-step UX — show a code, ask the
 /// user to type it on github.com — which we surface in
-/// <see cref="GitHubLoginModal"/>.
+/// <c>GitHubLoginModal</c>.
 ///
 /// Login is OPTIONAL. The app is fully usable signed-out; the only
 /// features that depend on auth are the in-app issue submission flow
@@ -60,6 +60,7 @@ public class GitHubAuth
     /// after sign-in / sign-out and on first use.</summary>
     public GitHubAccount? Account { get; private set; }
 
+    /// <summary>True when a GitHub account is currently signed in.</summary>
     public bool IsLoggedIn => Account != null;
 
     /// <summary>True when an effective Client ID is set (build-time
@@ -77,6 +78,9 @@ public class GitHubAuth
     /// re-render on the event.</summary>
     public event Action? OnChange;
 
+    /// <summary>Creates a new <see cref="GitHubAuth"/>.</summary>
+    /// <param name="db">Application database context used for token/settings storage.</param>
+    /// <param name="logger">Optional logger; a null logger is used when omitted.</param>
     public GitHubAuth(ApplicationDbContext db, ILogger<GitHubAuth>? logger = null)
     {
         _db = db;
@@ -421,10 +425,15 @@ public class GitHubAuth
     /// </summary>
     public class DeviceCodeResponse
     {
+        /// <summary>Device verification code the client uses when polling for the token.</summary>
         [JsonPropertyName("device_code")]      public string DeviceCode      { get; set; } = "";
+        /// <summary>Short code the user types into the GitHub verification page.</summary>
         [JsonPropertyName("user_code")]        public string UserCode        { get; set; } = "";
+        /// <summary>URL the user opens to enter the user code.</summary>
         [JsonPropertyName("verification_uri")] public string VerificationUri { get; set; } = "";
+        /// <summary>Seconds until the codes expire.</summary>
         [JsonPropertyName("expires_in")]       public int    ExpiresIn       { get; set; }
+        /// <summary>Minimum polling interval, in seconds.</summary>
         [JsonPropertyName("interval")]         public int    IntervalSeconds { get; set; }
     }
 
@@ -435,9 +444,13 @@ public class GitHubAuth
     /// </summary>
     public class TokenResponse
     {
+        /// <summary>OAuth access token, present once the handshake succeeds.</summary>
         [JsonPropertyName("access_token")] public string? AccessToken { get; set; }
+        /// <summary>Token type (typically <c>bearer</c>).</summary>
         [JsonPropertyName("token_type")]   public string? TokenType   { get; set; }
+        /// <summary>Granted OAuth scopes.</summary>
         [JsonPropertyName("scope")]        public string? Scope       { get; set; }
+        /// <summary>Error code while the handshake is still pending or has failed.</summary>
         [JsonPropertyName("error")]        public string? Error       { get; set; }
     }
 
@@ -447,9 +460,13 @@ public class GitHubAuth
     /// </summary>
     public class GitHubAccount
     {
+        /// <summary>GitHub login handle.</summary>
         [JsonPropertyName("login")]      public string  Login     { get; set; } = "";
+        /// <summary>Display name, if set on the account.</summary>
         [JsonPropertyName("name")]       public string? Name      { get; set; }
+        /// <summary>URL of the account's avatar image.</summary>
         [JsonPropertyName("avatar_url")] public string? AvatarUrl { get; set; }
+        /// <summary>URL of the account's profile page.</summary>
         [JsonPropertyName("html_url")]   public string? HtmlUrl   { get; set; }
     }
 }
@@ -484,11 +501,11 @@ internal sealed class GitHubApiResult : IDisposable
 ///
 ///   1. Register a new OAuth App at https://github.com/settings/developers
 ///   2. Tick "Enable Device Flow" in the app's settings.
-///   3. Paste the Client ID into <see cref="ClientId"/> below.
+///   3. Paste the Client ID into <see cref="DefaultClientId"/> below.
 ///   4. Update <see cref="IssueOwner"/> / <see cref="IssueRepo"/> if
 ///      issues should land in a different repo than the upstream one.
 ///
-/// Until <see cref="ClientId"/> is set, the in-app login flow stays
+/// Until <see cref="DefaultClientId"/> is set, the in-app login flow stays
 /// disabled and the existing Tier 1 (copy diagnostics) + Tier 2
 /// (open prefilled issue URL) feedback paths remain the only
 /// channel — neither requires authentication.

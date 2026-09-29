@@ -78,6 +78,9 @@ public class WaveformData
             new System.Text.Json.JsonSerializerOptions { WriteIndented = false });
     }
 
+    /// <summary>Deserializes a <see cref="WaveformData"/> from its JSON form, or null if invalid.</summary>
+    /// <param name="json">JSON produced by <c>ToJson</c>.</param>
+    /// <returns>The deserialized waveform, or null.</returns>
     public static WaveformData? FromJson(string json)
     {
         if (string.IsNullOrWhiteSpace(json)) return null;
@@ -103,7 +106,7 @@ public class WaveformData
     /// JSON-serialisation DTO for <see cref="WaveformData"/>. Decoupled from the public
     /// shape so the on-disk format can evolve without breaking the in-memory contract.
     /// </summary>
-    private class SerializedForm
+    private sealed class SerializedForm
     {
         /// <summary>Total simulated ticks captured by the waveform.</summary>
         public ulong TotalTicks { get; set; }

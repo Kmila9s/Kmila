@@ -7,15 +7,24 @@ namespace Kmila.Shared.Services;
 /// </summary>
 public enum EditorTab
 {
+    /// <summary>Parsed design entities.</summary>
     Entities,
+    /// <summary>Logic schematic view.</summary>
     Schematic,
+    /// <summary>Flow view.</summary>
     Flow,
+    /// <summary>Input ports.</summary>
     Ports,
+    /// <summary>Output waveforms.</summary>
     Waveforms,
+    /// <summary>Captured simulation runs.</summary>
     Runs,
+    /// <summary>Project files.</summary>
     Files,
+    /// <summary>Build/run output log.</summary>
     Output,
     // Appended so older persisted values (0-7) still parse.
+    /// <summary>Source-control panel.</summary>
     SourceControl
 }
 

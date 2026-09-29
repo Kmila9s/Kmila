@@ -404,7 +404,7 @@ else if (Data != null && Data.Signals.Count > 0)
 
     /// <summary>
     /// When true, the viewer renders only a trailing time window of fixed
-    /// duration (<see cref="LiveWindowNs"/>) so that as new transitions
+    /// duration (<see cref="_liveWindowNs"/>) so that as new transitions
     /// arrive from a running simulation the X-axis stays at a constant
     /// scale and the trace appears to scroll right — instead of every
     /// existing transition shrinking to fit a growing total time. Once
@@ -1076,7 +1076,6 @@ else if (Data != null && Data.Signals.Count > 0)
         const int H = 40;         // row height in SVG units
         const int PadY = 4;       // vertical padding so strokes don't clip
         const double ValHi = PadY;
-        const double ValLo = H - PadY;
         const double ValMid = H / 2.0;
 
         var sb = new System.Text.StringBuilder();
@@ -1240,7 +1239,7 @@ else if (Data != null && Data.Signals.Count > 0)
         long maxNs)
     {
         const int H = 40;
-        const double ValHi = 4.0, ValLo = 36.0, ValMid = 20.0;
+        const double ValMid = 20.0;
 
         var sb = new System.Text.StringBuilder();
         sb.Append($"<svg class=\"waveform-svg\" viewBox=\"0 0 {widthPx} {H}\" preserveAspectRatio=\"none\" width=\"{widthPx}\" height=\"{H}\">");

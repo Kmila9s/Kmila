@@ -21,7 +21,7 @@ end architecture rtl;
 
 En un proceso puramente combinacional, cada salida debe quedar asignada **en cada camino** por el proceso. Este solo asigna `y` cuando `enable = '1'`. Cuando `enable = '0'`, el proceso no dice nada sobre `y`.
 
-La solución por defecto de VHDL a "no me dijiste qué hacer con esta señal" es **recordar el valor anterior**. Eso es un latch — un elemento de memoria transparente. La síntesis inferirá uno, tu diseño tendrá una pesadilla de timing y la placa glitchará en transiciones.
+La solución por defecto de VHDL a "no me dijiste qué hacer con esta señal" es **recordar el valor anterior**. Eso es un latch — un elemento de memoria transparente. La síntesis inferirá uno, tu diseño tendrá una pesadilla de temporización y la placa presentará glitches en las transiciones.
 
 ## Tu misión
 
@@ -58,7 +58,7 @@ Ambos son correctos. Ambos producen el mismo hardware. Elige el que se lea mejor
 
 ## Verifica el arreglo
 
-Después, corre la simulación. En la forma de onda:
+Después, ejecuta la simulación. En la forma de onda:
 
 - Para `15–25 µs` (cuando `enable = '1'` y `a=b='1'`): `y = '1'`.
 - En cualquier otro momento: `y = '0'`.

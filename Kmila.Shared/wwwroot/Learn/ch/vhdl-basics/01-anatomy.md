@@ -8,7 +8,7 @@
 library IEEE;                          -- 1. 库
 use IEEE.STD_LOGIC_1164.ALL;           -- 2. 用到的 package
 
-entity my_design is                    -- 3. entity(“头部")
+entity my_design is                    -- 3. entity(“头部”)
   port (
     a : in  std_logic;
     b : in  std_logic;
@@ -16,7 +16,7 @@ entity my_design is                    -- 3. entity(“头部")
   );
 end entity my_design;
 
-architecture rtl of my_design is       -- 4. architecture(“主体")
+architecture rtl of my_design is       -- 4. architecture(“主体”)
 begin
   y <= a and b;
 end architecture rtl;

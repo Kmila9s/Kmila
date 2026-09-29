@@ -72,7 +72,7 @@ flowchart TD
     Arch --> Conc["concurrente: y &lt;= a and b"]
 ```
 
-Al pulsar **Build**, los puertos se vuelven entradas en la pestaña **Puertos** del dock, la entidad aparece en **Entidades**, y las asignaciones dentro de la arquitectura se convierten en el cableado que ejecuta el simulador.
+Al pulsar **Compilar**, los puertos se vuelven entradas en la pestaña **Puertos** del dock, la entidad aparece en **Entidades**, y las asignaciones dentro de la arquitectura se convierten en el cableado que ejecuta el simulador.
 
 ## Convenciones de nombres
 

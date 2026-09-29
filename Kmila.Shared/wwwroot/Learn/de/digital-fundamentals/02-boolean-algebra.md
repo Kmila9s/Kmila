@@ -8,9 +8,9 @@ Die gute Nachricht: du musst dir nur eine Handvoll Identitäten merken. Damit ka
 
 | Op | Symbol (Mathe) | Symbol (VHDL) | Liest sich als |
 |----|----------------|---------------|----------------|
-| AND | · oder Aneinanderreihung | `and` | „A und B" |
-| OR  | +                  | `or`  | „A oder B" |
-| NOT | Überstrich (`Ā`)   | `not` | „nicht A"  |
+| AND | · oder Aneinanderreihung | `and` | „A und B“ |
+| OR  | +                  | `or`  | „A oder B“ |
+| NOT | Überstrich (`Ā`)   | `not` | „nicht A“  |
 
 Wahrheitstabellen der binären Operatoren:
 
@@ -66,7 +66,7 @@ not(A · B) = Ā + B̄
 not(A + B) = Ā · B̄
 ```
 
-De Morgan lässt dich ein NAND in „OR der Komplemente" verwandeln, oder ein NOR in „AND der Komplemente", oder lange NOT-Striche kürzen. Jede FPGA-Toolchain nutzt sie ständig bei der Optimierung.
+De Morgan lässt dich ein NAND in „OR der Komplemente“ verwandeln, oder ein NOR in „AND der Komplemente“, oder lange NOT-Striche kürzen. Jede FPGA-Toolchain nutzt sie ständig bei der Optimierung.
 
 ## Eine durchgerechnete Vereinfachung
 

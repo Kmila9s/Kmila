@@ -22,7 +22,10 @@ public sealed record SchematicCellColours(string Body, string Stroke, string Lab
 /// </remarks>
 public sealed class SchematicColourPalette
 {
+    /// <summary>Colour triple per cell, keyed by cell identifier.</summary>
     public Dictionary<string, SchematicCellColours> Cells { get; init; } = new();
+    /// <summary>Colour per port, keyed by port name.</summary>
     public Dictionary<string, string> Ports { get; init; } = new();
+    /// <summary>Colour per wire/net, keyed by wire identifier.</summary>
     public Dictionary<string, string> Wires { get; init; } = new();
 }

@@ -28,6 +28,7 @@ public class AppLogStore
     private readonly object _lock = new();
     private const int MaxEntries = 2000;
 
+    /// <summary>Fires when the log changes in bulk so consumers can re-render.</summary>
     public event Action? OnChange;
 
     /// <summary>

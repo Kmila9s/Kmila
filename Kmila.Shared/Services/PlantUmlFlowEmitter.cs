@@ -48,7 +48,7 @@ public static class PlantUmlFlowEmitter
             try { EmitEntity(sb, entity, indent: 0); }
             catch (Exception ex)
             {
-                sb.AppendLine($":⚠ render error: {EscapeLabel(ex.Message)};");
+                sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $":⚠ render error: {EscapeLabel(ex.Message)};");
             }
         }
 
@@ -64,7 +64,7 @@ public static class PlantUmlFlowEmitter
         string archName = arch != null ? (TryGetString(arch, "Name") ?? "(arch)") : "(arch)";
 
         var pad = Pad(indent);
-        sb.AppendLine($"{pad}partition \"entity {EscapeQuoted(entityName)} / architecture {EscapeQuoted(archName)}\" {{");
+        sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{pad}partition \"entity {EscapeQuoted(entityName)} / architecture {EscapeQuoted(archName)}\" {{");
 
         var archTasks = arch != null ? TryGetProp(arch, "Tasks") as IEnumerable : null;
         var taskList = new List<object>();
@@ -76,20 +76,20 @@ public static class PlantUmlFlowEmitter
         // the fork wrapper for a cleaner output.
         if (taskList.Count > 1)
         {
-            sb.AppendLine($"{pad}  fork");
+            sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{pad}  fork");
             for (int i = 0; i < taskList.Count; i++)
             {
-                if (i > 0) sb.AppendLine($"{pad}  fork again");
+                if (i > 0) sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{pad}  fork again");
                 EmitArchTask(sb, taskList[i], i + 1, indent + 2);
             }
-            sb.AppendLine($"{pad}  end fork");
+            sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{pad}  end fork");
         }
         else if (taskList.Count == 1)
         {
             EmitArchTask(sb, taskList[0], 1, indent + 1);
         }
 
-        sb.AppendLine($"{pad}}}");
+        sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{pad}}}");
     }
 
     private static void EmitArchTask(StringBuilder sb, object task, int idx, int indent)
@@ -112,12 +112,12 @@ public static class PlantUmlFlowEmitter
                         if (!string.IsNullOrEmpty(n)) names.Add(n!);
                     }
                     if (names.Count > 0)
-                        label.Append($" (sensitive to: {string.Join(", ", names)})");
+                        label.Append(System.Globalization.CultureInfo.InvariantCulture, $" (sensitive to: {string.Join(", ", names)})");
                 }
             }
             catch { }
 
-            sb.AppendLine($"{pad}partition \"{EscapeQuoted(label.ToString())}\" {{");
+            sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{pad}partition \"{EscapeQuoted(label.ToString())}\" {{");
             var body = TryGetProp(task, "Tasks") as IEnumerable;
             if (body != null)
             {
@@ -128,11 +128,11 @@ public static class PlantUmlFlowEmitter
                     EmitSequential(sb, sub, j, indent + 1);
                 }
             }
-            sb.AppendLine($"{pad}}}");
+            sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{pad}}}");
             return;
         }
 
-        sb.AppendLine($"{pad}:{EscapeLabel(DescribeConcurrent(task, typeName))};");
+        sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{pad}:{EscapeLabel(DescribeConcurrent(task, typeName))};");
     }
 
     private static void EmitSequential(StringBuilder sb, object task, int idx, int indent)
@@ -153,13 +153,13 @@ public static class PlantUmlFlowEmitter
             return;
         }
 
-        if (typeName.EndsWith("LoopStructure") || typeName == "GenerateBlock")
+        if (typeName.EndsWith("LoopStructure", System.StringComparison.Ordinal) || typeName == "GenerateBlock")
         {
             EmitLoop(sb, task, typeName, indent);
             return;
         }
 
-        sb.AppendLine($"{pad}:{EscapeLabel(DescribeConcurrent(task, typeName))};");
+        sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{pad}:{EscapeLabel(DescribeConcurrent(task, typeName))};");
     }
 
     private static void EmitIf(StringBuilder sb, object task, int indent)
@@ -175,7 +175,7 @@ public static class PlantUmlFlowEmitter
 
         if (branches.Count == 0)
         {
-            sb.AppendLine($"{pad}:if (empty);");
+            sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{pad}:if (empty);");
             return;
         }
 
@@ -193,16 +193,16 @@ public static class PlantUmlFlowEmitter
 
             if (first)
             {
-                sb.AppendLine($"{pad}if (\"{EscapeQuoted(condLabel)}\") then (yes)");
+                sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{pad}if (\"{EscapeQuoted(condLabel)}\") then (yes)");
                 first = false;
             }
             else if (isElse)
             {
-                sb.AppendLine($"{pad}else (no)");
+                sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{pad}else (no)");
             }
             else
             {
-                sb.AppendLine($"{pad}elseif (\"{EscapeQuoted(condLabel)}\") then (yes)");
+                sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{pad}elseif (\"{EscapeQuoted(condLabel)}\") then (yes)");
             }
 
             var body = TryGetProp(br, "Tasks") as IEnumerable;
@@ -213,8 +213,8 @@ public static class PlantUmlFlowEmitter
             }
         }
 
-        if (!hasElse) sb.AppendLine($"{pad}else (no)");
-        sb.AppendLine($"{pad}endif");
+        if (!hasElse) sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{pad}else (no)");
+        sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{pad}endif");
     }
 
     private static void EmitCase(StringBuilder sb, object task, int indent)
@@ -225,7 +225,7 @@ public static class PlantUmlFlowEmitter
                ?? TryGetString(task, "Expression")
                ?? TryGetString(task, "RawData")
                ?? "?";
-        sb.AppendLine($"{pad}switch (\"{EscapeQuoted(Truncate(sel.Trim(), 48))}\")");
+        sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{pad}switch (\"{EscapeQuoted(Truncate(sel.Trim(), 48))}\")");
 
         var cases = TryGetProp(task, "Branches") as IEnumerable
                  ?? TryGetProp(task, "Cases") as IEnumerable;
@@ -236,7 +236,7 @@ public static class PlantUmlFlowEmitter
             {
                 c++;
                 var label = TryGetString(ce, "Label") ?? $"when #{c}";
-                sb.AppendLine($"{pad}case (\"{EscapeQuoted(Truncate(label.Trim(), 32))}\")");
+                sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{pad}case (\"{EscapeQuoted(Truncate(label.Trim(), 32))}\")");
                 var body = TryGetProp(ce, "Tasks") as IEnumerable;
                 if (body != null)
                 {
@@ -245,7 +245,7 @@ public static class PlantUmlFlowEmitter
                 }
             }
         }
-        sb.AppendLine($"{pad}endswitch");
+        sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{pad}endswitch");
     }
 
     private static void EmitLoop(StringBuilder sb, object task, string typeName, int indent)
@@ -259,14 +259,14 @@ public static class PlantUmlFlowEmitter
             "GenerateBlock"       => "generate",
             _                     => "loop"
         };
-        sb.AppendLine($"{pad}repeat :{EscapeLabel(keyword)};");
+        sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{pad}repeat :{EscapeLabel(keyword)};");
         var body = TryGetProp(task, "Tasks") as IEnumerable;
         if (body != null)
         {
             int j = 0;
             foreach (var t in body) { j++; EmitSequential(sb, t, j, indent + 1); }
         }
-        sb.AppendLine($"{pad}repeat while (\"{EscapeQuoted(keyword)} iter\")");
+        sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{pad}repeat while (\"{EscapeQuoted(keyword)} iter\")");
     }
 
     private static string DescribeConcurrent(object task, string typeName)
@@ -349,8 +349,8 @@ public static class PlantUmlFlowEmitter
     private static string EscapeLabel(string s)
     {
         if (string.IsNullOrEmpty(s)) return string.Empty;
-        s = s.Replace("\r", "").Replace("\n", " ").TrimEnd(';').Trim();
-        return s.Replace(";", ",");
+        s = s.Replace("\r", "", System.StringComparison.Ordinal).Replace("\n", " ", System.StringComparison.Ordinal).TrimEnd(';').Trim();
+        return s.Replace(";", ",", System.StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -362,7 +362,7 @@ public static class PlantUmlFlowEmitter
     private static string EscapeQuoted(string s)
     {
         if (string.IsNullOrEmpty(s)) return string.Empty;
-        return s.Replace("\r", "").Replace("\n", " ").Replace("\"", "'").Trim();
+        return s.Replace("\r", "", System.StringComparison.Ordinal).Replace("\n", " ", System.StringComparison.Ordinal).Replace("\"", "'", System.StringComparison.Ordinal).Trim();
     }
 
     private static string Pad(int indent) => indent <= 0 ? string.Empty : new string(' ', indent * 2);
