@@ -14,7 +14,7 @@ namespace Kmila;
 /// Entry point class for the Kmila Blazor Web application.
 /// Configures services, middleware, and the HTTP request pipeline.
 /// </summary>
-public class Program
+public sealed class Program
 {
     /// <summary>
     /// Main entry point for the Blazor Web application.
@@ -170,6 +170,7 @@ public class Program
 
             return new Traductor(async path =>
             {
+                await Task.CompletedTask;
                 // path comes as "Dictionaries/{lang}.json"
                 var pathsToTry = new List<string>();
 
@@ -231,6 +232,7 @@ public class Program
                                  .CreateLogger<LessonCatalog>();
             return new LessonCatalog(async path =>
             {
+                await Task.CompletedTask;
                 var pathsToTry = new List<string>
                 {
                     Path.Combine(env.ContentRootPath, "..", "Kmila.Shared", "wwwroot", path),
@@ -269,6 +271,7 @@ public class Program
                                  .CreateLogger<ConceptCatalog>();
             return new ConceptCatalog(async path =>
             {
+                await Task.CompletedTask;
                 var pathsToTry = new List<string>
                 {
                     Path.Combine(env.ContentRootPath, "..", "Kmila.Shared", "wwwroot", path),
@@ -320,6 +323,7 @@ public class Program
                                  .CreateLogger<Kmila.Shared.Services.Practice.PracticeCatalog>();
             return new Kmila.Shared.Services.Practice.PracticeCatalog(async path =>
             {
+                await Task.CompletedTask;
                 var pathsToTry = new List<string>
                 {
                     Path.Combine(env.ContentRootPath, "..", "Kmila.Shared", "wwwroot", path),
@@ -358,6 +362,7 @@ public class Program
                                  .CreateLogger<ProjectTemplateService>();
             Func<string, Task<Stream>> open = async path =>
             {
+                await Task.CompletedTask;
                 var pathsToTry = new List<string>
                 {
                     Path.Combine(env.ContentRootPath, "..", "Kmila.Shared", "wwwroot", path),

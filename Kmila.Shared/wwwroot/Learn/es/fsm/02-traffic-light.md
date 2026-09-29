@@ -6,7 +6,7 @@ Un semáforo es el FSM Moore canónico: tres estados (`RED`, `GREEN`, `YELLOW`),
 
 El ejemplo sigue el **patrón de dos procesos**:
 
-- Proceso 1 es el **registro de estado** — un D flip-flop clásico que guarda `state` y corre un contador de permanencia.
+- Proceso 1 es el **registro de estado** — un D flip-flop clásico que guarda `state` y lleva un contador de permanencia.
 - Proceso 2 es la **lógica de siguiente estado** — puramente combinacional, decide `next_state` dado el actual.
 - Las asignaciones de salida (al final de la arquitectura) son salidas Moore combinacionales — dependen solo de `state`.
 
@@ -63,7 +63,7 @@ yellow <= '1' when state = S_YELLOW else '0';
 
 ## Qué hace el ejemplo
 
-El reloj corre ~400 µs. Cada 8 ciclos (7 de espera + 1 de transición) la FSM avanza. Verás tres ondas cuadradas rotando: `red` alto 8 ticks, luego `green` 8, luego `yellow`, y vuelta a `red`.
+El reloj avanza ~400 µs. Cada 8 ciclos (7 de espera + 1 de transición) la FSM avanza. Verás tres ondas cuadradas rotando: `red` alto 8 ticks, luego `green` 8, luego `yellow`, y vuelta a `red`.
 
 ## Tu turno
 

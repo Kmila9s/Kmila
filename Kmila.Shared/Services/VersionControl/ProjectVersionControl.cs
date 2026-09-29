@@ -23,8 +23,16 @@ public class ProjectVersionControl : IProjectVersionControl
     private readonly ILogger<ProjectVersionControl> _logger;
     private readonly Task _initTask;
 
+    /// <summary>True when the most recent remote call hit the GitHub rate limit.</summary>
     public bool LastRateLimited => _remote.LastRateLimited;
 
+    /// <summary>Creates the version-control engine and kicks off database initialization.</summary>
+    /// <param name="db">Application database used for links and the local snapshot mirror.</param>
+    /// <param name="files">Project file repository for the working tree.</param>
+    /// <param name="projects">Project repository.</param>
+    /// <param name="remote">GitHub remote used to build commits and read refs/trees/blobs.</param>
+    /// <param name="auth">GitHub authentication state.</param>
+    /// <param name="logger">Optional logger; a null logger is used when omitted.</param>
     public ProjectVersionControl(
         ApplicationDbContext db, ProjectFiles files, Projects projects,
         GitHubRemote remote, GitHubAuth auth, ILogger<ProjectVersionControl>? logger = null)
@@ -40,6 +48,9 @@ public class ProjectVersionControl : IProjectVersionControl
 
     // ─── Link management ─────────────────────────────────────────
 
+    /// <summary>Returns the repository link for a project, or null when the project is not linked.</summary>
+    /// <param name="projectId">The project id.</param>
+    /// <returns>The link record, or null.</returns>
     public async Task<VcProjectLink?> GetLinkAsync(int projectId)
     {
         await _initTask;
@@ -54,6 +65,8 @@ public class ProjectVersionControl : IProjectVersionControl
         else { link.Id = existing.Id; await _db.UpdateAsync(link); }
     }
 
+    /// <summary>Removes a project's repository link and its local snapshot mirror.</summary>
+    /// <param name="projectId">The project id.</param>
     public async Task UnlinkAsync(int projectId)
     {
         await _initTask;
@@ -61,6 +74,12 @@ public class ProjectVersionControl : IProjectVersionControl
         await _db.ExecuteAsync("DELETE FROM VcSnapshotFile WHERE ProjectId = ?", projectId);
     }
 
+    /// <summary>Links a project to an existing repository and seeds the baseline by pulling (remote wins).</summary>
+    /// <param name="projectId">The project id.</param>
+    /// <param name="owner">Repository owner.</param>
+    /// <param name="repo">Repository name.</param>
+    /// <param name="branch">Branch to track; defaults to "main" when blank.</param>
+    /// <returns>The outcome of the operation.</returns>
     public async Task<VcResult> LinkExistingAsync(int projectId, string owner, string repo, string branch)
     {
         await _initTask;
@@ -79,6 +98,12 @@ public class ProjectVersionControl : IProjectVersionControl
         return await PullAsync(projectId, force: true);
     }
 
+    /// <summary>Creates a new GitHub repository and links the project to it.</summary>
+    /// <param name="projectId">The project id.</param>
+    /// <param name="repoName">Name for the new repository.</param>
+    /// <param name="description">Optional repository description.</param>
+    /// <param name="isPrivate">True to create a private repository (requires the 'repo' scope).</param>
+    /// <returns>The outcome of the operation.</returns>
     public async Task<VcResult> CreateAndLinkAsync(int projectId, string repoName, string? description, bool isPrivate)
     {
         await _initTask;
@@ -106,6 +131,9 @@ public class ProjectVersionControl : IProjectVersionControl
 
     // ─── Status / diff ───────────────────────────────────────────
 
+    /// <summary>Computes the working-tree status by comparing the project files against the local snapshot.</summary>
+    /// <param name="projectId">The project id.</param>
+    /// <returns>The set of added, modified, and deleted files.</returns>
     public async Task<VcStatus> GetStatusAsync(int projectId)
     {
         await _initTask;
@@ -131,6 +159,10 @@ public class ProjectVersionControl : IProjectVersionControl
         return status;
     }
 
+    /// <summary>Produces a unified diff for one file between the snapshot and the working tree.</summary>
+    /// <param name="projectId">The project id.</param>
+    /// <param name="relativePath">Project-relative path of the file to diff.</param>
+    /// <returns>The unified diff text, or an empty string when there is nothing to show.</returns>
     public async Task<string> GetFileDiffAsync(int projectId, string relativePath)
     {
         await _initTask;
@@ -147,6 +179,11 @@ public class ProjectVersionControl : IProjectVersionControl
 
     // ─── Commit / push ───────────────────────────────────────────
 
+    /// <summary>Commits the working tree and pushes it to the linked repository, uploading only changed blobs.</summary>
+    /// <param name="projectId">The project id.</param>
+    /// <param name="message">Commit message; a timestamped default is used when blank.</param>
+    /// <param name="force">True to overwrite the remote branch even when it has advanced since the last sync.</param>
+    /// <returns>The outcome of the operation.</returns>
     public async Task<VcResult> CommitAndPushAsync(int projectId, string message, bool force = false)
     {
         await _initTask;
@@ -207,6 +244,10 @@ public class ProjectVersionControl : IProjectVersionControl
 
     // ─── Pull ────────────────────────────────────────────────────
 
+    /// <summary>Pulls the latest remote commit into the project, mirroring its tree into the working files.</summary>
+    /// <param name="projectId">The project id.</param>
+    /// <param name="force">True to overwrite local changes (remote wins); otherwise a dirty tree yields a conflict.</param>
+    /// <returns>The outcome of the operation.</returns>
     public async Task<VcResult> PullAsync(int projectId, bool force = false)
     {
         await _initTask;
@@ -282,6 +323,9 @@ public class ProjectVersionControl : IProjectVersionControl
 
     // ─── History / auto-commit ───────────────────────────────────
 
+    /// <summary>Returns the commit history for the linked branch, or null when not linked or not signed in.</summary>
+    /// <param name="projectId">The project id.</param>
+    /// <returns>The list of commits, or null.</returns>
     public async Task<List<VcCommit>?> GetHistoryAsync(int projectId)
     {
         await _initTask;
@@ -290,6 +334,9 @@ public class ProjectVersionControl : IProjectVersionControl
         return await _remote.GetCommitsAsync(link.Owner, link.Repo, link.Branch);
     }
 
+    /// <summary>Enables or disables auto-commit for a linked project.</summary>
+    /// <param name="projectId">The project id.</param>
+    /// <param name="enabled">True to enable auto-commit.</param>
     public async Task SetAutoCommitAsync(int projectId, bool enabled)
     {
         await _initTask;
@@ -299,6 +346,9 @@ public class ProjectVersionControl : IProjectVersionControl
         await UpsertLinkAsync(link);
     }
 
+    /// <summary>Commits and pushes automatically when the project is linked, signed in, and auto-commit is on; otherwise a no-op.</summary>
+    /// <param name="projectId">The project id.</param>
+    /// <returns>The outcome of the operation.</returns>
     public async Task<VcResult> TryAutoCommitAsync(int projectId)
     {
         var link = await GetLinkAsync(projectId);

@@ -1,8 +1,8 @@
 # Projet : ALU 8 bits avec drapeaux
 
-Une **Unité Arithmétique et Logique** (ALU) est le cœur battant de tout CPU. Donne-lui deux opérandes et un opcode ; elle te rend un résultat et une poignée de drapeaux qui décrivent ce qui s'est passé (débordement ? résultat nul ? etc.).
+Une **Unité Arithmétique et Logique** (ALU) est le cœur battant de tout CPU. Donne-lui deux opérandes et un opcode ; elle vous rend un résultat et une poignée de drapeaux qui décrivent ce qui s'est passé (débordement ? résultat nul ? etc.).
 
-## Ce que tu construis
+## Ce que vous construisez
 
 Une ALU 8 bits avec les opérations suivantes :
 
@@ -20,15 +20,15 @@ Une ALU 8 bits avec les opérations suivantes :
 Plus deux drapeaux de sortie :
 
 - `zero` — haut quand `y` est entièrement à zéro
-- `carry` — la retenue sortante d'ADD/SUB ; pilote `'0'` pour tout le reste
+- `carry` — la retenue sortante d'ADD/SUB ; pilotez `'0'` pour tout le reste
 
-## Ce que le squelette te donne
+## Ce que le squelette vous donne
 
-Le starter déclare l'entity, les signaux `result` et `cout`, et un squelette `process(op, a, b)` qui gère déjà ADD et SUB. Ton boulot : remplir les six autres branches du `case`.
+Le starter déclare l'entity, les signaux `result` et `cout`, et un squelette `process(op, a, b)` qui gère déjà ADD et SUB. Votre boulot : remplir les six autres branches du `case`.
 
 ## Indices
 
-- Pour **AND / OR / XOR**, c'est une ligne chacune — affecte juste le résultat bit-à-bit :
+- Pour **AND / OR / XOR**, c'est une ligne chacune — affectez juste le résultat bit-à-bit :
 
   ```vhdl
   when "010" => result <= a and b;
@@ -41,9 +41,9 @@ Le starter déclare l'entity, les signaux `result` et `cout`, et un squelette `p
   when "110" => result <= '0' & a(7 downto 1);
   ```
 
-- Pour **PASS_A**, copie simplement `a` dans `result`.
+- Pour **PASS_A**, copiez simplement `a` dans `result`.
 
-Pense à piloter `cout <= '0'` pour les ops logiques — tu le fais une fois en haut du process, donc toute branche qui ne le surcharge pas hérite du défaut. Pratique, mais ça veut dire qu'il faut être explicite quand une branche **veut** une retenue non nulle.
+Pensez à piloter `cout <= '0'` pour les ops logiques — vous le faites une fois en haut du process, donc toute branche qui ne le surcharge pas hérite du défaut. Pratique, mais ça veut dire qu'il faut être explicite quand une branche **veut** une retenue non nulle.
 
 ## Critères d'acceptation
 
@@ -59,8 +59,8 @@ Avec les stimuli de la config compagnon :
 
 ## Pour aller plus loin
 
-- Ajoute un drapeau **signed** (résultat négatif pour SUB en complément à deux).
-- Ajoute un opcode **rotate** — comme SHL mais le bit de poids fort revient au bit 0.
-- Ajoute un opcode **multiply** produisant un résultat 16 bits sur deux ports de sortie séparés. La plupart des petits FPGAs ont des blocs DSP dédiés pour ça — surveille l'utilisation lors d'une nouvelle synthèse.
+- Ajoutez un drapeau **signed** (résultat négatif pour SUB en complément à deux).
+- Ajoutez un opcode **rotate** — comme SHL mais le bit de poids fort revient au bit 0.
+- Ajoutez un opcode **multiply** produisant un résultat 16 bits sur deux ports de sortie séparés. La plupart des petits FPGAs ont des blocs DSP dédiés pour ça — surveillez l'utilisation lors d'une nouvelle synthèse.
 
-Cette ALU est une brique directe pour le projet CPU au niveau Expert — garde le design propre, tu vas le brancher là-bas.
+Cette ALU est une brique directe pour le projet CPU au niveau Expert — gardez le design propre, vous allez le brancher là-bas.

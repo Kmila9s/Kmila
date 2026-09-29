@@ -11,6 +11,7 @@ namespace Kmila.Shared.Pages;
 // ProjectsView.razor without buying anything — resources keep the file
 // lean while matching how the other examples ship (all-in-project).
 
+/// <summary>Projects gallery page; this partial supplies the capstone calculator example's embedded VHDL corpus.</summary>
 public partial class ProjectsView
 {
     // File order matters for the Editor's file list. `calc_top.vhd` is

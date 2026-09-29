@@ -93,13 +93,13 @@ public class Projects : IRepository<Project>
                 return false;
             }
             // Ensure no other project is using the same base path (case-insensitive)
-            if ((await _applicationDbContext.Projects.ToListAsync()).Any(p => p.BasePath.ToLower() == project.BasePath.ToLower() && p.Id != project.Id))
+            if ((await _applicationDbContext.Projects.ToListAsync()).Any(p => p.BasePath.ToLowerInvariant() == project.BasePath.ToLowerInvariant() && p.Id != project.Id))
             {
                 LastError = "Path already in use";
                 return false;
             }
             // If the base path changed, move the project directory on disk
-            if (oldProject.BasePath.ToLower() != project.BasePath.ToLower())
+            if (oldProject.BasePath.ToLowerInvariant() != project.BasePath.ToLowerInvariant())
             {
                 if (!Directory.Exists(oldProject.BasePath))
                 {
@@ -301,5 +301,6 @@ public class Projects : IRepository<Project>
     {
         _cts?.Cancel();
         _cts?.Dispose();
+        GC.SuppressFinalize(this);
     }
 }

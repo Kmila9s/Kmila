@@ -4,7 +4,7 @@ La logique combinatoire en VHDL s'écrit avec des instructions concurrentes — 
 
 ## `when/else` — conditionnel
 
-Bien quand tu as une liste priorisée de conditions, ou quand chaque branche teste un signal différent :
+Bien quand vous avez une liste priorisée de conditions, ou quand chaque branche teste un signal différent :
 
 ```vhdl
 y <= '0' when reset = '1' else
@@ -17,7 +17,7 @@ La première condition vraie gagne. L'ordre compte — ça compile vers un **MUX
 
 ## `with/select` — sélectif
 
-Bien quand tu branches sur une seule expression (comme un `switch` logiciel) :
+Bien quand vous branchez sur une seule expression (comme un `switch` logiciel) :
 
 ```vhdl
 with mode select
@@ -32,14 +32,14 @@ Tous les cas comparent au même signal (`mode`), et `when others` est obligatoir
 
 ## Lequel choisir ?
 
-- **Même signal, plusieurs motifs :** `with/select` se lit comme une table de vérité. Prends-le.
+- **Même signal, plusieurs motifs :** `with/select` se lit comme une table de vérité. Prenez-le.
 - **Signaux différents, logique prioritaire :** `when/else`. Naturel.
 - **Sortie de synthèse :** les deux produisent à peu près les mêmes portes sur un FPGA moderne — choisir la forme la plus claire au niveau source est presque toujours la bonne décision.
 
 ## Un petit piège
 
-Les deux formes exigent que `y` soit assigné dans **chaque** scénario. Si tu oublies le `else` final d'un `when/else`, ou si tu sautes le `when others` d'un `with/select`, le compilateur t'avertit — et le synthétiseur peut inférer un verrou pour « se souvenir » de la dernière valeur, ce qui n'est presque jamais ce que tu veux. C'est le même piège du verrou que tu reverras dans l'exercice fix-it du module séquentiel.
+Les deux formes exigent que `y` soit assigné dans **chaque** scénario. Si vous oubliez le `else` final d'un `when/else`, ou si vous sautez le `when others` d'un `with/select`, le compilateur vous avertit — et le synthétiseur peut inférer un verrou pour « se souvenir » de la dernière valeur, ce qui n'est presque jamais ce que vous voulez. C'est le même piège du verrou que vous reverrez dans l'exercice fix-it du module séquentiel.
 
 ## Où ça apparaît ensuite
 
-Tu utiliseras `with/select` dans le décodeur 3 vers 8 juste après cette leçon, et `when/else` un peu partout dans le FSM de feu tricolore plus tard. Tous deux sont le pain quotidien du VHDL.
+Vous utiliserez `with/select` dans le décodeur 3 vers 8 juste après cette leçon, et `when/else` un peu partout dans le FSM de feu tricolore plus tard. Tous deux sont le pain quotidien du VHDL.

@@ -8,7 +8,7 @@ Jede VHDL-Datei hat dieselben vier Abschnitte, immer in derselben Reihenfolge. S
 library IEEE;                          -- 1. Bibliotheken
 use IEEE.STD_LOGIC_1164.ALL;           -- 2. genutzte Packages
 
-entity my_design is                    -- 3. Entity (der „Header")
+entity my_design is                    -- 3. Entity (der „Header“)
   port (
     a : in  std_logic;
     b : in  std_logic;
@@ -16,7 +16,7 @@ entity my_design is                    -- 3. Entity (der „Header")
   );
 end entity my_design;
 
-architecture rtl of my_design is       -- 4. Architecture (der „Body")
+architecture rtl of my_design is       -- 4. Architecture (der „Body“)
 begin
   y <= a and b;
 end architecture rtl;

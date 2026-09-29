@@ -51,6 +51,6 @@ Zum Lernen ist Async leichter zu verstehen. Für Produktion: lies die Vorgaben d
 
 ## Du bist dran
 
-- Füge einen **Enable**-Eingang hinzu. `q` soll nur an der steigenden Flanke updaten, wenn `enable = '1'`.
+- Füge einen **Enable**-Eingang hinzu. `q` soll den Wert nur an der steigenden Flanke übernehmen, wenn `enable = '1'`.
 - Lass es einen **4-Bit-Bus** registrieren statt eines einzelnen Bits. Ändere `d` und `q` zu `std_logic_vector(3 downto 0)` und passe den Reset-Wert auf `(others => '0')` an.
 - Füge einen `q_not`-Ausgang hinzu, der immer das Inverse von `q` ist. Bonus: verkable `q_not` zurück in `d` und beobachte einen Teiler-durch-zwei-Takt.

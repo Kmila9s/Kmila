@@ -13,7 +13,7 @@ y <= '0' when reset = '1' else
      'Z';
 ```
 
-Die erste passende Bedingung gewinnt. Die Reihenfolge zählt — es compiliert zu einem **Prioritäts-MUX**: die oberste Bedingung hat den direktesten Pfad zu `y`.
+Die erste passende Bedingung gewinnt. Die Reihenfolge zählt — es kompiliert zu einem **Prioritäts-MUX**: die oberste Bedingung hat den direktesten Pfad zu `y`.
 
 ## `with/select` — selektiv
 
@@ -28,7 +28,7 @@ with mode select
     'Z' when others;
 ```
 
-Alle Fälle vergleichen gegen dasselbe Signal (`mode`), und `when others` ist Pflicht, um jedes mögliche Muster abzudecken. Dieser Stil compiliert zu einem **balancierten MUX** — kein Zweig wird bevorzugt.
+Alle Fälle vergleichen gegen dasselbe Signal (`mode`), und `when others` ist Pflicht, um jedes mögliche Muster abzudecken. Dieser Stil kompiliert zu einem **balancierten MUX** — kein Zweig wird bevorzugt.
 
 ## Welche wählen?
 
@@ -38,7 +38,7 @@ Alle Fälle vergleichen gegen dasselbe Signal (`mode`), und `when others` ist Pf
 
 ## Eine kleine Falle
 
-Beide Formen verlangen, dass `y` in **jedem** Szenario zugewiesen wird. Vergisst du das finale `else` bei `when/else` oder lässt `when others` bei `with/select` weg, warnt der Compiler — und der Synthesizer kann einen Latch ableiten, um den letzten Wert zu „merken", was fast nie gewünscht ist. Es ist dieselbe Latch-Falle, die du in der Fix-it-Übung des sequentiellen Moduls wiedersiehst.
+Beide Formen verlangen, dass `y` in **jedem** Szenario zugewiesen wird. Vergisst du das finale `else` bei `when/else` oder lässt `when others` bei `with/select` weg, warnt der Compiler — und der Synthesizer kann einen Latch ableiten, um den letzten Wert zu „merken“, was fast nie gewünscht ist. Es ist dieselbe Latch-Falle, die du in der Fix-it-Übung des sequentiellen Moduls wiedersiehst.
 
 ## Wo das als nächstes auftaucht
 

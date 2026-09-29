@@ -21,6 +21,7 @@ namespace Kmila.Shared.Services.Api;
 // Cadence: 5-minute tick. First run fires 30 s after startup so the initial
 // disk sweep runs early enough to matter, but late enough that healthy new
 // projects aren't racy with it.
+/// <summary>Background service that periodically sweeps expired and orphaned /api/v1 sandbox projects.</summary>
 public sealed class SandboxJanitor : BackgroundService
 {
     private static readonly TimeSpan Interval           = TimeSpan.FromMinutes(5);
@@ -32,11 +33,17 @@ public sealed class SandboxJanitor : BackgroundService
     private readonly SandboxProjectStore _store;
     private readonly ILogger<SandboxJanitor> _log;
 
+    /// <summary>Creates the janitor with its target store and logger.</summary>
+    /// <param name="store">The sandbox project store to sweep.</param>
+    /// <param name="log">Logger for sweep activity and errors.</param>
     public SandboxJanitor(SandboxProjectStore store, ILogger<SandboxJanitor> log)
     {
         _store = store; _log = log;
     }
 
+    /// <summary>Runs the periodic sweep loop until cancellation.</summary>
+    /// <param name="stoppingToken">Token signaled when the host is shutting down.</param>
+    /// <returns>A task that completes when the loop stops.</returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         try { await Task.Delay(InitialDelay, stoppingToken); }

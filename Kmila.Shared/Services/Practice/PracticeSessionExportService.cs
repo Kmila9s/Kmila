@@ -27,6 +27,9 @@ public sealed class PracticeSessionExportService
     private readonly PracticeAttemptStore _attempts;
     private readonly ILogger<PracticeSessionExportService> _logger;
 
+    /// <summary>Creates the export service with the attempt store and an optional logger.</summary>
+    /// <param name="attempts">Store providing practice attempt data to export.</param>
+    /// <param name="logger">Optional logger; a null logger is used when omitted.</param>
     public PracticeSessionExportService(
         PracticeAttemptStore attempts,
         ILogger<PracticeSessionExportService>? logger = null)
@@ -46,7 +49,7 @@ public sealed class PracticeSessionExportService
         string lang,
         PracticeSessionExportRequest request)
     {
-        if (exercise is null) throw new ArgumentNullException(nameof(exercise));
+        ArgumentNullException.ThrowIfNull(exercise);
 
         var attemptsDesc = await _attempts.GetAttemptsAsync(exercise.Id, limit: PracticeAttemptStore.MaxAttemptsPerExercise);
         if (attemptsDesc.Count == 0) return null;
@@ -331,7 +334,7 @@ public sealed class PracticeSessionExportService
             for (int i = 0; i < attempts.Count; i++)
             {
                 var a = attempts[i];
-                var ord = (i + 1).ToString("D3");
+                var ord = (i + 1).ToString("D3", CultureInfo.InvariantCulture);
                 var verd = a.Verdict.ToString().ToLowerInvariant();
                 var ts = a.SubmittedAt.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
                 WriteText(zip, $"attempts/attempt-{ord}-{ts}-{verd}.vhd", a.CodeSnapshot);
@@ -374,12 +377,12 @@ public sealed class PracticeSessionExportService
     }
 
     private static string MdEscape(string s)
-        => string.IsNullOrEmpty(s) ? "" : s.Replace("|", "\\|").Replace("\n", " ").Replace("\r", "");
+        => string.IsNullOrEmpty(s) ? "" : s.Replace("|", "\\|", System.StringComparison.Ordinal).Replace("\n", " ", System.StringComparison.Ordinal).Replace("\r", "", System.StringComparison.Ordinal);
 
     private static string MdInline(string? s)
     {
         if (string.IsNullOrEmpty(s)) return "—";
-        return "`" + s.Replace("`", "ʼ").Replace("|", "\\|").Replace("\n", " ").Replace("\r", "") + "`";
+        return "`" + s.Replace("`", "ʼ", System.StringComparison.Ordinal).Replace("|", "\\|", System.StringComparison.Ordinal).Replace("\n", " ", System.StringComparison.Ordinal).Replace("\r", "", System.StringComparison.Ordinal) + "`";
     }
 
     private static string Truncate(string s, int max)

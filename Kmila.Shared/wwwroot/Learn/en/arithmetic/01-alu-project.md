@@ -43,7 +43,7 @@ The starter declares the entity, the `result` and `cout` signals, and a `process
 
 - For **PASS_A**, just copy `a` into `result`.
 
-Remember to drive `cout <= '0'` for logic ops — you already do it once at the top of the process, which means any branch that doesn't override it inherits that default. Nice, but means you have to be explicit when a branch **does** want a non-zero carry.
+Remember to drive `cout <= '0'` for logic ops — you already do it once at the top of the process, which means any branch that doesn't override it inherits that default. Handy, but it means you have to be explicit when a branch **does** want a non-zero carry.
 
 ## Acceptance criteria
 
@@ -63,4 +63,4 @@ With the stimuli in the companion config:
 - Add a **rotate** opcode — same as SHL but the top bit wraps back to bit 0.
 - Add a **multiply** opcode producing a 16-bit result on two separate output ports. Most small FPGAs have dedicated DSP blocks for this — watch your utilisation when you resynthesise.
 
-This ALU is a direct building block for the CPU project at the Expert level — keep this design clean, you'll wire it up there.
+This ALU is a direct building block for the CPU project at the Expert level — keep this design clean — you'll wire it up there.

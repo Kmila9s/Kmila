@@ -13,7 +13,7 @@ flowchart LR
 
 **ID (Decode).** Zerlege das Befehlswort. Trenne es in einen **Opcode** (welche Operation?) und **Operanden-Felder** (welche Register? welcher Immediate?).
 
-**EX (Execute).** Schiebe die Operanden in die ALU. Bei `ADD R0, R1` liest EX R0 und R1 aus dem Registerfile, sagt der ALU „add" und latcht das Ergebnis. Bei `JUMP addr` berechnet EX den neuen PC.
+**EX (Execute).** Schiebe die Operanden in die ALU. Bei `ADD R0, R1` liest EX R0 und R1 aus dem Registerfile, sagt der ALU „add“ und latcht das Ergebnis. Bei `JUMP addr` berechnet EX den neuen PC.
 
 **MEM (Memory).** Wenn der Befehl ein Load oder Store ist, sprichst du hier mit dem Datenspeicher. Bei Register-zu-Register-Befehlen ist die Stufe ein Durchgang — sie existiert aber immer, damit jeder Befehl dieselbe Pipeline-Tiefe hat.
 

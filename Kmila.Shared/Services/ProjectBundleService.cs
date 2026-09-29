@@ -28,6 +28,13 @@ public class ProjectBundleService
     private readonly SimulationSnapshotStore _snapshots;
     private readonly ILogger _logger;
 
+    /// <summary>Creates a new <see cref="ProjectBundleService"/>.</summary>
+    /// <param name="db">Application database context.</param>
+    /// <param name="projects">Project repository.</param>
+    /// <param name="files">Project files repository.</param>
+    /// <param name="configs">Configuration service used to resolve saved configurations.</param>
+    /// <param name="snapshots">Store of simulation snapshots.</param>
+    /// <param name="logger">Optional logger; a null logger is used when omitted.</param>
     public ProjectBundleService(
         ApplicationDbContext db,
         Projects projects,
@@ -183,45 +190,65 @@ public class ProjectBundleService
     /// <summary>Top-level bundle JSON shape.</summary>
     public class Bundle
     {
+        /// <summary>Schema revision of this bundle.</summary>
         public int SchemaVersion { get; set; }
+        /// <summary>UTC timestamp when the bundle was exported.</summary>
         public DateTime ExportedAt { get; set; }
+        /// <summary>Project metadata.</summary>
         public ProjectRecord? Project { get; set; }
+        /// <summary>Source files contained in the project.</summary>
         public List<FileRecord> Files { get; set; } = new();
+        /// <summary>Saved configurations associated with the project.</summary>
         public List<KmilaConfiguration> Configurations { get; set; } = new();
+        /// <summary>Simulation snapshots included in the bundle.</summary>
         public List<SnapshotRecord> Snapshots { get; set; } = new();
     }
 
     /// <summary>Minimal project metadata embedded in the bundle (name, description, creation timestamp).</summary>
     public class ProjectRecord
     {
+        /// <summary>Project name.</summary>
         public string Name { get; set; } = string.Empty;
+        /// <summary>Optional project description.</summary>
         public string? Description { get; set; }
+        /// <summary>Timestamp when the project was originally created.</summary>
         public DateTime CreationTime { get; set; }
     }
 
     /// <summary>One source file inside the bundle: filename, sub-directory (v2+), plus full text content.</summary>
     public class FileRecord
     {
+        /// <summary>File name (without directory).</summary>
         public string FileName { get; set; } = string.Empty;
         /// <summary>
         /// Project-relative sub-directory (forward slashes), added in schema v2.
         /// Absent in v1 bundles — deserializes to null, treated as project root.
         /// </summary>
         public string? DirectoryPath { get; set; }
+        /// <summary>Full text content of the file.</summary>
         public string? Content { get; set; }
     }
 
     /// <summary>One simulation snapshot included in the bundle (label, scale, FPGA target, signal/sample counts, pinned flag).</summary>
     public class SnapshotRecord
     {
+        /// <summary>Display label for the snapshot.</summary>
         public string Label { get; set; } = string.Empty;
+        /// <summary>UTC timestamp when the snapshot was captured.</summary>
         public DateTime CreatedAt { get; set; }
+        /// <summary>Simulated time at which the snapshot was taken, in <see cref="Scale"/> units.</summary>
         public int Time { get; set; }
+        /// <summary>Time scale unit for <see cref="Time"/>.</summary>
         public string Scale { get; set; } = "US";
+        /// <summary>Target FPGA model, if any.</summary>
         public string? FpgaModel { get; set; }
+        /// <summary>Number of signals in the captured waveform.</summary>
         public int SignalCount { get; set; }
+        /// <summary>Number of samples in the captured waveform.</summary>
         public int SampleCount { get; set; }
+        /// <summary>Whether the snapshot is pinned.</summary>
         public bool Pinned { get; set; }
+        /// <summary>Serialized waveform data as JSON.</summary>
         public string WaveformJson { get; set; } = string.Empty;
     }
 }

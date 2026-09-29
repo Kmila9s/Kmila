@@ -1,6 +1,6 @@
 # El hardware es paralelo
 
-Quienes vienen de C, Python o JavaScript traen el mismo modelo mental: "el código corre de arriba abajo, una sentencia a la vez". VHDL te va a castigar por esa suposición hasta que construyas el modelo correcto.
+Quienes vienen de C, Python o JavaScript traen el mismo modelo mental: "el código se ejecuta de arriba abajo, una sentencia a la vez". VHDL te va a castigar por esa suposición hasta que construyas el modelo correcto.
 
 ## El gran cambio
 
@@ -69,7 +69,7 @@ begin
 end architecture rtl;
 ```
 
-Las tres unidades concurrentes están vivas al mismo tiempo. Cada una corre cuando cambian sus entradas. Dentro del proceso, el cuerpo se lee en orden, pero es una propiedad local del proceso, no de la arquitectura.
+Las tres unidades concurrentes están vivas al mismo tiempo. Cada una se ejecuta cuando cambian sus entradas. Dentro del proceso, el cuerpo se lee en orden, pero es una propiedad local del proceso, no de la arquitectura.
 
 ## Una consecuencia concreta
 
@@ -84,11 +84,11 @@ begin
 end architecture wrong;
 ```
 
-Leído como software, parece "pon `a` en no-b, luego pon `b` en no-a" — no pasa nada. Leído como hardware, son dos inversores cableados en un lazo. Eso es un **oscilador** — un anillo de retroalimentación que no puede estabilizarse. La simulación se queja, la síntesis (a veces) lo optimiza, y la placa glitchea impredeciblemente.
+Leído como software, parece "pon `a` en no-b, luego pon `b` en no-a" — no pasa nada. Leído como hardware, son dos inversores cableados en un lazo. Eso es un **oscilador** — un anillo de retroalimentación que no puede estabilizarse. La simulación se queja, la síntesis (a veces) lo optimiza, y la placa presenta glitches de forma impredecible.
 
 ## El recableado mental
 
-- Deja de pensar "¿qué corre primero?"
+- Deja de pensar "¿qué se ejecuta primero?"
 - Empieza a pensar "¿qué cables existen?"
 - Dentro de un proceso vuelve el "uno a la vez" — pero solo dentro de ese proceso.
 

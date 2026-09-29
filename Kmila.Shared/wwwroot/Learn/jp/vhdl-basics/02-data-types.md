@@ -35,7 +35,7 @@ signal addr : std_logic_vector(0 to 15);     -- 16 ビット、インデック�
 
 ```vhdl
 data <= "10101010";     -- バイナリリテラル、1 文字 1 ビット
-data <= x"AA";          -- 16 進リテラル(4 ビットの倍数)
+addr <= x"CAFE";        -- 16 進リテラル(4 ビットの倍数)
 data <= (others => '0');-- 全ゼロの短縮形
 data <= (0 => '1', others => '0'); -- LSB だけ High
 ```

@@ -6,12 +6,12 @@ Jede digitale Schaltung, bis hinunter zur modernen GPU, ist eine Kombination von
 
 | Gatter | VHDL-Symbol  | Liest sich als | Ausgang ist `1`, wenn… |
 |--------|--------------|----------------|------------------------|
-| AND    | `a and b`    | „A und B"      | beide Eingänge 1 sind  |
-| OR     | `a or b`     | „A oder B"     | mindestens ein Eingang 1 ist |
-| XOR    | `a xor b`    | „A xor B"      | Eingänge unterschiedlich sind |
-| NAND   | `a nand b`   | „nicht (A und B)" | mindestens ein Eingang 0 ist |
-| NOR    | `a nor b`    | „nicht (A oder B)" | beide Eingänge 0 sind |
-| XNOR   | `a xnor b`   | „A = B"        | Eingänge gleich sind   |
+| AND    | `a and b`    | „A und B“      | beide Eingänge 1 sind  |
+| OR     | `a or b`     | „A oder B“     | mindestens ein Eingang 1 ist |
+| XOR    | `a xor b`    | „A xor B“      | Eingänge unterschiedlich sind |
+| NAND   | `a nand b`   | „nicht (A und B)“ | mindestens ein Eingang 0 ist |
+| NOR    | `a nor b`    | „nicht (A oder B)“ | beide Eingänge 0 sind |
+| XNOR   | `a xnor b`   | „A = B“        | Eingänge gleich sind   |
 
 Und das ein-Eingang-NOT:
 
@@ -21,7 +21,7 @@ y <= not a;
 
 ## Warum NAND und NOR besonders sind
 
-Ein klassisches Resultat der digitalen Logik: **NAND allein** (oder NOR allein) reicht, um jedes andere Gatter zu bauen. Beide nennt man „funktional vollständig". Deshalb liefern CMOS-Prozessbibliotheken jede Menge NAND2- und NOR2-Zellen — du kannst alles daraus synthetisieren.
+Ein klassisches Resultat der digitalen Logik: **NAND allein** (oder NOR allein) reicht, um jedes andere Gatter zu bauen. Beide nennt man „funktional vollständig“. Deshalb liefern CMOS-Prozessbibliotheken jede Menge NAND2- und NOR2-Zellen — du kannst alles daraus synthetisieren.
 
 - NOT: `not a = a nand a`
 - AND: `a and b = not (a nand b)`
@@ -29,7 +29,7 @@ Ein klassisches Resultat der digitalen Logik: **NAND allein** (oder NOR allein) 
 
 ## XOR ist das mathematische
 
-XOR wird oft mit einem Kreis-Plus (⊕) gezeichnet. Es ist das Gatter, das „Parität" berechnet — sein Ausgang ist `1`, wenn eine ungerade Zahl von Eingängen `1` ist. Damit ist es der Kern von:
+XOR wird oft mit einem Kreis-Plus (⊕) gezeichnet. Es ist das Gatter, das „Parität“ berechnet — sein Ausgang ist `1`, wenn eine ungerade Zahl von Eingängen `1` ist. Damit ist es der Kern von:
 
 - Addierern: `sum = a xor b xor carry_in`
 - Paritätsprüfern und Fehlererkennungscodes
@@ -56,5 +56,5 @@ Beachte: jede dieser sechs Zeilen ist **ein Draht**, keine Anweisung, die ausgef
 ## Was du behalten solltest
 
 - Sechs Zwei-Eingang-Gatter + NOT ist das ganze Set.
-- NAND und NOR sind „universell" — aus ihnen baust du alles.
-- In VHDL sind Gatter Ein-Zeiler-Nebenläufige-Zuweisungen. Sie werden nicht „aufgerufen"; sie existieren.
+- NAND und NOR sind „universell“ — aus ihnen baust du alles.
+- In VHDL sind Gatter Ein-Zeiler-Nebenläufige-Zuweisungen. Sie werden nicht „aufgerufen“; sie existieren.

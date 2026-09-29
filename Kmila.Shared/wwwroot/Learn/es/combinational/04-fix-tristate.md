@@ -16,7 +16,7 @@ Léelo en voz alta: "`y` vale `d` **cuando `oe` es 0**, si no, `'Z'`." Está al 
 
 - Abre el ejemplo en el editor.
 - Arregla la condición de la línea 12 (la asignación `y <=`).
-- Corre la simulación y verifica en la pestaña de formas de onda:
+- Ejecuta la simulación y verifica en la pestaña de formas de onda:
   - Con `oe = '0'`, `y` debe ser `'Z'`.
   - Con `oe = '1'`, `y` debe seguir a `d`.
 

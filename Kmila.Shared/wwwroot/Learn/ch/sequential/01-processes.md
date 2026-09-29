@@ -4,7 +4,7 @@ VHDL 里 process 之外的一切都是并发的 —— 都是线和门。一旦�
 
 ## process 是什么
 
-`process` 是 VHDL architecture 内部的一段顺序代码。它的语句自上而下读,跟软件一样。但 process 本身只在它的**敏感列表**里有信号变化时才 “跑"。
+`process` 是 VHDL architecture 内部的一段顺序代码。它的语句自上而下读,跟软件一样。但 process 本身只在它的**敏感列表**里有信号变化时才 “跑”。
 
 ```vhdl
 process(clk, reset)
@@ -17,7 +17,7 @@ begin
 end process;
 ```
 
-这一块的意思是:“每当 `clk` 或 `reset` 变了,就重新执行我的主体。"
+这一块的意思是:“每当 `clk` 或 `reset` 变了,就重新执行我的主体。”
 
 ## 99% 时候你会见到的两种形态
 

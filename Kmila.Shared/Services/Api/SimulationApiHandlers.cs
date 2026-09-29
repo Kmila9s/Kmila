@@ -26,14 +26,23 @@ public static class SimulationApiHandlers
         PropertyNameCaseInsensitive = true,
     };
 
+    /// <summary>Serializes a payload to JSON using the shared API options.</summary>
+    /// <param name="payload">The object to serialize.</param>
+    /// <returns>The JSON string.</returns>
     public static string Serialize(object? payload) =>
         JsonSerializer.Serialize(payload, JsonOpts);
 
+    /// <summary>Deserializes a JSON request body, returning the default when empty.</summary>
+    /// <typeparam name="T">The target type.</typeparam>
+    /// <param name="body">The JSON body to parse.</param>
+    /// <returns>The deserialized value, or the default of <typeparamref name="T"/> when the body is empty.</returns>
     public static T? Deserialize<T>(string body) =>
         string.IsNullOrWhiteSpace(body)
             ? default
             : JsonSerializer.Deserialize<T>(body, JsonOpts);
 
+    /// <summary>Handles the health-check endpoint.</summary>
+    /// <returns>A 200 response describing service status and version.</returns>
     public static ApiResponse Health() => ApiResponse.Json(200, new
     {
         status     = "ok",
@@ -86,6 +95,10 @@ public static class SimulationApiHandlers
         return null;
     }
 
+    /// <summary>Creates a new sandbox project.</summary>
+    /// <param name="req">The create request; a default is used when null.</param>
+    /// <param name="store">The sandbox project store.</param>
+    /// <returns>A 200 response with the new project id and sandbox path.</returns>
     public static ApiResponse CreateProject(CreateProjectRequest? req, SandboxProjectStore store)
     {
         req ??= new CreateProjectRequest();
@@ -97,6 +110,11 @@ public static class SimulationApiHandlers
         });
     }
 
+    /// <summary>Writes a file into a sandbox project.</summary>
+    /// <param name="id">The project id.</param>
+    /// <param name="body">The write request with file name and content.</param>
+    /// <param name="store">The sandbox project store.</param>
+    /// <returns>A 200 response with the written file's metadata, 404 if the project is missing, or 400 on an invalid name.</returns>
     public static ApiResponse WriteFile(string id, WriteFileRequest body, SandboxProjectStore store)
     {
         var project = store.Get(id);
@@ -119,6 +137,11 @@ public static class SimulationApiHandlers
         }
     }
 
+    /// <summary>Reads a file from a sandbox project.</summary>
+    /// <param name="id">The project id.</param>
+    /// <param name="name">The relative file name to read.</param>
+    /// <param name="store">The sandbox project store.</param>
+    /// <returns>A 200 text response with the file content, or 404 if the project or file is missing.</returns>
     public static ApiResponse ReadFile(string id, string name, SandboxProjectStore store)
     {
         var project = store.Get(id);
@@ -130,6 +153,10 @@ public static class SimulationApiHandlers
         return ApiResponse.Text(200, content);
     }
 
+    /// <summary>Deletes a sandbox project.</summary>
+    /// <param name="id">The project id.</param>
+    /// <param name="store">The sandbox project store.</param>
+    /// <returns>A 204 response on success, or 404 if the project is missing.</returns>
     public static ApiResponse DeleteProject(string id, SandboxProjectStore store)
     {
         return store.Delete(id)
@@ -137,6 +164,11 @@ public static class SimulationApiHandlers
             : ApiResponse.Json(404, new ApiError { Error = "project_not_found" });
     }
 
+    /// <summary>Runs a headless simulation and maps failures to appropriate status codes.</summary>
+    /// <param name="req">The simulation request.</param>
+    /// <param name="sim">The headless simulator.</param>
+    /// <param name="log">Logger for unexpected failures.</param>
+    /// <returns>A 200 response with the result, or 400/422/500 depending on the failure.</returns>
     public static async Task<ApiResponse> SimulateAsync(SimulateRequest req, HeadlessSimulator sim, ILogger log)
     {
         try
@@ -173,12 +205,22 @@ public static class SimulationApiHandlers
 /// </summary>
 public sealed record ApiResponse(int StatusCode, string ContentType, string Body)
 {
+    /// <summary>Builds a JSON response with the given status and payload.</summary>
+    /// <param name="status">HTTP status code.</param>
+    /// <param name="payload">Object serialized as the JSON body.</param>
+    /// <returns>The response.</returns>
     public static ApiResponse Json(int status, object? payload) =>
         new(status, "application/json; charset=utf-8", SimulationApiHandlers.Serialize(payload));
 
+    /// <summary>Builds a plain-text response with the given status and body.</summary>
+    /// <param name="status">HTTP status code.</param>
+    /// <param name="body">The text body.</param>
+    /// <returns>The response.</returns>
     public static ApiResponse Text(int status, string body) =>
         new(status, "text/plain; charset=utf-8", body);
 
+    /// <summary>Builds an empty 204 No Content response.</summary>
+    /// <returns>The response.</returns>
     public static ApiResponse NoContent() =>
         new(204, string.Empty, string.Empty);
 }

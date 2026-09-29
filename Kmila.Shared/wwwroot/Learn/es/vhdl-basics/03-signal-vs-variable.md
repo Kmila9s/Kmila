@@ -11,7 +11,7 @@ VHDL tiene **signals** (declaradas a nivel de arquitectura con `signal`) y **var
 - **Las asignaciones de signal toman efecto al final del tick de simulación actual.**
 - **Las asignaciones de variable toman efecto inmediatamente, dentro del proceso.**
 
-Eso es todo. Cada "gotcha" de signals vs variables es una versión distinta de esa regla.
+Eso es todo. Cada tropiezo con signals frente a variables es una versión distinta de esa regla.
 
 ## La demostración
 
@@ -79,7 +79,7 @@ begin
 end process;
 ```
 
-Esperan que esto intercambie `a` y `b`. Y como las signals se actualizan al final del tick, **sí lo hace**: en el flanco, `a` toma el valor **viejo** de `b`, y `b` toma el valor **viejo** de `a`. Es el idiomatic way de intercambiar dos registros en un ciclo.
+Esperan que esto intercambie `a` y `b`. Y como las signals se actualizan al final del tick, **sí lo hace**: en el flanco, `a` toma el valor **viejo** de `b`, y `b` toma el valor **viejo** de `a`. Es la forma idiomática de intercambiar dos registros en un ciclo.
 
 Pero si cambias a variables la semántica cambia:
 

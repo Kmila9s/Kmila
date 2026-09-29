@@ -45,11 +45,11 @@ public static class FeedbackHelper
     {
         var sb = new StringBuilder();
         sb.AppendLine("## Kmila diagnostics");
-        sb.AppendLine($"- UTC timestamp: {DateTime.UtcNow:O}");
-        sb.AppendLine($"- OS: {System.Runtime.InteropServices.RuntimeInformation.OSDescription}");
-        sb.AppendLine($"- Architecture: {System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture}");
-        sb.AppendLine($"- .NET: {System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}");
-        sb.AppendLine($"- UI language: {uiLang}");
+        sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"- UTC timestamp: {DateTime.UtcNow:O}");
+        sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"- OS: {System.Runtime.InteropServices.RuntimeInformation.OSDescription}");
+        sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"- Architecture: {System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture}");
+        sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"- .NET: {System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}");
+        sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"- UI language: {uiLang}");
         sb.AppendLine();
 
         if (!string.IsNullOrEmpty(logContext))

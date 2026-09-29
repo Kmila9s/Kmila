@@ -22,6 +22,7 @@ namespace Kmila.Shared.Services.VisualRun;
 // at drain time. Disjoint slices from different widgets pack into one
 // port cleanly; overlaps behave as last-writer-wins on the overlap
 // bits (surface as a wiring warning in the modal, not enforced here).
+/// <summary>Helpers for parsing, extracting, and composing bit-slice port bindings.</summary>
 public static class SliceHelper
 {
     /// <summary>
@@ -40,14 +41,14 @@ public static class SliceHelper
     {
         if (string.IsNullOrWhiteSpace(binding)) return ("", null);
         var s = binding.Trim();
-        int open = s.IndexOf('[');
+        int open = s.IndexOf('[', System.StringComparison.Ordinal);
         if (open < 0) return (s, null);
         int close = s.IndexOf(']', open + 1);
         if (close <= open) return (s, null);
         string name = s.Substring(0, open).Trim();
         string spec = s.Substring(open + 1, close - open - 1).Trim();
         if (spec.Length == 0) return (name, null);
-        int colon = spec.IndexOf(':');
+        int colon = spec.IndexOf(':', System.StringComparison.Ordinal);
         if (colon < 0)
         {
             // Single bit: [N]
@@ -162,5 +163,6 @@ public static class SliceHelper
 /// </summary>
 public readonly record struct BitSlice(int High, int Low)
 {
+    /// <summary>Number of bits covered by the slice.</summary>
     public int Width => High - Low + 1;
 }

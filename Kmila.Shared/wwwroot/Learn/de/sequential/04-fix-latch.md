@@ -21,7 +21,7 @@ end architecture rtl;
 
 In einem rein kombinatorischen Prozess muss jeder Ausgang **auf jedem Pfad** durch den Prozess zugewiesen werden. Dieser hier weist `y` nur zu, wenn `enable = '1'`. Wenn `enable = '0'`, sagt der Prozess nichts über `y`.
 
-VHDLs Lösung für „du hast mir nicht gesagt, was ich mit diesem Signal tun soll": **merke dir den vorherigen Wert**. Das ist ein Latch — ein transparentes Speicherelement. Die Synthese leitet einen ab, dein Design hat einen Timing-Pfad-Albtraum, und das Board glitcht bei Signalübergängen.
+VHDLs Lösung für „du hast mir nicht gesagt, was ich mit diesem Signal tun soll“: **merke dir den vorherigen Wert**. Das ist ein Latch — ein transparentes Speicherelement. Die Synthese leitet einen ab, dein Design hat einen Timing-Pfad-Albtraum, und das Board glitcht bei Signalübergängen.
 
 ## Dein Auftrag
 
@@ -39,7 +39,7 @@ begin
 end process;
 ```
 
-Ein Signal darf in einem Prozess mehrfach zugewiesen werden — nur die letzte Zuweisung gilt. Der Default oben bedeutet „außer etwas überschreibt mich, bin ich `'0'`".
+Ein Signal darf in einem Prozess mehrfach zugewiesen werden — nur die letzte Zuweisung gilt. Der Default oben bedeutet „außer etwas überschreibt mich, bin ich `'0'`“.
 
 **Fix 2: Vervollständige das `if`**
 

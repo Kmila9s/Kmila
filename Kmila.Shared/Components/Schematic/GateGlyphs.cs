@@ -11,7 +11,9 @@ namespace Kmila.Shared.Components.Schematic;
 /// </summary>
 public static class GateGlyphs
 {
+    /// <summary>Width of the glyph bounding box, in SVG units.</summary>
     public const double Width = 70;
+    /// <summary>Height of the glyph bounding box, in SVG units.</summary>
     public const double Height = 50;
 
     /// <summary>

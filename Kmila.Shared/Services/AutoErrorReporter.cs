@@ -31,6 +31,7 @@ public sealed class AutoErrorReporter : IDisposable
 {
     private const string AutoReportSettingKey = "KMILA_AUTO_REPORT_ENABLED";
     private static readonly TimeSpan ThrottleWindow = TimeSpan.FromHours(24);
+    private static readonly string[] AutoReportLabels = new[] { "auto-report" };
 
     private readonly AppLogStore _store;
     private readonly GitHubAuth _auth;
@@ -49,6 +50,11 @@ public sealed class AutoErrorReporter : IDisposable
     /// race the very error we're trying to report.</summary>
     private bool _enabled;
 
+    /// <summary>Creates the reporter and subscribes to log and setting-change events.</summary>
+    /// <param name="store">Application log store whose new entries are watched.</param>
+    /// <param name="auth">GitHub auth used to submit reports.</param>
+    /// <param name="db">Database context providing the enabled-toggle setting.</param>
+    /// <param name="logger">Optional logger; a null logger is used when omitted.</param>
     public AutoErrorReporter(
         AppLogStore store,
         GitHubAuth auth,
@@ -163,7 +169,7 @@ public sealed class AutoErrorReporter : IDisposable
                             : $"### Exception\n```\n{entry.Exception}\n```\n\n") +
                        $"---\n\n{diag}";
 
-            var url = await _auth.SubmitIssueAsync(title, body, new[] { "auto-report" });
+            var url = await _auth.SubmitIssueAsync(title, body, AutoReportLabels);
             if (url == null)
             {
                 _logger.LogWarning("[AutoErrorReporter] SubmitIssueAsync returned null — issue not opened");
@@ -178,6 +184,7 @@ public sealed class AutoErrorReporter : IDisposable
         }
     }
 
+    /// <summary>Unsubscribes from log and setting-change events.</summary>
     public void Dispose()
     {
         _store.OnEntryAdded -= OnEntryAdded;

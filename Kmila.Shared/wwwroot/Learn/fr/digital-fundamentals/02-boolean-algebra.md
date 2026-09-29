@@ -2,7 +2,7 @@
 
 L'algèbre de Boole est la mathématique des valeurs vrai/faux et des opérations qu'on peut faire dessus. Tout circuit numérique — d'une seule porte à un CPU à un million de transistors — est en dernière instance une expression booléenne.
 
-La bonne nouvelle : tu n'as qu'à mémoriser une poignée d'identités. Avec ça tu peux simplifier presque n'importe quelle expression à la main.
+La bonne nouvelle : vous n'avez qu'à mémoriser une poignée d'identités. Avec ça vous pouvez simplifier presque n'importe quelle expression à la main.
 
 ## Les trois opérations de base
 
@@ -23,7 +23,7 @@ Tables de vérité des opérateurs binaires :
  1  1  │   1     1
 ```
 
-## Les identités que tu utiliseras vraiment
+## Les identités que vous utiliserez vraiment
 
 **Commutativité** — l'ordre est sans importance :
 
@@ -66,7 +66,7 @@ non(A · B) = Ā + B̄
 non(A + B) = Ā · B̄
 ```
 
-De Morgan te laisse transformer un NAND en « OR des compléments », ou un NOR en « AND des compléments », ou annuler de longues barres NOT. Toute toolchain FPGA les utilise constamment lors de l'optimisation.
+De Morgan vous laisse transformer un NAND en « OR des compléments », ou un NOR en « AND des compléments », ou annuler de longues barres NOT. Toute toolchain FPGA les utilise constamment lors de l'optimisation.
 
 ## Une simplification déroulée
 
@@ -76,13 +76,13 @@ On part de :
 Y = A·B + A·B̄·C + A·B̄·C̄
 ```
 
-Factorise `A` :
+Factorisez `A` :
 
 ```
 Y = A · (B + B̄·C + B̄·C̄)
 ```
 
-Factorise `B̄` à l'intérieur :
+Factorisez `B̄` à l'intérieur :
 
 ```
 Y = A · (B + B̄ · (C + C̄))
@@ -97,10 +97,10 @@ Y = A · (B + B̄ · 1)
   = A
 ```
 
-Quatre termes avec cinq opérations AND-OR s'effondrent en un fil. C'est le genre de travail que le synthétiseur fait pour toi automatiquement — mais le comprendre te rend plus aiguisé pour lire la netlist d'un collègue.
+Quatre termes avec cinq opérations AND-OR s'effondrent en un fil. C'est le genre de travail que le synthétiseur fait pour vous automatiquement — mais le comprendre vous rend plus aiguisé pour lire la netlist d'un collègue.
 
 ## À retenir
 
-- AND / OR / NOT, c'est tout ce qu'il te faut. NAND et NOR, c'est AND/OR avec un NOT collé dessus.
-- De Morgan est le couteau suisse — apprends à le reconnaître dans les deux sens.
+- AND / OR / NOT, c'est tout ce qu'il vous faut. NAND et NOR, c'est AND/OR avec un NOT collé dessus.
+- De Morgan est le couteau suisse — apprenez à le reconnaître dans les deux sens.
 - Quand une sous-expression vaut `1` par complément, le produit entier se simplifie.

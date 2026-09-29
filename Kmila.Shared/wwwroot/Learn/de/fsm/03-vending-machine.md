@@ -6,8 +6,8 @@ Das ist dein erstes richtiges Projekt. Die Spec ist fest, der Starter-Code reich
 
 Einen FSM, der das von einem Kunden eingeworfene Geld verfolgt und ein Produkt ausgibt (einen einzelnen Output-Puls, `dispense`), wenn die Summe 25 ¢ erreicht. Die Eingänge sind:
 
-- `nickel` — 1-Zyklus-Puls: „eine 5-¢-Münze ist gerade reingefallen"
-- `dime`   — 1-Zyklus-Puls: „eine 10-¢-Münze ist gerade reingefallen"
+- `nickel` — 1-Zyklus-Puls: „eine 5-¢-Münze ist gerade reingefallen“
+- `dime`   — 1-Zyklus-Puls: „eine 10-¢-Münze ist gerade reingefallen“
 - `clk`, `reset`
 
 Und die Ausgänge:
@@ -50,7 +50,7 @@ change   <= '0';  -- TODO
 2. **Pulse `dispense` für genau einen Zyklus.** Trick: wenn du den Verkauf erkennst, setze ein Flag-Signal und setze `total` auf null zurück. Das Flag lebt einen Zyklus.
 3. **Berechne `change`.** Wenn die Summe im Verkaufsmoment > 25 war, pulse auch `change`.
 
-Hinweis: einfacher, wenn du die „nächste Summe" als lokales Signal (oder `variable` im Prozess) berechnest:
+Hinweis: einfacher, wenn du die „nächste Summe“ als lokales Signal (oder `variable` im Prozess) berechnest:
 
 ```vhdl
 variable next_total : unsigned(5 downto 0);
@@ -74,5 +74,5 @@ end if;
 ## Weitergehen
 
 - Füge einen **Refund**-Knopf hinzu, der `total` ohne Verkauf nullt.
-- Unterstütze eine **Quarter**-Münze (25 ¢) — soll sofort vending.
+- Unterstütze eine **Quarter**-Münze (25 ¢) — soll sofort ausgeben.
 - Verfolge die Anzahl verkaufter Artikel in einem separaten 8-Bit-Zähler, der als Ausgang sichtbar ist. So eine Rückmeldung schicken echte Verkaufsautomaten nach oben.

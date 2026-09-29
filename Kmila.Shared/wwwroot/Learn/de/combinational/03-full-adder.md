@@ -1,6 +1,6 @@
 # Beispiel: 4-Bit-Ripple-Carry-Addierer
 
-Zwei Binärzahlen zu addieren ist das „hello world" der digitalen Arithmetik. Dieses Beispiel baut einen 4-Bit-Addierer mit Carry-in und Carry-out — genau die Zelle, die du in einer größeren ALU oder in der Adress-Inkrement-Logik einer CPU kachelst.
+Zwei Binärzahlen zu addieren ist das „hello world“ der digitalen Arithmetik. Dieses Beispiel baut einen 4-Bit-Addierer mit Carry-in und Carry-out — genau die Zelle, die du in einer größeren ALU oder in der Adress-Inkrement-Logik einer CPU kachelst.
 
 ## Schnittstelle
 

@@ -83,6 +83,11 @@ namespace Kmila.Shared.Services;
 /// </remarks>
 public class VhdlBlockBuilder
 {
+    // Cached to avoid allocating a JsonSerializerOptions per Serialize call (CA1869).
+    // MaxDepth=512: `next`-pointer chains produce linearly deep JSON; the default
+    // MaxDepth=64 trips on 100+-arm cases and deeply nested processes.
+    private static readonly System.Text.Json.JsonSerializerOptions WorkspaceJsonOptions = new() { MaxDepth = 512 };
+
     private readonly ILogger _logger;
 
     /// <summary>
@@ -96,6 +101,10 @@ public class VhdlBlockBuilder
     /// </summary>
     public int LastRawCount { get; private set; }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="VhdlBlockBuilder"/> class.
+    /// </summary>
+    /// <param name="logger">Optional logger; a null logger is used when omitted.</param>
     public VhdlBlockBuilder(ILogger<VhdlBlockBuilder>? logger = null)
     {
         _logger = (ILogger?)logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
@@ -148,8 +157,7 @@ public class VhdlBlockBuilder
             // `JsonSerializer.Serialize` throws an "object cycle detected"
             // error (misleading — it's depth, not a cycle). Bump to 512
             // to safely handle 100+-arm cases and deeply nested processes.
-            return JsonSerializer.Serialize(doc,
-                new JsonSerializerOptions { MaxDepth = 512 });
+            return JsonSerializer.Serialize(doc, WorkspaceJsonOptions);
         }
         catch (Exception ex)
         {
@@ -360,7 +368,7 @@ public class VhdlBlockBuilder
         @"\bport\s*\(",
         RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
 
-    private Dictionary<string, object?> BuildEntity(string name, string body)
+    private static Dictionary<string, object?> BuildEntity(string name, string body)
     {
         var b = MkBlock("kmila_vhdl_entity");
         AddField(b, "NAME", name);
@@ -404,7 +412,7 @@ public class VhdlBlockBuilder
         @"\s*(?<names>\w+(?:\s*,\s*\w+)*)\s*:\s*(?<type>\w+(?:\s*\(\s*[^)]+\s*\)|\s+range\s+[^;:]+)?)\s*(?::=\s*(?<def>.+?))?\s*$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    private Dictionary<string, object?>? ParseGenericList(string body)
+    private static Dictionary<string, object?>? ParseGenericList(string body)
     {
         Dictionary<string, object?>? head = null;
         foreach (var partRaw in body.Split(';', StringSplitOptions.RemoveEmptyEntries))
@@ -438,7 +446,7 @@ public class VhdlBlockBuilder
         @"^\s*(?:(?<class>constant|variable|signal|file)\s+)?(?<names>\w+(?:\s*,\s*\w+)*)\s*:\s*(?:(?<mode>in|out|inout|buffer)\s+)?(?<type>[^;]+?)\s*(?::=\s*(?<default>[^;]+?))?\s*$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    private Dictionary<string, object?>? ParseSubprogParams(string paramsBody)
+    private static Dictionary<string, object?>? ParseSubprogParams(string paramsBody)
     {
         Dictionary<string, object?>? head = null;
         // VHDL allows both `;` and `,` between params but `;` is canonical
@@ -472,7 +480,7 @@ public class VhdlBlockBuilder
     // optional `is`, optional `generic (…)`, and mandatory `port (…)`.
     // Uses ExtractParenBody + ParsePortList/ParseGenericList to avoid the
     // vector-paren nesting hazard.
-    private Dictionary<string, object?> BuildComponentDeclBlock(Match m)
+    private static Dictionary<string, object?> BuildComponentDeclBlock(Match m)
     {
         var b = MkBlock("kmila_vhdl_component_decl");
         AddField(b, "NAME", m.Groups["name"].Value.Trim());
@@ -1012,7 +1020,7 @@ public class VhdlBlockBuilder
         @"\s*(?<name>\w+(?:\s*,\s*\w+)*)\s*:\s*(?<dir>in|out|inout|buffer|linkage)\b\s*(?<type>\w+(?:\s*\(\s*[^)]+\s*\))?)\s*",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    private Dictionary<string, object?>? ParsePortList(string body)
+    private static Dictionary<string, object?>? ParsePortList(string body)
     {
         // Top-level split on ';' (no nesting expected at this depth).
         var parts = body.Split(';', StringSplitOptions.RemoveEmptyEntries);
@@ -1193,7 +1201,7 @@ public class VhdlBlockBuilder
         if (string.IsNullOrWhiteSpace(raw)) return "std_logic";
         var t = System.Text.RegularExpressions.Regex.Replace(raw.Trim(), @"\s+", " ");
         // Lowercase the leading identifier only; keep numeric ranges verbatim
-        var paren = t.IndexOf('(');
+        var paren = t.IndexOf('(', StringComparison.Ordinal);
         if (paren < 0) return t.ToLowerInvariant();
         return t.Substring(0, paren).ToLowerInvariant() + t.Substring(paren);
     }
@@ -1841,7 +1849,7 @@ public class VhdlBlockBuilder
     // final `<value>` at the tail is what the emitter renders after the
     // last `else`. Arms are stored as a chain of kmila_vhdl_cond_arm
     // blocks with VALUE + COND, and the tail expr lives in ELSE_VALUE.
-    private Dictionary<string, object?>? TryBuildCondAssign(string target, string value)
+    private static Dictionary<string, object?>? TryBuildCondAssign(string target, string value)
     {
         var whens = FindTopLevelKeywords(value, "when");
         if (whens.Count == 0) return null;
@@ -2344,7 +2352,7 @@ public class VhdlBlockBuilder
     // scan text (blanked comments) + original text. `kw` is the lowercase
     // leading keyword. Returns null on malformed input; caller falls
     // through to raw fallback.
-    private Dictionary<string, object?>? ParseSequentialPrimitiveBody(
+    private static Dictionary<string, object?>? ParseSequentialPrimitiveBody(
         string kw, string body, string orig)
     {
         // Trim trailing ';' and whitespace from the working slice.
@@ -2467,7 +2475,7 @@ public class VhdlBlockBuilder
     // shapes ending in `;` at depth 0 immediately after the closing `)`
     // (or after the ident when no args); rejects known keywords so it
     // doesn't collide with wait/exit/assert/report/case/if/for/while/etc.
-    private int TryParseProcedureCall(
+    private static int TryParseProcedureCall(
         string scan, string original, int start,
         out Dictionary<string, object?>? block)
     {
@@ -2525,7 +2533,7 @@ public class VhdlBlockBuilder
     // Returns total characters consumed (0 if not a known head). Keeps
     // ParseSequentialBody recovering instead of poisoning the rest of the
     // body when the catalog doesn't cover a statement.
-    private int TryConsumeUnknownSequential(
+    private static int TryConsumeUnknownSequential(
         string scan, string original, int start,
         out Dictionary<string, object?>? rawTile)
     {
@@ -2534,13 +2542,12 @@ public class VhdlBlockBuilder
         var kw = PeekIdent(scan, p);
         if (kw == null) return 0;
         string endKw;
-        bool requiresLoop = false;
         switch (kw.ToLowerInvariant())
         {
             case "case":  endKw = "case"; break;
             case "loop":  endKw = "loop"; break;
             case "for":
-            case "while": endKw = "loop"; requiresLoop = true; break;
+            case "while": endKw = "loop"; break;
             case "wait":
             case "exit":
             case "next":
@@ -2688,7 +2695,7 @@ public class VhdlBlockBuilder
             while (openParen < scan.Length && char.IsWhiteSpace(scan[openParen])) openParen++;
             if (openParen < scan.Length && scan[openParen] == '(')
             {
-                string gmBody = ExtractParenBody(scan, openParen);
+                string gmBody = ExtractParenBody(scan, openParen)!;
                 var gmHead = ParseAssociationList(gmBody);
                 if (gmHead != null) AddInput(inst, "GENERIC_MAP", gmHead);
             }
@@ -2702,7 +2709,7 @@ public class VhdlBlockBuilder
             while (openParen < scan.Length && char.IsWhiteSpace(scan[openParen])) openParen++;
             if (openParen < scan.Length && scan[openParen] == '(')
             {
-                string pmBody = ExtractParenBody(scan, openParen);
+                string pmBody = ExtractParenBody(scan, openParen)!;
                 var pmHead = ParseAssociationList(pmBody);
                 if (pmHead != null) AddInput(inst, "PORT_MAP", pmHead);
             }
@@ -2740,7 +2747,7 @@ public class VhdlBlockBuilder
         return s;
     }
 
-    private int TryParseWithSelect(
+    private static int TryParseWithSelect(
         string scan, string original, int start,
         out Dictionary<string, object?>? block)
     {
@@ -2938,7 +2945,7 @@ public class VhdlBlockBuilder
     // Split a `<f1> => <a1>, <f2> => <a2>, …` body into a chain of
     // kmila_vhdl_port_assoc blocks. Positional (no `=>`) associations
     // get FORMAL="" and ACTUAL = the whole item.
-    private Dictionary<string, object?>? ParseAssociationList(string body)
+    private static Dictionary<string, object?>? ParseAssociationList(string body)
     {
         Dictionary<string, object?>? head = null;
         var parts = SplitTopLevelCommas(body);
@@ -3040,7 +3047,7 @@ public class VhdlBlockBuilder
     // (`<ident>: <stmt>` — instantiations, named generates, named
     // processes) and bare `for/if … generate` blocks. Emits a single
     // raw_concurrent tile per construct.
-    private int TryConsumeUnknownConcurrent(
+    private static int TryConsumeUnknownConcurrent(
         string scan, string original, int start,
         out Dictionary<string, object?>? rawTile)
     {
@@ -3582,7 +3589,7 @@ public class VhdlBlockBuilder
     // lowest→highest, so `2 ** N - 1` splits at `-` first, then `**`.
     private static readonly string[] PowerOps = { "**" };
 
-    private Dictionary<string, object?> BuildExpression(string text)
+    private static Dictionary<string, object?> BuildExpression(string text)
     {
         var s = text.Trim();
         if (s.Length == 0) return BuildRaw("kmila_vhdl_raw_expr", "");
@@ -3876,7 +3883,7 @@ public class VhdlBlockBuilder
         // kmila_vhdl_call block with an ARGS chain of kmila_vhdl_call_arg
         // wrappers, each holding one expression sub-block.
         var callHead = CallHeadRe.Match(s);
-        if (callHead.Success && s.EndsWith(")"))
+        if (callHead.Success && s.EndsWith(')'))
         {
             int openParen = callHead.Index + callHead.Length - 1; // at '('
             var body = ExtractParenBody(s, openParen);
@@ -3993,7 +4000,7 @@ public class VhdlBlockBuilder
                         var prev = s[k - 1];
                         // Skip if preceded by an operator character or start.
                         while (k > 0 && char.IsWhiteSpace(prev)) { break; }
-                        if (prev == '(' || prev == ',' || "+-*/=<>&|".IndexOf(prev) >= 0) continue;
+                        if (prev == '(' || prev == ',' || "+-*/=<>&|".Contains(prev, StringComparison.Ordinal)) continue;
                     }
                 }
                 bestIdx = k; bestOp = op;
@@ -4248,9 +4255,9 @@ public class VhdlBlockBuilder
     /// index of the matching `end …;` while tracking `process … end process`
     /// pairs so a stray `end architecture name;` typed inside a malformed
     /// process body doesn't falsely terminate the architecture. Accepts
-    /// any of the syntactically valid forms: `end;`, `end <archname>;`,
-    /// `end architecture;`, `end architecture <archname>;`.
-    /// On success <paramref name="endLen"/> is the length of the closer
+    /// any of the syntactically valid forms: `end;`, `end &lt;archname&gt;;`,
+    /// `end architecture;`, `end architecture &lt;archname&gt;;`.
+    /// On success <c>endLen</c> is the length of the closer
     /// (start of `end` to and including `;`). Returns -1 if no match.
     /// </summary>
     // 2026-07-19 Phase 19 — walk forward from just after the architecture

@@ -1,6 +1,6 @@
 # Delta-Zyklen und Race Conditions
 
-Ein Simulator muss „zwei Dinge passieren gleichzeitig" deterministisch ordnen. VHDLs Antwort ist der **Delta-Zyklus**: ein unendlich kleines Zeitstück, das Ursache von Wirkung trennt.
+Ein Simulator muss „zwei Dinge passieren gleichzeitig“ deterministisch ordnen. VHDLs Antwort ist der **Delta-Zyklus**: ein unendlich kleines Zeitstück, das Ursache von Wirkung trennt.
 
 ## Was ein Delta-Zyklus ist
 
@@ -12,7 +12,7 @@ Die Simulationszeit schreitet in echten Schritten voran (gemessen in ns, µs, ms
 - δ₃: diese Änderungen treten in Kraft.
 - …
 
-Jedes Delta ist „null echte Zeit", repräsentiert aber einen Kausalschritt. Der Simulator kreiselt durch Deltas, bis nichts mehr zu aktualisieren ist — erst dann schreitet die echte Zeit voran.
+Jedes Delta ist „null echte Zeit“, repräsentiert aber einen Kausalschritt. Der Simulator kreiselt durch Deltas, bis nichts mehr zu aktualisieren ist — erst dann schreitet die echte Zeit voran.
 
 ## Warum es das gibt
 
@@ -48,11 +48,11 @@ end process;
 
 Wenn `a` sich ändert, feuert der erste Prozess und plant `b` ein. Bei δ₁ hat `b` seinen neuen Wert. Der zweite Prozess feuert, plant `c` ein. Bei δ₂ hat `c` den richtigen Wert.
 
-Aber dreh jetzt die beiden Prozesse um. Ändert sich etwas? **Nein.** Delta-Zyklen garantieren, dass beide Pfade dasselbe Endergebnis liefern — auch wenn die „Reihenfolge" der Prozesse in der Datei anders ist. Genau dafür gibt es Delta-Zyklen.
+Aber dreh jetzt die beiden Prozesse um. Ändert sich etwas? **Nein.** Delta-Zyklen garantieren, dass beide Pfade dasselbe Endergebnis liefern — auch wenn die „Reihenfolge“ der Prozesse in der Datei anders ist. Genau dafür gibt es Delta-Zyklen.
 
 ## Wo es schiefgeht
 
-Das Problem entsteht, wenn du **Signal**-Semantik mit „das muss vor jenem im selben Tick passieren" mischst. Beispiel:
+Das Problem entsteht, wenn du **Signal**-Semantik mit „das muss vor jenem im selben Tick passieren“ mischst. Beispiel:
 
 ```vhdl
 process(clk)
@@ -64,7 +64,7 @@ begin
 end process;
 ```
 
-Wenn du annimmst „Zeile 1 läuft zuerst, also ist `a` bei Zeile 2 schon aktualisiert", liegst du falsch. `a` wird am Ende des Ticks aktualisiert. `b` liest den alten Wert von `a`. Ergebnis: beide inkrementieren auf alten Daten basierend, nicht auf den neuen Daten des anderen.
+Wenn du annimmst „Zeile 1 läuft zuerst, also ist `a` bei Zeile 2 schon aktualisiert“, liegst du falsch. `a` wird am Ende des Ticks aktualisiert. `b` liest den alten Wert von `a`. Ergebnis: beide inkrementieren auf alten Daten basierend, nicht auf den neuen Daten des anderen.
 
 Ersetze die Signale durch Variablen, um C-Stil-Semantik zu kriegen:
 
@@ -81,10 +81,10 @@ end process;
 
 Jetzt funktioniert es so, wie Software-Programmierer es erwarten.
 
-## Das Mitnehmen
+## Zum Mitnehmen
 
 - Delta-Zyklen sind die Art des Simulators, nebenläufige Logik deterministisch zu machen.
 - Signalzuweisungen werden **nach** Delta-Zyklen wirksam. Variablen nicht.
-- Wenn sich deine Testbench um eine Taktflanke „seltsam" verhält, vermute zuerst ein Delta-Zyklus-Reihenfolgeproblem, bevor du dem Tool die Schuld gibst.
+- Wenn sich deine Testbench um eine Taktflanke „seltsam“ verhält, vermute zuerst ein Delta-Zyklus-Reihenfolgeproblem, bevor du dem Tool die Schuld gibst.
 
 Die nächste Übung im Curriculum zeigt eine kleine Race Condition in Aktion. Finde sie, benenne sie, fixe sie — du wirst die Regel nie wieder vergessen.

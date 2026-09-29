@@ -18,11 +18,15 @@ namespace Kmila.Shared.Services;
 /// </remarks>
 public class SimulationSnapshotStore
 {
+    /// <summary>Maximum number of unpinned snapshots retained per project.</summary>
     public const int MaxPerProject = 50;
 
     private readonly ApplicationDbContext _db;
     private readonly ILogger _logger;
 
+    /// <summary>Creates the store over the given database context.</summary>
+    /// <param name="db">Application database context.</param>
+    /// <param name="logger">Optional logger.</param>
     public SimulationSnapshotStore(ApplicationDbContext db,
                                    ILogger<SimulationSnapshotStore>? logger = null)
     {
@@ -33,6 +37,14 @@ public class SimulationSnapshotStore
     /// <summary>Fires after any insert / update / delete so UIs re-render.</summary>
     public event Action<int>? OnChange;  // projectId that changed
 
+    /// <summary>Captures a simulation run as a new snapshot and enforces retention.</summary>
+    /// <param name="projectId">Project the run belongs to.</param>
+    /// <param name="waveform">Waveform data to persist.</param>
+    /// <param name="time">Simulated time value.</param>
+    /// <param name="scale">Time scale unit.</param>
+    /// <param name="fpgaModel">FPGA model used for the run, if any.</param>
+    /// <param name="label">Optional user label; a timestamp is used when omitted.</param>
+    /// <returns>The captured snapshot, or null on failure.</returns>
     public async Task<SimulationSnapshot?> CaptureAsync(int projectId,
                                                        WaveformData waveform,
                                                        int time, string scale,
@@ -48,7 +60,7 @@ public class SimulationSnapshotStore
                 ProjectId    = projectId,
                 CreatedAt    = DateTime.UtcNow,
                 Label        = string.IsNullOrWhiteSpace(label)
-                                 ? DateTime.Now.ToString("HH:mm:ss · MMM d")
+                                 ? DateTime.Now.ToString("HH:mm:ss · MMM d", System.Globalization.CultureInfo.InvariantCulture)
                                  : label.Trim(),
                 Time         = time,
                 Scale        = scale,
@@ -72,6 +84,9 @@ public class SimulationSnapshotStore
         }
     }
 
+    /// <summary>Returns all snapshots for a project.</summary>
+    /// <param name="projectId">Project to list snapshots for.</param>
+    /// <returns>The project's snapshots.</returns>
     public async Task<List<SimulationSnapshot>> ListForProjectAsync(int projectId)
     {
         try
@@ -150,6 +165,9 @@ public class SimulationSnapshotStore
         }
     }
 
+    /// <summary>Returns a single snapshot by id, or null if not found.</summary>
+    /// <param name="snapshotId">Snapshot id.</param>
+    /// <returns>The snapshot, or null.</returns>
     public async Task<SimulationSnapshot?> GetByIdAsync(int snapshotId)
     {
         try
@@ -166,6 +184,9 @@ public class SimulationSnapshotStore
         }
     }
 
+    /// <summary>Deletes a snapshot by id.</summary>
+    /// <param name="snapshotId">Snapshot id.</param>
+    /// <returns>True if a snapshot was deleted.</returns>
     public async Task<bool> DeleteAsync(int snapshotId)
     {
         try
@@ -186,6 +207,10 @@ public class SimulationSnapshotStore
         }
     }
 
+    /// <summary>Renames a snapshot's label.</summary>
+    /// <param name="snapshotId">Snapshot id.</param>
+    /// <param name="newLabel">New label; ignored when blank.</param>
+    /// <returns>True if the snapshot was found and updated.</returns>
     public async Task<bool> RenameAsync(int snapshotId, string newLabel)
     {
         try
@@ -207,6 +232,10 @@ public class SimulationSnapshotStore
         }
     }
 
+    /// <summary>Pins or unpins a snapshot, exempting it from retention eviction.</summary>
+    /// <param name="snapshotId">Snapshot id.</param>
+    /// <param name="pinned">Whether the snapshot should be pinned.</param>
+    /// <returns>True if the snapshot was found and updated.</returns>
     public async Task<bool> SetPinnedAsync(int snapshotId, bool pinned)
     {
         try
@@ -256,7 +285,7 @@ public class SimulationSnapshotStore
             parsed.CreatedAt = DateTime.UtcNow;
             parsed.Pinned    = false;
             if (string.IsNullOrWhiteSpace(parsed.Label))
-                parsed.Label = "Imported · " + DateTime.Now.ToString("HH:mm:ss");
+                parsed.Label = "Imported · " + DateTime.Now.ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
 
             await _db.InsertAsync(parsed);
             await EnforceRetentionAsync(projectId);

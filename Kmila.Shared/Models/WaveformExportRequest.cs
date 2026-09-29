@@ -7,7 +7,9 @@ namespace Kmila.Shared.Models;
 /// </summary>
 public enum WaveformExportFormat
 {
+    /// <summary>Vector SVG output.</summary>
     Svg,
+    /// <summary>Raster PNG output.</summary>
     Png
 }
 

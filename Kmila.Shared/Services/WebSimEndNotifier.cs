@@ -20,12 +20,19 @@ public class WebSimEndNotifier : ISimEndNotifier
     private readonly IJSRuntime _js;
     private readonly ILogger<WebSimEndNotifier> _log;
 
+    /// <summary>Creates the notifier with the JS runtime and logger.</summary>
+    /// <param name="js">JS runtime used to invoke the browser Notification API.</param>
+    /// <param name="log">Logger for notification failures.</param>
     public WebSimEndNotifier(IJSRuntime js, ILogger<WebSimEndNotifier> log)
     {
         _js = js;
         _log = log;
     }
 
+    /// <summary>Shows an OS-level notification that a simulation has ended.</summary>
+    /// <param name="title">Notification title.</param>
+    /// <param name="body">Notification body text.</param>
+    /// <returns>A task that completes once the JS interop call returns.</returns>
     public async Task NotifySimEndAsync(string title, string body)
     {
         try

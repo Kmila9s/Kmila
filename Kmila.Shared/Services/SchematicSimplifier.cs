@@ -229,7 +229,7 @@ public static class SchematicSimplifier
                 if (commonSel == null) commonSel = sel;
                 else if (commonSel != sel) { decoder = false; break; }
                 string label = eq.Attrs != null && eq.Attrs.TryGetValue("Choice", out var ch)
-                    ? ch.Replace("\"", "").Replace("'", "").Trim()
+                    ? ch.Replace("\"", "", System.StringComparison.Ordinal).Replace("'", "", System.StringComparison.Ordinal).Trim()
                     : (netById.TryGetValue(aConst ? a : b, out var cn) ? cn.ConstValue ?? "?" : "?");
                 choices.Add(label);
             }

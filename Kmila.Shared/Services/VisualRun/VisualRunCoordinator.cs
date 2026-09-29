@@ -22,6 +22,11 @@ namespace Kmila.Shared.Services.VisualRun;
 //
 // Bounded HeadlessSimulator + ReplayState live-attach paths are untouched.
 
+/// <summary>
+/// Drives the existing <c>DeltaCycleEngine</c> one tick at a time so the visual
+/// layer can inject live input writes between ticks, throttle to a watchable
+/// speed, and snapshot output ports into a history ring for scrubbing.
+/// </summary>
 public sealed class VisualRunCoordinator : IDisposable
 {
     private readonly Entity _entity;
@@ -67,14 +72,19 @@ public sealed class VisualRunCoordinator : IDisposable
     private readonly Dictionary<string, Dictionary<BitSlice, string>> _slicedInputs
         = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _slicedGate = new();
+    /// <summary>Playback speed preset that determines the per-tick delay.</summary>
     public VisualSpeed Speed { get; set; } = VisualSpeed.Normal;
     // Phase 2: when non-null, overrides Speed's preset delay. Lets the UI's
     // numeric step-rate field hold an exact value (e.g. 5 ms/tick) without
     // having to invent a new VisualSpeed variant per option. null means
     // "use Speed.TickDelayMs()".
+    /// <summary>Exact per-tick delay in milliseconds; overrides <see cref="Speed"/> when non-null.</summary>
     public int? CustomTickDelayMs { get; set; }
+    /// <summary>True while the run loop task is active.</summary>
     public bool IsRunning => _loopTask is { IsCompleted: false };
+    /// <summary>True when the loop is paused (running but not advancing ticks).</summary>
     public bool IsPaused { get; private set; }
+    /// <summary>The most recently completed tick number.</summary>
     public ulong CurrentTick { get; private set; }
 
     // Phase 2 tick breakpoints. Set membership check happens at the top of
@@ -95,6 +105,11 @@ public sealed class VisualRunCoordinator : IDisposable
     /// <summary>Raised after the loop task has fully completed (canceled or errored). Safe place to flip UI back to idle.</summary>
     public event Action? OnStopped;
 
+    /// <summary>Creates a coordinator that will drive the given entity's architecture.</summary>
+    /// <param name="entity">Entity to simulate; must have an architecture.</param>
+    /// <param name="ringCapacity">Capacity of the frame history ring buffer.</param>
+    /// <param name="userDrivenPorts">Ports driven directly by the user; the auto-clock loop leaves these alone.</param>
+    /// <param name="traductor">Optional translator used to localize error messages.</param>
     public VisualRunCoordinator(Entity entity, int ringCapacity = 2000, IEnumerable<string>? userDrivenPorts = null, Traductor? traductor = null)
     {
         _entity = entity ?? throw new ArgumentNullException(nameof(entity));
@@ -112,8 +127,12 @@ public sealed class VisualRunCoordinator : IDisposable
         Frames = new FrameRing(ringCapacity);
     }
 
+    /// <summary>The entity's ports.</summary>
     public IReadOnlyCollection<Variable> Ports => _entity.Ports;
 
+    /// <summary>Returns the current value of the named port, or an empty string if not found.</summary>
+    /// <param name="portName">Name of the port to read.</param>
+    /// <returns>The port's current value as a string, or empty if unknown.</returns>
     public string LatestPortValue(string portName)
     {
         if (_portsByName.TryGetValue(portName, out var v))
@@ -147,7 +166,7 @@ public sealed class VisualRunCoordinator : IDisposable
     public void WriteInput(string binding, string value)
     {
         if (string.IsNullOrEmpty(binding)) return;
-        if (binding.IndexOf('[') >= 0)
+        if (binding.Contains('[', StringComparison.Ordinal))
             SetSlicedInput(binding, value);
         else
             Inputs.Set(binding, value);
@@ -176,6 +195,8 @@ public sealed class VisualRunCoordinator : IDisposable
         }
     }
 
+    /// <summary>Starts the run loop on a background task. No-op if already running.</summary>
+    /// <returns>A completed task; the loop runs in the background.</returns>
     public Task StartAsync()
     {
         if (IsRunning) return Task.CompletedTask;
@@ -203,7 +224,9 @@ public sealed class VisualRunCoordinator : IDisposable
         }
     }
 
+    /// <summary>Pauses the loop; ticks stop advancing until <see cref="Resume"/> is called.</summary>
     public void Pause() => IsPaused = true;
+    /// <summary>Resumes a paused loop.</summary>
     public void Resume()
     {
         // Clearing _lastBreakTick lets the engine break on the same tick
@@ -214,6 +237,7 @@ public sealed class VisualRunCoordinator : IDisposable
         IsPaused = false;
     }
 
+    /// <summary>Requests cancellation of the run loop.</summary>
     public void Stop()
     {
         _cts?.Cancel();
@@ -222,6 +246,8 @@ public sealed class VisualRunCoordinator : IDisposable
     // Await the loop task's completion. Used by Visual.razor's StopRun so
     // the post-click render correctly observes IsRunning=false instead of
     // catching the coordinator mid-cancellation.
+    /// <summary>Awaits completion of the run loop task after a <see cref="Stop"/>.</summary>
+    /// <returns>The loop task, or a completed task if the loop never started.</returns>
     public Task WaitForStopAsync() => _loopTask ?? Task.CompletedTask;
 
     private async Task LoopAsync(CancellationToken ct)
@@ -436,13 +462,13 @@ public sealed class VisualRunCoordinator : IDisposable
         if (port.Type == DATATYPES.STD_LOGIC)
         {
             // Tolerate '1', "1", 1 — collapse to single char.
-            string stripped = raw.Replace("'", "").Replace("\"", "");
+            string stripped = raw.Replace("'", "", System.StringComparison.Ordinal).Replace("\"", "", System.StringComparison.Ordinal);
             if (stripped.Length == 0) return "0";
             return stripped[^1].ToString();
         }
         if (port.Type == DATATYPES.STD_LOGIC_VECTOR && port.Size > 0)
         {
-            string stripped = raw.Replace("'", "").Replace("\"", "");
+            string stripped = raw.Replace("'", "", System.StringComparison.Ordinal).Replace("\"", "", System.StringComparison.Ordinal);
             if (stripped.Length == port.Size) return stripped;
             if (stripped.Length > port.Size) return stripped[^port.Size..];
             return stripped.PadLeft(port.Size, '0');
@@ -458,6 +484,7 @@ public sealed class VisualRunCoordinator : IDisposable
         Frames.Push(new VisualFrame(tick, dict));
     }
 
+    /// <summary>Stops the loop, waits briefly for it to finish, and releases engine resources.</summary>
     public void Dispose()
     {
         try { Stop(); } catch { }
@@ -474,6 +501,6 @@ public sealed class VisualRunCoordinator : IDisposable
     {
         var template = _traductor?.T(key);
         if (string.IsNullOrEmpty(template)) template = fallbackFormat;
-        return string.Format(template, args);
+        return string.Format(System.Globalization.CultureInfo.InvariantCulture, template, args);
     }
 }

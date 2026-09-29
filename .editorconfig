@@ -1,0 +1,124 @@
+# Kmila — analyzer severity policy (CA warning remediation program)
+# ---------------------------------------------------------------------------
+# Full .NET analyzer suite is enabled via Directory.Build.props
+# (EnableNETAnalyzers + AnalysisMode=All). This file curates the ruleset for
+# an INTERNAL Blazor/MAUI educational app (not a published library): rules that
+# are inappropriate or low-value for this project type are turned off here with
+# a documented rationale (a curated ruleset, not a blanket bug suppression).
+# Cleanup/perf, globalization, and behavioral rules are kept as warnings to fix.
+# ---------------------------------------------------------------------------
+
+root = true
+
+[*.{cs,razor}]
+
+# --- Async/threading conventions inappropriate for a Blazor/MAUI UI app ------
+# ConfigureAwait(false) breaks UI-thread affinity in Blazor/MAUI components;
+# Microsoft's own guidance is to NOT use it in UI code.
+dotnet_diagnostic.CA2007.severity = none
+
+# --- API-shape rules: this is an app, not a reusable library -----------------
+# Public types are required for DI, JSON serialization, Blazor component
+# parameters, and cross-project test access — making them internal breaks those.
+dotnet_diagnostic.CA1515.severity = none
+# Exposing List<T>/arrays and settable collection properties is fine for
+# internal DTOs and serialized models (no external API-compat contract).
+dotnet_diagnostic.CA1002.severity = none
+dotnet_diagnostic.CA2227.severity = none
+dotnet_diagnostic.CA1819.severity = none
+# Action/Action<T> events are idiomatic here; EventHandler<T> not required.
+dotnet_diagnostic.CA1003.severity = none
+
+# --- Naming rules that conflict with the VHDL domain / test conventions ------
+# VHDL identifiers, tokenizer constants (KEYWORDS, STD_LOGIC_VECTOR) and test
+# method names use underscores and may collide with language keywords/types.
+dotnet_diagnostic.CA1707.severity = none   # underscores in identifiers
+dotnet_diagnostic.CA1716.severity = none   # identifier vs reserved keyword
+dotnet_diagnostic.CA1720.severity = none   # identifier contains type name
+dotnet_diagnostic.CA1721.severity = none   # property/Get method confusion
+dotnet_diagnostic.CA1724.severity = none   # type name vs namespace
+dotnet_diagnostic.CA1725.severity = none   # param names match base
+dotnet_diagnostic.CA1711.severity = none   # type-suffix conventions
+dotnet_diagnostic.CA1710.severity = none   # collection-suffix conventions
+dotnet_diagnostic.CA1715.severity = none   # interface/type-param prefixes
+
+# --- Perf micro-optimisation not worth the churn for this app's scale --------
+# LoggerMessage source-gen delegates: negligible benefit at this logging volume.
+dotnet_diagnostic.CA1848.severity = none
+# Span-based Substring/Concat rewrites: awkward and risky where an intervening
+# ToLowerInvariant/format sits between the slices; negligible benefit here.
+dotnet_diagnostic.CA1845.severity = none
+# Caching JsonSerializerOptions: the remaining call sites are cold paths (catalog
+# load, config save, bundle export), not hot loops; the one hot path (workspace
+# serialization in VhdlBlockBuilder) IS cached. Not worth the churn elsewhere.
+dotnet_diagnostic.CA1869.severity = none
+
+# --- Globalization: casing DIRECTION must not change -------------------------
+# CA1308 wants ToUpperInvariant instead of ToLowerInvariant, but the engine
+# canonicalises VHDL identifiers to lower-case and compares against lower-case
+# literals (e.g. "clk"); flipping to upper-case would change generated/compared
+# values. Lower-case canonicalisation is intentional. (The rest of the CA13xx
+# family — adding Ordinal/InvariantCulture without changing case direction — is
+# kept as warning and fixed.)
+dotnet_diagnostic.CA1308.severity = none
+
+# --- Behavioral rules that reflect intentional patterns for this app ----------
+# Defensive catch-all is deliberate: a bad parse/sim/IO must not crash the
+# educational UI — errors are surfaced via LastError/logs, not propagated.
+dotnet_diagnostic.CA1031.severity = none
+# Public methods don't null-check args: callers are in-app (trusted), and adding
+# throws would change behavior for an internal, non-library codebase.
+dotnet_diagnostic.CA1062.severity = none
+# Interpolated log message templates are intentional (readable diagnostics); no
+# high-volume/structured-logging or localization requirement here.
+dotnet_diagnostic.CA2254.severity = none
+# Nested public types are an intentional grouping choice (DTO/result shapes).
+dotnet_diagnostic.CA1034.severity = none
+# File paths and URLs are modelled as strings throughout by design.
+dotnet_diagnostic.CA1054.severity = none
+dotnet_diagnostic.CA1055.severity = none
+dotnet_diagnostic.CA1056.severity = none
+# "Uninstantiated" internal types are created via DI / reflection / JSON — FP.
+dotnet_diagnostic.CA1812.severity = none
+# Random here is non-security (schematic hue jitter, satisfaction-prompt sampling);
+# a crypto RNG is unwarranted and would change values.
+dotnet_diagnostic.CA5394.severity = none
+# Method form (vs property) is intentional where work/allocation is implied.
+dotnet_diagnostic.CA1024.severity = none
+# Leaf/sealed types hold only managed resources; the simple Dispose() is
+# sufficient — the full virtual Dispose(bool) pattern is unnecessary here.
+dotnet_diagnostic.CA1063.severity = none
+# Sync calls inside async methods are intentional (cheap, in-memory); converting
+# risks behavior/scheduling changes for no real benefit.
+dotnet_diagnostic.CA1849.severity = none
+# Jagged-vs-multidimensional array shape is chosen deliberately (truth tables).
+dotnet_diagnostic.CA1814.severity = none
+# Internal exception types are intentionally non-public.
+dotnet_diagnostic.CA1064.severity = none
+# Flow analysis misreads async/locked lazy-init double-checks and defensive null
+# guards as dead code; removing them would risk races. Guards are intentional.
+dotnet_diagnostic.CA1508.severity = none
+# Load-gate SemaphoreSlim / CancellationTokenSource fields live in app-lifetime
+# DI singletons — released at process exit; implementing IDisposable on each adds
+# ceremony for no real lifecycle benefit here.
+dotnet_diagnostic.CA1001.severity = none
+# These "created but not disposed" objects have their ownership transferred to the
+# DI/logging pipeline or are stored for later cancellation; flow analysis misses it.
+dotnet_diagnostic.CA2000.severity = none
+# Standard exception ctors matter for public exceptions others construct; the only
+# flagged type is a PRIVATE sentinel with a purpose-built (message, detail) ctor.
+dotnet_diagnostic.CA1032.severity = none
+
+# --- EF Core query predicates: culture/comparison APIs are untranslatable ------
+# In these repositories, ToLower()/Equals(...) inside FirstOrDefaultAsync/Where
+# lambdas are EF Core expression trees translated to SQL. ToLowerInvariant() and
+# Equals(..., StringComparison) are NOT translatable and throw at runtime, so the
+# globalization rules must stay off for these query files.
+[**/Repositories/{Projects,ProjectFiles}.cs]
+dotnet_diagnostic.CA1304.severity = none
+dotnet_diagnostic.CA1305.severity = none
+dotnet_diagnostic.CA1309.severity = none
+dotnet_diagnostic.CA1311.severity = none
+# CA1862 (ToLower().Equals → Equals(OrdinalIgnoreCase)) is likewise untranslatable
+# by EF Core inside these query predicates.
+dotnet_diagnostic.CA1862.severity = none

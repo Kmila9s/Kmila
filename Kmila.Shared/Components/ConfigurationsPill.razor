@@ -25,6 +25,7 @@
 @inject ConfigurationService ConfigService
 @inject SimulationParameters Sim
 @inject SelectedFPGA SelectedFPGA
+@inject JSONFileReader JsonReader
 
 <details class="kmila-config-pill" @ref="_detailsRef">
     <summary class="kmila-config-pill__summary" aria-label="@Traductor.T("CONFIG_PILL_LABEL")">
@@ -175,7 +176,7 @@
     /// </summary>
     private async Task SaveAsync(string name)
     {
-        var config = ConfigService.CreateConfiguration(
+        var config = ConfigurationService.CreateConfiguration(
             name,
             description: null,
             fpga: SelectedFPGA?.FPGA,
@@ -233,7 +234,7 @@
             try
             {
                 var fpga = !string.IsNullOrEmpty(config.FPGA.Path)
-                    ? await JSONFileReader.ReadFPGAJsonFileAsync(config.FPGA.Path)
+                    ? await JsonReader.ReadFPGAJsonFileAsync(config.FPGA.Path)
                     : null;
                 if (fpga != null)
                 {

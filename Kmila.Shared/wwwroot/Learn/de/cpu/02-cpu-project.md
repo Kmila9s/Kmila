@@ -71,7 +71,7 @@ Füge `r1` als zweites 8-Bit-Register hinzu. Definiere `LOAD R1, #i` als Opcode 
 
 ### Aufgabe 4: Externer Datenspeicher
 
-Hänge das RAM-Modul aus dem Memories-Track an diese CPU. Füge `LOAD R0, [addr]` und `STORE R0, [addr]` als Opcodes hinzu. Vorsicht: ein Single-Cycle-Design verlangt, dass der Lese-Port des Speichers seinen Output im selben Zyklus liefert, in dem du die Adresse anlegst — nutze einen kombinatorischen Read fürs ROM und einen registered Read fürs Daten-RAM und plane die Pipeline sorgfältig.
+Hänge das RAM-Modul aus dem Memories-Track an diese CPU. Füge `LOAD R0, [addr]` und `STORE R0, [addr]` als Opcodes hinzu. Vorsicht: ein Single-Cycle-Design verlangt, dass der Lese-Port des Speichers seinen Output im selben Zyklus liefert, in dem du die Adresse anlegst — nutze einen kombinatorischen Read fürs ROM und einen getakteten Read fürs Daten-RAM und plane die Pipeline sorgfältig.
 
 ## Warum das tun?
 

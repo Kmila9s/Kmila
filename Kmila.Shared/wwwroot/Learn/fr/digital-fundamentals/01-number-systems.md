@@ -48,7 +48,7 @@ La correspondance est fixe :
 | 0110 | 6   | 1110 | E   |
 | 0111 | 7   | 1111 | F   |
 
-En VHDL tu écriras des littéraux hex pour des vecteurs dont la longueur est multiple de quatre :
+En VHDL vous écrirez des littéraux hex pour des vecteurs dont la longueur est multiple de quatre :
 
 ```vhdl
 signal addr : std_logic_vector(7 downto 0) := x"CA";  -- 8 bits : 11001010
@@ -64,7 +64,7 @@ Le binaire montré ci-dessus n'encode que des nombres **non négatifs**. Pour fa
 
 Pour représenter `-5` sur 8 bits : `+5 = 00000101`, invert → `11111010`, +1 → `11111011`.
 
-Pourquoi ce schéma ? Parce que l'addition fonctionne à l'identique, signés ou non — tu n'as pas besoin de deux additionneurs. `-5 + 7` en complément à deux 8 bits :
+Pourquoi ce schéma ? Parce que l'addition fonctionne à l'identique, signés ou non — vous n'avez pas besoin de deux additionneurs. `-5 + 7` en complément à deux 8 bits :
 
 ```
   11111011   (-5)
@@ -79,4 +79,4 @@ Le neuvième bit déborde par le haut, et les 8 du bas valent `00000010 = 2`. Ce
 
 - Les bits sont les atomes ; les octets sont des groupes de 8.
 - Binaire et hex sont **le même nombre** sous un autre vernis. L'hex est plus lisible.
-- Le complément à deux encode les négatifs par invert-et-+1 — et c'est la raison pour laquelle `A + B` dans ton ALU fonctionne quel que soit le signe.
+- Le complément à deux encode les négatifs par invert-et-+1 — et c'est la raison pour laquelle `A + B` dans votre ALU fonctionne quel que soit le signe.

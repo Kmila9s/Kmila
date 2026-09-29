@@ -24,17 +24,36 @@
  * Persistence
  *   - Global welcome tour:        localStorage key `kmila.tutorialSeen`
  *   - Per-route tours (preferred): `kmila.tutorialSeen.<routeId>`
- *   The engine sets the configured key on finish OR skip.
+ *   - Global opt-out:             `kmila.tutorialsDisabled`
+ *   Finish AND Skip (also Esc / backdrop-click) set only the CURRENT tour's key,
+ *   so skipping one view still lets other views introduce themselves. The
+ *   "Don't show tours again" link sets the opt-out, which suppresses all tours
+ *   until reset(). When localStorage is unavailable the engine falls back to an
+ *   in-memory record (show each tour once per session) rather than never showing.
  */
 (function () {
     'use strict';
 
     var TUTORIAL_KEY_PREFIX = 'kmila.tutorialSeen';
     var TUTORIAL_SEEN_KEY   = TUTORIAL_KEY_PREFIX; // legacy / global welcome
+    // Single global opt-out. Deliberately NOT under the `kmila.tutorialSeen`
+    // prefix so a per-key reset() wildcard sweep doesn't clear it by accident;
+    // reset() removes it explicitly. When set, hasSeen() reports every tour as
+    // seen, so no tour ever fires until the user hits "Replay tours".
+    var TUTORIAL_DISABLED_KEY = 'kmila.tutorialsDisabled';
+
+    // In-memory fallbacks for when localStorage throws (private mode, locked-down
+    // WebViews). They keep the "show each tour at most once per session" contract
+    // even when nothing can be persisted — better than the old behaviour of
+    // treating unavailable storage as "already seen" (tour never appeared).
+    var sessionSeen = {};       // storageKey -> true
+    var sessionDisabled = false;
+
     var root = null;          // root <div class="kmila-tour"> overlay
     var steps = [];
     var labels = {};
     var idx = 0;
+    var lastDir = 1;          // +1 = advancing, -1 = going back; used to auto-skip missing steps
     var storageKey = TUTORIAL_SEEN_KEY;
     var keyHandler = null;
     var resizeHandler = null;
@@ -83,6 +102,7 @@
             + '<h3 class="kmila-tour__title"></h3>'
             + '<p class="kmila-tour__body"></p>'
             + '<div class="kmila-tour__actions">'
+            +   '<button type="button" class="kmila-tour__btn kmila-tour__btn--link" data-act="disable"></button>'
             +   '<button type="button" class="kmila-tour__btn kmila-tour__btn--ghost" data-act="skip"></button>'
             +   '<div class="kmila-tour__spacer"></div>'
             +   '<button type="button" class="kmila-tour__btn kmila-tour__btn--ghost" data-act="back"></button>'
@@ -90,6 +110,9 @@
             + '</div>';
         overlay.appendChild(card);
 
+        // Skip = "skip this view's tour only" (marks just the current key). The
+        // separate "Don't show tours again" link is the deliberate global opt-out.
+        card.querySelector('[data-act="disable"]').addEventListener('click', disableAll);
         card.querySelector('[data-act="skip"]').addEventListener('click', dismiss);
         card.querySelector('[data-act="back"]').addEventListener('click', goBack);
         card.querySelector('[data-act="next"]').addEventListener('click', goNext);
@@ -102,14 +125,47 @@
         return overlay;
     }
 
+    /*
+     * Returns the first index at or after `from` (moving by `dir`) whose step is
+     * renderable — a null target (centered card) or a target currently in the
+     * DOM. Returns -1 if none. Lets the tour skip steps whose target is missing
+     * (empty states, a page still hydrating) instead of showing a centered card
+     * that describes an element the user can't see.
+     */
+    function firstRenderable(from, dir) {
+        var i = from;
+        var guard = 0;
+        while (i >= 0 && i < steps.length && guard <= steps.length) {
+            var s = steps[i];
+            if (!s) return -1;
+            if (!s.target || findTarget(s.target)) return i;
+            i += dir;
+            guard++;
+        }
+        return -1;
+    }
+
     function render() {
         if (!root) return;
+
+        // Auto-skip a step whose target has gone missing, in the direction of
+        // travel. If nothing is renderable ahead, try the other direction; if the
+        // whole tour is unrenderable, finish gracefully (marks it seen).
+        var current = steps[idx];
+        if (current && current.target && !findTarget(current.target)) {
+            var ni = firstRenderable(idx, lastDir);
+            if (ni === -1) ni = firstRenderable(idx, -lastDir);
+            if (ni === -1) { finish(); return; }
+            idx = ni;
+        }
+
         var step = steps[idx];
-        if (!step) { dismiss(); return; }
+        if (!step) { finish(); return; }
 
         var stepEl    = root.querySelector('.kmila-tour__step');
         var titleEl   = root.querySelector('.kmila-tour__title');
         var bodyEl    = root.querySelector('.kmila-tour__body');
+        var disableBtn= root.querySelector('[data-act="disable"]');
         var skipBtn   = root.querySelector('[data-act="skip"]');
         var backBtn   = root.querySelector('[data-act="back"]');
         var nextBtn   = root.querySelector('[data-act="next"]');
@@ -123,6 +179,7 @@
         titleEl.textContent = step.title || '';
         bodyEl.textContent  = step.body  || '';
 
+        disableBtn.textContent = labels.disable || "Don't show tours again";
         skipBtn.textContent = labels.skip   || 'Skip';
         backBtn.textContent = labels.back   || 'Back';
         nextBtn.textContent = (idx === steps.length - 1)
@@ -130,7 +187,11 @@
             : (labels.next   || 'Next');
 
         backBtn.style.visibility = (idx === 0) ? 'hidden' : 'visible';
-        skipBtn.style.visibility = (idx === steps.length - 1) ? 'hidden' : 'visible';
+        // On the last step the primary button becomes "Got it" (finish), so the
+        // per-view Skip and the global opt-out are redundant there — hide both.
+        var isLast = (idx === steps.length - 1);
+        skipBtn.style.visibility    = isLast ? 'hidden' : 'visible';
+        disableBtn.style.visibility = isLast ? 'hidden' : 'visible';
 
         // Position spotlight + card
         var target = findTarget(step.target);
@@ -189,38 +250,37 @@
 
     function goNext() {
         if (idx >= steps.length - 1) { finish(); return; }
+        lastDir = 1;
         idx++;
         render();
     }
 
     function goBack() {
         if (idx <= 0) return;
+        lastDir = -1;
         idx--;
         render();
     }
 
     function markSeen() {
-        try { localStorage.setItem(storageKey, '1'); } catch (e) {}
-    }
-
-    /* When the user skips a tour, mark EVERY known tour key as seen so we
-       don't fire the next route's tour 200 ms later (TourCatalog hangs a
-       distinct storageKey off /, /projects, /editor, /learn, …). One Skip
-       press = "I don't want the tour anywhere", which matches user intent
-       and prevents tour fatigue (UX-N-005). The known keys are emitted by
-       TourCatalog.cs and all share the `kmila.tutorialSeen` prefix. */
-    function markAllSeen() {
-        try {
-            ['kmila.tutorialSeen', 'kmila.tutorialSeen.home',
-             'kmila.tutorialSeen.projects', 'kmila.tutorialSeen.editor',
-             'kmila.tutorialSeen.learn', 'kmila.tutorialSeen.concepts',
-             'kmila.tutorialSeen.practice', 'kmila.tutorialSeen.settings']
-              .forEach(function (k) { localStorage.setItem(k, '1'); });
-        } catch (e) {}
+        try { localStorage.setItem(storageKey, '1'); }
+        catch (e) { sessionSeen[storageKey] = true; }
     }
 
     function finish()  { markSeen(); teardown(); }
-    function dismiss() { markAllSeen(); teardown(); }
+
+    /* Skip / Esc / backdrop-click dismiss ONLY the current view's tour (same as
+       finishing it). Each view still introduces itself the first time it's
+       visited — skipping one no longer suppresses the rest. To turn every tour
+       off at once the user clicks the explicit "Don't show tours again" link,
+       which calls disableAll(). */
+    function dismiss() { markSeen(); teardown(); }
+
+    function disableAll() {
+        try { localStorage.setItem(TUTORIAL_DISABLED_KEY, '1'); }
+        catch (e) { sessionDisabled = true; }
+        teardown();
+    }
 
     function teardown() {
         if (!root) return;
@@ -232,6 +292,7 @@
         keyHandler = resizeHandler = scrollHandler = null;
         steps = [];
         idx = 0;
+        lastDir = 1;
         storageKey = TUTORIAL_SEEN_KEY;
     }
 
@@ -241,6 +302,7 @@
         labels = labelsIn || {};
         storageKey = (options && options.storageKey) || TUTORIAL_SEEN_KEY;
         idx = 0;
+        lastDir = 1;
         if (steps.length === 0) return;
 
         root = buildSkeleton();
@@ -301,19 +363,29 @@
 
     function hasSeen(key) {
         var k = key || TUTORIAL_SEEN_KEY;
-        try { return localStorage.getItem(k) === '1'; }
-        catch (e) { return true; } // treat missing storage as "already seen" so we never spam
+        try {
+            // Global opt-out gates every tour off.
+            if (localStorage.getItem(TUTORIAL_DISABLED_KEY) === '1') return true;
+            return localStorage.getItem(k) === '1';
+        } catch (e) {
+            // Storage unavailable (private mode, locked-down WebView): fall back to
+            // the in-memory record so each tour still shows at most once this
+            // session, instead of never (the previous behaviour).
+            return sessionDisabled || sessionSeen[k] === true;
+        }
     }
 
     /*
      * reset() with no args clears every flag in localStorage that starts
-     * with the tutorial prefix — used by the "Replay tutorials" button.
+     * with the tutorial prefix AND the global opt-out — used by the "Replay
+     * tours" button, so tours fire again (and are re-enabled if turned off).
      * reset('kmila.tutorialSeen.editor') clears just that key.
      */
     function reset(key) {
         try {
             if (key) {
                 localStorage.removeItem(key);
+                delete sessionSeen[key];
                 return;
             }
             var doomed = [];
@@ -322,7 +394,11 @@
                 if (k && k.indexOf(TUTORIAL_KEY_PREFIX) === 0) doomed.push(k);
             }
             doomed.forEach(function (k) { localStorage.removeItem(k); });
+            localStorage.removeItem(TUTORIAL_DISABLED_KEY);
         } catch (e) {}
+        // Clear the in-memory fallbacks too so a storage-less session replays.
+        if (key) { delete sessionSeen[key]; }
+        else { sessionSeen = {}; sessionDisabled = false; }
     }
 
     window.kmilaTutorial = {

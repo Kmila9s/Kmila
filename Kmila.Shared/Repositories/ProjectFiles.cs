@@ -167,7 +167,10 @@ public class ProjectFiles : IRepository<ProjectFile>
         };
     }
 
-    public async Task<ProjectFile> GetByAsync(object id) => throw new NotImplementedException();
+    /// <summary>Not supported for project files; always throws.</summary>
+    /// <param name="id">Ignored.</param>
+    /// <returns>Never returns; throws <see cref="NotImplementedException"/>.</returns>
+    public async Task<ProjectFile> GetByAsync(object id) { await Task.CompletedTask; throw new NotImplementedException(); }
 
     /// <summary>
     /// Updates a project file's content on disk and refreshes the DB backup.
@@ -262,7 +265,7 @@ public class ProjectFiles : IRepository<ProjectFile>
             }
             newFileName = newFileName.Trim();
             // Forbid path separators in the new name — that's a Move, not a Rename.
-            if (newFileName.Contains('/') || newFileName.Contains('\\'))
+            if (newFileName.Contains('/', System.StringComparison.Ordinal) || newFileName.Contains('\\', System.StringComparison.Ordinal))
             {
                 LastError = "File name cannot contain path separators";
                 return false;
@@ -538,7 +541,7 @@ public class ProjectFiles : IRepository<ProjectFile>
     /// Returns disk metadata (size, dates, line count) for a file. Throws if the file
     /// is missing on disk — callers should catch and surface a friendly message.
     /// </summary>
-    public ProjectFileMetadata GetMetadata(ProjectFile file, Project project)
+    public static ProjectFileMetadata GetMetadata(ProjectFile file, Project project)
     {
         var path = GetDiskPath(project.BasePath, file);
         var info = new System.IO.FileInfo(path);
@@ -651,10 +654,12 @@ public class ProjectFiles : IRepository<ProjectFile>
         return new();
     }
 
+    /// <summary>Cancels and disposes the background cancellation source.</summary>
     public void Dispose()
     {
         _cts?.Cancel();
         _cts?.Dispose();
+        GC.SuppressFinalize(this);
     }
 }
 
@@ -664,12 +669,19 @@ public class ProjectFiles : IRepository<ProjectFile>
 /// </summary>
 public class ProjectFileMetadata
 {
+    /// <summary>Absolute path to the file on disk.</summary>
     public string FullPath { get; set; } = string.Empty;
+    /// <summary>Project-relative path to the file.</summary>
     public string RelativePath { get; set; } = string.Empty;
+    /// <summary>Whether the file currently exists on disk.</summary>
     public bool Exists { get; set; }
+    /// <summary>File size in bytes.</summary>
     public long SizeBytes { get; set; }
+    /// <summary>UTC creation timestamp.</summary>
     public DateTime CreatedUtc { get; set; }
+    /// <summary>UTC last-modified timestamp.</summary>
     public DateTime ModifiedUtc { get; set; }
+    /// <summary>Number of lines in the file.</summary>
     public int LineCount { get; set; }
 
     /// <summary>Human-readable size: "1.4 KB", "23.0 MB", etc.</summary>

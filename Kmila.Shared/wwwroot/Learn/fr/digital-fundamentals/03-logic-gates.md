@@ -1,6 +1,6 @@
 # Les sept portes logiques
 
-Tout circuit numérique, jusqu'à un GPU moderne, est une combinaison de sept cellules élémentaires. Si tu sais comment chacune se comporte et comment l'écrire en VHDL, tu as déjà commencé le design matériel.
+Tout circuit numérique, jusqu'à un GPU moderne, est une combinaison de sept cellules élémentaires. Si vous savez comment chacune se comporte et comment l'écrire en VHDL, vous avez déjà commencé le design matériel.
 
 ## Les six portes à deux entrées
 
@@ -21,7 +21,7 @@ y <= not a;
 
 ## Pourquoi NAND et NOR sont spéciaux
 
-Résultat classique de logique numérique : **NAND seule** (ou NOR seule) suffit à bâtir toutes les autres portes. Toutes deux sont appelées « fonctionnellement complètes » exactement pour cette raison. C'est pourquoi les bibliothèques de procédé CMOS livrent des tonnes de cellules NAND2 et NOR2 — tu peux tout synthétiser à partir d'elles.
+Résultat classique de logique numérique : **NAND seule** (ou NOR seule) suffit à bâtir toutes les autres portes. Toutes deux sont appelées « fonctionnellement complètes » exactement pour cette raison. C'est pourquoi les bibliothèques de procédé CMOS livrent des tonnes de cellules NAND2 et NOR2 — vous pouvez tout synthétiser à partir d'elles.
 
 - NOT : `not a = a nand a`
 - AND : `a and b = not (a nand b)`
@@ -37,7 +37,7 @@ XOR est souvent dessinée avec un plus dans un cercle (⊕). C'est la porte qui 
 
 ## Les six dans un seul fichier
 
-Si tu ouvres le lab **explorateur de table de vérité** de ce module, tu trouveras une seule entity VHDL qui calcule simultanément les six portes 2 entrées, avec les entrées `a` et `b` câblées à l'onglet ports pour le stimulus. Le visualiseur de chronogrammes montre alors la réaction de chaque sortie à chaque combinaison.
+Si vous ouvrez le lab **explorateur de table de vérité** de ce module, vous trouverez une seule entity VHDL qui calcule simultanément les six portes 2 entrées, avec les entrées `a` et `b` câblées à l'onglet ports pour le stimulus. Le visualiseur de chronogrammes montre alors la réaction de chaque sortie à chaque combinaison.
 
 ```vhdl
 architecture rtl of gates is
@@ -51,10 +51,10 @@ begin
 end architecture rtl;
 ```
 
-Remarque : chacune de ces six lignes est **un fil**, pas une instruction qui s'exécute. Six portes, six morceaux de matériel — ils évaluent tous simultanément.
+Remarquez : chacune de ces six lignes est **un fil**, pas une instruction qui s'exécute. Six portes, six morceaux de matériel — ils évaluent tous simultanément.
 
 ## À retenir
 
 - Six portes à deux entrées + NOT, c'est tout l'ensemble.
-- NAND et NOR sont « universelles » — tu peux tout construire à partir d'elles.
+- NAND et NOR sont « universelles » — vous pouvez tout construire à partir d'elles.
 - En VHDL, les portes sont des affectations concurrentes d'une ligne. Elles ne sont pas « appelées » ; elles existent.

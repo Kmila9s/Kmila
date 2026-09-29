@@ -44,6 +44,16 @@ public class SimulationCoordinator : IDisposable
     /// </summary>
     private int _lastEndedProjectId;
 
+    /// <summary>Creates the simulation coordinator and wires up its dependencies.</summary>
+    /// <param name="builder">Program builder that runs simulations and raises progress/end events.</param>
+    /// <param name="sim">Shared simulation parameters/state.</param>
+    /// <param name="snapshots">Store for captured simulation runs.</param>
+    /// <param name="toast">Toast notification service.</param>
+    /// <param name="pushNotifier">Notifier used to signal when a simulation ends.</param>
+    /// <param name="fpga">Currently selected FPGA.</param>
+    /// <param name="projects">Project repository.</param>
+    /// <param name="traductor">Localization/translation service.</param>
+    /// <param name="log">Logger.</param>
     public SimulationCoordinator(
         ProgramBuilder builder,
         SimulationParameters sim,
@@ -141,7 +151,7 @@ public class SimulationCoordinator : IDisposable
 
             int signals = wave.Signals.Count;
             string bodyTemplate = _traductor.T("TOAST_SIM_COMPLETE_BODY_FMT");
-            string body = string.Format(bodyTemplate, signals);
+            string body = string.Format(System.Globalization.CultureInfo.InvariantCulture, bodyTemplate, signals);
 
             // In-app toast — fires whether or not the user is on the editor.
             // KmilaToastService surfaces it in the top-center stack. Uses the
@@ -175,6 +185,7 @@ public class SimulationCoordinator : IDisposable
         }
     }
 
+    /// <summary>Unsubscribes from builder events and releases resources.</summary>
     public void Dispose()
     {
         if (_disposed) return;
@@ -182,5 +193,6 @@ public class SimulationCoordinator : IDisposable
         _builder.OnProgressAdvanced    -= OnProgressAdvanced;
         _builder.OnSimulationEnded     -= OnSimulationEnded;
         _builder.OnSimulationCompleted -= OnSimulationCompleted;
+        GC.SuppressFinalize(this);
     }
 }

@@ -14,7 +14,7 @@ Ein Decoder nimmt einen kleinen Binärcode und verwandelt ihn in einen **One-Hot
   111  │  10000000
 ```
 
-Decoder leben in jedem Speichersystem — die Adressleitungen treiben einen Decoder, und der „Row-Match"-Ausgang aktiviert genau eine Zeile. Wann immer du „Adressdecoder" hörst, das ist es darunter.
+Decoder leben in jedem Speichersystem — die Adressleitungen treiben einen Decoder, und der „Row-Match“-Ausgang aktiviert genau eine Zeile. Wann immer du „Adressdecoder“ hörst, das ist es darunter.
 
 ## Das VHDL
 
@@ -37,7 +37,7 @@ Beachte `when others` am Ende. `sel` ist ein `std_logic_vector(2 downto 0)` — 
 
 ## Was das Beispiel tut
 
-Das Beispiel zyklt `sel` durch alle acht 3-Bit-Werte, 10 µs pro Wert. Auf dem Wellenform-Tab siehst du die 8 Bits von `y` zu einer wandernden `'1'` werden — ein digitaler „Licht-Chaser".
+Das Beispiel zyklt `sel` durch alle acht 3-Bit-Werte, 10 µs pro Wert. Auf dem Wellenform-Tab siehst du die 8 Bits von `y` zu einer wandernden `'1'` werden — ein digitaler „Licht-Chaser“.
 
 ## Du bist dran
 

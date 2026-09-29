@@ -47,11 +47,11 @@ Ya implementa:
 - JUMP (`0010`)
 - HALT (`1111`)
 
-La ROM preinicializada corre `R0 = 3; R0 += 4; R0 += 2; HALT`.
+La ROM preinicializada ejecuta `R0 = 3; R0 += 4; R0 += 2; HALT`.
 
 ## Tu trabajo
 
-Corre tal cual primero. Simula 200 µs con el reloj y reset incluidos. En la pestaña de formas de onda verás `r0_out` pasando por `3 → 7 → 9`, y luego `halted` quedando en alto.
+Ejecútalo tal cual primero. Simula 200 µs con el reloj y reset incluidos. En la pestaña de formas de onda verás `r0_out` pasando por `3 → 7 → 9`, y luego `halted` quedando en alto.
 
 Cuando la base funcione, **extiende** la ISA:
 

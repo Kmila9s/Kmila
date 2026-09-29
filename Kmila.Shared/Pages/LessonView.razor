@@ -181,7 +181,7 @@
 
         <footer class="lesson-footer">
             <KmilaTooltip TextKey="@(_completed ? "LEARN_MARK_INCOMPLETE_TIP" : "LEARN_MARK_COMPLETE_TIP")">
-                <button type="button" class="kmila-btn @(_completed ? "kmila-btn--ghost kmila-btn--primary" : "kmila-btn--success")"
+                <button type="button" data-tour="lesson-complete-btn" class="kmila-btn @(_completed ? "kmila-btn--ghost kmila-btn--primary" : "kmila-btn--success")"
                         @onclick="ToggleCompletedAsync">
                     <Icon Name="@(_completed ? IconName.ArrowCounterclockwise : IconName.CheckCircleFill)" />
                     <span>@Traductor.T(_completed ? "LEARN_MARK_INCOMPLETE" : "LEARN_MARK_COMPLETE")</span>
@@ -408,7 +408,7 @@
                                 : p.Values.Select(v => new PortMomentValue { Time = v.Time, TimeScale = v.Scale, Value = v.Value }).ToList()
                         }).ToList();
 
-                    var cfg = ConfigService.CreateConfiguration(
+                    var cfg = ConfigurationService.CreateConfiguration(
                         name: cfgName,
                         description: $"Auto-generated for lesson: {name}",
                         fpga: null,

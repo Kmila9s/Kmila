@@ -1,6 +1,6 @@
 # Beispiel: deine erste Entity (2-zu-1-MUX)
 
-Ein **Multiplexer** ist das einfachste kombinatorische Gerät, das eine „Wahl" hat. Die 2-zu-1-Variante wählt zwischen zwei Eingängen basierend auf einem `sel`-Bit:
+Ein **Multiplexer** ist das einfachste kombinatorische Gerät, das eine „Wahl“ hat. Die 2-zu-1-Variante wählt zwischen zwei Eingängen basierend auf einem `sel`-Bit:
 
 ```
   sel = 0  →  y = a
@@ -15,7 +15,7 @@ y <= a when sel = '0' else b;
 
 ## Was das Beispiel tut
 
-Öffne das Beispiel und du bekommst ein Projekt namens **Your first entity** mit:
+Öffne das Beispiel und du bekommst ein Projekt namens **Deine erste Entity** mit:
 
 - `mux21.vhd` (das Design oben)
 - Eine Begleit-Simulations-Config, die `sel`, `a` und `b` über 40 Mikrosekunden treibt
@@ -24,7 +24,7 @@ Wenn du Run drückst, zeigt der Wellenform-Tab vier Zeilen — die drei Eingäng
 
 ## Dinge zu beachten
 
-Die Zuweisung `y <= a when sel = '0' else b;` ist eine **nebenläufige Anweisung**: sie lebt außerhalb eines Prozesses und beschreibt eine permanente Verdrahtung. Es gibt kein „wann wird diese Zeile ausgeführt?" — sie existiert einfach.
+Die Zuweisung `y <= a when sel = '0' else b;` ist eine **nebenläufige Anweisung**: sie lebt außerhalb eines Prozesses und beschreibt eine permanente Verdrahtung. Es gibt kein „wann wird diese Zeile ausgeführt?“ — sie existiert einfach.
 
 Die Bedingung in einem `when/else` kann jeder boolesche Ausdruck sein:
 

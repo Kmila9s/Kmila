@@ -49,21 +49,21 @@ begin
 end architecture demo;
 ```
 
-Note deux choses :
+Notez deux choses :
 
 - Les variables utilisent `:=` ; les signaux utilisent `<=`.
 - Les variables sont locales à un seul process.
 
 ## Pourquoi ça compte pour le matériel
 
-Un signal **modélise un fil ou une bascule**. Tu ne peux pas changer la valeur d'un fil deux fois au même instant — ce qui pilote le fil pendant un tick se stabilise à une valeur à la fin de ce tick.
+Un signal **modélise un fil ou une bascule**. Vous ne pouvez pas changer la valeur d'un fil deux fois au même instant — ce qui pilote le fil pendant un tick se stabilise à une valeur à la fin de ce tick.
 
 Une variable **modélise un calcul temporaire** à l'intérieur d'un process. Le synthétiseur est libre de l'implémenter en combinatoire, ou de l'optimiser complètement.
 
 ## Quand utiliser quoi
 
-- **Signaux** — par défaut. Chaque port, chaque registre, chaque bus que tu verras sur le visualiseur de chronogrammes : signal.
-- **Variables** — pour des compteurs de boucle locaux ou des résultats arithmétiques intermédiaires dans un process, où tu veux la sémantique style C à l'intérieur de ce process.
+- **Signaux** — par défaut. Chaque port, chaque registre, chaque bus que vous verrez sur le visualiseur de chronogrammes : signal.
+- **Variables** — pour des compteurs de boucle locaux ou des résultats arithmétiques intermédiaires dans un process, où vous voulez la sémantique style C à l'intérieur de ce process.
 
 ## Un piège fréquent
 
@@ -81,7 +81,7 @@ end process;
 
 Ils s'attendent à ce que ça échange `a` et `b`. Comme les affectations de signal ont lieu à la fin du tick, **c'est** ce que ça fait : au front, `a` reçoit l'**ancienne** valeur de `b`, et `b` reçoit l'**ancienne** valeur de `a`. C'est en fait la façon idiomatique d'échanger deux registres en un cycle.
 
-Mais si tu passes aux variables, la sémantique change :
+Mais si vous passez aux variables, la sémantique change :
 
 ```vhdl
 process(clk)
@@ -100,4 +100,4 @@ Pas d'échange. Juste les deux égaux à l'ancien `b`.
 
 - `signal` : mis à jour en fin de tick. Affectation `<=`. Modélise les fils et registres.
 - `variable` : mis à jour immédiatement. Affectation `:=`. Locale à un process. Modélise les calculs intermédiaires.
-- Dans le doute — prends un signal.
+- Dans le doute — prenez un signal.

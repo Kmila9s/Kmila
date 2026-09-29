@@ -253,7 +253,7 @@
         if (string.IsNullOrWhiteSpace(_newConfigName))
             return;
 
-        var config = ConfigService.CreateConfiguration(
+        var config = ConfigurationService.CreateConfiguration(
             _newConfigName,
             _newConfigDescription,
             CurrentFPGA,
@@ -316,7 +316,7 @@
         var config = await ConfigService.LoadConfigurationAsync(name);
         if (config != null)
         {
-            _exportContent = ConfigService.ExportConfiguration(config);
+            _exportContent = ConfigurationService.ExportConfiguration(config);
             _exportFileName = $"{name.Replace(" ", "_")}.k-config";
             _showExportDownload = true;
             StateHasChanged();

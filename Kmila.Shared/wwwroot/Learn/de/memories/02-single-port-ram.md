@@ -1,6 +1,6 @@
 # Beispiel: Single-Port-RAM mit Write-First-Read
 
-Lese-Schreib-Speicher ist die andere Hälfte des „BRAM-Ableitens". Dasselbe `type…array…of`-Muster funktioniert, nur ist das Array jetzt ein **Signal**, und du schreibst auf einigen Taktflanken und liest auf den anderen.
+Lese-Schreib-Speicher ist die andere Hälfte des „BRAM-Ableitens“. Dasselbe `type…array…of`-Muster funktioniert, nur ist das Array jetzt ein **Signal**, und du schreibst auf einigen Taktflanken und liest auf den anderen.
 
 ## Die Vorlage
 

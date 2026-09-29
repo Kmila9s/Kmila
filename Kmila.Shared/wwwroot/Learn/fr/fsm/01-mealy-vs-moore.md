@@ -17,7 +17,7 @@ flowchart LR
     SR --> OUT["outputs"]
 ```
 
-Étant donné un état, la sortie est fixée. Si tu es dans `S_GREEN`, `green = '1'`. Toujours. Quoi que dise l'entrée.
+Étant donné un état, la sortie est fixée. Si vous êtes dans `S_GREEN`, `green = '1'`. Toujours. Quoi que dise l'entrée.
 
 **Pour**
 - Les sorties ne changent qu'aux fronts d'horloge → pas de glitches.
@@ -52,11 +52,11 @@ Les sorties sont une fonction de l'état courant **et** de l'entrée courante. E
 
 **Par défaut : Moore.** L'absence de glitches et les sorties alignées sur les fronts rendent le design prévisible. Pour de la logique de contrôle dans un CPU, un contrôleur mémoire ou tout ce qui relève de la sûreté, Moore est le choix le plus sûr.
 
-**Prends Mealy quand** tu dois réagir dans le même cycle d'horloge, ou quand les états supplémentaires Moore feraient enfler le design. UART et moteurs de protocole finissent souvent en Mealy pour cette raison de temps de réaction.
+**Prenez Mealy quand** vous devez réagir dans le même cycle d'horloge, ou quand les états supplémentaires Moore feraient enfler le design. UART et moteurs de protocole finissent souvent en Mealy pour cette raison de temps de réaction.
 
 ## Comment Kmila les supporte
 
-Les deux styles entrent dans le même **motif à deux process** que tu verras dans l'exemple du feu tricolore :
+Les deux styles entrent dans le même **motif à deux process** que vous verrez dans l'exemple du feu tricolore :
 
 ```vhdl
 -- Process 1 : registre d'état (toujours sûr Moore)
@@ -82,4 +82,4 @@ Pour une machine Moore, les sorties ne regardent que `state`. Pour une machine M
 
 - Moore : sortie = fonction de l'état seul. Sans glitch.
 - Mealy : sortie = fonction de l'état + entrée. Plus rapide.
-- Commence par Moore ; passe à Mealy quand tu as une raison précise.
+- Commencez par Moore ; passez à Mealy quand vous avez une raison précise.

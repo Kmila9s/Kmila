@@ -67,4 +67,4 @@ Before the fix, `y` would stay `'1'` when `enable` dropped back to `'0'` — tha
 
 ## The rule
 
-In a combinational process, **every output must be assigned on every path**. If you can't satisfy that, either add a default or you're actually wanting a flip-flop — in which case you should move to a clocked process and own that decision.
+In a combinational process, **every output must be assigned on every path**. If you can't satisfy that, either add a default, or you actually want a flip-flop — in which case you should move to a clocked process and own that decision.

@@ -29,6 +29,7 @@
 @inject SidebarState SidebarState
 @inject GitHubAuth GitHubAuth
 @inject IServiceProvider SP
+@inject JSONFileReader JsonReader
 
 <details class="kmila-profile-menu">
     <summary class="kmila-profile-menu__summary"
@@ -320,7 +321,7 @@
         {
             try
             {
-                var m = await JSONFileReader.ReadFPGAJsonFileAsync(p);
+                var m = await JsonReader.ReadFPGAJsonFileAsync(p);
                 _fpgaMeta[p] = (m?.Manufacturer, m?.Family);
             }
             catch { _fpgaMeta[p] = (null, null); }
@@ -383,12 +384,12 @@
                 var savedPath = await DbContext.GetSettingAsync(AppSettings.KEY_FPGA_PATH);
                 if (!string.IsNullOrWhiteSpace(savedPath) && _fpgas.Contains(savedPath))
                 {
-                    var restored = await JSONFileReader.ReadFPGAJsonFileAsync(savedPath);
+                    var restored = await JsonReader.ReadFPGAJsonFileAsync(savedPath);
                     if (restored is not null)
                     {
                         _fpga = restored;
                         _selectedFPGA = savedPath;
-                        SelectedFPGA.SetFPGA(restored, savedPath);
+                        SelectedFPGA!.SetFPGA(restored, savedPath);
                     }
                 }
             }
@@ -426,7 +427,7 @@
     private async Task OnFPGAPicked(string path)
     {
         _selectedFPGA = path;
-        _fpga = await JSONFileReader.ReadFPGAJsonFileAsync(path);
+        _fpga = await JsonReader.ReadFPGAJsonFileAsync(path);
         if (_fpga is not null) SelectedFPGA.SetFPGA(_fpga, path);
         // Persist so the picked board survives a cold app restart — the
         // SelectedFPGA singleton has no persistence layer of its own.
@@ -483,7 +484,7 @@
     }
 
     /// <summary>
-    /// Closes the outer profile <details> via JS so it doesn't sit visible
+    /// Closes the outer profile &lt;details&gt; via JS so it doesn't sit visible
     /// behind a follow-up modal/navigation. We don't expose the open state to
     /// Blazor — it's a cosmetic concern owned by the browser side.
     /// </summary>

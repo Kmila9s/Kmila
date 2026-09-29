@@ -82,7 +82,9 @@
                 && DateTime.UtcNow - last < MinInterval)
                 return;
 
+#pragma warning disable CA5394 // Random is non-security here: sampling which sessions see the prompt
             if (Random.Shared.NextDouble() > probability) return;
+#pragma warning restore CA5394
 
             var answered = await DbContext.GetSettingAsync(AppSettings.KEY_SATISFACTION_ANSWERED);
             _answered = string.Equals(answered, "true", StringComparison.OrdinalIgnoreCase);

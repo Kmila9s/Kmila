@@ -33,6 +33,9 @@ public class ConceptCatalog
     private readonly Dictionary<string, ExecutionTimelineDoc?> _timelineCache = new();
     private readonly Dictionary<string, ExercisePayload?> _exerciseCache = new();
 
+    /// <summary>Creates the catalog with its resource-open delegate and an optional logger.</summary>
+    /// <param name="openFileAsync">Delegate that opens a bundled resource stream by path.</param>
+    /// <param name="logger">Optional logger; a null logger is used when omitted.</param>
     public ConceptCatalog(Func<string, Task<Stream>> openFileAsync,
                           ILogger<ConceptCatalog>? logger = null)
     {

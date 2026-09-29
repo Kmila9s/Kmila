@@ -63,10 +63,10 @@ yellow <= '1' when state = S_YELLOW else '0';
 
 ## Ce que fait l'exemple
 
-L'horloge tourne pendant environ 400 µs. Tous les 8 cycles (7 de maintien + 1 de transition), la FSM avance. Tu vois trois signaux carrés tourner en séquence : `red` passe à 1 pendant 8 ticks, puis `green` pendant 8 ticks, puis `yellow`, puis retour à `red`.
+L'horloge tourne pendant environ 400 µs. Tous les 8 cycles (7 de maintien + 1 de transition), la FSM avance. Vous voyez trois signaux carrés tourner en séquence : `red` passe à 1 pendant 8 ticks, puis `green` pendant 8 ticks, puis `yellow`, puis retour à `red`.
 
-## À toi de jouer
+## À vous de jouer
 
-- **Ajoute une entrée requête piéton.** Quand `ped = '1'` et que l'état est `S_GREEN`, force `next_state` à `S_YELLOW` (le cycle se raccourcit pour laisser traverser les piétons). Ça transforme la machine Moore en quelque chose de Mealy-esque — la sortie `yellow` dépend maintenant de `state` **et** de `ped`.
-- **Émets un signal `walk`** qui n'est haut que quand `state = S_RED`. Nouvelle sortie Moore.
-- **Paramètre `HOLD`** en generic — 7 va pour la simu, mais sur un FPGA 50 MHz il faut quelques centaines de millions de cycles pour tenir 1 s.
+- **Ajoutez une entrée requête piéton.** Quand `ped = '1'` et que l'état est `S_GREEN`, forcez `next_state` à `S_YELLOW` (le cycle se raccourcit pour laisser traverser les piétons). Ça transforme la machine Moore en quelque chose de Mealy-esque — la sortie `yellow` dépend maintenant de `state` **et** de `ped`.
+- **Émettez un signal `walk`** qui n'est haut que quand `state = S_RED`. Nouvelle sortie Moore.
+- **Paramétrez `HOLD`** en generic — 7 va pour la simu, mais sur un FPGA 50 MHz il faut quelques centaines de millions de cycles pour tenir 1 s.

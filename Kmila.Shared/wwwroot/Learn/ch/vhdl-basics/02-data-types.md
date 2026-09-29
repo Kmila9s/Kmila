@@ -35,14 +35,14 @@ signal addr : std_logic_vector(0 to 15);     -- 16 位,索引 0..15
 
 ```vhdl
 data <= "10101010";     -- 二进制字面量,每位一个字符
-data <= x"AA";          -- 十六进制字面量(必须是 4 位的倍数)
+addr <= x"CAFE";        -- 十六进制字面量(必须是 4 位的倍数)
 data <= (others => '0');-- 全零的简写
 data <= (0 => '1', others => '0'); -- 只有 LSB 为高
 ```
 
 ## `unsigned` / `signed` —— 可以做算术的向量
 
-`std_logic_vector` 只是 “一袋位",没有数值含义。要做加减,得用 `unsigned` 或 `signed`:
+`std_logic_vector` 只是 “一袋位”,没有数值含义。要做加减,得用 `unsigned` 或 `signed`:
 
 ```vhdl
 use IEEE.NUMERIC_STD.ALL;

@@ -17,11 +17,17 @@ public sealed class InMemoryLoggerProvider : ILoggerProvider
 {
     private readonly AppLogStore _store;
 
+    /// <summary>Creates a provider that writes log events into the given store.</summary>
+    /// <param name="store">Shared in-memory log buffer to receive entries.</param>
     public InMemoryLoggerProvider(AppLogStore store) { _store = store; }
 
+    /// <summary>Creates a logger for the given category.</summary>
+    /// <param name="categoryName">Category name supplied by the logging framework.</param>
+    /// <returns>An <see cref="ILogger"/> that forwards to the shared store.</returns>
     public ILogger CreateLogger(string categoryName) =>
         new InMemoryLogger(categoryName, _store);
 
+    /// <summary>No-op; the backing store outlives this provider.</summary>
     public void Dispose() { /* AppLogStore lives longer than this provider */ }
 }
 

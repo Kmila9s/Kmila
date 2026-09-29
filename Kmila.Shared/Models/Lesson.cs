@@ -189,9 +189,11 @@ public class LessonSample
 /// <summary>Minimal simulation configuration shape carried by a sample.</summary>
 public class LessonSampleConfig
 {
+    /// <summary>Total simulation time in units of <see cref="Scale"/>.</summary>
     [JsonPropertyName("time")]
     public int Time { get; set; } = 100;
 
+    /// <summary>Time-scale unit for <see cref="Time"/> (e.g. "US").</summary>
     [JsonPropertyName("scale")]
     public string Scale { get; set; } = "US";
 
@@ -207,6 +209,7 @@ public class LessonSampleConfig
 /// <summary>Per-port stimulus entry inside a lesson sample config.</summary>
 public class LessonPortStimulus
 {
+    /// <summary>Name of the design port this stimulus drives.</summary>
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
 
@@ -214,6 +217,7 @@ public class LessonPortStimulus
     [JsonPropertyName("clock")]
     public bool Clock { get; set; }
 
+    /// <summary>Ordered stimulus moments applied to the port.</summary>
     [JsonPropertyName("values")]
     public List<LessonPortValue> Values { get; set; } = new();
 }
@@ -221,12 +225,15 @@ public class LessonPortStimulus
 /// <summary>One (time, scale, value) stimulus moment.</summary>
 public class LessonPortValue
 {
+    /// <summary>Moment time in units of <see cref="Scale"/>.</summary>
     [JsonPropertyName("time")]
     public int Time { get; set; }
 
+    /// <summary>Time-scale unit for <see cref="Time"/> (e.g. "US").</summary>
     [JsonPropertyName("scale")]
     public string Scale { get; set; } = "US";
 
+    /// <summary>Value applied to the port at this moment.</summary>
     [JsonPropertyName("value")]
     public string Value { get; set; } = "0";
 }
@@ -238,6 +245,7 @@ public class LessonManifest
     [JsonPropertyName("version")]
     public int Version { get; set; } = 1;
 
+    /// <summary>Curriculum modules declared in the manifest.</summary>
     [JsonPropertyName("modules")]
     public List<LessonModule> Modules { get; set; } = new();
 }

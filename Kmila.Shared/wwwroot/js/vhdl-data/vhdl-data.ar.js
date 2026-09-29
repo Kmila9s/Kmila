@@ -76,8 +76,8 @@
             // --- البرامج الفرعية ---
             function:     { summary: "برنامج فرعي خالص يُعيد قيمة.", description: "يحسب قيمة من معاملاته — دون أي آثار جانبية على الإشارات.", example: "function max(a, b : integer) return integer is\nbegin\n  if a > b then return a; else return b; end if;\nend function;" },
             procedure:    { summary: "برنامج فرعي قادر على قيادة الإشارات.", description: "بخلاف function يمكن لـ procedure امتلاك معاملات `out` / `inout`." },
-            impure:       { summary: "تعلّم function أنه يجوز اعتماده على حالة خارجية.", description: "تسمح بقراءة الإشارات المُعلَنة خارج نطاقه." },
-            pure:         { summary: "تعلّم function أنه دون تبعيات خارجية.", description: "القيمة الافتراضية لـ `function` — نادرًا ما تُكتب صراحة." },
+            impure:       { summary: "تصف function بأنها قد تعتمد على حالة خارجية.", description: "تسمح بقراءة الإشارات المُعلَنة خارج نطاقها." },
+            pure:         { summary: "تصف function بأنها دون تبعيات خارجية.", description: "القيمة الافتراضية لـ `function` — نادرًا ما تُكتب صراحة." },
             open:         { summary: "يترك منفذًا غير موصول، أو يفتح ملفًا.", description: "في port map: `some_port => open;`. لإدخال/إخراج الملفات: `file F : text open read_mode is ...;`" },
 
             // --- المعاملات (كلمات مفتاحية) ---

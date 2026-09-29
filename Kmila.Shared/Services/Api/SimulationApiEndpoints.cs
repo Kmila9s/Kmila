@@ -13,13 +13,22 @@ namespace Kmila.Shared.Services.Api;
 // bodies delegate to SimulationApiHandlers so the MAUI-embedded HttpListener
 // host (Kmila/Services/EmbeddedApiHost.cs) can call the same code paths
 // without duplicating the logic. Localhost-only by host configuration.
+/// <summary>
+/// Minimal-API endpoint group for the headless simulation surface, mounted by
+/// Kmila.Web via <see cref="MapSimulationApi"/>. Endpoint bodies delegate to
+/// <c>SimulationApiHandlers</c> so the MAUI-embedded host shares the same code.
+/// </summary>
 public static class SimulationApiEndpoints
 {
+    /// <summary>Base URL path the simulation API is mounted under (re-exported from the handlers).</summary>
     // BasePath moved to SimulationApiHandlers (target-agnostic) so the MAUI
     // HttpListener host can reach it. Kept here as a re-export for backwards
     // compatibility.
     public const string BasePath = SimulationApiHandlers.BasePath;
 
+    /// <summary>Registers the simulation API's services (sandbox store, simulator, janitor).</summary>
+    /// <param name="services">The service collection to add to.</param>
+    /// <returns>The same service collection for chaining.</returns>
     public static IServiceCollection AddSimulationApi(this IServiceCollection services)
     {
         // TryAdd so a caller that pre-registered a configured SandboxProjectStore
@@ -36,6 +45,9 @@ public static class SimulationApiEndpoints
         return services;
     }
 
+    /// <summary>Maps the simulation API endpoints, including the bearer-token auth filter.</summary>
+    /// <param name="app">The endpoint route builder to map onto.</param>
+    /// <returns>The same route builder for chaining.</returns>
     public static IEndpointRouteBuilder MapSimulationApi(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup(BasePath).WithTags("SimulationApi");

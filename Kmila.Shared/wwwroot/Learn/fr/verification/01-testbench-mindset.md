@@ -1,6 +1,6 @@
 # La mentalité du banc de test
 
-Dans toutes les leçons précédentes, Kmila a été ton banc de test — tu glissais des stimuli dans l'onglet Ports, Run lançait le design, et tu jugeais le chronogramme à l'œil. Pour apprendre, c'est très bien. Ce n'est pas comme ça que le design numérique professionnel fonctionne.
+Dans toutes les leçons précédentes, Kmila a été votre banc de test — vous glissiez des stimuli dans l'onglet Ports, Exécuter lançait le design, et vous jugiez le chronogramme à l'œil. Pour apprendre, c'est très bien. Ce n'est pas comme ça que le design numérique professionnel fonctionne.
 
 ## Ce qu'est un vrai banc de test
 
@@ -47,12 +47,12 @@ Trois idées nouvelles :
 
 ## Pourquoi ça compte
 
-- **Régression** : un banc de test écrit hier tourne encore aujourd'hui. Un chronogramme que tu fixais hier est perdu.
-- **Couverture** : tu peux pousser des motifs de stimulus qu'une session interactive n'atteindra jamais (entrées aléatoires, cas limites, fréquences extrêmes).
-- **Automatisation** : un système de CI lance ton banc à chaque commit. Les chronogrammes ne rentrent pas en CI.
+- **Régression** : un banc de test écrit hier tourne encore aujourd'hui. Un chronogramme que vous fixiez hier est perdu.
+- **Couverture** : vous pouvez pousser des motifs de stimulus qu'une session interactive n'atteindra jamais (entrées aléatoires, cas limites, fréquences extrêmes).
+- **Automatisation** : un système de CI lance votre banc à chaque commit. Les chronogrammes ne rentrent pas en CI.
 
 ## Limites actuelles de Kmila
 
-Le simulateur Kmila exécute très bien les bancs de test si tu les écris comme des entities ordinaires — la seule chose qui manque aujourd'hui, c'est l'extraction automatique de pass/fail depuis les `assert` vers le journal de sortie. C'est dans la roadmap.
+Le simulateur Kmila exécute très bien les bancs de test si vous les écrivez comme des entities ordinaires — la seule chose qui manque aujourd'hui, c'est l'extraction automatique de pass/fail depuis les `assert` vers le journal de sortie. C'est dans la roadmap.
 
 *D'autres leçons à venir — ce module est en cours d'écriture.*

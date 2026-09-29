@@ -28,6 +28,9 @@ public class LessonProgressStore
     private bool _hydrated;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    /// <summary>Creates the store with the database context and an optional logger.</summary>
+    /// <param name="db">Database context backing lesson progress persistence.</param>
+    /// <param name="logger">Optional logger; a null logger is used when omitted.</param>
     public LessonProgressStore(ApplicationDbContext db,
                                ILogger<LessonProgressStore>? logger = null)
     {

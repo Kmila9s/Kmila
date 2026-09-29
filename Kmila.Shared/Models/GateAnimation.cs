@@ -80,6 +80,7 @@ public class GateNode
 /// </summary>
 public class GatePin
 {
+    /// <summary>Pin name.</summary>
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
 
@@ -286,9 +287,11 @@ public class GateChip
     [JsonPropertyName("net")]
     public string Net { get; set; } = string.Empty;
 
+    /// <summary>X coordinate of the chip.</summary>
     [JsonPropertyName("x")]
     public double X { get; set; }
 
+    /// <summary>Y coordinate of the chip.</summary>
     [JsonPropertyName("y")]
     public double Y { get; set; }
 
@@ -304,12 +307,15 @@ public class GateChip
 /// </summary>
 public class GateJunction
 {
+    /// <summary>Source net id whose colour the junction dot uses.</summary>
     [JsonPropertyName("source")]
     public string Source { get; set; } = string.Empty;
 
+    /// <summary>X coordinate of the junction dot.</summary>
     [JsonPropertyName("x")]
     public double X { get; set; }
 
+    /// <summary>Y coordinate of the junction dot.</summary>
     [JsonPropertyName("y")]
     public double Y { get; set; }
 }

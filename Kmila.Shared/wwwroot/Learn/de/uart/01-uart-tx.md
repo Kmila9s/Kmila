@@ -21,7 +21,7 @@ Jedes Bit wird auf `tx` für genau `clk_freq / baud` Taktzyklen gehalten. Bei 50
 1. Bau einen Taktzähler, der alle ~434 Zyklen einen Ein-Zyklus-`baud_tick` erzeugt.
 2. Bei `send = '1'` lade `data` in ein 10-Bit-Schieberegister: `{ stop_bit, data[7..0], start_bit } = 1 & data & 0`. Treibe `busy <= '1'`.
 3. Schiebe das Register bei jedem `baud_tick` nach rechts (so geht das Startbit zuerst raus, dann LSB bis MSB der Daten, dann das Stoppbit).
-4. Nach dem 10. Tick fällt `busy`, und `tx` idlet high.
+4. Nach dem 10. Tick fällt `busy`, und `tx` liegt wieder auf High (Idle).
 
 ## Gerüst
 
@@ -81,6 +81,6 @@ Danach wieder idle high. Zoome in den Wellenform-Tab und prüfe das Muster Bit f
 
 ## Weitergehen
 
-- Füge eine **FIFO** hinzu, damit du mehrere Bytes einreihen kannst; `send` wird zu „push".
+- Füge eine **FIFO** hinzu, damit du mehrere Bytes einreihen kannst; `send` wird zu „push“.
 - Bau die **RX**-Seite: jedes ankommende Bit bei 1,5 × Bitperiode samplen, danach bei 1 × .
 - Parametriere den Frame: Parität, 7-Bit vs. 8-Bit Daten, 1 vs. 2 Stoppbits.

@@ -20,7 +20,7 @@ Al abrirlo obtienes un proyecto llamado **Tu primera entidad** con:
 - `mux21.vhd` (el diseño de arriba)
 - Una configuración de simulación que estimula `sel`, `a` y `b` durante 40 microsegundos
 
-Al pulsar Run, la pestaña de formas de onda muestra cuatro filas — las tres entradas y la salida. Observa cómo `y` alterna entre `a` y `b` cada vez que `sel` cambia.
+Al pulsar Ejecutar, la pestaña de formas de onda muestra cuatro filas — las tres entradas y la salida. Observa cómo `y` alterna entre `a` y `b` cada vez que `sel` cambia.
 
 ## Lo que hay que notar
 

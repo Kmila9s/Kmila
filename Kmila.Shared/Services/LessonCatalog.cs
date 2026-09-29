@@ -28,6 +28,9 @@ public class LessonCatalog
     private readonly Dictionary<string, GateAnimationDoc?> _gatesCache = new();
     private readonly Dictionary<string, FsmAnimationDoc?> _fsmCache = new();
 
+    /// <summary>Creates the catalog with a delegate for opening bundled files.</summary>
+    /// <param name="openFileAsync">Opens a bundled asset by relative path.</param>
+    /// <param name="logger">Optional logger.</param>
     public LessonCatalog(Func<string, Task<Stream>> openFileAsync,
                          ILogger<LessonCatalog>? logger = null)
     {
@@ -297,4 +300,4 @@ public class LessonCatalog
 /// so <see cref="LessonCatalog"/>'s manifest deserialisation reads tidily without
 /// fully-qualifying the BCL converter name on every reference.
 /// </summary>
-internal class JsonStringEnumConverter : System.Text.Json.Serialization.JsonStringEnumConverter { }
+internal sealed class JsonStringEnumConverter : System.Text.Json.Serialization.JsonStringEnumConverter { }

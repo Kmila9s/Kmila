@@ -3,7 +3,7 @@ namespace Kmila.Shared.Services.Api;
 /// <summary>
 /// Cross-host contract for the Phase B in-process API host. The concrete
 /// implementation lives in <c>Kmila/Services/EmbeddedApiHost.cs</c> and is
-/// only registered by the MAUI head — <see cref="Kmila.Web"/> ships the
+/// only registered by the MAUI head — <c>Kmila.Web</c> ships the
 /// same API surface natively (via <c>MapSimulationApi</c> in Program.cs)
 /// and does NOT register this abstraction.
 ///
@@ -24,7 +24,10 @@ public interface ILocalApiHost
 
     /// <param name="port">TCP port; 0 means "let the OS pick".</param>
     /// <param name="bindLan">When true, bind IPAddress.Any; else loopback.</param>
+    /// <param name="ct">Cancellation token.</param>
     Task StartAsync(int port, bool bindLan, CancellationToken ct = default);
 
+    /// <summary>Stops the API host if running.</summary>
+    /// <param name="ct">Cancellation token.</param>
     Task StopAsync(CancellationToken ct = default);
 }

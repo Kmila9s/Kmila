@@ -6,7 +6,17 @@ namespace Kmila.Shared.Services;
 /// the same namespace scope without ambiguity (the Output panel uses this;
 /// the system-wide Logs page uses the Microsoft one).
 /// </summary>
-public enum BuildLogLevel { Info, Success, Warn, Error }
+public enum BuildLogLevel
+{
+    /// <summary>Informational message.</summary>
+    Info,
+    /// <summary>Successful outcome.</summary>
+    Success,
+    /// <summary>Warning.</summary>
+    Warn,
+    /// <summary>Error.</summary>
+    Error
+}
 
 /// <summary>Single append-only log entry for the Output tab.</summary>
 public record LogEntry(DateTime Timestamp, BuildLogLevel Level, string Message);

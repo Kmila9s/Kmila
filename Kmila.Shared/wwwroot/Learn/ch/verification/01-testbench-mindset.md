@@ -41,8 +41,8 @@ end architecture sim;
 
 三个新概念:
 
-1. **`wait`** —— 只有 process 说 “走" 时间才会前进。
-2. **`assert … report … severity`** —— 自检。把 1000 行的波形浓缩成 “pass" 或 “fail"。
+1. **`wait`** —— 只有 process 说 “走” 时间才会前进。
+2. **`assert … report … severity`** —— 自检。把 1000 行的波形浓缩成 “pass” 或 “fail”。
 3. **没有端口的 entity** —— 测试台是自包含的;仿真器直接实例化它们。
 
 ## 为什么重要

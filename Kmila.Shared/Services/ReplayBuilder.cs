@@ -196,7 +196,7 @@ public static class ReplayBuilder
         var map = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
         if (string.IsNullOrEmpty(sourceCode) || signalNames.Count == 0) return map;
 
-        var lines = sourceCode.Replace("\r\n", "\n").Split('\n');
+        var lines = sourceCode.Replace("\r\n", "\n", System.StringComparison.Ordinal).Split('\n');
         for (int i = 0; i < lines.Length; i++)
         {
             foreach (var name in ExtractAssignedNames(lines[i]))
@@ -291,8 +291,8 @@ public static class ReplayBuilder
             // std_logic: render 0 or 1 directly. Wider buses get a decimal
             // form when no Label was provided (rare).
             if (_bitWidth == 1)
-                return tr.Value == 1.0 ? "1" : tr.Value == 0.0 ? "0" : tr.Value.ToString() ?? "?";
-            return tr.Value.Value.ToString("0");
+                return tr.Value == 1.0 ? "1" : tr.Value == 0.0 ? "0" : tr.Value?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "";
+            return tr.Value.Value.ToString("0", System.Globalization.CultureInfo.InvariantCulture);
         }
     }
 }
