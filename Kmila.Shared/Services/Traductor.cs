@@ -67,6 +67,13 @@ public class Traductor : IDisposable
     public string Lang => _lang;
 
     /// <summary>
+    /// Gets a read-only view of the currently loaded translation dictionary
+    /// (every key/value for the active language). Used by the settings page to
+    /// export the live dictionary so it can be edited and re-imported.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> CurrentEntries => _languageKeys;
+
+    /// <summary>
     /// Gets whether the current language is right-to-left (RTL).
     /// </summary>
     public bool IsRtl => _lang == "ar";

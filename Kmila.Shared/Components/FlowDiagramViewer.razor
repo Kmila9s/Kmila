@@ -206,10 +206,10 @@
         try
         {
             var svg = await JS.InvokeAsync<string>("kmilaSerializeFlowSvg", ".flow-diagram__body");
-            if (string.IsNullOrEmpty(svg))
+            if (IsFlowExportFailure(svg, out var failKey))
             {
                 ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
-                    Traductor.T("FLOW_MERMAID_NOT_READY"), ToastType.Danger));
+                    Traductor.T(failKey), ToastType.Danger));
                 return;
             }
             var result = await Export.SaveTextAsync(ExportCategory.Svg, fileName, "image/svg+xml", svg);
@@ -228,10 +228,10 @@
         try
         {
             var base64 = await JS.InvokeAsync<string>("kmilaSerializeFlowPng", ".flow-diagram__body");
-            if (string.IsNullOrEmpty(base64))
+            if (IsFlowExportFailure(base64, out var failKey))
             {
                 ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
-                    Traductor.T("FLOW_MERMAID_NOT_READY"), ToastType.Danger));
+                    Traductor.T(failKey), ToastType.Danger));
                 return;
             }
             var bytes = Convert.FromBase64String(base64);
@@ -242,6 +242,32 @@
         {
             ToastService.Notify(Message(Traductor.T("COMMON_ERROR"), ex.Message, ToastType.Danger));
         }
+    }
+
+    /// <summary>
+    /// Interprets the payload returned by <c>kmilaSerializeFlowSvg</c> /
+    /// <c>kmilaSerializeFlowPng</c>. Those return a real SVG string / PNG
+    /// base64 on success, or an <c>ERR:&lt;reason&gt;</c> sentinel (never a
+    /// valid payload, which never starts with "ERR:") when the diagram could
+    /// not be rendered. Maps the reason to the right toast key so the user
+    /// sees "couldn't render" rather than the old catch-all "not ready".
+    /// </summary>
+    private static bool IsFlowExportFailure(string? payload, out string messageKey)
+    {
+        if (string.IsNullOrEmpty(payload))
+        {
+            messageKey = "FLOW_MERMAID_NOT_READY";
+            return true;
+        }
+        if (payload.StartsWith("ERR:", StringComparison.Ordinal))
+        {
+            messageKey = payload == "ERR:render-failed"
+                ? "FLOW_RENDER_FAILED"
+                : "FLOW_MERMAID_NOT_READY";
+            return true;
+        }
+        messageKey = string.Empty;
+        return false;
     }
 
     /// <summary>

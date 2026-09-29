@@ -97,7 +97,7 @@
                             data-tour="logs-export"
                             class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
                             @onclick="ExportLogsAsync"
-                            disabled="@(_snapshot.Count == 0)"
+                            disabled="@(_filtered.Count == 0)"
                             aria-label="@Traductor.T("LOGS_EXPORT")">
                         <Icon Name="IconName.Download" />
                     </button>
@@ -353,10 +353,13 @@
 
     private async Task ExportLogsAsync()
     {
-        if (_snapshot.Count == 0) return;
+        // Export the filtered view (what the user is actually looking at), not
+        // the whole buffer. The on-screen list caps rendering at 500 rows for
+        // perf, but the file gets every matching entry.
+        if (_filtered.Count == 0) return;
         var sb = new System.Text.StringBuilder();
         sb.AppendLine($"# Kmila app log — exported {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
-        foreach (var e in _snapshot)
+        foreach (var e in _filtered)
         {
             sb.Append(e.Timestamp.ToString("HH:mm:ss.fff"))
               .Append(" [").Append(e.Level.ToString().ToUpperInvariant()).Append("] ")
