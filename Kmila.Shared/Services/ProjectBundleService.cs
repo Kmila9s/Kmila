@@ -60,9 +60,11 @@ public class ProjectBundleService
     {
         var files = await _files.GetProjectFilesAsync(project);
         var snaps = await _snapshots.ListForProjectAsync(project.Id);
-        // Configurations are global; filter to ones whose name references the
-        // project. Best-effort — if the user renamed the config, it still
-        // exports as part of the bundle under its saved name.
+        // Configurations are global (not project-scoped) and Kmila is a
+        // single-user app, so we bundle every saved configuration to keep the
+        // export self-contained — the importing install gets the same configs
+        // the design was built against. (There is no project→config link to
+        // filter on; if per-project configs are ever added, filter here.)
         var allConfigNames = await _configs.GetConfigurationNamesAsync();
         var configs = new List<KmilaConfiguration>();
         foreach (var name in allConfigNames ?? new List<string>())

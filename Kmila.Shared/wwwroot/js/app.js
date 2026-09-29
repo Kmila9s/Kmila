@@ -399,13 +399,47 @@ window.downloadFile = function (fileName, content) {
     // path so the bytes flow through IFileExportService → MauiFileExportService
     // on MAUI (writes to ~/Documents/Kmila/SVG/) instead of the browser-only
     // anchor download (which iOS/macCatalyst WebViews drop on the floor).
-    window.kmilaSerializeFlowSvg = function (container) {
+    // Ensures the flow diagram's mermaid <svg> exists before serialising.
+    // The on-screen diagram is produced by an ASYNC mermaid pipeline
+    // (kmilaMermaidRun); export can be clicked before it finishes, or during a
+    // theme-toggle teardown that briefly reverts pre.mermaid to raw text. The
+    // old code failed on the first miss and surfaced a misleading "not ready"
+    // toast. Instead we kick a render and poll briefly. Returns the prep object
+    // on success; on failure a { ok:false, reason } where reason is:
+    //   'no-diagram'    — no pre.mermaid in the DOM (nothing to export)
+    //   'render-failed' — source present but mermaid never produced an <svg>
+    async function _kmilaEnsureFlowSvg(container) {
+        let prep = _kmilaPrepFlowSvg(container);
+        if (prep.ok) return prep;
+
+        const hasSource = !!document.querySelector('.flow-diagram__body pre.mermaid, pre.mermaid');
+        if (!hasSource) return { ok: false, reason: 'no-diagram' };
+
+        // Kick a render, then POLL for the <svg> — deliberately without awaiting
+        // kmilaMermaidRun(): a large flowchart can take several seconds to lay
+        // out, and kmilaMermaidRun's reentrancy guard resolves immediately when
+        // another render is already in flight, so awaiting it would either hang
+        // the export or return before the <svg> exists. Firing + polling with a
+        // bounded ceiling recovers the diagram when it finishes and fails fast
+        // (render-failed) otherwise, so the export never hangs.
+        try { window.kmilaMermaidRun(); } catch (e) { /* fall through to poll */ }
+        for (let i = 0; i < 100; i++) {          // ~5s ceiling (100 × 50ms)
+            await new Promise(function (r) { setTimeout(r, 50); });
+            prep = _kmilaPrepFlowSvg(container);
+            if (prep.ok) return prep;
+        }
+        return { ok: false, reason: 'render-failed' };
+    }
+
+    // On failure returns an 'ERR:<reason>' sentinel (never a valid SVG, which
+    // always starts with '<') so the C# caller can pick the right toast.
+    window.kmilaSerializeFlowSvg = async function (container) {
         try {
-            const r = _kmilaPrepFlowSvg(container);
-            return r.ok ? r.svg : '';
+            const r = await _kmilaEnsureFlowSvg(container);
+            return r.ok ? r.svg : ('ERR:' + r.reason);
         } catch (e) {
             console.error('[kmilaSerializeFlowSvg]', e);
-            return '';
+            return 'ERR:render-failed';
         }
     };
 
@@ -421,9 +455,9 @@ window.downloadFile = function (fileName, content) {
     // export uses — same primitive, same robustness.
     window.kmilaSerializeFlowPng = function (container) {
         return new Promise(function (resolve) {
-            try {
-                const prep = _kmilaPrepFlowSvg(container);
-                if (!prep.ok) { resolve(''); return; }
+            _kmilaEnsureFlowSvg(container).then(function (prep) {
+              try {
+                if (!prep.ok) { resolve('ERR:' + prep.reason); return; }
                 const dpr = Math.max(1, window.devicePixelRatio || 1) * 2;
                 const canvas = document.createElement('canvas');
                 canvas.width  = Math.max(1, Math.floor(prep.w * dpr));
@@ -463,10 +497,14 @@ window.downloadFile = function (fileName, content) {
                     resolve('');
                 };
                 img.src = blobUrl;
-            } catch (e) {
+              } catch (e) {
                 console.error('[kmilaSerializeFlowPng]', e);
                 resolve('');
-            }
+              }
+            }, function (e) {
+                console.error('[kmilaSerializeFlowPng] ensure failed', e);
+                resolve('ERR:render-failed');
+            });
         });
     };
 

@@ -351,6 +351,11 @@
                         <Icon Name="IconName.Download" />
                         <span>@Traductor.T("SETTINGS_DOWNLOAD_TEMPLATE")</span>
                     </button>
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary"
+                            @onclick="DownloadCurrentDictionary">
+                        <Icon Name="IconName.Download" />
+                        <span>@Traductor.T("SETTINGS_EXPORT_DICTIONARY")</span>
+                    </button>
                     <label class="kmila-btn kmila-btn--accent settings-import-btn">
                         <Icon Name="IconName.FileEarmarkPlus" />
                         <span>@Traductor.T("SETTINGS_IMPORT_LANG")</span>
@@ -1455,6 +1460,46 @@
         var result = await Export.SaveTextAsync(ExportCategory.Languages,
             "language-template.json", "application/json",
             UserAssetStore.BuildLanguageTemplate());
+        NotifyExport(result);
+    }
+
+    /// <summary>
+    /// Exports the live translation dictionary for the active language as an
+    /// editable JSON file. Unlike <see cref="DownloadLanguageTemplate"/> (a blank
+    /// ~15-key starter), this dumps every key currently loaded so the user can
+    /// tweak the wording and re-import it through the same import flow. The file
+    /// leads with the <c>__LANG_NAME__</c> key so
+    /// <see cref="UserAssetStore.ReadLanguageDisplayName"/> gives it a friendly
+    /// name on import.
+    /// </summary>
+    private async Task DownloadCurrentDictionary()
+    {
+        var displayName = Traductor.AvailableLanguages
+            .FirstOrDefault(kv => kv.Value == Traductor.Lang).Key ?? Traductor.Lang;
+
+        // Lead with __LANG_NAME__, then every live key (skip a pre-existing
+        // display-name key so we don't emit it twice).
+        var export = new Dictionary<string, string>
+        {
+            [UserAssetStore.LanguageDisplayNameKey] = displayName
+        };
+        foreach (var kv in Traductor.CurrentEntries)
+        {
+            if (kv.Key == UserAssetStore.LanguageDisplayNameKey) continue;
+            export[kv.Key] = kv.Value;
+        }
+
+        // UnsafeRelaxedJsonEscaping keeps CJK / accented / Arabic glyphs literal
+        // so the exported file stays human-editable instead of \uXXXX-escaped.
+        var json = System.Text.Json.JsonSerializer.Serialize(export,
+            new System.Text.Json.JsonSerializerOptions
+            {
+                WriteIndented = true,
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+            });
+
+        var result = await Export.SaveTextAsync(ExportCategory.Languages,
+            $"language-{Traductor.Lang}.json", "application/json", json);
         NotifyExport(result);
     }
 

@@ -244,7 +244,7 @@ else if (Data != null && Data.Signals.Count > 0)
                 </KmilaTooltip>
                 <KmilaTooltip TextKey="WAVEFORM_EXPORT_VCD">
                     <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
-                            @onclick="HandleVcdExport">
+                            @onclick="HandleVcdExport" disabled="@IsLive">
                         <Icon Name="IconName.Download" />
                         <span>VCD</span>
                     </button>
@@ -1349,6 +1349,10 @@ else if (Data != null && Data.Signals.Count > 0)
         // Minimal IEEE-1364 VCD emitter built from the transition list. No
         // Interpreter-side helper exists yet, so we synthesise the same data
         // the SVG renders from.
+        // Guard against exporting with no data (mirrors OpenExportModalAsync):
+        // BuildVcd would otherwise emit an empty string that the download helper
+        // still "saves", leaving the user with an empty .vcd and a success toast.
+        if (Data == null || Data.Signals.Count == 0) return;
         try
         {
             await OnExportVcd.InvokeAsync(BuildVcd());
@@ -1437,13 +1441,28 @@ else if (Data != null && Data.Signals.Count > 0)
             .Where(s => !_hiddenSignals.Contains(s.Name))
             .ToList();
 
+        // VCD identifier codes are strings of printable ASCII (33..126). Encode
+        // the signal index in bijective base-94 over that range so designs with
+        // more than 94 signals still get unique codes instead of running past
+        // '~' into control chars / DEL (the old '!'+i scheme broke at 94).
+        static string VcdId(int index)
+        {
+            const int Base = 94; // 126 - 33 + 1
+            var s = new System.Text.StringBuilder();
+            do
+            {
+                s.Insert(0, (char)(33 + index % Base));
+                index = index / Base - 1;
+            } while (index >= 0);
+            return s.ToString();
+        }
+
         var ids = new Dictionary<string, string>();
-        int next = 33; // '!' — first printable VCD identifier
+        int idx = 0;
         foreach (var signal in exported)
         {
-            var id = ((char)next).ToString();
+            var id = VcdId(idx++);
             ids[signal.Name] = id;
-            next++;
             sb.AppendLine($"$var wire {signal.BitWidth} {id} {signal.Name} $end");
         }
         sb.AppendLine("$upscope $end");

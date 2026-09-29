@@ -70,9 +70,14 @@
                         try {
                             await mermaid.parse(src);
                             await mermaid.run({ nodes: [el] });
+                            el.removeAttribute('data-kmila-mermaid-error');
                         } catch (e) {
                             console.warn('[mermaid]', e, src.slice(0, 80));
                             el.removeAttribute('data-processed');
+                            // Mark the node so the export path (and any debugging)
+                            // can tell "render failed" apart from "still rendering"
+                            // instead of silently leaving raw text behind.
+                            el.setAttribute('data-kmila-mermaid-error', (e && e.message) ? e.message : 'render error');
                         }
                     }
                 } while (mermaidPending);
