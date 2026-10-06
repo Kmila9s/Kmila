@@ -145,6 +145,24 @@ public class AppSettings
     public const string KEY_VISUAL_RING_BUFFER = "KMILA_VISUAL_RING_BUFFER";
 
     /// <summary>
+    /// Advanced mode (2026-10-06). Opt-in switch that reveals the per-widget
+    /// "Expert (…)" Visual-mode bindings (formerly "Assisted") — the high-level
+    /// widget ports (LCD text lines, keypad key+pressed, buzzer freq_hz, 7-seg
+    /// decoded value, matrix value/planes, DIP vector) and the push-button
+    /// debounce toggle. OFF by default so beginners only ever wire real device
+    /// pins (raw): a design that "works" with an expert binding in the
+    /// simulator would fail on a real FPGA because the hardware protocol was
+    /// never described. When OFF, the widget property pane hides those options
+    /// and new widgets default to their raw/basic surface; runtime
+    /// interpretation is unaffected (a .kviz that already carries an expert
+    /// <c>mode</c> still renders). Stored as "true" / "false"; any other value
+    /// falls back to false on read. Persisted in SQLite for native parity; the
+    /// per-user source of truth is the browser-side localStorage copy
+    /// ('kmila-advanced-mode') since the Web host's SQLite is shared.
+    /// </summary>
+    public const string KEY_ADVANCED_MODE = "KMILA_ADVANCED_MODE";
+
+    /// <summary>
     /// Editor sync mode (2026-07-06). Controls how Code↔Blocks cross-editor
     /// sync fires. "auto" (default) syncs on every view-tab switch — a Code
     /// edit is instantly visible in the Blocks canvas and vice-versa. "manual"
