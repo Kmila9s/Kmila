@@ -1572,7 +1572,41 @@
             var parser = new Debugger.Repositories.Parser(filePath);
             parser.ParseFile();
             _entity = parser.Entities.FirstOrDefault(e => e.Architecture != null);
-            if (_entity == null) _loadError = Traductor.T("VISUAL_NO_ENTITY_FOUND");
+            if (_entity == null)
+            {
+                _loadError = Traductor.T("VISUAL_NO_ENTITY_FOUND");
+                return;
+            }
+
+            // Multi-component designs: inline the instantiated components into a
+            // flat single-entity source so the live Visual runtime actually
+            // executes the sub-components (otherwise a structural top like a
+            // full adder whose logic lives entirely in its half-adder instances
+            // would drive nothing and every widget would stay dark). Mirrors the
+            // waveform/bounded-sim path in ProgramBuilder. ElaborateOrNull
+            // returns null when the top has no component instance, so single-file
+            // designs are untouched. The flattened source goes to a TEMP file so
+            // the project tree stays clean.
+            try
+            {
+                var flat = Interpreter.Services.SourceElaborator.ElaborateOrNull(
+                    _project.BasePath, _entity.Name);
+                if (!string.IsNullOrEmpty(flat))
+                {
+                    var tmp = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                        $"kmila_visual_{_entity.Name}_{Guid.NewGuid():N}.vhd");
+                    await System.IO.File.WriteAllTextAsync(tmp, flat);
+                    var flatParser = new Debugger.Repositories.Parser(tmp);
+                    flatParser.ParseFile();
+                    var flatEntity = flatParser.Entities.FirstOrDefault(e =>
+                            string.Equals(e.Name, _entity.Name, StringComparison.OrdinalIgnoreCase)
+                            && e.Architecture != null)
+                        ?? flatParser.Entities.FirstOrDefault(e => e.Architecture != null);
+                    if (flatEntity != null) _entity = flatEntity;
+                    try { System.IO.File.Delete(tmp); } catch { }
+                }
+            }
+            catch { /* fall back to the raw (un-inlined) top entity */ }
         }
         catch (Exception ex)
         {
