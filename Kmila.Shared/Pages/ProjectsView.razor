@@ -964,7 +964,14 @@ end rtl;
     /// row-major (LSB = (0,0)) without any per-cell wiring.
     /// </summary>
     private const string MATRIX_PLUS_VHD =
-@"library IEEE;
+@"-- Kmila example: plus-sign scroller on a 3x3 LED matrix (raw per-cell wiring).
+--
+-- Pure VHDL. The design outputs a 9-bit `pattern`, one bit per LED, row-major
+-- (bit 0 = cell (0,0), bit 8 = cell (2,2)). In the .kviz each anode a{r}{c} is
+-- wired directly to its pattern bit, so you drive every cell individually just
+-- like a real matrix with its cathodes shorted to ground. A frame counter
+-- advances through six patterns on each STEP, animating a plus sign.
+library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 
 entity plus_sign_scroller is
@@ -1015,7 +1022,11 @@ end rtl;
     { ""id"": ""btn-reset"", ""type"": ""button"", ""position"": { ""x"": 60,  ""y"": 60 }, ""config"": { ""label"": ""RESET"" }, ""bindings"": { ""out"": ""reset"" } },
     { ""id"": ""sw-step"",   ""type"": ""switch"", ""position"": { ""x"": 220, ""y"": 60 }, ""config"": { ""label"": ""STEP"", ""defaultState"": ""1"" }, ""bindings"": { ""out"": ""step_en"" } },
 
-    { ""id"": ""mtx-1"", ""type"": ""matrix-3x3"", ""position"": { ""x"": 420, ""y"": 200 }, ""config"": { ""mode"": ""value"", ""color"": ""red"", ""brightness"": 100 }, ""bindings"": { ""value"": ""pattern"" } }
+    { ""id"": ""mtx-1"", ""type"": ""matrix-3x3"", ""position"": { ""x"": 420, ""y"": 200 }, ""config"": { ""mode"": ""raw"", ""color"": ""red"", ""brightness"": 100 },
+      ""bindings"": {
+        ""a00"": ""pattern[0]"", ""a01"": ""pattern[1]"", ""a02"": ""pattern[2]"",
+        ""a10"": ""pattern[3]"", ""a11"": ""pattern[4]"", ""a12"": ""pattern[5]"",
+        ""a20"": ""pattern[6]"", ""a21"": ""pattern[7]"", ""a22"": ""pattern[8]"" } }
   ],
   ""settings"": { ""ringBufferTicks"": 2000, ""defaultSpeed"": ""Normal"" }
 }
@@ -1029,7 +1040,13 @@ end rtl;
     /// colour-generator arithmetic.
     /// </summary>
     private const string RGB_RAINBOW_VHD =
-@"library IEEE;
+@"-- Kmila example: RGB rainbow on a 3x3 RGB matrix (raw per-cell wiring).
+--
+-- Pure VHDL. Three 9-bit registers (one per colour plane) are driven onto the
+-- matrix's 27 raw colour pins: r{r}{c}/g{r}{c}/b{r}{c} each wired to one bit of
+-- red/green/blue, row-major (bit 0 = cell (0,0)). Each plane is a small LFSR
+-- with a different tap, so the three colours cycle out of step and mix.
+library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 
 entity rgb_rainbow is
@@ -1085,7 +1102,11 @@ end rtl;
     { ""id"": ""btn-reset"", ""type"": ""button"", ""position"": { ""x"": 60,  ""y"": 60 }, ""config"": { ""label"": ""RESET"" }, ""bindings"": { ""out"": ""reset"" } },
     { ""id"": ""sw-step"",   ""type"": ""switch"", ""position"": { ""x"": 220, ""y"": 60 }, ""config"": { ""label"": ""STEP"", ""defaultState"": ""1"" }, ""bindings"": { ""out"": ""step_en"" } },
 
-    { ""id"": ""rgb-1"", ""type"": ""matrix-3x3-rgb"", ""position"": { ""x"": 420, ""y"": 200 }, ""config"": { ""mode"": ""planes"", ""brightness"": 100 }, ""bindings"": { ""red"": ""red"", ""green"": ""green"", ""blue"": ""blue"" } }
+    { ""id"": ""rgb-1"", ""type"": ""matrix-3x3-rgb"", ""position"": { ""x"": 420, ""y"": 200 }, ""config"": { ""mode"": ""raw"", ""brightness"": 100 },
+      ""bindings"": {
+        ""r00"": ""red[0]"",   ""r01"": ""red[1]"",   ""r02"": ""red[2]"",   ""r10"": ""red[3]"",   ""r11"": ""red[4]"",   ""r12"": ""red[5]"",   ""r20"": ""red[6]"",   ""r21"": ""red[7]"",   ""r22"": ""red[8]"",
+        ""g00"": ""green[0]"", ""g01"": ""green[1]"", ""g02"": ""green[2]"", ""g10"": ""green[3]"", ""g11"": ""green[4]"", ""g12"": ""green[5]"", ""g20"": ""green[6]"", ""g21"": ""green[7]"", ""g22"": ""green[8]"",
+        ""b00"": ""blue[0]"",  ""b01"": ""blue[1]"",  ""b02"": ""blue[2]"",  ""b10"": ""blue[3]"",  ""b11"": ""blue[4]"",  ""b12"": ""blue[5]"",  ""b20"": ""blue[6]"",  ""b21"": ""blue[7]"",  ""b22"": ""blue[8]"" } }
   ],
   ""settings"": { ""ringBufferTicks"": 2000, ""defaultSpeed"": ""Normal"" }
 }
@@ -1100,33 +1121,75 @@ end rtl;
     /// alt-lists have historical gaps).
     /// </summary>
     private const string BUZZER_SCALE_VHD =
-@"library IEEE;
+@"-- Kmila example: buzzer scale generator (raw PWM signal).
+--
+-- Pure VHDL, raw buzzer wiring: the design generates the square wave itself on
+-- a single `signal` pin, exactly as you would drive a piezo buzzer from one
+-- FPGA pin. A 3-bit NOTE selector picks one of the C-major octave notes; the
+-- ENABLE switch gates the tone.
+--
+-- How it works: each note maps to a HALF-PERIOD count (in clock ticks). A
+-- counter counts up to that half-period and then toggles `signal`, producing a
+-- square wave whose period is 2x the half-period. A lower count = faster
+-- toggling = higher pitch. The counts here are sim-scaled (small integers) so
+-- the different notes are visibly distinct in the waveform within a short run;
+-- on a real 50 MHz board you would instead use half_period = 50_000_000 /
+-- (2 * note_hz).
+--
+-- NOTE: in raw mode the Visual buzzer widget shows the pulsing signal but does
+-- not synthesise audio (that is an assisted-mode feature). Watch `signal` in
+-- the Waveform viewer to see each note's frequency.
+library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 use IEEE.NUMERIC_STD.ALL;
 
 entity scale_generator is
     port(
+        clk      : in  std_logic;
+        reset    : in  std_logic;
         note_sel : in  std_logic_vector(2 downto 0);
         enable   : in  std_logic;
-        freq_hz  : out std_logic_vector(15 downto 0);
-        gate     : out std_logic
+        signal_o : out std_logic   -- single PWM pin to the buzzer
     );
 end scale_generator;
 
 architecture rtl of scale_generator is
-    signal note_freq : integer range 0 to 65535;
+    -- Sim-scaled half-period per note (ticks). Smaller = higher pitch. The
+    -- ratios roughly track the real C-major frequencies C4..C5 noted alongside.
+    signal half_period : integer range 1 to 63;
+    signal counter     : integer range 0 to 63 := 0;
+    signal sig_reg     : std_logic := '0';
 begin
-    note_freq <= 262 when note_sel = ""000"" else   -- C4
-                 294 when note_sel = ""001"" else   -- D4
-                 330 when note_sel = ""010"" else   -- E4
-                 349 when note_sel = ""011"" else   -- F4
-                 392 when note_sel = ""100"" else   -- G4
-                 440 when note_sel = ""101"" else   -- A4
-                 494 when note_sel = ""110"" else   -- B4
-                 523;                               -- C5
+    half_period <= 20 when note_sel = ""000"" else   -- C4 (262 Hz)
+                   18 when note_sel = ""001"" else   -- D4 (294 Hz)
+                   16 when note_sel = ""010"" else   -- E4 (330 Hz)
+                   15 when note_sel = ""011"" else   -- F4 (349 Hz)
+                   13 when note_sel = ""100"" else   -- G4 (392 Hz)
+                   12 when note_sel = ""101"" else   -- A4 (440 Hz)
+                   11 when note_sel = ""110"" else   -- B4 (494 Hz)
+                   10;                               -- C5 (523 Hz)
 
-    freq_hz <= std_logic_vector(to_unsigned(note_freq, 16));
-    gate    <= enable;
+    -- Square-wave generator. ENABLE off holds the pin low (silent); otherwise
+    -- the counter toggles `signal` every half_period ticks.
+    process(clk, reset)
+    begin
+        if reset = '1' then
+            counter <= 0;
+            sig_reg <= '0';
+        elsif rising_edge(clk) then
+            if enable = '0' then
+                counter <= 0;
+                sig_reg <= '0';
+            elsif counter >= half_period - 1 then
+                counter <= 0;
+                sig_reg <= not sig_reg;
+            else
+                counter <= counter + 1;
+            end if;
+        end if;
+    end process;
+
+    signal_o <= sig_reg;
 end rtl;
 ";
 
@@ -1136,10 +1199,12 @@ end rtl;
   ""designFile"": ""main.vhd"",
   ""canvas"": { ""width"": 900, ""height"": 500, ""background"": ""grid"" },
   ""components"": [
-    { ""id"": ""sw-en"", ""type"": ""switch"", ""position"": { ""x"": 60, ""y"": 60 }, ""config"": { ""label"": ""ENABLE"", ""defaultState"": ""1"" }, ""bindings"": { ""out"": ""enable"" } },
-    { ""id"": ""dip-note"", ""type"": ""multi-switch"", ""position"": { ""x"": 240, ""y"": 60 }, ""config"": { ""mode"": ""vector"", ""count"": 3, ""bounce"": false }, ""bindings"": { ""value"": ""note_sel"" } },
+    { ""id"": ""btn-reset"", ""type"": ""button"", ""position"": { ""x"": 60, ""y"": 60 }, ""config"": { ""label"": ""RESET"" }, ""bindings"": { ""out"": ""reset"" } },
+    { ""id"": ""sw-en"", ""type"": ""switch"", ""position"": { ""x"": 220, ""y"": 60 }, ""config"": { ""label"": ""ENABLE"", ""defaultState"": ""1"" }, ""bindings"": { ""out"": ""enable"" } },
+    { ""id"": ""dip-note"", ""type"": ""multi-switch"", ""position"": { ""x"": 400, ""y"": 60 }, ""config"": { ""mode"": ""per-bit"", ""count"": 3 },
+      ""bindings"": { ""out0"": ""note_sel[0]"", ""out1"": ""note_sel[1]"", ""out2"": ""note_sel[2]"" } },
 
-    { ""id"": ""buz-1"", ""type"": ""buzzer-piezo"", ""position"": { ""x"": 480, ""y"": 200 }, ""config"": { ""mode"": ""freq"" }, ""bindings"": { ""freq_hz"": ""freq_hz"", ""enable"": ""gate"" } }
+    { ""id"": ""buz-1"", ""type"": ""buzzer-piezo"", ""position"": { ""x"": 480, ""y"": 220 }, ""config"": { ""mode"": ""signal"" }, ""bindings"": { ""signal"": ""signal_o"" } }
   ],
   ""settings"": { ""ringBufferTicks"": 2000, ""defaultSpeed"": ""Normal"" }
 }
@@ -1290,9 +1355,12 @@ end rtl;
             ExtraFiles: ShiftRegisterExtraFiles),
         new ExampleDef("dip-adder",  "EXAMPLE_DIP_ADDER_NAME",  "EXAMPLE_DIP_ADDER_DESC",  DIP_ADDER_VHD,       DIP_ADDER_KVIZ,
             ExtraFiles: DipAdderExtraFiles),
-        new ExampleDef("matrix-plus","EXAMPLE_MATRIX_NAME",     "EXAMPLE_MATRIX_DESC",     MATRIX_PLUS_VHD,     MATRIX_PLUS_KVIZ),
-        new ExampleDef("rgb-rainbow","EXAMPLE_RGB_NAME",        "EXAMPLE_RGB_DESC",        RGB_RAINBOW_VHD,     RGB_RAINBOW_KVIZ),
-        new ExampleDef("buzzer-scale","EXAMPLE_BUZZER_NAME",    "EXAMPLE_BUZZER_DESC",     BUZZER_SCALE_VHD,    BUZZER_SCALE_KVIZ),
+        new ExampleDef("matrix-plus","EXAMPLE_MATRIX_NAME",     "EXAMPLE_MATRIX_DESC",     MATRIX_PLUS_VHD,     MATRIX_PLUS_KVIZ,
+            ExtraFiles: MatrixPlusExtraFiles),
+        new ExampleDef("rgb-rainbow","EXAMPLE_RGB_NAME",        "EXAMPLE_RGB_DESC",        RGB_RAINBOW_VHD,     RGB_RAINBOW_KVIZ,
+            ExtraFiles: RgbRainbowExtraFiles),
+        new ExampleDef("buzzer-scale","EXAMPLE_BUZZER_NAME",    "EXAMPLE_BUZZER_DESC",     BUZZER_SCALE_VHD,    BUZZER_SCALE_KVIZ,
+            ExtraFiles: BuzzerScaleExtraFiles),
         new ExampleDef("keypad-display","EXAMPLE_KEYPAD_NAME",  "EXAMPLE_KEYPAD_DESC",     KEYPAD_DISPLAY_VHD,  KEYPAD_DISPLAY_KVIZ),
         new ExampleDef("lcd-hello",   "EXAMPLE_LCD_NAME",       "EXAMPLE_LCD_DESC",        LCD_HELLO_VHD,       LCD_HELLO_KVIZ),
         new ExampleDef(
