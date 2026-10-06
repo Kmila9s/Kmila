@@ -141,6 +141,9 @@ public sealed class Program
         // foregrounded — the in-app toast covers that case.
         builder.Services.AddScoped<ISimEndNotifier, WebSimEndNotifier>();
 
+        // External links — real browsers honour window.open (issue #8).
+        builder.Services.AddScoped<Kmila.Shared.Services.IExternalLinkOpener, Kmila.Shared.Services.JsExternalLinkOpener>();
+
         // In-app logs (/logs page). Construct the store eagerly so we can hand
         // the same instance to the logger provider and to the DI container —
         // .NET's logging pipeline doesn't hand out IServiceProvider at the

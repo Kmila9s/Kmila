@@ -34,6 +34,24 @@ public class SignalCursorBus
     public event Action? OnChange;
 
     /// <summary>
+    /// Invokes every subscriber independently so a single disposed/throwing
+    /// handler can't abort the chain and starve the later subscribers. This is
+    /// why the waveform value column used to refresh only on scroll: a stale
+    /// subscriber threw inside the plain <c>OnChange?.Invoke()</c>, so the live
+    /// viewer's handler (registered after it) never ran on a cursor hover.
+    /// </summary>
+    private void RaiseChange()
+    {
+        var handlers = OnChange;
+        if (handlers is null) return;
+        foreach (var d in handlers.GetInvocationList())
+        {
+            try { ((Action)d).Invoke(); }
+            catch { /* one bad subscriber must not block the others */ }
+        }
+    }
+
+    /// <summary>
     /// Publishes a new cursor tick. No-op (and no event) when the value matches
     /// the current state, so callers can call this idempotently from animation
     /// frames without producing render storms.
@@ -43,7 +61,7 @@ public class SignalCursorBus
     {
         if (tick == CursorTick) return;
         CursorTick = tick;
-        OnChange?.Invoke();
+        RaiseChange();
     }
 
     /// <summary>
@@ -55,7 +73,7 @@ public class SignalCursorBus
     {
         if (string.Equals(SelectedNet, netName, StringComparison.Ordinal)) return;
         SelectedNet = netName;
-        OnChange?.Invoke();
+        RaiseChange();
     }
 
     /// <summary>
@@ -67,6 +85,6 @@ public class SignalCursorBus
         if (CursorTick == 0 && SelectedNet == null) return;
         CursorTick = 0;
         SelectedNet = null;
-        OnChange?.Invoke();
+        RaiseChange();
     }
 }

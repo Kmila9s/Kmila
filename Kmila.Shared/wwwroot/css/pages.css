@@ -156,14 +156,14 @@
     gap: var(--space-3);
     padding: var(--space-4) var(--space-4);
     text-decoration: none;
-    color: #ffffff;
+    color: var(--text-on-primary);
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     min-height: var(--topbar-height);
     flex-shrink: 0;
 }
 
 .kmila-sidebar__brand:hover {
-    color: #ffffff;
+    color: var(--text-on-primary);
     text-decoration: none;
     background-color: rgba(255, 255, 255, 0.04);
 }
@@ -191,7 +191,7 @@
     font-size: var(--fs-md);
     font-weight: var(--fw-bold);
     letter-spacing: var(--tracking-tight);
-    color: #ffffff;
+    color: var(--text-on-primary);
     line-height: 1;
 }
 
@@ -249,7 +249,7 @@
     padding: 0 6px;
     height: 18px;
     background-color: rgba(255, 255, 255, 0.15);
-    color: #ffffff;
+    color: var(--text-on-primary);
     border-radius: var(--radius-pill);
     font-size: var(--fs-xs);
     font-weight: var(--fw-semibold);
@@ -288,7 +288,7 @@
 }
 
 .kmila-nav-item:hover,
-.kmila-nav-item:focus-visible { color: #ffffff; text-decoration: none; }
+.kmila-nav-item:focus-visible { color: var(--text-on-primary); text-decoration: none; }
 
 .kmila-nav-item:focus-visible {
     outline: 2px solid var(--kmila-accent);
@@ -296,7 +296,7 @@
 }
 
 .kmila-nav-item.is-active {
-    color: #ffffff;
+    color: var(--text-on-primary);
     font-weight: var(--fw-semibold);
 }
 
@@ -383,7 +383,7 @@
 
 .kmila-sidebar__collapse-btn:hover {
     background-color: rgba(255, 255, 255, 0.08);
-    color: #ffffff;
+    color: var(--text-on-primary);
 }
 
 .kmila-sidebar__collapse-btn:focus-visible {
@@ -1366,7 +1366,10 @@
 /* Card grid */
 .projects-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    /* `min(100%, 300px)` gives slightly more substantial cards on desktop
+       while letting a single card shrink below 300 on narrow phones instead
+       of forcing horizontal page scroll. */
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
     gap: var(--space-4);
 }
 
@@ -1439,8 +1442,10 @@
     overflow: hidden;
     text-overflow: ellipsis;
     display: -webkit-box;
-    -webkit-line-clamp: 1;
-    line-clamp: 1;
+    /* Allow the name to wrap to two lines so full project names show (e.g.
+       "Sample · 4-bit counter") instead of truncating at one line. */
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
 }
 
@@ -1674,11 +1679,16 @@
 }
 
 .settings-page__grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-    /* Wider gutter so each card reads as its own object rather than a
-       tile in a continuous wall. Backlog #6: "no clear separation". */
-    gap: var(--space-5);
+    /* Masonry-style packing via CSS multicolumn: cards flow and pack tightly by
+       their own content height, which avoids BOTH failure modes of a grid here —
+       the equal-height stretch left content-light cards (e.g. "Editor") with a
+       big internal void, and `align-items:start` instead left large row-locked
+       ragged gaps (issue #11 "many gaps"). `column-width` keeps each card at
+       ~>=520px on desktop — so the per-card `@container (max-width:520px)` stack
+       query stays off and labels don't crush — giving a roomy two-up that
+       collapses to a single column on phones without horizontal scroll. */
+    columns: 33rem;            /* ~528px min column width */
+    column-gap: var(--space-5);
 }
 
 /* F-032 (real-device audit 2026-08-02) — Settings → Text-size row wrapped
@@ -1719,6 +1729,11 @@
 
 .settings-card {
     background-color: var(--surface-2);
+    /* Multicolumn (masonry) layout: never split a card across columns, and give
+       each card bottom spacing so stacked cards in a column keep the grid gutter.
+       (The grid `gap` is gone — column-gap handles the horizontal gutter.) */
+    break-inside: avoid;
+    margin-bottom: var(--space-5);
     /* Stronger boundary so cards visually separate from the page bg
        and from each other. Backlog #6. */
     border: 1px solid var(--border-default);
@@ -2489,6 +2504,110 @@
     .editor-shortcut { display: none; }
 }
 
+/* Keyboard-shortcuts help popover (KeyboardShortcutsHelp.razor) — a small
+   keyboard button in the editor toolbar that reveals the platform-adapted
+   shortcut list. <details> popover, same pattern as the language picker, so it
+   sidesteps the Bootstrap-modal stacking traps. */
+.kmila-shortcuts-help { position: relative; display: inline-flex; }
+
+.kmila-shortcuts-help__trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    list-style: none;
+}
+.kmila-shortcuts-help__trigger::-webkit-details-marker { display: none; }
+.kmila-shortcuts-help__trigger::marker { content: ""; display: none; }
+.kmila-shortcuts-help__trigger:hover,
+.kmila-shortcuts-help[open] .kmila-shortcuts-help__trigger {
+    background-color: var(--surface-3, var(--surface-2));
+    color: var(--text-default);
+}
+
+.kmila-shortcuts-help__panel {
+    position: absolute;
+    top: calc(100% + var(--space-2));
+    right: 0;
+    left: auto;
+    z-index: var(--z-dropdown);
+    min-width: 240px;
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-3);
+    padding: var(--space-2);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    animation: kmilaPop var(--duration-fast) var(--ease-standard);
+    max-height: min(70dvh, var(--kmila-viewport-h, 70dvh) - 32px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+[dir="rtl"] .kmila-shortcuts-help__panel { right: auto; left: 0; }
+
+.kmila-shortcuts-help__title {
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    padding: var(--space-1) var(--space-2) var(--space-2);
+}
+
+.kmila-shortcuts-help__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+}
+.kmila-shortcuts-help__label {
+    font-size: var(--fs-sm);
+    color: var(--text-default);
+    white-space: nowrap;
+}
+.kmila-shortcuts-help__keys {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+.kmila-shortcuts-help__keys kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.6em;
+    padding: 1px 5px;
+    background-color: var(--surface-1);
+    border: 1px solid var(--border-default);
+    border-bottom-width: 2px;
+    border-radius: var(--radius-xs);
+    color: var(--text-default);
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    line-height: 1;
+}
+.kmila-shortcuts-help__note {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+    padding: var(--space-2);
+    border-top: 1px solid var(--border-subtle);
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+}
+
 
 /* --- Body: main editor area + right rail --- */
 
@@ -3205,7 +3324,7 @@
 .resource-metric__chips {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
+    gap: var(--space-1);
     margin-top: var(--space-2);
 }
 
@@ -3257,7 +3376,7 @@
 .resource-bar__counts {
     display: inline-flex;
     align-items: baseline;
-    gap: 4px;
+    gap: var(--space-1);
     font-family: var(--font-mono);
     font-size: var(--fs-sm);
 }
@@ -3607,7 +3726,7 @@
     font-size: var(--fs-xs);
     font-weight: 600;
     color: var(--text-strong);
-    margin-bottom: 4px;
+    margin-bottom: var(--space-1);
 }
 
 /* Output-options grid: pairs of (label, control). Auto-fit with a
@@ -3756,7 +3875,7 @@
 .kmila-export-pill__opt {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-1);
     padding: 4px 10px;
     border: none;
     background: transparent;
@@ -3779,7 +3898,7 @@
 
 .kmila-export-pill__opt.is-active {
     background: var(--brand-accent);
-    color: #fff;
+    color: var(--text-on-primary);
 }
 
 .kmila-export-pill__opt:focus-visible {
@@ -4270,7 +4389,7 @@
     max-width: calc(100vw - 16px);
     max-height: 80vh;
     overflow-y: auto;
-    padding: 4px;
+    padding: var(--space-1);
     background-color: var(--surface-2);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-md);
@@ -4411,7 +4530,7 @@
 
 .flow-diagram__count {
     background: var(--surface-3);
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     padding: 2px 8px;
     font-size: var(--fs-sm);
     color: var(--text-muted);
@@ -4523,7 +4642,7 @@
 .entity-chip {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-1);
     padding: 2px 10px;
     font-family: var(--font-mono);
     font-size: var(--fs-xs);
@@ -5148,7 +5267,7 @@
     left: auto;
     z-index: var(--z-dropdown);
     min-width: 220px;
-    padding: 4px;
+    padding: var(--space-1);
     background-color: var(--surface-2);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-md);
@@ -5619,7 +5738,7 @@
 
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-1);
     padding: 2px 8px;
     background: transparent;
     border: none;
@@ -5807,7 +5926,7 @@
 .kmila-config-pill__section {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--space-1);
     padding: var(--space-2) var(--space-1);
 }
 
@@ -5961,7 +6080,7 @@
 .kmila-config-pill__saveas {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-1);
 }
 
 .kmila-config-pill__saveas .form-control {
@@ -6106,7 +6225,7 @@
 .port-moment__timeline {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--space-1);
 }
 
 .port-moment__timeline-svg {
@@ -6256,7 +6375,7 @@
     align-items: center;
     justify-content: center;
     color: var(--text-muted);
-    padding: 4px;
+    padding: var(--space-1);
     border-radius: var(--radius-xs);
 }
 
@@ -6314,7 +6433,7 @@
         grid-template-areas:
             "value scale remove"
             "time  time  time";
-        row-gap: 4px;
+        row-gap: var(--space-1);
     }
     .port-moment__value  { grid-area: value; }
     .port-moment__scale  { grid-area: scale; }
@@ -6488,11 +6607,11 @@
 .home-bento__card--wide {
     grid-column: span 8;
     background: linear-gradient(135deg, var(--kmila-primary-dark) 0%, var(--kmila-primary) 100%);
-    color: #ffffff;
+    color: var(--text-on-primary);
     border-color: transparent;
 }
 
-.home-bento__card--wide h3 { color: #ffffff; }
+.home-bento__card--wide h3 { color: var(--text-on-primary); }
 .home-bento__card--wide p  { color: rgba(255, 255, 255, 0.85); }
 
 .home-bento__card--highlight {
@@ -6530,7 +6649,7 @@
 }
 
 .home-bento__icon--accent  { background-color: var(--kmila-accent-soft); color: var(--kmila-accent); }
-.home-bento__icon--primary { background-color: rgba(255, 255, 255, 0.15); color: #ffffff; }
+.home-bento__icon--primary { background-color: rgba(255, 255, 255, 0.15); color: var(--text-on-primary); }
 .home-bento__icon--success { background-color: var(--success-soft);      color: var(--success); }
 .home-bento__icon--warning { background-color: var(--warning-soft);      color: var(--warning); }
 
@@ -6551,7 +6670,7 @@
     margin-top: var(--space-7);
     padding: var(--space-6) var(--space-5);
     background: linear-gradient(135deg, var(--kmila-primary-dark) 0%, var(--kmila-primary) 100%);
-    color: #ffffff;
+    color: var(--text-on-primary);
     border-radius: var(--radius-xl);
     box-shadow: var(--shadow-2);
 }
@@ -6564,7 +6683,7 @@
 }
 
 .home-cta__text h2 {
-    color: #ffffff;
+    color: var(--text-on-primary);
     margin: 0 0 var(--space-2);
     font-size: var(--fs-xl);
     letter-spacing: var(--tracking-tight);
@@ -6594,7 +6713,7 @@
 }
 .home-cta .kmila-btn::after { background-color: transparent; }
 .home-cta .kmila-btn:hover,
-.home-cta .kmila-btn:focus-visible { color: #ffffff; }
+.home-cta .kmila-btn:focus-visible { color: var(--text-on-primary); }
 
 
 /* Home responsive */
@@ -6696,7 +6815,7 @@
     width: 100%;
     height: 10px;
     background-color: var(--surface-0);
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     overflow: hidden;
     border: 1px solid var(--border-subtle);
 }
@@ -6705,7 +6824,7 @@
     position: absolute;
     inset: 0 auto 0 0;
     background: linear-gradient(90deg, var(--success) 0%, var(--kmila-accent) 100%);
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     transition: width var(--duration-slow) var(--ease-standard);
 }
 
@@ -6895,7 +7014,7 @@
     display: inline-flex;
     align-items: center;
     padding: 2px var(--space-2);
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     font-family: var(--font-mono);
     font-size: var(--fs-2xs);
     font-weight: var(--fw-bold);
@@ -6914,7 +7033,7 @@
     align-items: center;
     gap: var(--space-1);
     padding: 2px var(--space-2);
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background-color: rgba(16, 185, 129, 0.12);
     color: var(--success);
     font-family: var(--font-mono);
@@ -7023,7 +7142,7 @@
     align-items: center;
     gap: var(--space-1);
     padding: 3px var(--space-2);
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     font-size: var(--fs-2xs);
     font-family: var(--font-mono);
     font-weight: var(--fw-semibold);
@@ -7257,6 +7376,13 @@
     gap: var(--space-4);
     padding-top: var(--space-4);
     border-top: 1px solid var(--border-subtle);
+    /* Align the action/nav row to the same reading column as .lesson-markdown
+       (min(72ch,100%), centered) so the "Mark as complete" button matches the
+       prose width instead of spanning the full page — fixes the giant-button-
+       under-narrow-text mismatch. `min(72ch,100%)` keeps it safe on mobile. */
+    width: 100%;
+    max-width: min(72ch, 100%);
+    margin-inline: auto;
 }
 
 .lesson-footer__nav {
@@ -7361,7 +7487,7 @@
 }
 
 .run-bar__fpga-chevron {
-    margin-left: 4px;
+    margin-left: var(--space-1);
     opacity: 0.6;
     font-size: 0.75em;
 }
@@ -7505,7 +7631,7 @@
     color: var(--text-muted);
     background-color: var(--surface-2);
     padding: 1px var(--space-2);
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
 }
 
 /* ─── Account / GitHub login (Settings) ─────────────────────────────
@@ -7725,7 +7851,7 @@
 .kmila-account-pill__action--primary {
     background-color: var(--kmila-accent);
     border-color: var(--kmila-accent);
-    color: #ffffff;
+    color: var(--text-on-primary);
 }
 
 .kmila-account-pill__action--primary:hover {
@@ -7889,7 +8015,7 @@
 }
 
 .kmila-profile-menu__section--actions {
-    gap: 4px;
+    gap: var(--space-1);
 }
 
 .kmila-profile-menu__section-head {
@@ -7919,7 +8045,7 @@
 .kmila-profile-menu__lang-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
-    gap: 4px;
+    gap: var(--space-1);
 }
 
 /* Lang chips: visuals delegated to .kmila-btn-tab. The local class only
@@ -7956,14 +8082,14 @@
 .kmila-profile-menu__theme-row {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 4px;
+    gap: var(--space-1);
 }
 
 /* Theme buttons: visuals delegated to .kmila-btn-tab. Local class only
    carries the icon-on-top column layout. */
 .kmila-profile-menu__theme-btn {
     flex-direction: column;
-    gap: 4px;
+    gap: var(--space-1);
     padding: 8px 4px;
     justify-content: center;
 }
@@ -8004,7 +8130,7 @@
     height: 28px;
     flex-shrink: 0;
     background-color: var(--kmila-accent);
-    color: #ffffff;
+    color: var(--text-on-primary);
     border-radius: 50%;
     font-weight: var(--fw-bold);
 }
@@ -8022,6 +8148,18 @@
     font-family: var(--font-mono);
     font-size: var(--fs-sm);
     color: var(--kmila-accent);
+}
+
+/* Raw verification URL shown under the "Open GitHub" fast-path button as a
+   manual fallback (issue #9b). Muted + monospace + wraps so it never overflows
+   the dialog. */
+.github-login__verification-url {
+    display: block;
+    margin-top: var(--space-1);
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs, var(--fs-sm));
+    color: var(--text-muted, var(--text-2));
+    word-break: break-all;
 }
 
 .github-login__code-row {
@@ -8071,6 +8209,32 @@
     color: var(--text-muted);
     font-size: var(--fs-xs);
 }
+
+/* #9b — streamlined single-button login: GitHub auto-opens, so this is one
+   compact centred "waiting" state instead of a numbered wizard. Wraps on mobile. */
+.github-login__flow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-4);
+    text-align: center;
+    padding: var(--space-2) 0;
+}
+.github-login__waiting--lead {
+    font-size: var(--fs-md);
+    color: var(--text-default);
+}
+.github-login__code-hint {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    margin: 0;
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
+}
+.github-login__flow .github-login__privacy { text-align: start; }
 
 
 .settings-card__note {
@@ -8160,7 +8324,7 @@
 
 .kmila-nav-item__action:hover {
     background-color: rgba(239, 68, 68, 0.35);
-    color: #ffffff;
+    color: var(--text-on-primary);
 }
 
 .kmila-nav-item__action:focus-visible {
@@ -8189,7 +8353,7 @@
 }
 
 .kmila-sidebar__view-all:hover {
-    color: #ffffff;
+    color: var(--text-on-primary);
     text-decoration: none;
     border-color: rgba(255, 255, 255, 0.35);
 }
@@ -8611,9 +8775,9 @@
 .kmila-nav-item__badge {
     margin-left: auto;
     padding: 1px var(--space-2);
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background-color: color-mix(in srgb, var(--kmila-accent) 20%, transparent);
-    color: #ffffff;
+    color: var(--text-on-primary);
     font-family: var(--font-mono);
     font-size: var(--fs-2xs);
     font-weight: var(--fw-bold);
@@ -8633,7 +8797,7 @@
     align-items: center;
     margin-left: var(--space-2);
     padding: 1px var(--space-2);
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background-color: color-mix(in srgb, var(--kmila-accent) 15%, transparent);
     color: var(--kmila-accent);
     font-family: var(--font-mono);
@@ -8730,7 +8894,7 @@
 
 .waveform-viewer__chip {
     padding: 1px var(--space-2);
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background-color: color-mix(in srgb, var(--kmila-accent) 15%, transparent);
     color: var(--kmila-accent);
     font-family: var(--font-mono);
@@ -8747,13 +8911,18 @@
 .waveform-viewer__body {
     padding: var(--space-2);
     overflow-x: auto;
+    /* Width of the sticky signal-name column. Set inline from LabelWidthPx and
+       driven live (no Blazor round-trip) by the resize grip; the label cells,
+       the sticky track offset and the JS hover/window helpers all read it.
+       This default is the fallback before the inline style lands. */
+    --wf-label-w: 160px;
 }
 
 .waveform-signal-chip {
     display: inline-flex;
     align-items: center;
     padding: 1px var(--space-2);
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     font-family: var(--font-mono);
     font-size: var(--fs-2xs);
     font-weight: var(--fw-bold);
@@ -8791,7 +8960,7 @@
     left: var(--space-2);
     padding: var(--space-2) var(--space-3);
     background-color: var(--kmila-accent);
-    color: #ffffff;
+    color: var(--text-on-primary);
     font-weight: var(--fw-semibold);
     text-decoration: none;
     border-radius: var(--radius-sm);
@@ -8807,7 +8976,7 @@
 .kmila-skip-link:focus {
     transform: translateY(0);
     opacity: 1;
-    outline: 2px solid #ffffff;
+    outline: 2px solid var(--text-on-primary);
     outline-offset: 2px;
 }
 
@@ -8920,9 +9089,12 @@
 .waveform-row--ruler { min-height: 26px; }
 
 .waveform-row__label {
-    flex: 0 0 160px;
-    min-width: 160px;
+    flex: 0 0 var(--wf-label-w, 160px);
+    min-width: var(--wf-label-w, 160px);
     padding: var(--space-1) var(--space-2);
+    /* Positioning context for the absolutely-placed resize grip (below). The
+       cell is already position: sticky — declared further down — which also
+       establishes it; this is just explicit intent. */
     background-color: var(--surface-1);
     border-right: 1px solid var(--border-subtle);
     display: inline-flex;
@@ -8980,7 +9152,7 @@
    Width is updated by Blazor whenever JS reports a resize/scroll. */
 .waveform-row__track-view {
     position: sticky;
-    left: 160px;
+    left: var(--wf-label-w, 160px);
     height: 100%;
     /* width set inline — equals body.clientWidth - 160 (approx).
        The SVG inside renders at this exact size; transitions outside
@@ -9066,6 +9238,38 @@
     letter-spacing: 0.02em;
 }
 
+/* Clickable value displays cycle the number base (dec / hex / bin / oct). The
+   value cell and the value-only readout become <button>s for bus/integer rows;
+   reset the native chrome so they read as the text they replace, with a subtle
+   hover + pointer to signal they're interactive. The bus trace itself is also
+   clickable (cursor only), so every value display switches the base. */
+button.waveform-signal-value,
+button.waveform-value-readout {
+    appearance: none;
+    -webkit-appearance: none;
+    border: none;
+    background: transparent;
+    margin: 0;
+    padding: 0 2px;
+    cursor: pointer;
+    text-align: inherit;
+    border-radius: var(--radius-xs);
+}
+button.waveform-signal-value:hover,
+button.waveform-value-readout:hover {
+    background: var(--surface-2);
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
+}
+button.waveform-signal-value:focus-visible,
+button.waveform-value-readout:focus-visible {
+    outline: 2px solid var(--kmila-accent);
+    outline-offset: 1px;
+}
+.waveform-row__track-view--radix { cursor: pointer; }
+.waveform-radix-btn { font-variant-numeric: tabular-nums; }
+.waveform-radix-btn__hash { opacity: 0.6; margin-right: 1px; font-weight: 700; }
+
 /* Direction pill ↔ name separation. Previously the uppercase direction chip
    sat 4px from the mono name, so a name containing "in"/"out"/"internal" read
    as part of the type. A slim divider + breathing room to the LEFT of the name
@@ -9075,6 +9279,47 @@
 .waveform-row__label-main .waveform-signal-name {
     padding-left: var(--space-2);
     border-left: 1px solid var(--border-default);
+}
+
+/* Resize grip for the signal-name column. One sits in each label's right
+   padding (the --space-2 gutter, clear of the value/toggle controls) over the
+   column's right border; the cells are position: sticky so every grip tracks
+   the label/track boundary during horizontal scroll with no overlay or JS
+   geometry. Dragging any grip drives --wf-label-w live (see
+   kmilaWaveformLabelResize). The grips stack into one continuous divider down
+   the column. A hair-line cue appears on hover / during the drag. */
+.waveform-resize-grip {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    width: 7px;
+    cursor: ew-resize;
+    touch-action: none;
+    z-index: 3;
+}
+.waveform-resize-grip::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 2px;
+    width: 2px;
+    border-radius: var(--radius-pill);
+    background-color: var(--kmila-accent);
+    opacity: 0;
+    transition: opacity var(--duration-fast) var(--ease-standard);
+}
+.waveform-resize-grip:hover::after,
+.kmila-col-resizing .waveform-resize-grip::after { opacity: 1; }
+
+/* While dragging, lock the cursor and kill text/selection flicker globally so
+   the pointer doesn't change as it crosses over SVG strokes or buttons. */
+.kmila-col-resizing,
+.kmila-col-resizing * {
+    cursor: ew-resize !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
 }
 
 /* Vector expand/collapse chevron (bus → per-bit waves). Sits as the first item
@@ -9142,7 +9387,7 @@
     padding: 2px 8px;
     background-color: var(--surface-0);
     border: 1px solid var(--border-default);
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     font-family: ui-monospace, Menlo, monospace;
     font-size: var(--fs-xs);
     color: var(--text-strong);
@@ -9253,11 +9498,11 @@
 
 /* Make room on the right of the project name for the always-on controls. */
 .kmila-nav-item--running .kmila-nav-item__main {
-    padding-right: 64px;
+    padding-right: var(--space-8);
 }
 [dir="rtl"] .kmila-nav-item--running .kmila-nav-item__main {
     padding-right: var(--space-4);
-    padding-left: 64px;
+    padding-left: var(--space-8);
 }
 
 /* The default action:hover turns red (matches the trash semantics).
@@ -9265,12 +9510,12 @@
    Only the Stop button (--danger) keeps the red hover. */
 .kmila-nav-item__action:not(.kmila-nav-item__action--danger):hover {
     background-color: rgba(255, 255, 255, 0.18);
-    color: #ffffff;
+    color: var(--text-on-primary);
 }
 
 .kmila-nav-item__action--danger:hover {
     background-color: rgba(239, 68, 68, 0.35);
-    color: #ffffff;
+    color: var(--text-on-primary);
 }
 
 /* Slim progress strip pinned to the bottom of the row. 2px so it reads as
@@ -9339,7 +9584,7 @@
     gap: 6px;
     margin-left: var(--space-2);
     padding: 2px var(--space-2);
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background-color: color-mix(in srgb, var(--kmila-accent) 15%, transparent);
     color: var(--kmila-accent);
     font-size: var(--fs-2xs);
@@ -9372,7 +9617,7 @@
     align-items: center;
     margin-left: var(--space-2);
     padding: 1px var(--space-2);
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background-color: var(--surface-3);
     color: var(--kmila-text-muted, var(--kmila-muted, #667));
     font-size: var(--fs-2xs);
@@ -9444,7 +9689,7 @@
     padding: 2px var(--space-2);
     background-color: var(--surface-1);
     border: 1px solid var(--border-subtle);
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     font-size: var(--fs-xs);
     font-family: var(--font-mono);
     color: var(--text-strong);
@@ -9627,7 +9872,7 @@
     align-items: center;
     gap: var(--space-1);
     padding: 2px var(--space-2);
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background-color: color-mix(in srgb, var(--kmila-accent) 12%, transparent);
     color: var(--kmila-accent);
     font-family: var(--font-mono);
@@ -9873,7 +10118,7 @@
     position: absolute;
     inset: 2px 0 2px 0;
     background-color: transparent;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     transition: background-color var(--duration-fast) var(--ease-standard);
 }
 .kmila-dock__grabber:hover::after,
@@ -10259,7 +10504,7 @@
     transform: translate(-50%, -50%);
     width: 44px;
     height: 4px;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: var(--border-strong);
     transition: background-color var(--duration-fast) var(--ease-standard),
                 width var(--duration-fast) var(--ease-standard);
@@ -10388,7 +10633,7 @@
     .kmila-dock__tabs::-webkit-scrollbar { display: block; height: 5px; }
     .kmila-dock__tabs::-webkit-scrollbar-thumb {
         background: color-mix(in srgb, var(--kmila-accent) 55%, var(--border-strong));
-        border-radius: 999px;
+        border-radius: var(--radius-pill);
     }
     /* D-2: collapse the count from a third row to a top-right corner pip
        on the tab, so the row baseline stays uniform. */
@@ -10676,7 +10921,7 @@
    reads as a small card even on a 360-px phone. */
 @media (max-width: 575.98px) {
     .modal-dialog {
-        --kmila-modal-margin: 16px;
+        --kmila-modal-margin: var(--space-4);
         margin: var(--kmila-modal-margin) auto !important;
         width: auto !important;
         max-width: calc(100vw - 2 * var(--kmila-modal-margin)) !important;
@@ -10709,10 +10954,22 @@
     max-height: 85dvh;
 }
 
+/* Vertically centre every modal (like Bootstrap's .modal-dialog-centered) so it
+   never rides up to the top of the window. That keeps the card clear of the
+   macOS title bar / phone notch WITHOUT padding the header — the header used to
+   add env(safe-area-inset-top) to its top padding, which on the desktop app and
+   notched phones produced a large blank "forehead" above the title. */
+.modal-dialog {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: calc(100% - var(--bs-modal-margin, 1.75rem) * 2);
+}
+
 .modal-header {
-    padding-top: calc(var(--space-3) + env(safe-area-inset-top, 0px));
-    padding-left: calc(var(--space-3) + env(safe-area-inset-left, 0px));
-    padding-right: calc(var(--space-3) + env(safe-area-inset-right, 0px));
+    /* Normal, symmetric padding — the safe-area inset moved out of here (the
+       centring above handles title-bar/notch clearance). */
+    padding: var(--space-3) var(--space-4);
     align-items: flex-start;
     background-color: var(--surface-1);
     border-bottom: 1px solid var(--border-subtle);
@@ -10934,32 +11191,48 @@
     body:has(.flow-diagram.is-fullscreen) .status-bar {
         display: none !important;
     }
-    .schematic-viewer.is-fullscreen .schematic-viewer__toolbar,
-    .flow-diagram.is-fullscreen .flow-diagram__head {
-        padding-top: calc(var(--space-2) + env(safe-area-inset-top, 0px));
-        padding-left: calc(var(--space-2) + env(safe-area-inset-left, 0px));
-        padding-right: calc(var(--space-2) + env(safe-area-inset-right, 0px));
-    }
+}
+
+/* A fullscreen panel is position:fixed inset:0, so under viewport-fit=cover its
+   toolbar sits at the physical top of the window — beneath the device notch on
+   phones AND beneath the macOS window title bar / traffic-lights on the desktop
+   app, where the buttons then can't be clicked. Pad the toolbar past the top
+   (and side) safe-area inset on EVERY platform. This was previously mobile-only,
+   which left the desktop fullscreen diagram/schematic toolbar trapped under the
+   window chrome. */
+.schematic-viewer.is-fullscreen .schematic-viewer__toolbar,
+.flow-diagram.is-fullscreen .flow-diagram__head {
+    padding-top: calc(var(--space-2) + env(safe-area-inset-top, 0px));
+    padding-left: calc(var(--space-2) + env(safe-area-inset-left, 0px));
+    padding-right: calc(var(--space-2) + env(safe-area-inset-right, 0px));
 }
 
 
-/* ── Mobile: Bootstrap modals declared inside the dock must escape it ──────
+/* ── Bootstrap modals declared inside a stacking-context ancestor must escape ──
    FilesCard renders <Modal> instances inline (create-file, file details,
-   delete-confirm). On phones the dock is `position: fixed; overflow: hidden;
-   z-index: var(--z-drawer)` (1020) and so forms a stacking context. Bootstrap
-   appends `.modal-backdrop` to <body> at z-index 1050, which then paints on
-   top of the entire dock — including the .modal-dialog trapped inside it.
-   iOS WebKit additionally clips the position-fixed dialog to the dock's
-   overflow box, so the user only sees the dark backdrop with no reachable
-   UI to dismiss it.
-   When any backdrop is visible, lift the dock above the modal layer and
-   drop its overflow clip so the dialog renders normally. */
-@media (max-width: 768px) {
-    body:has(.modal-backdrop.show) .kmila-dock {
-        z-index: calc(var(--z-modal) + 5) !important;
-        overflow: visible !important;
-    }
+   delete-confirm) inside the dock, and ProfileMenu renders the GitHub-login
+   <Modal> inside the topbar. Both ancestors form stacking contexts BELOW the
+   modal layer — the dock is `position: relative/fixed; overflow: hidden;
+   z-index: var(--z-drawer)` (1020); the topbar is `position: sticky;
+   z-index: calc(var(--z-drawer) + 1)` (1021). Bootstrap appends
+   `.modal-backdrop` to <body> at z-index 1050, which then paints on top of the
+   entire ancestor — including the .modal-dialog trapped inside it. On the dock,
+   WebKit additionally clips the position-fixed dialog to the overflow box, so
+   the user sees only the dark backdrop with no reachable UI (and, because the
+   backdrop eats pointer events while the dialog is hidden, the app appears
+   frozen). On the topbar, the dialog is simply painted under sibling chrome.
+   When any backdrop is visible, lift these ancestors above the modal layer and
+   drop their overflow clip so the dialog renders and is clickable. This applies
+   on every viewport (it was previously mobile-only, which left desktop broken:
+   the "New file" modal appeared to do nothing and GitHub login showed a dark
+   screen). */
+body:has(.modal-backdrop.show) .kmila-dock,
+body:has(.modal-backdrop.show) .kmila-topbar {
+    z-index: calc(var(--z-modal) + 5) !important;
+    overflow: visible !important;
+}
 
+@media (max-width: 768px) {
     /* Bootstrap's default 0.5 backdrop leaves the page reading through the
        dialog — list items, dates and the footer link stay legible on phones.
        Push opacity higher and add a 2-px blur so the modal isolates cleanly
@@ -11388,7 +11661,7 @@
     --bs-btn-padding-y: 2px;
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-1);
 }
 
 /* ── Catalog status chips ──────────────────────────────────────────────── */
@@ -11396,9 +11669,9 @@
 .practice-status-chip {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-1);
     padding: 2px var(--space-2);
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     font-size: var(--fs-2xs);
     font-weight: var(--fw-semibold);
     letter-spacing: var(--tracking-wide);
@@ -11456,7 +11729,7 @@
     color: var(--warning);
     font-size: var(--fs-lg);
 }
-.practice-gate-banner__body strong { display: block; margin-bottom: 4px; }
+.practice-gate-banner__body strong { display: block; margin-bottom: var(--space-1); }
 .practice-gate-banner__body p { margin: 0; }
 
 
@@ -11664,7 +11937,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
 .schematic-viewer__chip {
     display: inline-block;
     padding: 0 .4rem;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: var(--bg-subtle, rgba(0,0,0,.05));
     font-size: var(--fs-xs);
     color: var(--text-muted, #64748b);
@@ -11718,7 +11991,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
 }
 
 .schematic-diagnostics__item--blackboxprocess {
-    color: #b45309;
+    color: var(--warning);
 }
 
 .schematic-diagnostics__item--info {
@@ -11726,11 +11999,11 @@ body:has(.visual-page.is-fullscreen) .status-bar {
 }
 
 .schematic-diagnostics__item--warning {
-    color: #b45309;
+    color: var(--warning);
 }
 
 .schematic-diagnostics__item--error {
-    color: #b91c1c;
+    color: var(--danger);
 }
 
 .schematic-viewer__body {
@@ -11779,9 +12052,9 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     display: inline-block;
     margin-left: .3rem;
     padding: 0 .35rem;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: #6366f1;
-    color: #fff;
+    color: var(--text-on-primary);
     font-size: var(--fs-xs);
     font-weight: 600;
     line-height: 1.4;
@@ -11807,7 +12080,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
    the dim/trace rules visually by using !important on stroke so it reads even
    when a trace selection is also active. */
 .schematic-cell.is-active-step > path:first-child {
-    stroke: var(--accent, #f59e0b) !important;
+    stroke: var(--accent) !important;
     stroke-width: 3 !important;
     animation: kmila-schem-pulse 1s ease-in-out infinite;
     transform-box: fill-box;
@@ -11817,14 +12090,14 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     opacity: 1 !important;
 }
 .schematic-wire.is-active-step {
-    stroke: var(--accent, #f59e0b) !important;
+    stroke: var(--accent) !important;
     stroke-width: 4 !important;
     opacity: 1 !important;
     animation: kmila-schem-wire-pulse 1s ease-in-out infinite;
 }
 @keyframes kmila-schem-pulse {
     0%, 100% { filter: drop-shadow(0 0 0 transparent); }
-    50%      { filter: drop-shadow(0 0 4px var(--accent, #f59e0b)); }
+    50%      { filter: drop-shadow(0 0 4px var(--accent)); }
 }
 @keyframes kmila-schem-wire-pulse {
     0%, 100% { opacity: .65; }
@@ -11851,7 +12124,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     align-items: center;
     gap: .35rem;
     font-weight: 600;
-    color: var(--accent, #f59e0b);
+    color: var(--accent);
 }
 .schematic-debug-bar__hint {
     flex: 1 1 12rem;
@@ -11902,7 +12175,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     align-items: center;
     gap: .25rem;
     padding: .15rem .4rem;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: rgba(99, 102, 241, 0.12);
     color: var(--text-strong, #1e293b);
     font-family: ui-monospace, Menlo, monospace;
@@ -12128,6 +12401,42 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     overflow: hidden;
 }
 
+/* In the editor's "Paso a paso" (Replay) tab the player sits in a tall dock
+   card, so the fixed 320px code box wasted a big empty band below the transport
+   while long files (100+ lines) only showed ~15 lines. Let the code editor grow
+   to fill the column height here (the signals column already stretches tall), so
+   far more code is visible and you scroll much less. Scoped to the editor tab so
+   embedded Concepts/lesson players keep their compact 320px sizing. */
+.editor-workbench__view--replay .kmila-exec-player__code { min-height: 0; }
+.editor-workbench__view--replay .kmila-exec-monaco {
+    height: auto;
+    flex: 1 1 auto;
+    min-height: 320px;
+}
+/* Fill-the-window chain for the "Paso a paso" tab: without these, the player's
+   height is driven by the signals-table content (not the viewport), so designs
+   with few signals left a dead band below the editor. Establish a viewport-
+   bounded flex height so the code column fills the available space; the signals
+   column scrolls internally instead of defining the height. Scoped to the
+   editor replay tab (embedded Concepts/lesson players keep their compact 320px
+   sizing above) AND to >=881px — the player is a single stacked column below
+   that (see the 880px rule), where the view scrolls naturally instead. */
+@media (min-width: 881px) {
+    .editor-workbench__view--replay .kmila-replay {
+        flex: 1 1 auto;
+        min-height: 0;
+    }
+    .editor-workbench__view--replay .kmila-exec-player {
+        flex: 1 1 auto;
+        min-height: 0;
+        margin: 0;
+    }
+    .editor-workbench__view--replay .kmila-exec-player__side {
+        min-height: 0;
+        overflow: auto;
+    }
+}
+
 .kmila-exec-player__side {
     display: flex;
     flex-direction: column;
@@ -12233,7 +12542,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     flex: 1;
     height: 6px;
     background-color: var(--surface-3, var(--surface-2));
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     overflow: hidden;
 }
 
@@ -12644,7 +12953,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     color: var(--text-muted, #64748b);
     padding: 0 .5rem;
     background-color: var(--surface-3, var(--surface-2));
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
 }
 .kmila-replay__bp-row {
     display: flex;
@@ -12732,7 +13041,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     border: 1px solid var(--border-subtle);
     background-color: var(--surface-1);
     color: var(--text-muted, #64748b);
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     padding: .1rem .55rem;
     font-size: var(--fs-xs);
     font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
@@ -12895,7 +13204,14 @@ body:has(.visual-page.is-fullscreen) .status-bar {
        just needs to keep the flex chain going. */
 }
 .editor-workbench__view--replay {
+    /* Mobile (stacked player): the view scrolls naturally so code + signals
+       below it are reachable. */
     overflow: auto;
+}
+@media (min-width: 881px) {
+    /* Desktop: the player fills the view and its columns scroll internally, so
+       clip here to avoid a redundant outer scrollbar. */
+    .editor-workbench__view--replay { overflow: hidden; }
 }
 
 /* Subgroup header row when "Group by type" is on. */
@@ -13002,6 +13318,21 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     height: auto;
     min-height: 360px;
 }
+/* #6 scroll fix — the palette is a tall natural-height list; without a bound
+   the flex row stretched the canvas to the palette's full height (~3900px),
+   which ballooned the whole editor so the PAGE scrolled with a huge empty
+   canvas tail instead of the canvas scrolling internally. Cap the workspace to
+   the editor's visible area (desktop) and let the panes scroll inside it.
+   Mobile keeps its own tuned calc (the @media 768 block below). */
+@media (min-width: 769px) {
+    .editor-workbench__view--blocks .kmila-block-editor__canvas {
+        height: clamp(360px, calc(100dvh - 19rem), 1000px);
+        min-height: 0;
+    }
+}
+.editor-workbench__view--blocks .kmila-block-root { min-height: 0; }
+.editor-workbench__view--blocks .kmila-block-palette { min-height: 0; overflow: auto; }
+.editor-workbench__view--blocks .kmila-block-canvas { min-height: 0; }
 /* B-3 (editor-mobile audit 2026-06-29 — partial accept): on phone widths,
    give the canvas a sensible viewport-relative cap so it doesn't leave a
    huge empty band BELOW it on tall screens. The earlier attempt to chain
@@ -13127,7 +13458,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--space-2);
     align-items: stretch;
 }
 /* 2026-08-08 mobile round 11 — Fix 2: category-tab pill row + chip
@@ -13140,7 +13471,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
 .kmila-block-palette__strip {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--space-2);
     align-items: stretch;
     min-width: 0;
 }
@@ -13183,8 +13514,8 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     .kmila-block-palette__tabs {
         display: flex;
         flex: 0 0 auto;
-        gap: 8px;
-        margin-bottom: 8px;
+        gap: var(--space-2);
+        margin-bottom: var(--space-2);
         overflow-x: auto;
         overflow-y: hidden;
         scrollbar-width: none;
@@ -13192,7 +13523,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
            of stopping mid-gap; proximity (not mandatory) so a decisive
            swipe past two pills still lands where the user expects. */
         scroll-snap-type: x proximity;
-        scroll-padding-inline: 8px;
+        scroll-padding-inline: var(--space-2);
         scroll-behavior: smooth;
     }
     .kmila-block-palette__tabs::-webkit-scrollbar { display: none; }
@@ -13202,7 +13533,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
         border: 1px solid var(--border-default);
         background-color: var(--surface-1);
         color: var(--text-default);
-        border-radius: 999px;
+        border-radius: var(--radius-pill);
         padding: 6px 14px;
         font: 500 var(--fs-xs) inherit;
         white-space: nowrap;
@@ -13235,7 +13566,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
            natural stop. `scroll-padding-inline: 12px` keeps the first
            chip from jamming against the palette's inline-start edge. */
         scroll-snap-type: x proximity;
-        scroll-padding-inline: 12px;
+        scroll-padding-inline: var(--space-3);
         scroll-behavior: smooth;
         /* Momentum + hide the native scrollbar; users know from the
            tab row that this strip scrolls. */
@@ -13366,10 +13697,27 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     scrollbar-color: var(--border-strong) transparent;
     padding: var(--space-2) var(--space-5) var(--space-5) var(--space-2);
 }
+/* #6 zoom layers. contentEl holds the absolutely-positioned blocks (at model
+   coords) and is transform-scaled for zoom; sizerEl is an invisible spacer
+   sized to the scaled bounding box so the scroll range tracks the zoom. */
+.kmila-block-canvas__content {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-origin: 0 0;
+}
+.kmila-block-canvas__sizer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1px;
+    height: 1px;
+    pointer-events: none;
+}
 .kmila-block-canvas::-webkit-scrollbar { height: 8px; width: 8px; }
 .kmila-block-canvas::-webkit-scrollbar-thumb {
     background: var(--border-strong);
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
 }
 .kmila-block-canvas::-webkit-scrollbar-track {
     background: transparent;
@@ -13459,7 +13807,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     position: absolute;
     inset: 8px auto 8px 6px;
     width: 3px;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: var(--kmila-block-tint);
 }
 
@@ -13474,7 +13822,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
 }
 
 @media (max-width: 640.98px) {
-    .kmila-block { padding: 8px 10px 8px 16px; font-size: 0.86rem; gap: 4px; max-width: 100%; }
+    .kmila-block { padding: 8px 10px 8px 16px; font-size: 0.86rem; gap: var(--space-1); max-width: 100%; }
     .kmila-block__statement { margin-inline-start: 12px; padding: 4px 6px; }
     /* 2026-08-08 mobile round 11 — Fix 1: mobile inset numbers match the
        reduced .kmila-block padding of `8px 10px 8px 16px`, so chained
@@ -13635,7 +13983,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
 /* Value blocks (output-bearing expression atoms) — pill shape, tinted
    border + soft tinted background so they still read as inline values. */
 .kmila-block--has-output {
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     padding: 6px 12px 6px 14px;
     background-color: color-mix(in srgb, var(--kmila-block-tint) 12%, var(--surface-2));
     border-color: var(--kmila-block-tint);
@@ -13732,7 +14080,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     background-color: var(--surface-1);
     padding: 2px 6px;
     border-radius: var(--radius-xs);
-    margin-bottom: 4px;
+    margin-bottom: var(--space-1);
 }
 
 /* ── Slots (value / statement / next) ─────────────────────────────────── */
@@ -13748,7 +14096,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     min-width: 38px;
     min-height: 22px;
     padding: 0;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background-color: color-mix(in srgb, var(--surface-1) 90%, transparent);
     outline: 1px dashed var(--border-default);
     outline-offset: -1px;
@@ -13763,7 +14111,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
 }
 
 .kmila-block__statement {
-    margin-top: 4px;
+    margin-top: var(--space-1);
     margin-inline-start: 12px;
     padding: 6px 8px;
     min-height: 28px;
@@ -13773,15 +14121,26 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    gap: 4px;
-    max-height: 60vh;
-    overflow-y: auto;
-    overflow-x: visible;
+    gap: var(--space-1);
+    /* #6 notation 2 — the canvas is effectively infinite, so let a deeply
+       nested body expand to its full height instead of clipping into a 60vh
+       inner scroll window (which trapped scrolling "inside instances"). The
+       outer canvas now scrolls the whole thing (its sizer measures the full
+       top-level block height). */
+    overflow: visible;
 }
 .kmila-block__statement:not(:empty) {
     border-style: solid;
     border-color: var(--border-subtle);
     padding: 6px;
+}
+
+/* #6 notation 1 — on the (effectively infinite) desktop canvas, keep each
+   block row on one line so a field/type doesn't wrap to a second row; the
+   block widens to fit instead. Palette chips and the mobile layout keep their
+   existing wrap behavior. */
+@media (min-width: 769px) {
+    .kmila-block-canvas .kmila-block__row { flex-wrap: nowrap; }
 }
 
 .kmila-block__next-slot {
@@ -13804,7 +14163,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
    .kmila-block-canvas > .kmila-block at ~line 13279). */
 .kmila-block__next-slot > .kmila-block { margin-top: 6px; width: 100%; }
 .kmila-block__statement > .kmila-block { margin-top: 0; }
-.kmila-block__statement > .kmila-block + .kmila-block { margin-top: 4px; }
+.kmila-block__statement > .kmila-block + .kmila-block { margin-top: var(--space-1); }
 
 /* Snap preview — accent ring + brand-tinted fill. White-on-tint stopped
    making sense once block bodies are light frosted glass. */
@@ -13861,6 +14220,23 @@ body:has(.visual-page.is-fullscreen) .status-bar {
    (32 px desktop / 40 px on phone). */
 .kmila-block-editor { position: relative; }
 
+/* Loading overlay shown until the JS block workspace mounts (issue #5b). Sits
+   above the (initially blank) canvas and centres a spinner + "Loading…" label
+   so first open reads as "working" rather than "empty/broken". */
+.kmila-block-editor__loading {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    color: var(--text-muted, var(--text-2));
+    background: var(--surface-1);
+    pointer-events: none;
+}
+
 .kmila-block-toolbar {
     position: absolute;
     top: var(--space-3);
@@ -13868,7 +14244,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     display: inline-flex;
     align-items: center;
     gap: 2px;
-    padding: 4px;
+    padding: var(--space-1);
     background-color: var(--surface-2);
     border: 1px solid var(--border-default);
     border-radius: var(--radius-pill);
@@ -13882,7 +14258,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     background: transparent;
     border: 0;
     width: 32px; height: 32px;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     color: var(--text-default);
     cursor: pointer;
     display: inline-grid;
@@ -13905,6 +14281,52 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     width: 1px; height: 20px;
     background-color: var(--border-subtle);
     margin: 0 4px;
+}
+/* #6 zoom %-readout between the +/- buttons */
+.kmila-block-toolbar__zoom {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 3.2em;
+    font-size: var(--fs-xs);
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+    user-select: none;
+}
+/* #6 Phase C — export dropdown (native <details>) on the block toolbar */
+.kmila-block-export { position: relative; display: inline-flex; }
+.kmila-block-export > summary { list-style: none; cursor: pointer; }
+.kmila-block-export > summary::-webkit-details-marker { display: none; }
+.kmila-block-export__menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    inset-inline-end: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--space-1);
+    min-width: 7rem;
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-3);
+    z-index: var(--z-dropdown, 1040);
+}
+.kmila-block-export__menu button {
+    appearance: none;
+    border: none;
+    background: none;
+    color: var(--text-default);
+    font: inherit;
+    font-size: var(--fs-sm);
+    text-align: start;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+.kmila-block-export__menu button:hover {
+    background-color: var(--surface-3);
+    color: var(--text-strong);
 }
 @media (max-width: 640.98px) {
     /* 2026-08-08 mobile round 11 — Fix 6: on phones the top-anchored
@@ -14047,6 +14469,16 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     animation: kmila-tour-fade-in 200ms var(--ease-standard, ease-out);
 }
 
+/* When a step highlights a target, the spotlight's box-shadow already dims the
+   whole screen except the cut-out. Keeping the backdrop's dark fill on top of
+   that double-darkened everything — including the target showing through the
+   cut-out — so the highlighted element looked dimmed instead of lit. Drop the
+   fill while a spotlight is active (the backdrop stays for click-to-dismiss and
+   still dims on targetless welcome/final cards). */
+.kmila-tour--spotlight .kmila-tour__backdrop {
+    background: transparent;
+}
+
 .kmila-tour__spotlight {
     position: absolute;
     pointer-events: none;
@@ -14124,7 +14556,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
 .kmila-tour__btn--primary {
     background: var(--kmila-primary, #4f46e5);
     border-color: var(--kmila-primary, #4f46e5);
-    color: #fff;
+    color: var(--text-on-primary);
 }
 
 .kmila-tour__btn--primary:hover {
@@ -14426,7 +14858,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     z-index: var(--z-popover, 1100);
     min-width: 200px;
     max-width: min(280px, calc(100vw - 16px));
-    padding: 4px;
+    padding: var(--space-1);
     background: var(--surface-2);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-md);
@@ -14821,14 +15253,14 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     overflow: visible;
 }
 .visual-page__wire-line {
-    stroke: color-mix(in srgb, var(--accent, #f59e0b) 70%, transparent);
+    stroke: color-mix(in srgb, var(--accent) 70%, transparent);
     stroke-width: 1.5;
     stroke-dasharray: 4 3;
     fill: none;
 }
 .visual-page__wire-chip {
     fill: var(--surface-3, #1f2532);
-    stroke: var(--accent, #f59e0b);
+    stroke: var(--accent);
     stroke-width: 1;
 }
 .visual-page__wire-label {
@@ -14936,7 +15368,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     border: 1px solid color-mix(in srgb, var(--kmila-accent) 12%, var(--border-default));
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-3),
-                inset 0 1px 0 color-mix(in srgb, #ffffff 40%, transparent);
+                inset 0 1px 0 color-mix(in srgb, var(--text-on-primary) 40%, transparent);
     overflow-y: auto;
     display: flex;
     flex-direction: column;
@@ -15244,7 +15676,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
 }
 
 .kviz-widget--selected {
-    outline: 2px solid var(--accent, #6366f1);
+    outline: 2px solid var(--accent);
     outline-offset: 4px;
     border-radius: 4px;
 }
@@ -15256,7 +15688,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-1);
 }
 
 .kviz-led-body {
@@ -15291,7 +15723,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-1);
     cursor: pointer;
     touch-action: none;
 }
@@ -15400,12 +15832,12 @@ body:has(.visual-page.is-fullscreen) .status-bar {
 }
 .examples-gallery-card:hover {
     background: var(--surface-3, color-mix(in srgb, var(--surface-2) 80%, var(--accent) 20%));
-    border-color: var(--accent, #f59e0b);
+    border-color: var(--accent);
     transform: translateY(-1px);
 }
 .examples-gallery-card__icon {
     font-size: 1.6em;
-    color: var(--accent, #f59e0b);
+    color: var(--accent);
 }
 .examples-gallery-card__title {
     margin: 0;
@@ -15477,11 +15909,11 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     transition: border-color 120ms ease, background-color 120ms ease;
 }
 .import-mode-option--active {
-    border-color: var(--accent, #f59e0b);
+    border-color: var(--accent);
     background: color-mix(in srgb, var(--surface-2) 82%, var(--accent) 18%);
 }
 .import-mode-option input { margin-top: 0.25rem; }
-.import-mode-option__icon { font-size: 1.4em; color: var(--accent, #f59e0b); }
+.import-mode-option__icon { font-size: 1.4em; color: var(--accent); }
 .import-mode-option__text { display: flex; flex-direction: column; gap: 2px; }
 .import-mode-option__title { font-weight: 600; color: var(--text); }
 .import-mode-option__desc { font-size: var(--fs-sm); color: var(--text-muted); line-height: 1.35; }
@@ -15496,7 +15928,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     border-radius: var(--radius);
     color: var(--text-muted);
 }
-.import-mode-form__preview .bi { font-size: 1.4em; color: var(--accent, #f59e0b); }
+.import-mode-form__preview .bi { font-size: 1.4em; color: var(--accent); }
 @media (max-width: 560px) { .import-mode-options { grid-template-columns: 1fr; } }
 
 /* --- Stimulus-source selector (PortsPanel) --- */
@@ -15549,7 +15981,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     color: var(--text-muted);
     line-height: 1.4;
 }
-.ports-panel__testbench-info .bi { color: var(--accent, #f59e0b); }
+.ports-panel__testbench-info .bi { color: var(--accent); }
 
 /* --- Source Control panel --- */
 .sc-panel { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-2); font-size: var(--fs-sm); }
@@ -15558,14 +15990,14 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     padding-bottom: var(--space-2); border-bottom: 1px solid var(--border-subtle); flex-wrap: wrap;
 }
 .sc-header__repo { display: inline-flex; align-items: center; gap: var(--space-1, 4px); color: var(--text); text-decoration: none; font-weight: 600; }
-.sc-header__repo:hover { color: var(--accent, #f59e0b); }
+.sc-header__repo:hover { color: var(--accent); }
 .sc-header__branch {
-    margin-inline-start: var(--space-1, 4px); padding: 0 .4rem; border-radius: 999px;
+    margin-inline-start: var(--space-1, 4px); padding: 0 .4rem; border-radius: var(--radius-pill);
     background: var(--surface-2); color: var(--text-muted); font-size: var(--fs-xs, .75rem); font-weight: 500;
 }
 .sc-header__auto { display: inline-flex; align-items: center; gap: var(--space-1, 4px); color: var(--text-muted); cursor: pointer; }
 .sc-toolbar { display: flex; flex-wrap: wrap; gap: var(--space-1, 4px); }
-.sc-toolbar .kmila-btn.is-active { border-color: var(--accent, #f59e0b); color: var(--accent, #f59e0b); }
+.sc-toolbar .kmila-btn.is-active { border-color: var(--accent); color: var(--accent); }
 .sc-toolbar__unlink { margin-inline-start: auto; }
 .sc-busy { display: flex; align-items: center; gap: var(--space-2); color: var(--text-muted); padding: var(--space-2) 0; }
 .sc-commit { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-2) 0; }
@@ -15591,9 +16023,9 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     flex: 0 0 auto; width: 1.2rem; height: 1.2rem; display: inline-flex; align-items: center; justify-content: center;
     border-radius: 4px; font-weight: 700; font-size: var(--fs-xs, .75rem);
 }
-.sc-badge--added    { background: color-mix(in srgb, #22c55e 22%, transparent); color: #16a34a; }
-.sc-badge--modified { background: color-mix(in srgb, #f59e0b 22%, transparent); color: #d97706; }
-.sc-badge--deleted  { background: color-mix(in srgb, #ef4444 22%, transparent); color: #dc2626; }
+.sc-badge--added    { background: color-mix(in srgb, var(--success) 22%, transparent); color: var(--success); }
+.sc-badge--modified { background: color-mix(in srgb, var(--warning) 22%, transparent); color: var(--warning); }
+.sc-badge--deleted  { background: color-mix(in srgb, var(--danger) 22%, transparent); color: var(--danger); }
 .sc-commit-row { flex-direction: column; align-items: flex-start; gap: 0; }
 .sc-commit-row__msg { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .sc-commit-row__meta { font-size: var(--fs-xs, .75rem); color: var(--text-muted); }
@@ -15602,9 +16034,9 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     overflow: auto; max-height: 40vh; font-family: var(--bs-font-monospace, monospace); font-size: var(--fs-xs, .78rem);
 }
 .sc-diff__line { padding: 0 var(--space-2); white-space: pre; }
-.sc-diff__line--add  { background: color-mix(in srgb, #22c55e 14%, transparent); }
-.sc-diff__line--del  { background: color-mix(in srgb, #ef4444 14%, transparent); }
-.sc-diff__line--hunk { color: var(--accent, #f59e0b); }
+.sc-diff__line--add  { background: color-mix(in srgb, var(--success) 14%, transparent); }
+.sc-diff__line--del  { background: color-mix(in srgb, var(--danger) 14%, transparent); }
+.sc-diff__line--hunk { color: var(--accent); }
 .sc-diff__line--meta { color: var(--text-muted); }
 
 /* --- Satisfaction-survey invite (corner card) --- */
@@ -15676,8 +16108,8 @@ body:has(.visual-page.is-fullscreen) .status-bar {
    is blocked by the simulation loop — the whole point of this overlay. */
 .wasm-sim-overlay__spinner {
     width: 2.4rem; height: 2.4rem; border-radius: 50%;
-    border: 3px solid color-mix(in srgb, var(--accent, #f59e0b) 30%, transparent);
-    border-top-color: var(--accent, #f59e0b);
+    border: 3px solid color-mix(in srgb, var(--accent) 30%, transparent);
+    border-top-color: var(--accent);
     animation: wasm-sim-spin 0.8s linear infinite;
 }
 @keyframes wasm-sim-spin { to { transform: rotate(360deg); } }
@@ -15734,7 +16166,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-1);
     cursor: pointer;
     touch-action: none;
     user-select: none;
@@ -15747,13 +16179,13 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     height: 30px;
     display: grid;
     place-items: center;
-    padding: 4px;
+    padding: var(--space-1);
 }
 
 .kviz-switch-track {
     width: 100%;
     height: 100%;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: var(--kviz-switch-track-off, #cbd5e1);
     border: 1px solid var(--kviz-switch-track-off-border, #94a3b8);
     position: relative;
@@ -15804,7 +16236,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-1);
     touch-action: none;
     user-select: none;
 }
@@ -15814,7 +16246,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
 .kviz-multi-switch__row {
     display: flex;
     flex-direction: row;
-    gap: 4px;
+    gap: var(--space-1);
     padding: 6px 8px;
     background: var(--kviz-multi-switch-body, #f1f5f9);
     border: 1px solid var(--kviz-multi-switch-body-border, #94a3b8);
@@ -15886,14 +16318,14 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-1);
     touch-action: none;
     user-select: none;
 }
 
 .kviz-led-array__strip {
     display: flex;
-    gap: 4px;
+    gap: var(--space-1);
     padding: 6px;
     background: var(--kviz-housing-dark, #0b0f14);
     border-radius: 8px;
@@ -15940,7 +16372,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-1);
     touch-action: none;
     user-select: none;
 }
@@ -15952,7 +16384,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     grid-template-columns: repeat(3, 20px);
     grid-template-rows: repeat(3, 20px);
     gap: 6px;
-    padding: 8px;
+    padding: var(--space-2);
     background: var(--kviz-housing-dark, #0b0f14);
     border-radius: 8px;
     border: 1px solid var(--kviz-housing-border, #1f2937);
@@ -15993,7 +16425,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-1);
     touch-action: none;
     user-select: none;
 }
@@ -16005,7 +16437,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     grid-template-columns: repeat(3, 20px);
     grid-template-rows: repeat(3, 20px);
     gap: 6px;
-    padding: 8px;
+    padding: var(--space-2);
     background: var(--kviz-housing-dark, #0b0f14);
     border-radius: 8px;
     border: 1px solid var(--kviz-housing-border, #1f2937);
@@ -16047,8 +16479,8 @@ body:has(.visual-page.is-fullscreen) .status-bar {
 .kviz-buzzer {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 4px;
+    gap: var(--space-2);
+    padding: var(--space-1);
     touch-action: none;
     user-select: none;
 }
@@ -16133,7 +16565,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 4px;
+    gap: var(--space-1);
     touch-action: none;
     user-select: none;
 }
@@ -16144,7 +16576,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     display: grid;
     /* grid-template-columns supplied inline (repeat(Cols, 42px)) */
     grid-auto-rows: 42px;
-    gap: 4px;
+    gap: var(--space-1);
     padding: 6px;
     background: var(--surface-card, #ffffff);
     border-radius: 10px;
@@ -16170,7 +16602,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
 
 .kviz-keypad__key--pressed {
     background: var(--kmila-brand-slate, #3b82f6);
-    color: #ffffff;
+    color: var(--text-on-primary);
     transform: translateY(1px);
     box-shadow: inset 0 1px 3px rgba(0,0,0,0.25);
 }
@@ -16190,7 +16622,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 4px;
+    gap: var(--space-1);
     touch-action: none;
     user-select: none;
 }
@@ -16252,7 +16684,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-1);
     user-select: none;
     -webkit-user-select: none;
 }
@@ -16325,7 +16757,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 4px;
+    gap: var(--space-1);
     user-select: none;
     -webkit-user-select: none;
 }
@@ -16350,7 +16782,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-1);
     user-select: none;
     -webkit-user-select: none;
 }
@@ -16407,13 +16839,13 @@ body:has(.visual-page.is-fullscreen) .status-bar {
 .kviz-stepper-coil--s { bottom: -2px; left: calc(50% - 9px); }
 .kviz-stepper-coil--w { left: -2px;   top:  calc(50% - 9px); }
 .kviz-stepper-coil--lit {
-    background: var(--accent, #f59e0b);
+    background: var(--accent);
     color: #1a1a1a;
-    box-shadow: 0 0 8px color-mix(in srgb, var(--accent, #f59e0b) 70%, transparent);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 70%, transparent);
 }
 .kviz-stepper-meta {
     display: flex;
-    gap: 8px;
+    gap: var(--space-2);
     font-size: var(--fs-xs);
     font-family: var(--font-mono);
     color: var(--text-muted);
@@ -16428,7 +16860,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
 .visual-page__runbar {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--space-2);
     padding: 8px 12px;
     background: var(--surface-2, #2a3142);
     border-bottom: 1px solid var(--border, #3a4053);
@@ -16436,7 +16868,7 @@ body:has(.visual-page.is-fullscreen) .status-bar {
 .visual-page__runbar-row {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--space-3);
     flex-wrap: wrap;
 }
 .visual-page__runbar-row--disabled { opacity: 0.55; }
@@ -16468,13 +16900,13 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     font-size: var(--fs-xs);
 }
 .visual-page__bp-hit {
-    color: var(--accent, #f59e0b);
+    color: var(--accent);
     font-weight: 600;
 }
 .visual-page__scrub-slider {
     flex: 1 1 auto;
     width: 100%;
-    accent-color: var(--accent, #f59e0b);
+    accent-color: var(--accent);
 }
 .visual-page__scrub-readout {
     font-family: var(--font-mono);
@@ -16485,13 +16917,13 @@ body:has(.visual-page.is-fullscreen) .status-bar {
 .visual-page__bp-input { width: 7em; }
 .visual-page__bp-list {
     display: flex;
-    gap: 4px;
+    gap: var(--space-1);
     flex-wrap: wrap;
 }
 .visual-page__bp-chip {
     border: 1px solid var(--border, #3a4053);
     background: var(--surface-3, #1f2532);
-    color: var(--accent, #f59e0b);
+    color: var(--accent);
     border-radius: 14px;
     padding: 2px 10px;
     font-family: var(--font-mono);

@@ -99,6 +99,8 @@ public static class Program
         builder.Services.AddScoped<SignalCursorBus>();
         builder.Services.AddScoped<SimulationParameters>();
         builder.Services.AddScoped<BuildLog>();
+        // External links — real browsers honour window.open (issue #8).
+        builder.Services.AddScoped<Kmila.Shared.Services.IExternalLinkOpener, Kmila.Shared.Services.JsExternalLinkOpener>();
         builder.Services.AddScoped<SimulationCoordinator>();
         builder.Services.AddScoped<Kmila.Shared.Services.VisualRun.VisualRunRegistry>();
 

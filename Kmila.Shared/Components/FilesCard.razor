@@ -336,6 +336,15 @@
     [Parameter] public Project Project { get; set; } = null!;
     [Parameter] public EventCallback<ProjectFile> OnProjectFileClicked { get; set; } = new();
     [Parameter] public EventCallback<ProjectFile> OnProjectFileRemoved { get; set; } = new();
+    /// <summary>
+    /// Raised when the user asks to create a new file (toolbar button or a
+    /// folder's "new file" menu), with the target sub-directory ("" = root).
+    /// When wired, the parent (Editor) opens the create-file modal from its own
+    /// root — FilesCard's inline modal is nested in the dock's stacking/overflow
+    /// context and renders as a frozen backdrop with no dialog (#5). Falls back
+    /// to the inline modal when no handler is attached (standalone use).
+    /// </summary>
+    [Parameter] public EventCallback<string> OnNewFileRequested { get; set; }
 
     private List<ProjectFile> _projectFiles { get; set; } = new();
     private List<string> _directories { get; set; } = new();
@@ -995,6 +1004,16 @@
 
     private async Task RequestNewFile(string targetDir)
     {
+        // Prefer the parent's root-level modal (see OnNewFileRequested) — the
+        // inline modal below is trapped by the dock's stacking/overflow context
+        // on this platform and never shows (#5).
+        if (OnNewFileRequested.HasDelegate)
+        {
+            if (!string.IsNullOrEmpty(targetDir)) _collapsedFolders.Remove(targetDir);
+            await OnNewFileRequested.InvokeAsync(targetDir ?? string.Empty);
+            return;
+        }
+
         _pendingNewFileDir = targetDir ?? string.Empty;
         if (!string.IsNullOrEmpty(targetDir)) _collapsedFolders.Remove(targetDir);
         var parameters = new Dictionary<string, object>

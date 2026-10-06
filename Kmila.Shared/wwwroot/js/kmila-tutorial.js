@@ -203,17 +203,27 @@
             spotlight.style.top    = (r.top    - pad) + 'px';
             spotlight.style.width  = (r.width  + pad * 2) + 'px';
             spotlight.style.height = (r.height + pad * 2) + 'px';
+            // The spotlight's box-shadow is the dimmer; drop the full-screen
+            // backdrop fill so the highlighted target isn't double-darkened
+            // (it was showing dimmed instead of lit). CSS keys off this class.
+            root.classList.add('kmila-tour--spotlight');
             // Scroll target into view if it's off-screen.
             if (r.bottom < 0 || r.top > window.innerHeight) {
                 target.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
         } else {
             spotlight.style.display = 'none';
+            // No spotlight (welcome / final card): the backdrop is the only
+            // dimmer, so let it keep its dark fill.
+            root.classList.remove('kmila-tour--spotlight');
         }
 
         // Card placement: prefer below-right of target, fall back to centre.
-        var cardW = 340;
-        var cardH = 220;
+        // Roomier than the original 340×220 so coach-mark copy isn't cramped on
+        // the larger editor/desktop views (issue #10). The CSS max-width cap
+        // (.kmila-tour__card) still shrinks it on narrow phones.
+        var cardW = 420;
+        var cardH = 260;
         var cardX, cardY;
         if (target) {
             var tr = target.getBoundingClientRect();

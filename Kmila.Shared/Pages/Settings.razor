@@ -18,6 +18,7 @@
 @inject UserSampleService UserSamples
 @inject Projects ProjectsRepo
 @inject GitHubAuth GitHubAuth
+@inject Kmila.Shared.Services.IExternalLinkOpener Links
 @inject LibraryCompiler.Services.LibraryCompiler LibCompiler
 @inject Kmila.Shared.Services.ReplayState Replay
 @inject SelectedFPGA SelectedFPGA
@@ -995,7 +996,7 @@
 </section>
 
 <ConfirmDialog @ref="_confirmDialog" />
-<Modal @ref="_accountLoginModal" Title="@Traductor.T("TOPBAR_SIGN_IN_GITHUB")" Size="ModalSize.Small" />
+<Modal @ref="_accountLoginModal" Title="@Traductor.T("TOPBAR_SIGN_IN_GITHUB")" Size="ModalSize.Large" />
 <Modal @ref="_importModeModal" Title="@Traductor.T("IMPORT_MODE_TITLE")" />
 
 @* Library source viewer — opened from the "View" button on each
@@ -1812,7 +1813,7 @@
         {
             var body = FeedbackHelper.BuildDiagnostics(Traductor.Lang ?? "en");
             var url  = FeedbackHelper.BuildIssueUrl("[Report] ", body);
-            await JS.InvokeVoidAsync("open", url, "_blank");
+            await Links.OpenAsync(url);
         }
         catch (Exception ex)
         {
@@ -1831,7 +1832,7 @@
             // pre-filled; the user writes the title + description on the page.
             var url = FeedbackHelper.BuildKmilaReportUrl(
                 Traductor.Lang ?? "en", appVersion: Traductor.T("APP_VERSION"));
-            await JS.InvokeVoidAsync("open", url, "_blank");
+            await Links.OpenAsync(url);
         }
         catch (Exception ex)
         {

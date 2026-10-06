@@ -1,6 +1,7 @@
 @implements IDisposable
 @inject ApplicationDbContext DbContext
 @inject IJSRuntime JS
+@inject Kmila.Shared.Services.IExternalLinkOpener Links
 
 @*
     Occasional satisfaction-survey invite. Mounted once app-wide in MainLayout,
@@ -102,7 +103,9 @@
 
     private async Task AnswerAsync(string url)
     {
-        try { await JS.InvokeVoidAsync("open", url, "_blank"); } catch { }
+        // Routed through IExternalLinkOpener so the survey actually opens on
+        // desktop — window.open(_blank) silently no-ops in the MAUI WebView (#8).
+        await Links.OpenAsync(url);
         await MarkAnsweredAsync();
     }
 

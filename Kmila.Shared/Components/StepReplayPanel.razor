@@ -127,7 +127,8 @@
                step as the doc grows. LiveTick is a render trigger so the
                component re-runs OnParametersSetAsync even though Doc identity
                doesn't change (we mutate the same instance per frame). *@
-            <ExecutionPlayer Doc="liveDoc"
+            <ExecutionPlayer @ref="_player"
+                             Doc="liveDoc"
                              Lang="@(Traductor.Lang ?? "en")"
                              FollowLive="true"
                              LiveTick="Replay.LiveFrameTick" />
@@ -156,7 +157,7 @@ else if (Replay.Current is { Steps.Count: > 0 } doc)
                 </select>
             </label>
         </header>
-        <ExecutionPlayer Doc="doc" Lang="@(Traductor.Lang ?? "en")" />
+        <ExecutionPlayer @ref="_player" Doc="doc" Lang="@(Traductor.Lang ?? "en")" />
     </div>
 }
 else
@@ -170,6 +171,21 @@ else
 
 @code {
     private int? _pendingBreakpointLine;
+
+    // Only one of the two ExecutionPlayer instances (live / post-hoc) is
+    // rendered at a time, so a single shared @ref always points at the active
+    // one (or null when the empty state shows).
+    private ExecutionPlayer? _player;
+
+    /// <summary>
+    /// Forwarded by the Editor when the Replay tab becomes active so the
+    /// ExecutionPlayer's Monaco — created while the tab was display:none —
+    /// re-measures and its code panel scrolls to the executing line (#7).
+    /// </summary>
+    public async Task RelayoutAsync()
+    {
+        if (_player != null) await _player.RelayoutAsync();
+    }
 
     protected override void OnInitialized()
     {

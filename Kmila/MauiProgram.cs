@@ -123,6 +123,10 @@ public static class MauiProgram
         // has clear context (the user just finished a sim).
         builder.Services.AddSingleton<ISimEndNotifier, MauiSimEndNotifier>();
 
+        // External links must open in the system browser — window.open(_blank)
+        // is a no-op inside the BlazorWebView (issue #8).
+        builder.Services.AddSingleton<Kmila.Shared.Services.IExternalLinkOpener, KmilaMauiExternalLinkOpener>();
+
         // In-app logs (/logs page) — same instance shared between DI and the
         // logger provider so every ILogger<T> write lands in AppLogStore.
         var appLog = new AppLogStore();
@@ -324,6 +328,56 @@ public static class MauiProgram
 
         // Register the Blazor WebView for hosting Razor components inside MAUI
         builder.Services.AddMauiBlazorWebView();
+
+        // Disable native WebView zoom so a trackpad pinch (or Ctrl+scroll) can't
+        // magnify the whole app and push controls off-screen (issue #3). The JS
+        // guard in kmila-shared-head.js can't catch macCatalyst's native magnify
+        // gesture — it is never delivered as a wheel/gesture event — so it has to
+        // be turned off on the platform WebView itself. In-app canvas zoom
+        // (schematic / waveform / blocks) is unaffected: that's handled in the
+        // DOM, not by the WebView's own magnification.
+        Microsoft.AspNetCore.Components.WebView.Maui.BlazorWebViewHandler.BlazorWebViewMapper
+            .AppendToMapping("KmilaDisableWebViewZoom", static (handler, view) =>
+            {
+#if MACCATALYST
+                // Capture the WebView so the native "File ▸ Save" (⌘S) menu
+                // command can drive the editor's save — on Mac Catalyst the
+                // ⌘S key-equivalent never reaches the WebView's JS (issue #2).
+                KmilaMacSaveBridge.WebView = handler.PlatformView;
+#endif
+#if MACCATALYST || IOS
+                // macCatalyst's WKWebView binding doesn't expose the AppKit
+                // `allowsMagnification` property, so pin the underlying
+                // UIScrollView's zoom range to 1× and disable its pinch
+                // recogniser. Together with the maximum-scale/user-scalable
+                // viewport meta in wwwroot/index.html this stops a trackpad
+                // pinch from magnifying the whole app off-screen (issue #3).
+                try
+                {
+                    var sv = handler.PlatformView.ScrollView;
+                    if (sv != null)
+                    {
+                        sv.MaximumZoomScale = 1;
+                        sv.MinimumZoomScale = 1;
+                        sv.BouncesZoom = false;
+                        if (sv.PinchGestureRecognizer != null)
+                            sv.PinchGestureRecognizer.Enabled = false;
+                    }
+                }
+                catch { /* platform quirk — viewport meta still guards zoom */ }
+#elif WINDOWS
+                handler.PlatformView.CoreWebView2Initialized += static (_, e) =>
+                {
+                    try
+                    {
+                        var s = e.CoreWebView2.Settings;
+                        s.IsZoomControlEnabled = false;
+                        s.IsPinchZoomEnabled   = false;
+                    }
+                    catch { /* older WebView2 runtime without these settings — best-effort */ }
+                };
+#endif
+            });
 
         // BlazorBootstrap provides Bootstrap-based Blazor UI components
         builder.Services.AddBlazorBootstrap();

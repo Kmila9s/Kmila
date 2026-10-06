@@ -14,6 +14,7 @@
 *@
 @implements IAsyncDisposable
 @inject GitHubAuth Auth
+@inject Kmila.Shared.Services.IExternalLinkOpener Links
 
 <div class="github-login">
     @if (!Auth.IsConfigured)
@@ -48,54 +49,39 @@
     }
     else
     {
-        <p class="github-login__intro">@Traductor.T("GH_LOGIN_INSTRUCTIONS")</p>
-
-        <div class="github-login__steps">
-            <div class="github-login__step">
-                <span class="github-login__step-num">1</span>
-                <div>
-                    <div class="github-login__step-title">@Traductor.T("GH_LOGIN_OPEN_LINK")</div>
-                    <a href="@_code.VerificationUri" target="_blank" rel="noopener noreferrer"
-                       class="github-login__verification-link">
-                        <Icon Name="IconName.BoxArrowUpRight" />
-                        <span>@_code.VerificationUri</span>
-                    </a>
-                </div>
+        @* #9b single-button login: GitHub was opened automatically (code
+           pre-filled) the moment the code arrived, so this is a single compact
+           "authorize over there, we're waiting" state — not a multi-step wizard.
+           The reopen button and the visible code are fallbacks only. *@
+        <div class="github-login__flow">
+            <div class="github-login__waiting github-login__waiting--lead">
+                <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
+                <span>@Traductor.T("GH_LOGIN_WAITING")</span>
             </div>
 
-            <div class="github-login__step">
-                <span class="github-login__step-num">2</span>
-                <div>
-                    <div class="github-login__step-title">@Traductor.T("GH_LOGIN_ENTER_CODE")</div>
-                    <div class="github-login__code-row">
-                        <code class="github-login__code">@_code.UserCode</code>
-                        <KmilaTooltip TextKey="COMMON_COPY">
-                            <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
-                                    @onclick="CopyCodeAsync">
-                                <Icon Name="@(_copied ? IconName.CheckLg : IconName.Clipboard)" />
-                                <span>@Traductor.T(_copied ? "COMMON_COPIED" : "COMMON_COPY")</span>
-                            </button>
-                        </KmilaTooltip>
-                    </div>
-                </div>
-            </div>
+            <button type="button" class="kmila-btn kmila-btn--accent github-login__open-btn"
+                    @onclick="OpenVerificationAsync">
+                <Icon Name="IconName.BoxArrowUpRight" />
+                <span>@Traductor.T("GH_LOGIN_OPEN_LINK")</span>
+            </button>
 
-            <div class="github-login__step">
-                <span class="github-login__step-num">3</span>
-                <div>
-                    <div class="github-login__step-title">@Traductor.T("GH_LOGIN_AUTHORIZE")</div>
-                    <div class="github-login__waiting">
-                        <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
-                        <span>@Traductor.T("GH_LOGIN_WAITING")</span>
-                    </div>
-                </div>
-            </div>
+            <p class="github-login__code-hint">
+                <span>@Traductor.T("GH_LOGIN_ENTER_CODE")</span>
+                <code class="github-login__code">@_code.UserCode</code>
+                <KmilaTooltip TextKey="COMMON_COPY">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                            @onclick="CopyCodeAsync">
+                        <Icon Name="@(_copied ? IconName.CheckLg : IconName.Clipboard)" />
+                        <span>@Traductor.T(_copied ? "COMMON_COPIED" : "COMMON_COPY")</span>
+                    </button>
+                </KmilaTooltip>
+            </p>
+
+            <p class="github-login__privacy">
+                <Icon Name="IconName.ShieldLock" />
+                <span>@Traductor.T("GH_LOGIN_PRIVACY_NOTE")</span>
+            </p>
         </div>
-
-        <p class="github-login__privacy">
-            <Icon Name="IconName.ShieldLock" />
-            <span>@Traductor.T("GH_LOGIN_PRIVACY_NOTE")</span>
-        </p>
     }
 </div>
 
@@ -138,6 +124,14 @@
             _code = await Auth.StartDeviceFlowAsync();
             StateHasChanged();
 
+            // #9b single-button login: as soon as we have the code, open GitHub
+            // automatically (code pre-filled) so the user only has to click
+            // "Authorize" there — no manual "open link / copy code" steps. The
+            // reopen button + visible code below remain as a fallback if the
+            // auto-open is blocked (e.g. a browser popup blocker on the web host;
+            // on desktop the system browser opens reliably).
+            await OpenVerificationAsync();
+
             _pollCts?.Cancel();
             _pollCts?.Dispose();
             _pollCts = new CancellationTokenSource();
@@ -159,6 +153,22 @@
             _error = ex.Message;
             StateHasChanged();
         }
+    }
+
+    /// <summary>
+    /// Fast path (#9b): copy the user code, then open GitHub with the code
+    /// pre-filled (verification_uri_complete) when GitHub provides it, falling
+    /// back to the plain verification URL. Routed through IExternalLinkOpener so
+    /// it opens on desktop too.
+    /// </summary>
+    private async Task OpenVerificationAsync()
+    {
+        if (_code == null) return;
+        await CopyCodeAsync();
+        var url = !string.IsNullOrWhiteSpace(_code.VerificationUriComplete)
+            ? _code.VerificationUriComplete
+            : _code.VerificationUri;
+        await Links.OpenAsync(url);
     }
 
     private async Task CopyCodeAsync()

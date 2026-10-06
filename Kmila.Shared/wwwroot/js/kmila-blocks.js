@@ -380,6 +380,12 @@
             this._dragOffset    = { x: 0, y: 0 };
             this._snapCandidate = null;
             this._fromPalette   = false;
+            // #6 zoom state. Blocks live at model (unscaled) coords in
+            // this.contentEl; a CSS transform scales it, and this.sizerEl
+            // establishes the scroll range (transform doesn't affect scroll).
+            this._zoom    = 1;
+            this._minZoom = 0.4;
+            this._maxZoom = 2;
             // 2026-08-08 mobile round 11 (Fix 9) — double-tap-to-activate state.
             this._activeBlockEl = null;
             this._lastTap       = null;
@@ -403,6 +409,19 @@
             this.canvasEl.className = 'kmila-block-canvas';
             this.canvasEl.setAttribute('role', 'region');
             this.canvasEl.setAttribute('aria-label', 'Block workspace');
+
+            // #6 zoom: blocks are appended to contentEl (transform-scaled);
+            // sizerEl is an invisible spacer sized to the scaled bounding box so
+            // the canvas has the right scroll range at any zoom (CSS transform
+            // does not contribute to scrollWidth/Height on its own).
+            this.sizerEl = document.createElement('div');
+            this.sizerEl.className = 'kmila-block-canvas__sizer';
+            this.sizerEl.setAttribute('aria-hidden', 'true');
+            this.contentEl = document.createElement('div');
+            this.contentEl.className = 'kmila-block-canvas__content';
+            this.contentEl.style.transformOrigin = '0 0';
+            this.canvasEl.appendChild(this.sizerEl);
+            this.canvasEl.appendChild(this.contentEl);
 
             this.trashEl = document.createElement('div');
             this.trashEl.className = 'kmila-block-trash';
@@ -595,9 +614,9 @@
             // Re-pin to the canvas at its current screen position.
             const rect       = block.el.getBoundingClientRect();
             const canvasRect = this.canvasEl.getBoundingClientRect();
-            this.canvasEl.appendChild(block.el);
-            block.x = rect.left - canvasRect.left + this.canvasEl.scrollLeft;
-            block.y = rect.top  - canvasRect.top  + this.canvasEl.scrollTop;
+            this.contentEl.appendChild(block.el);
+            block.x = (rect.left - canvasRect.left + this.canvasEl.scrollLeft) / this._zoom;
+            block.y = (rect.top  - canvasRect.top  + this.canvasEl.scrollTop)  / this._zoom;
             block.el.style.position = 'absolute';
             block.el.style.left     = block.x + 'px';
             block.el.style.top      = block.y + 'px';
@@ -768,11 +787,11 @@
                 // Cloning a palette template — never modify the palette itself.
                 block = this._createBlock(paletteType);
                 this.topLevel.add(block);
-                this.canvasEl.appendChild(block.el);
+                this.contentEl.appendChild(block.el);
                 const canvasRect  = this.canvasEl.getBoundingClientRect();
                 const templateRect = blockEl.getBoundingClientRect();
-                block.x = templateRect.left - canvasRect.left + this.canvasEl.scrollLeft;
-                block.y = templateRect.top  - canvasRect.top  + this.canvasEl.scrollTop;
+                block.x = (templateRect.left - canvasRect.left + this.canvasEl.scrollLeft) / this._zoom;
+                block.y = (templateRect.top  - canvasRect.top  + this.canvasEl.scrollTop)  / this._zoom;
                 block.el.style.position = 'absolute';
                 block.el.style.left     = block.x + 'px';
                 block.el.style.top      = block.y + 'px';
@@ -809,11 +828,12 @@
             if (!this._dragging) return;
             const block = this._dragging;
             const canvasRect = this.canvasEl.getBoundingClientRect();
-            block.x = e.clientX - canvasRect.left - this._dragOffset.x + this.canvasEl.scrollLeft;
-            block.y = e.clientY - canvasRect.top  - this._dragOffset.y + this.canvasEl.scrollTop;
+            block.x = (e.clientX - canvasRect.left - this._dragOffset.x + this.canvasEl.scrollLeft) / this._zoom;
+            block.y = (e.clientY - canvasRect.top  - this._dragOffset.y + this.canvasEl.scrollTop)  / this._zoom;
             block.el.style.left = block.x + 'px';
             block.el.style.top  = block.y + 'px';
 
+            this._recomputeBounds();
             this._updateSnapCandidate();
             this._updateTrashHover(e.clientX, e.clientY);
         }
@@ -858,6 +878,65 @@
 
             this._fromPalette = false;
             this._fireChange();
+        }
+
+        /* ── #6 Zoom ──────────────────────────────────────────────────────
+           Blocks keep unscaled (model) coords; contentEl is transform-scaled
+           and sizerEl holds the scroll range (= scaled bounding box). */
+        _recomputeBounds() {
+            if (!this.contentEl || !this.sizerEl) return;
+            let maxR = 0, maxB = 0;
+            for (const el of this.contentEl.children) {
+                const x = parseFloat(el.style.left) || 0;
+                const y = parseFloat(el.style.top)  || 0;
+                maxR = Math.max(maxR, x + el.offsetWidth);
+                maxB = Math.max(maxB, y + el.offsetHeight);
+            }
+            const z = this._zoom;
+            // +40 model px slack so the last block never sits flush to the edge.
+            this.sizerEl.style.width  = Math.ceil((maxR + 40) * z) + 'px';
+            this.sizerEl.style.height = Math.ceil((maxB + 40) * z) + 'px';
+        }
+
+        _applyZoom() {
+            if (!this.contentEl) return;
+            this.contentEl.style.transform = 'scale(' + this._zoom + ')';
+            this._recomputeBounds();
+        }
+
+        zoomBy(factor) {
+            const z = Math.min(this._maxZoom, Math.max(this._minZoom, this._zoom * factor));
+            this._zoom = Math.round(z * 100) / 100;
+            this._applyZoom();
+            return this._zoom;
+        }
+
+        zoomReset() {
+            this._zoom = 1;
+            this._applyZoom();
+            return 1;
+        }
+
+        /* ── #6 Phase C: export as PNG / SVG / PDF ────────────────────────
+           The canvas is HTML, so we serialise the content layer into an SVG
+           <foreignObject> (styles inlined, inputs flattened to text, the mono
+           font embedded), always at 1× regardless of the current zoom. SVG is
+           downloaded directly; PNG rasterises the SVG via an <img>→<canvas>;
+           PDF wraps that PNG with the bundled jsPDF. */
+        _exportModelBounds() {
+            let w = 0, h = 0;
+            for (const el of this.contentEl.children) {
+                w = Math.max(w, (parseFloat(el.style.left) || 0) + el.offsetWidth);
+                h = Math.max(h, (parseFloat(el.style.top)  || 0) + el.offsetHeight);
+            }
+            return { w: Math.ceil(w), h: Math.ceil(h) };
+        }
+
+        async exportAs(format) {
+            const b = this._exportModelBounds();
+            if (!(b.w > 0) || !(b.h > 0)) return false;
+            try { return await kmilaBlocksRunExport(this, b, format); }
+            catch (_) { return false; }
         }
 
         _updateSnapCandidate() {
@@ -1064,7 +1143,7 @@
                 const block = this._materialize(node);
                 if (!block) continue;
                 this.topLevel.add(block);
-                this.canvasEl.appendChild(block.el);
+                this.contentEl.appendChild(block.el);
                 block.x = typeof node.x === 'number' ? node.x : 20;
                 block.y = typeof node.y === 'number' ? node.y : 20;
                 block.el.style.position = 'absolute';
@@ -1081,6 +1160,21 @@
             if (placed.length > 1 && placed.every(b => b.x === placed[0].x)) {
                 requestAnimationFrame(() => this._reflowStack(placed));
             }
+            this._recomputeBounds();
+        }
+
+        /* Re-measure and restack the auto-generated top-level column. Only
+         * touches single-column auto layouts (same guard as _loadRaw) so a
+         * user's hand-dragged positions are never disturbed. Deferred to the
+         * next animation frame so offsetHeight reads the real, post-paint size
+         * (the canvas may have been display:none until a moment ago). */
+        reflow() {
+            requestAnimationFrame(() => {
+                const tops = Array.from(this.topLevel);
+                if (tops.length > 1 && tops.every(b => b.x === tops[0].x)) {
+                    this._reflowStack(tops);
+                }
+            });
         }
 
         _reflowStack(blocks) {
@@ -1094,6 +1188,7 @@
                 const h = b.el.offsetHeight || 0;
                 y += h + gap;
             }
+            this._recomputeBounds();
         }
 
         _materialize(node) {
@@ -1207,9 +1302,16 @@
         }
     };
 
-    // No-op for back-compat with the previous Blockly interop: CSS handles
-    // layout reflows and theming.
-    window.kmilaBlocklyResize        = function () { };
+    // Re-measure + restack the auto-generated top-level column. The BlockEditor
+    // lives in an always-mounted editor tab that is `display:none` at init, so
+    // blocks were first measured at zero height and stacked on top of each
+    // other; entering the tab calls this so they lay out against their now-real
+    // heights. (Previously a no-op, which is why the Blocks view needed a second
+    // tab flip before it rendered correctly — issue #5b.)
+    window.kmilaBlocklyResize        = function (divId) {
+        const ws = workspaces.get(divId);
+        if (ws) ws.reflow();
+    };
     window.kmilaBlocklyApplyTheme    = function () { };
     window.kmilaBlocklyApplyThemeAll = function () { };
 
@@ -1260,13 +1362,179 @@
         const ws = workspaces.get(divId);
         if (ws) ws._redoOnce();
     };
-    // Fit-to-screen: scroll the canvas back to its origin so blocks that
-    // drifted off-viewport during authoring become reachable again.
+    // Fit-to-screen: reset zoom to 1× and scroll the canvas back to its origin
+    // so blocks that drifted off-viewport (or shrank under zoom) become
+    // reachable again.
     window.kmilaBlocksFit = function (divId) {
         const ws = workspaces.get(divId);
-        if (ws && ws.canvasEl)
+        if (!ws) return;
+        if (ws.zoomReset) ws.zoomReset();
+        if (ws.canvasEl)
             ws.canvasEl.scrollTo({ left: 0, top: 0, behavior: 'smooth' });
     };
+    // #6 Zoom in/out. `factor` > 1 zooms in, < 1 zooms out. Returns the new
+    // zoom level (clamped) so the toolbar can show a %-readout.
+    window.kmilaBlocksZoom = function (divId, factor) {
+        const ws = workspaces.get(divId);
+        return ws && ws.zoomBy ? ws.zoomBy(factor) : 1;
+    };
+    window.kmilaBlocksZoomReset = function (divId) {
+        const ws = workspaces.get(divId);
+        return ws && ws.zoomReset ? ws.zoomReset() : 1;
+    };
+
+    /* ── #6 Phase C export helpers (module scope) ─────────────────────── */
+    // Curated computed-style props to inline onto the export clone (same set
+    // the visual-canvas exporter uses, plus the left-border role tint + text
+    // ellipsis bits the blocks rely on).
+    const BLOCK_EXPORT_PROPS = [
+        'position', 'left', 'top', 'width', 'height', 'min-width', 'min-height',
+        'box-sizing', 'display', 'flex-direction', 'flex-wrap', 'align-items',
+        'justify-content', 'gap', 'color', 'background', 'background-color',
+        'background-image', 'border', 'border-color', 'border-width',
+        'border-style', 'border-radius', 'border-left', 'border-inline-start',
+        'box-shadow', 'padding', 'margin', 'font-family', 'font-size',
+        'font-weight', 'font-variant-numeric', 'line-height', 'letter-spacing',
+        'text-align', 'text-transform', 'white-space', 'text-overflow',
+        'opacity', 'z-index'
+    ];
+    function kmilaBlocksInlineStyles(src, dst) {
+        const cs = window.getComputedStyle(src);
+        let s = '';
+        for (const p of BLOCK_EXPORT_PROPS) {
+            const v = cs.getPropertyValue(p);
+            if (v && v !== 'none' && v !== 'auto' && v !== 'normal') s += p + ':' + v + ';';
+        }
+        dst.setAttribute('style', s);
+        for (let i = 0; i < src.children.length; i++) {
+            if (dst.children[i]) kmilaBlocksInlineStyles(src.children[i], dst.children[i]);
+        }
+    }
+    // Replace every <input>/<select>/<textarea> in the clone with a styled
+    // <span> showing its value — form controls don't rasterise inside an SVG
+    // foreignObject, so without this they'd export blank.
+    function kmilaBlocksFlattenInputs(srcRoot, cloneRoot) {
+        const ss = srcRoot.querySelectorAll('input,select,textarea');
+        const ds = cloneRoot.querySelectorAll('input,select,textarea');
+        for (let i = 0; i < ds.length; i++) {
+            const s = ss[i], d = ds[i];
+            if (!s || !d) continue;
+            let val = '';
+            if (s.tagName === 'SELECT') val = (s.options[s.selectedIndex] && s.options[s.selectedIndex].text) || s.value || '';
+            else val = s.value || s.getAttribute('placeholder') || '';
+            const span = document.createElement('span');
+            span.textContent = val;
+            span.setAttribute('style', (d.getAttribute('style') || '') +
+                ';display:inline-flex;align-items:center;white-space:nowrap;');
+            d.replaceWith(span);
+        }
+    }
+    let _blockFontCache = null;
+    async function kmilaBlocksFontCss() {
+        if (_blockFontCache !== null) return _blockFontCache;
+        try {
+            const base = '_content/Kmila.Shared/lib/jetbrains-mono/';
+            const css = await fetch(base + 'jetbrains-mono.css').then(r => r.text());
+            const m = css.match(/url\((fonts\/[^)]+\.woff2)\)/);
+            if (!m) throw 0;
+            const buf = await fetch(base + m[1]).then(r => r.arrayBuffer());
+            let bin = ''; const bytes = new Uint8Array(buf);
+            for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+            _blockFontCache = "@font-face{font-family:'JetBrains Mono';src:url(data:font/woff2;base64," +
+                btoa(bin) + ") format('woff2');font-weight:400;font-style:normal;}";
+        } catch (_) { _blockFontCache = ''; }  // best-effort; fall back to a system mono
+        return _blockFontCache;
+    }
+    function kmilaBlocksDownload(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 500);
+    }
+    // Rasterise the SVG to a <canvas>. Renders at 2× for crispness but caps the
+    // longest side (very deep designs can be 20 000+ px tall) so PNG/PDF stay a
+    // sane size; SVG export keeps full vector fidelity regardless.
+    function kmilaBlocksRasterize(svg, W, H) {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => {
+                try {
+                    const MAX = 8000;
+                    let scale = 2;
+                    const longest = Math.max(W, H);
+                    if (longest * scale > MAX) scale = MAX / longest;
+                    const c = document.createElement('canvas');
+                    c.width = Math.max(1, Math.round(W * scale));
+                    c.height = Math.max(1, Math.round(H * scale));
+                    const ctx = c.getContext('2d');
+                    ctx.scale(scale, scale);
+                    ctx.drawImage(img, 0, 0);
+                    resolve(c);
+                } catch (_) { resolve(null); }
+            };
+            img.onerror = () => resolve(null);
+            img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+        });
+    }
+    async function kmilaBlocksRunExport(ws, bounds, format) {
+        const PAD = 16;
+        const W = bounds.w + PAD * 2, H = bounds.h + PAD * 2;
+        const src = ws.contentEl;
+        const clone = src.cloneNode(true);
+        kmilaBlocksInlineStyles(src, clone);
+        clone.style.transform = 'none';   // export at 1×
+        clone.style.position = 'absolute';
+        clone.style.left = PAD + 'px';
+        clone.style.top = PAD + 'px';
+        kmilaBlocksFlattenInputs(src, clone);
+        const bg = window.getComputedStyle(ws.canvasEl).backgroundColor || '#0b1220';
+        const wrap = document.createElement('div');
+        wrap.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+        wrap.style.cssText = 'position:relative;width:' + W + 'px;height:' + H +
+            'px;background:' + bg + ';';
+        wrap.appendChild(clone);
+        const font = await kmilaBlocksFontCss();
+        const xml = new XMLSerializer().serializeToString(wrap);
+        const svg = '<?xml version="1.0" encoding="UTF-8"?>\n' +
+            '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H +
+            '" viewBox="0 0 ' + W + ' ' + H + '"><defs><style>' + font + '</style></defs>' +
+            '<foreignObject x="0" y="0" width="' + W + '" height="' + H + '">' + xml +
+            '</foreignObject></svg>';
+        if (format === 'svg') {
+            kmilaBlocksDownload(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }), 'kmila-blocks.svg');
+            return true;
+        }
+        const canvas = await kmilaBlocksRasterize(svg, W, H);
+        if (!canvas) return false;
+        if (format === 'png') {
+            const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
+            if (!blob) return false;
+            kmilaBlocksDownload(blob, 'kmila-blocks.png');
+            return true;
+        }
+        if (format === 'pdf') {
+            if (!window.jspdf || !window.jspdf.jsPDF) return false;
+            // JPEG (not PNG) in the PDF — a PNG of a 8000px-tall diagram inflates
+            // jsPDF to hundreds of MB; JPEG at high quality keeps it a few MB.
+            const jpeg = canvas.toDataURL('image/jpeg', 0.92);
+            const pw = canvas.width, ph = canvas.height;
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({
+                orientation: pw > ph ? 'landscape' : 'portrait',
+                unit: 'px', format: [pw, ph], hotfixes: ['px_scaling'],
+            });
+            doc.addImage(jpeg, 'JPEG', 0, 0, pw, ph);
+            doc.save('kmila-blocks.pdf');
+            return true;
+        }
+        return false;
+    }
+    window.kmilaBlocksExport = function (divId, format) {
+        const ws = workspaces.get(divId);
+        return ws && ws.exportAs ? ws.exportAs(format) : Promise.resolve(false);
+    };
+
     // Query whether undo / redo stacks are non-empty — toolbar buttons
     // grey themselves out via this when there's nothing to step.
     window.kmilaBlocksUndoState = function (divId) {

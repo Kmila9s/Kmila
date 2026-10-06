@@ -431,6 +431,12 @@ public class GitHubAuth
         [JsonPropertyName("user_code")]        public string UserCode        { get; set; } = "";
         /// <summary>URL the user opens to enter the user code.</summary>
         [JsonPropertyName("verification_uri")] public string VerificationUri { get; set; } = "";
+        /// <summary>
+        /// URL with the user code pre-filled (<c>verification_uri</c> +
+        /// <c>?user_code=…</c>). Opening this skips the manual code-entry step,
+        /// which is the fast path the login modal uses (issue #9b).
+        /// </summary>
+        [JsonPropertyName("verification_uri_complete")] public string VerificationUriComplete { get; set; } = "";
         /// <summary>Seconds until the codes expire.</summary>
         [JsonPropertyName("expires_in")]       public int    ExpiresIn       { get; set; }
         /// <summary>Minimum polling interval, in seconds.</summary>

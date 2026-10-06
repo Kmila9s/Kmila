@@ -19,6 +19,17 @@
 <div class="kmila-block-editor">
     <div id="@_workspaceId" class="kmila-block-editor__canvas"></div>
 
+    @* Loading overlay until the JS workspace mounts. The BlockEditor lives in
+       an always-mounted editor tab, so without this the canvas looked blank
+       (not broken) on first open — the spinner makes the init state legible. *@
+    @if (!_mounted)
+    {
+        <div class="kmila-block-editor__loading" role="status" aria-live="polite">
+            <Spinner Type="SpinnerType.Border" Color="SpinnerColor.Primary" />
+            <span>@Traductor.T("COMMON_LOADING")</span>
+        </div>
+    }
+
     @* Phase G (2026-06-28): floating toolbar — overlays the canvas
        top-end. Hidden until the workspace mounts so it doesn't flicker on
        prerender. On phone widths the .kmila-block-root flips to column +
@@ -50,6 +61,36 @@
                     <i class="bi bi-aspect-ratio" aria-hidden="true"></i>
                 </button>
             </KmilaTooltip>
+            <span class="kmila-block-toolbar__sep" aria-hidden="true"></span>
+            <KmilaTooltip TextKey="BLOCK_EDITOR_ZOOM_OUT">
+                <button type="button" class="kmila-block-toolbar__btn"
+                        aria-label="@Traductor.T("BLOCK_EDITOR_ZOOM_OUT")"
+                        @onclick="ZoomOutAsync">
+                    <i class="bi bi-dash-lg" aria-hidden="true"></i>
+                </button>
+            </KmilaTooltip>
+            <span class="kmila-block-toolbar__zoom" aria-live="polite">@_zoomPct%</span>
+            <KmilaTooltip TextKey="BLOCK_EDITOR_ZOOM_IN">
+                <button type="button" class="kmila-block-toolbar__btn"
+                        aria-label="@Traductor.T("BLOCK_EDITOR_ZOOM_IN")"
+                        @onclick="ZoomInAsync">
+                    <i class="bi bi-plus-lg" aria-hidden="true"></i>
+                </button>
+            </KmilaTooltip>
+            <span class="kmila-block-toolbar__sep" aria-hidden="true"></span>
+            <details class="kmila-block-export">
+                <summary class="kmila-block-toolbar__btn" role="button"
+                         title="@Traductor.T("BLOCK_EDITOR_EXPORT")"
+                         aria-label="@Traductor.T("BLOCK_EDITOR_EXPORT")">
+                    <i class="bi bi-download" aria-hidden="true"></i>
+                </summary>
+                <div class="kmila-block-export__menu" role="menu">
+                    <button type="button" role="menuitem" @onclick='() => ExportAsync("png")'>PNG</button>
+                    <button type="button" role="menuitem" @onclick='() => ExportAsync("svg")'>SVG</button>
+                    <button type="button" role="menuitem" @onclick='() => ExportAsync("pdf")'>PDF</button>
+                </div>
+            </details>
+            <span class="kmila-block-toolbar__sep" aria-hidden="true"></span>
             <KmilaTooltip TextKey="BLOCK_EDITOR_CLEAR">
                 <button type="button" class="kmila-block-toolbar__btn kmila-block-toolbar__btn--danger"
                         aria-label="@Traductor.T("BLOCK_EDITOR_CLEAR")"
@@ -179,7 +220,35 @@
     private async Task FitAsync()
     {
         if (!_mounted) return;
-        try { await JS.InvokeVoidAsync("kmilaBlocksFit", _workspaceId); }
+        try { await JS.InvokeVoidAsync("kmilaBlocksFit", _workspaceId); _zoomPct = 100; StateHasChanged(); }
+        catch { }
+    }
+
+    // #6 zoom — the floating toolbar's +/- buttons. Each JS call returns the
+    // new (clamped) zoom level so the %-readout stays accurate at the 0.4–2.0
+    // bounds. Factors are multiplicative so steps feel even across the range.
+    private int _zoomPct = 100;
+    private Task ZoomInAsync()  => ZoomAsync(1.25);
+    private Task ZoomOutAsync() => ZoomAsync(0.8);
+    private async Task ZoomAsync(double factor)
+    {
+        if (!_mounted) return;
+        try
+        {
+            var z = await JS.InvokeAsync<double>("kmilaBlocksZoom", _workspaceId, factor);
+            _zoomPct = (int)System.Math.Round(z * 100);
+            StateHasChanged();
+        }
+        catch { }
+    }
+
+    // #6 Phase C — export the workspace as PNG / SVG / PDF via the JS engine
+    // (foreignObject serialisation + jsPDF). Best-effort; a false return just
+    // means the browser couldn't rasterise, never a thrown error to the user.
+    private async Task ExportAsync(string format)
+    {
+        if (!_mounted) return;
+        try { await JS.InvokeAsync<bool>("kmilaBlocksExport", _workspaceId, format); }
         catch { }
     }
 
