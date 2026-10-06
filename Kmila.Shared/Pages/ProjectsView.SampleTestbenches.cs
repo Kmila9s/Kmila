@@ -253,6 +253,134 @@ begin
 end architecture sim;
 """;
 
+    // ---------------- Buzzer scale (raw PWM) ----------------
+    private const string BUZZER_SCALE_TB =
+"""
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+
+-- Testbench for the raw buzzer scale generator. 20 ns clock, one reset pulse,
+-- ENABLE high, then a couple of NOTE values so the PWM `signal` toggles at two
+-- different rates (lower note count = faster toggle). Suggested run: ~3 us.
+entity scale_generator_tb is
+end scale_generator_tb;
+
+architecture sim of scale_generator_tb is
+    signal clk      : STD_LOGIC := '0';
+    signal reset    : STD_LOGIC := '0';
+    signal note_sel : STD_LOGIC_VECTOR(2 downto 0) := "000";
+    signal enable   : STD_LOGIC := '0';
+    signal signal_o : STD_LOGIC;
+begin
+    dut : entity work.scale_generator
+        port map (clk => clk, reset => reset, note_sel => note_sel,
+                  enable => enable, signal_o => signal_o);
+
+    clk_gen : process
+    begin
+        clk <= '0'; wait for 10 ns;
+        clk <= '1'; wait for 10 ns;
+    end process;
+
+    stim : process
+    begin
+        reset  <= '1';
+        wait for 45 ns;
+        reset  <= '0';
+        enable <= '1';
+        note_sel <= "000";            -- C4 (slow toggle)
+        wait for 1500 ns;
+        note_sel <= "111";            -- C5 (fast toggle)
+        wait for 1500 ns;
+        report "scale_generator: testbench finished";
+        wait;
+    end process;
+end architecture sim;
+""";
+
+    // ---------------- Plus-sign scroller (raw 3x3 matrix) ----------------
+    private const string MATRIX_PLUS_TB =
+"""
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+
+-- Testbench for the plus-sign scroller. 20 ns clock, one reset pulse, then STEP
+-- held high so the 9-bit pattern cycles through its six frames. Suggested run:
+-- ~400 ns.
+entity plus_sign_scroller_tb is
+end plus_sign_scroller_tb;
+
+architecture sim of plus_sign_scroller_tb is
+    signal clk     : STD_LOGIC := '0';
+    signal reset   : STD_LOGIC := '0';
+    signal step_en : STD_LOGIC := '0';
+    signal pattern : STD_LOGIC_VECTOR(8 downto 0);
+begin
+    dut : entity work.plus_sign_scroller
+        port map (clk => clk, reset => reset, step_en => step_en, pattern => pattern);
+
+    clk_gen : process
+    begin
+        clk <= '0'; wait for 10 ns;
+        clk <= '1'; wait for 10 ns;
+    end process;
+
+    stim : process
+    begin
+        reset   <= '1';
+        wait for 45 ns;
+        reset   <= '0';
+        step_en <= '1';
+        wait for 400 ns;
+        report "plus_sign_scroller: testbench finished";
+        wait;
+    end process;
+end architecture sim;
+""";
+
+    // ---------------- RGB rainbow (raw 3x3 RGB matrix) ----------------
+    private const string RGB_RAINBOW_TB =
+"""
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+
+-- Testbench for the RGB rainbow. 20 ns clock, one reset pulse, then STEP held
+-- high so the three LFSR planes advance and the red/green/blue buses change.
+-- Suggested run: ~400 ns.
+entity rgb_rainbow_tb is
+end rgb_rainbow_tb;
+
+architecture sim of rgb_rainbow_tb is
+    signal clk     : STD_LOGIC := '0';
+    signal reset   : STD_LOGIC := '0';
+    signal step_en : STD_LOGIC := '0';
+    signal red     : STD_LOGIC_VECTOR(8 downto 0);
+    signal green   : STD_LOGIC_VECTOR(8 downto 0);
+    signal blue    : STD_LOGIC_VECTOR(8 downto 0);
+begin
+    dut : entity work.rgb_rainbow
+        port map (clk => clk, reset => reset, step_en => step_en,
+                  red => red, green => green, blue => blue);
+
+    clk_gen : process
+    begin
+        clk <= '0'; wait for 10 ns;
+        clk <= '1'; wait for 10 ns;
+    end process;
+
+    stim : process
+    begin
+        reset   <= '1';
+        wait for 45 ns;
+        reset   <= '0';
+        step_en <= '1';
+        wait for 400 ns;
+        report "rgb_rainbow: testbench finished";
+        wait;
+    end process;
+end architecture sim;
+""";
+
     // ExtraFiles loaders — each injects its testbench at the project root so
     // Workbench (Testbench) stimulus mode is pre-filled when the example opens.
     private static IEnumerable<(string FileName, string Content)> DemoBoardExtraFiles()
@@ -278,5 +406,20 @@ end architecture sim;
     private static IEnumerable<(string FileName, string Content)> DipAdderExtraFiles()
     {
         yield return ("dip_adder_tb.vhd", DIP_ADDER_TB);
+    }
+
+    private static IEnumerable<(string FileName, string Content)> BuzzerScaleExtraFiles()
+    {
+        yield return ("scale_generator_tb.vhd", BUZZER_SCALE_TB);
+    }
+
+    private static IEnumerable<(string FileName, string Content)> MatrixPlusExtraFiles()
+    {
+        yield return ("plus_sign_scroller_tb.vhd", MATRIX_PLUS_TB);
+    }
+
+    private static IEnumerable<(string FileName, string Content)> RgbRainbowExtraFiles()
+    {
+        yield return ("rgb_rainbow_tb.vhd", RGB_RAINBOW_TB);
     }
 }
