@@ -153,23 +153,177 @@
 
 
     // -------------------------------------------------------------------------
-    // 5) Swallow Ctrl+S / Cmd+S on the editor route so the browser's
-    //    "Save page as…" dialog never pops up. Editor.razor's OnKeyDown still
-    //    fires inside Monaco and saves through our code path. Capture phase
-    //    so we beat Monaco's own handler to the event.
+    // 5) Ctrl+S / Cmd+S on the editor route → save through our own code path,
+    //    and never let the browser's "Save page as…" dialog pop up.
+    //
+    //    History: this used to just preventDefault + stopPropagation in the
+    //    capture phase, on the assumption that "Editor.razor's OnKeyDown still
+    //    fires inside Monaco." It does NOT — stopPropagation in the document
+    //    capture phase kills the event before it ever descends to Monaco's DOM
+    //    node, so Monaco's AddCommand(Ctrl+S) and BlazorMonaco's OnKeyDown both
+    //    never ran and the shortcut saved nothing (desktop + web).
+    //
+    //    Fix: Editor.razor registers a .NET save bridge (kmilaRegisterEditorSave)
+    //    on first render. We keep the capture-phase preventDefault/stopPropagation
+    //    (suppresses the browser dialog and prevents a duplicate Monaco save) and
+    //    drive the single save path through that bridge — which also makes the
+    //    shortcut work regardless of whether the Monaco editor currently has
+    //    focus. If the bridge isn't registered (route check below guards this to
+    //    the editor page, where it always is after first render), the Monaco
+    //    handlers still act as a fallback because we only stopPropagation once
+    //    the editor route is confirmed.
     // -------------------------------------------------------------------------
+    var kmilaEditorCmdRef = null;
+    // Names kept for back-compat: they register/clear the Editor's DotNetRef,
+    // which now serves every editor command, not just save.
+    window.kmilaRegisterEditorSave = function (dotNetRef) { kmilaEditorCmdRef = dotNetRef; };
+    window.kmilaUnregisterEditorSave = function () { kmilaEditorCmdRef = null; };
+
+    // Single command entry point shared by the web/Windows keydown path below
+    // AND the native macOS menu commands (Platforms/MacCatalyst/AppDelegate.cs).
+    // On Mac Catalyst a ⌘-shortcut is resolved against the menu/responder chain
+    // before it reaches this WKWebView's JS, and an unmatched ⌘-combo is
+    // SWALLOWED (never delivered as a keydown) — which is why ⌘S/⌘N/⌘B/⌘Enter
+    // need native menu items, while ⌘X/⌘C/⌘V keep working through the system
+    // Edit menu. The menu commands call this. Guards to the editor route.
+    window.kmilaRunEditorCommand = function (name) {
+        if (document.documentElement.getAttribute("data-route") !== "editor") return false;
+        if (!kmilaEditorCmdRef) return false;
+        try { kmilaEditorCmdRef.invokeMethodAsync("JsRunCommand", name); return true; }
+        catch (_) { return false; /* ref disposed mid-navigation — next render re-registers */ }
+    };
+    // Back-compat alias (older callers / earlier macOS Save menu item).
+    window.kmilaTriggerSave = function () { return window.kmilaRunEditorCommand("save"); };
+
+    // ── macOS clipboard bridge ────────────────────────────────────────────
+    // Mac Catalyst's WKWebView does NOT deliver ⌘C/⌘X/⌘V/⌘A (nor the system
+    // cut:/copy:/paste: edit actions) into the web content — a documented
+    // platform limitation (see Monaco issue #2205, Uno #9877). So on macOS the
+    // native AppDelegate handlers drive the clipboard through these helpers +
+    // the system UIPasteboard instead of relying on the WebView's own clipboard.
+    // Each operates on the focused Monaco editor; harmless no-ops elsewhere.
+    function kmilaFocusedMonaco() {
+        try {
+            if (window.monaco && monaco.editor && monaco.editor.getEditors) {
+                var eds = monaco.editor.getEditors();
+                for (var i = 0; i < eds.length; i++) {
+                    if (eds[i] && eds[i].hasTextFocus && eds[i].hasTextFocus()) return eds[i];
+                }
+            }
+        } catch (e) { }
+        return null;
+    }
+    // The focused plain text field (filename inputs, search boxes, modals, …),
+    // if any. Clipboard works on these the same as on Monaco.
+    function kmilaActiveTextInput() {
+        var el = document.activeElement;
+        if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA") && !el.disabled && !el.readOnly) return el;
+        return null;
+    }
+    // Returns the selected text (for the native side to put on the pasteboard).
+    window.kmilaNativeCopy = function () {
+        var inp = kmilaActiveTextInput();
+        if (inp) {
+            try { return (inp.value || "").substring(inp.selectionStart || 0, inp.selectionEnd || 0); }
+            catch (e) { return ""; }
+        }
+        var ed = kmilaFocusedMonaco();
+        if (ed) {
+            try { var sel = ed.getSelection(); if (sel && !sel.isEmpty()) return ed.getModel().getValueInRange(sel) || ""; }
+            catch (e) { }
+        }
+        try { var s = window.getSelection && window.getSelection().toString(); if (s) return s; } catch (e) { }
+        return "";
+    };
+    // Returns the selected text AND deletes it from the focused field/editor.
+    window.kmilaNativeCut = function () {
+        var inp = kmilaActiveTextInput();
+        if (inp) {
+            try {
+                var t = (inp.value || "").substring(inp.selectionStart || 0, inp.selectionEnd || 0);
+                if (t) { inp.setRangeText("", inp.selectionStart, inp.selectionEnd, "end"); inp.dispatchEvent(new Event("input", { bubbles: true })); }
+                return t;
+            } catch (e) { return ""; }
+        }
+        var ed = kmilaFocusedMonaco();
+        if (ed) {
+            try {
+                var sel = ed.getSelection();
+                if (sel && !sel.isEmpty()) { var text = ed.getModel().getValueInRange(sel) || ""; ed.executeEdits("kmila-cut", [{ range: sel, text: "" }]); return text; }
+            } catch (e) { }
+        }
+        return "";
+    };
+    // Inserts pasteboard text at the cursor (replacing any selection).
+    window.kmilaNativePaste = function (text) {
+        if (text == null) return false;
+        var inp = kmilaActiveTextInput();
+        if (inp) {
+            // setRangeText + an input event so Blazor's @bind sees the change.
+            try { inp.setRangeText(text, inp.selectionStart, inp.selectionEnd, "end"); inp.dispatchEvent(new Event("input", { bubbles: true })); return true; }
+            catch (e) { return false; }
+        }
+        var ed = kmilaFocusedMonaco();
+        if (ed) {
+            try { ed.trigger("kmila-paste", "type", { text: text }); return true; }
+            catch (e) { return false; }
+        }
+        return false;
+    };
+    window.kmilaNativeSelectAll = function () {
+        var inp = kmilaActiveTextInput();
+        if (inp) { try { inp.select(); return true; } catch (e) { return false; } }
+        var ed = kmilaFocusedMonaco();
+        if (ed) { try { ed.trigger("kmila", "editor.action.selectAll", null); return true; } catch (e) { return false; } }
+        return false;
+    };
+
+    // Client-side platform probe for the keyboard-shortcuts help popover. Done
+    // in JS (not the C# IFormFactor) because on the web host the server only
+    // knows ITS OS, not the visitor's — and the right modifier symbol (⌘ vs
+    // Ctrl) depends on the visitor's OS. Works the same inside every host's
+    // WebView. `touch` flags a touch-primary device (phone/tablet) so the UI
+    // can note the shortcuts need a physical keyboard there.
+    window.kmilaPlatformInfo = function () {
+        var uaPlat = (navigator.userAgentData && navigator.userAgentData.platform) || "";
+        var p = ((uaPlat || navigator.platform || "") + " " + (navigator.userAgent || "")).toLowerCase();
+        var isIOS = /iphone|ipad|ipod/.test(p) ||
+                    (/mac/.test(p) && (navigator.maxTouchPoints || 0) > 1); // iPadOS poses as Mac
+        var isMac = /mac/.test(p) || isIOS;      // Apple family uses ⌘
+        var isAndroid = /android/.test(p);
+        var isWindows = /win/.test(p);
+        var coarse = false;
+        try { coarse = !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches); } catch (e) { }
+        return {
+            mod: isMac ? "⌘" : "Ctrl",   // ⌘ on Apple, Ctrl elsewhere
+            os: isMac ? "mac" : (isAndroid ? "android" : (isWindows ? "windows" : "other")),
+            touch: coarse
+        };
+    };
+
+    // Editor keyboard shortcuts for web/Windows, where ⌘/Ctrl combos DO reach
+    // JS. macOS routes the same commands through the native menu instead. Only
+    // app-level commands are intercepted here; text clipboard (⌘X/⌘C/⌘V) is
+    // deliberately left to Monaco / the browser so native cut/copy/paste
+    // (including Monaco's line-aware copy) keeps working.
+    var KMILA_EDITOR_KEYS = {
+        "KeyS":       "save",
+        "KeyN":       "new",
+        "KeyB":       "build",
+        "KeyT":       "split",
+        "Enter":      "run",
+        "NumpadEnter":"run"
+    };
     document.addEventListener(
         "keydown",
         function (e) {
-            var isSave =
-                (e.ctrlKey || e.metaKey) &&
-                !e.altKey &&
-                !e.shiftKey &&
-                (e.key === "s" || e.key === "S" || e.code === "KeyS");
-            if (!isSave) return;
+            if ((!e.ctrlKey && !e.metaKey) || e.altKey || e.shiftKey) return;
             if (document.documentElement.getAttribute("data-route") !== "editor") return;
+            var cmd = KMILA_EDITOR_KEYS[e.code];
+            if (!cmd) return;
             e.preventDefault();
             e.stopPropagation();
+            window.kmilaRunEditorCommand(cmd);
         },
         { capture: true }
     );

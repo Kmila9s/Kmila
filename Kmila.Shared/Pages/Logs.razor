@@ -17,6 +17,7 @@
 @implements IDisposable
 @inject AppLogStore Store
 @inject Microsoft.JSInterop.IJSRuntime JS
+@inject Kmila.Shared.Services.IExternalLinkOpener Links
 @using Microsoft.Extensions.Logging
 @using Kmila.Shared.Services
 
@@ -310,7 +311,7 @@
                                                         logContext: sb.ToString());
             var title = $"[{entry.Level}] {entry.Message}";
             var url   = FeedbackHelper.BuildIssueUrl(title, body);
-            await JS.InvokeVoidAsync("open", url, "_blank");
+            await Links.OpenAsync(url);
         }
         catch
         {
@@ -343,7 +344,7 @@
                 message: sb.ToString(),
                 category: string.IsNullOrEmpty(entry.Exception) ? null : "Crash",
                 appVersion: Traductor.T("APP_VERSION"));
-            await JS.InvokeVoidAsync("open", url, "_blank");
+            await Links.OpenAsync(url);
         }
         catch
         {

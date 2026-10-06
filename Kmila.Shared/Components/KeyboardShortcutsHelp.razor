@@ -1,0 +1,96 @@
+@*
+    KeyboardShortcutsHelp — a small, informational "keyboard" button that opens a
+    popover listing the editor's shortcuts. The modifier symbol adapts to the
+    viewer's platform (⌘ on macOS/iPadOS, Ctrl on Windows/Linux/Android), probed
+    client-side via kmilaPlatformInfo() because on the web host the server can't
+    know the visitor's OS. On touch-primary devices it adds a "needs a physical
+    keyboard" note. Purely informational — it triggers no commands.
+
+    Popover uses the native <details> pattern (same as LanguageChanger) so it
+    never hits the Bootstrap-modal stacking traps.
+*@
+@implements IDisposable
+@inject IJSRuntime JS
+
+<details class="kmila-shortcuts-help">
+    <summary class="kmila-shortcuts-help__trigger"
+             title="@Traductor.T("SHORTCUTS_TITLE")"
+             aria-label="@Traductor.T("SHORTCUTS_TITLE")">
+        <Icon Name="IconName.Keyboard" />
+    </summary>
+    <div class="kmila-shortcuts-help__panel" role="menu">
+        <div class="kmila-shortcuts-help__title">@Traductor.T("SHORTCUTS_TITLE")</div>
+        @foreach (var s in _shortcuts)
+        {
+            <div class="kmila-shortcuts-help__row" role="menuitem">
+                <span class="kmila-shortcuts-help__label">@Traductor.T(s.LabelKey)</span>
+                <span class="kmila-shortcuts-help__keys" dir="ltr">
+                    <kbd>@_mod</kbd><kbd>@s.Key</kbd>
+                </span>
+            </div>
+        }
+        @if (_touch)
+        {
+            <div class="kmila-shortcuts-help__note">
+                <Icon Name="IconName.InfoCircle" />
+                <span>@Traductor.T("SHORTCUTS_KEYBOARD_NOTE")</span>
+            </div>
+        }
+    </div>
+</details>
+
+@code {
+    // Default to Ctrl; replaced after the client-side platform probe.
+    private string _mod = "Ctrl";
+    private bool _touch;
+
+    private sealed record Shortcut(string LabelKey, string Key);
+
+    // Labels reuse existing dictionary keys where possible; Key is the letter/
+    // symbol shown AFTER the platform modifier. Mirrors the shortcuts wired in
+    // kmila-shared-head.js + the native macOS menu.
+    private static readonly Shortcut[] _shortcuts =
+    {
+        new("EDITOR_NEW_FILE", "N"),
+        new("COMMON_SAVE",     "S"),
+        new("SIM_BUILD",       "B"),
+        new("SIM_RUN",         "↵"), // ↵ Enter
+        new("EDITOR_SPLIT_ON", "T"),
+        new("COMMON_CLOSE",    "W"),
+        new("COMMON_CUT",      "X"),
+        new("COMMON_COPY",     "C"),
+        new("COMMON_PASTE",    "V"),
+    };
+
+    protected override void OnInitialized() => Traductor.StaticOnLangChanged += OnLangChanged;
+
+    private void OnLangChanged() => InvokeAsync(StateHasChanged);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            var info = await JS.InvokeAsync<PlatformInfo>("kmilaPlatformInfo");
+            if (info is not null)
+            {
+                if (!string.IsNullOrEmpty(info.Mod)) _mod = info.Mod!;
+                _touch = info.Touch;
+                StateHasChanged();
+            }
+        }
+        catch
+        {
+            // Prerender / JS unavailable — the default "Ctrl" label is a fine fallback.
+        }
+    }
+
+    public void Dispose() => Traductor.StaticOnLangChanged -= OnLangChanged;
+
+    private sealed class PlatformInfo
+    {
+        public string? Mod { get; set; }
+        public string? Os { get; set; }
+        public bool Touch { get; set; }
+    }
+}

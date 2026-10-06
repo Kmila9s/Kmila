@@ -191,6 +191,9 @@
     private StandaloneCodeEditor? _monaco;
     private bool _monacoReady;
     private ExecutionTimelineDoc? _lastLoaded;
+    // Last Lang we localized the caption for — lets us refresh the note on a
+    // pure language change even when the Doc reference hasn't swapped.
+    private string? _lastNoteLang;
     private string _speedKey = "1";
     private Dictionary<string, string> _previousSignals = new();
     private string _currentNote = string.Empty;
@@ -221,6 +224,12 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        // Refresh the caption if the language changed, even when the Doc
+        // reference is unchanged (defensive: current callers swap the per-lang
+        // doc on a language switch, but a pure Lang change should still retrack).
+        var langChanged = Lang != _lastNoteLang;
+        _lastNoteLang = Lang;
+
         // Reseed when the parent swaps to a different timeline document. We
         // compare by reference because the catalog caches deserialised docs,
         // so the same doc => same object identity.
@@ -272,6 +281,13 @@
                 await PushHighlightsAsync();
             }
         }
+
+        // A pure language change (Doc unchanged, not a live-follow tick) still
+        // needs the caption re-localized to the new language.
+        if (langChanged)
+        {
+            UpdateCurrentNote();
+        }
     }
 
     private StandaloneEditorConstructionOptions EditorOptions(StandaloneCodeEditor editor) =>
@@ -307,6 +323,21 @@
         await PushHighlightsAsync();
         UpdateCurrentNote();
         StateHasChanged();
+    }
+
+    /// <summary>
+    /// Re-layouts the read-only Monaco editor and re-reveals the current line.
+    /// Needed when this player lives inside an always-mounted tab that was
+    /// <c>display:none</c> when Monaco was created (the Editor's Replay tab):
+    /// Monaco built at 0px has a broken scroll viewport, so the code panel
+    /// won't scroll to the executing line until it is re-measured once visible
+    /// (issue #7). Safe to call repeatedly.
+    /// </summary>
+    public async Task RelayoutAsync()
+    {
+        if (_monaco == null || !_monacoReady) return;
+        try { await _monaco.Layout(); } catch { /* not mounted yet — fine */ }
+        await PushHighlightsAsync();
     }
 
     private void OnRunnerTick()

@@ -103,7 +103,8 @@
         <div class="waveform-viewer__body"
              data-view-start-ns="0"
              data-view-end-ns="@compareMaxNs"
-             data-label-width="160">
+             data-label-width="@LabelWidthPx"
+             style="--wf-label-w:@(LabelWidthPx)px;">
             <div class="waveform-grid">
                 @{
                     var trackWidthPx = compareTrackWidthPx;
@@ -134,7 +135,10 @@
                             @* label-main wrapper mirrors single mode so the name
                                gets ellipsis containment + the chip divider. *@
                             <span class="waveform-row__label-main">
-                                <span class="waveform-signal-chip waveform-signal-chip--@first.PortType.ToLowerInvariant()">@first.PortType</span>
+                                <KmilaTooltip TextKey="@PortTypeTipKey(first.PortType)" Placement="Right">
+                                    <span class="waveform-signal-chip waveform-signal-chip--@first.PortType.ToLowerInvariant()"
+                                          title="">@first.PortType</span>
+                                </KmilaTooltip>
                                 <span class="waveform-signal-name" title="@first.Name">@first.Name</span>
                                 @if (first.BitWidth > 1)
                                 {
@@ -142,15 +146,18 @@
                                 }
                             </span>
                             <Icon Name="IconName.EyeSlash" class="waveform-row__label-eye" />
+                            <span class="waveform-resize-grip" role="separator" aria-orientation="vertical" title="@Traductor.T("WAVEFORM_RESIZE_LABELS")"></span>
                         </div>
                         <div class="waveform-row__track" style="width: @(trackWidthPx)px;">
-                            @((MarkupString)BuildCompareTraceSvg(name, per, trackWidthPx, maxNs))
+                            @((MarkupString)CompareTraceSvgCached(name, per, trackWidthPx, maxNs))
                         </div>
                     </div>
                 }
 
                 <div class="waveform-row waveform-row--ruler">
-                    <div class="waveform-row__label"></div>
+                    <div class="waveform-row__label">
+                        <span class="waveform-resize-grip" role="separator" aria-orientation="vertical" title="@Traductor.T("WAVEFORM_RESIZE_LABELS")"></span>
+                    </div>
                     <div class="waveform-row__track" style="width: @(trackWidthPx)px;">
                         @((MarkupString)BuildRulerSvg(trackWidthPx, maxNs))
                     </div>
@@ -235,6 +242,20 @@ else if (Data != null && Data.Signals.Count > 0)
 
                 <span class="waveform-viewer__divider" aria-hidden="true"></span>
 
+                @* Global number base for every bus/integer signal. Cycles
+                   Auto → DEC → ±DEC → HEX → BIN → OCT; per-signal clicks on a
+                   value override this. *@
+                <KmilaTooltip TextKey="WAVEFORM_RADIX_GLOBAL">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm waveform-radix-btn"
+                            @onclick="CycleGlobalRadix"
+                            aria-label="@Traductor.T("WAVEFORM_RADIX_GLOBAL")">
+                        <span class="waveform-radix-btn__hash" aria-hidden="true">#</span>
+                        <span>@GlobalRadixBadge</span>
+                    </button>
+                </KmilaTooltip>
+
+                <span class="waveform-viewer__divider" aria-hidden="true"></span>
+
                 <KmilaTooltip TextKey="WAVEFORM_EXPORT_IMAGE">
                     <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
                             @onclick="OpenExportModalAsync" disabled="@IsLive">
@@ -280,7 +301,8 @@ else if (Data != null && Data.Signals.Count > 0)
         <div class="waveform-viewer__body"
              data-view-start-ns="@viewStartNs"
              data-view-end-ns="@viewEndNs"
-             data-label-width="160">
+             data-label-width="@LabelWidthPx"
+             style="--wf-label-w:@(LabelWidthPx)px;">
             <div class="waveform-grid">
                 @for (int i = 0; i < Data.Signals.Count; i++)
                 {
@@ -319,15 +341,33 @@ else if (Data != null && Data.Signals.Count > 0)
                                   @onclick="() => ToggleHidden(signalName)"
                                   role="button"
                                   title="@Traductor.T("WAVEFORM_HIDE_SIGNAL")">
-                                <span class="waveform-signal-chip waveform-signal-chip--@signal.PortType.ToLowerInvariant()">@signal.PortType</span>
+                                @* Styled tooltip (KmilaTooltip) explaining the port
+                                   direction. title="" on the chip suppresses the
+                                   parent label's native "hide signal" tooltip when
+                                   the pointer is over the chip. *@
+                                <KmilaTooltip TextKey="@PortTypeTipKey(signal.PortType)" Placement="Right">
+                                    <span class="waveform-signal-chip waveform-signal-chip--@signal.PortType.ToLowerInvariant()"
+                                          title="">@signal.PortType</span>
+                                </KmilaTooltip>
                                 <span class="waveform-signal-name" title="@signal.Name">@signal.Name</span>
                                 @if (signal.BitWidth > 1)
                                 {
                                     <span class="waveform-signal-width">[@signal.BitWidth]</span>
                                 }
                             </span>
-                            @* Value-at-cursor readout (non-destructive column) *@
-                            <span class="waveform-signal-value" style="color:@color" title="@Traductor.T("WAVEFORM_VALUE_AT_CURSOR")">@FormatCursorValue(signal)</span>
+                            @* Value-at-cursor readout (non-destructive column).
+                               For bus/integer signals it's a button that cycles
+                               the number base; std_logic has no base to cycle. *@
+                            @if (IsRadixCyclable(signal))
+                            {
+                                <button type="button" class="waveform-signal-value waveform-signal-value--radix" style="color:@color"
+                                        @onclick="() => CycleSignalRadix(signalName)" @onclick:stopPropagation="true"
+                                        title="@Traductor.T("WAVEFORM_RADIX_CYCLE")">@FormatCursorValue(signal)</button>
+                            }
+                            else
+                            {
+                                <span class="waveform-signal-value" style="color:@color" title="@Traductor.T("WAVEFORM_VALUE_AT_CURSOR")">@FormatCursorValue(signal)</span>
+                            }
                             @* Per-signal waveform↔value toggle *@
                             <button type="button" class="waveform-row__mode-toggle"
                                     @onclick="() => ToggleValueMode(signalName)"
@@ -335,12 +375,25 @@ else if (Data != null && Data.Signals.Count > 0)
                                     title="@Traductor.T(valueMode ? "WAVEFORM_SHOW_AS_WAVE" : "WAVEFORM_SHOW_AS_VALUE")">
                                 @(valueMode ? "∿" : "#")
                             </button>
+                            <span class="waveform-resize-grip" role="separator" aria-orientation="vertical" title="@Traductor.T("WAVEFORM_RESIZE_LABELS")"></span>
                         </div>
                         <div class="waveform-row__track" style="width: @(contentWidthPx)px;">
-                            <div class="waveform-row__track-view @(valueMode ? "waveform-row__value-track" : "")" style="width: @(visibleTrackPx)px;">
+                            <div class="waveform-row__track-view @(valueMode ? "waveform-row__value-track" : "") @(IsRadixCyclable(signal) ? "waveform-row__track-view--radix" : "")"
+                                 style="width: @(visibleTrackPx)px;"
+                                 @onclick="() => CycleSignalRadix(signalName)"
+                                 title="@(IsRadixCyclable(signal) ? Traductor.T("WAVEFORM_RADIX_CYCLE") : null)">
                                 @if (valueMode)
                                 {
-                                    <span class="waveform-value-readout" style="color:@color">@FormatCursorValue(signal)</span>
+                                    @if (IsRadixCyclable(signal))
+                                    {
+                                        <button type="button" class="waveform-value-readout waveform-value-readout--radix" style="color:@color"
+                                                @onclick="() => CycleSignalRadix(signalName)" @onclick:stopPropagation="true"
+                                                title="@Traductor.T("WAVEFORM_RADIX_CYCLE")">@FormatCursorValue(signal)</button>
+                                    }
+                                    else
+                                    {
+                                        <span class="waveform-value-readout" style="color:@color">@FormatCursorValue(signal)</span>
+                                    }
                                 }
                                 else
                                 {
@@ -364,6 +417,7 @@ else if (Data != null && Data.Signals.Count > 0)
                                     <span class="waveform-row__expand-spacer" aria-hidden="true"></span>
                                     <span class="waveform-row__bit-name" title="@bitLabel">@bitLabel</span>
                                     <span class="waveform-signal-value" style="color:@color">@FormatBitCursorValue(bitSig)</span>
+                                    <span class="waveform-resize-grip" role="separator" aria-orientation="vertical" title="@Traductor.T("WAVEFORM_RESIZE_LABELS")"></span>
                                 </div>
                                 <div class="waveform-row__track" style="width: @(contentWidthPx)px;">
                                     <div class="waveform-row__track-view" style="width: @(visibleTrackPx)px;">
@@ -380,7 +434,9 @@ else if (Data != null && Data.Signals.Count > 0)
                    right there. The click handler receives offsetX which we
                    project back to ns using the current view bounds. *@
                 <div class="waveform-row waveform-row--ruler">
-                    <div class="waveform-row__label"></div>
+                    <div class="waveform-row__label">
+                        <span class="waveform-resize-grip" role="separator" aria-orientation="vertical" title="@Traductor.T("WAVEFORM_RESIZE_LABELS")"></span>
+                    </div>
                     <div class="waveform-row__track" style="width: @(contentWidthPx)px;">
                         <div class="waveform-row__track-view" style="width: @(visibleTrackPx)px;"
                              @onclick="@(e => OnRulerClick(e, visibleTrackPx, viewStartNs, viewEndNs))">
@@ -523,11 +579,18 @@ else if (Data != null && Data.Signals.Count > 0)
     private double _scrollLeftPx  = 0.0;
     private double _viewportWidthPx = 0.0;
 
-    // Per-row label column width — kept in sync with the inline CSS rule
-    // on .waveform-row__label. If the CSS rule changes, update this too;
-    // GetViewBounds / ComputeVisibleTrackPx subtract it from clientWidth
-    // when sizing the windowed SVG.
-    private const int LabelWidthPx = 160;
+    // Per-row label column width. User-resizable via the drag grips on the
+    // column's right edge (JS kmilaWaveformInitResize drives the drag client-
+    // side and calls back OnLabelResizeEnd on release). Drives the --wf-label-w
+    // CSS var (inline on the body),
+    // the data-label-width attribute read by the JS hover/window helpers, and
+    // GetViewBounds / ComputeVisibleTrackPx (which subtract it from clientWidth
+    // when sizing the windowed SVG). Persisted per-user in localStorage —
+    // the Server DB is one shared file, so per-user prefs live client-side.
+    private const int DefaultLabelWidthPx = 160;
+    private const int MinLabelWidthPx = 96;
+    private const int MaxLabelWidthPx = 480;
+    private int LabelWidthPx = DefaultLabelWidthPx;
 
     // Watchdog so we recompute the initial pxPerNs whenever the WaveformData
     // instance changes (new sim run, snapshot loaded, etc.). Reference
@@ -546,18 +609,67 @@ else if (Data != null && Data.Signals.Count > 0)
     // those, so without a cache every hover would rebuild every row's SVG on
     // the single-threaded Blazor circuit — re-introducing the freeze. Keyed by
     // signal name; value is the last inputs + rendered string.
-    private readonly Dictionary<string, (long Start, long End, int Width, int Count, string Color, string Svg)> _traceCache = new();
+    private readonly Dictionary<string, (long Start, long End, int Width, int Count, string Color, WaveRadix Radix, string Svg)> _traceCache = new();
 
     private string TraceSvgCached(WaveformSignal signal, int widthPx, string color, long viewStartNs, long viewEndNs)
     {
+        var radix = EffectiveRadix(signal);
         if (_traceCache.TryGetValue(signal.Name, out var e) &&
             e.Start == viewStartNs && e.End == viewEndNs && e.Width == widthPx &&
-            e.Count == signal.Transitions.Count && e.Color == color)
+            e.Count == signal.Transitions.Count && e.Color == color && e.Radix == radix)
         {
             return e.Svg;
         }
-        var svg = BuildTraceSvg(signal, widthPx, color, viewStartNs, viewEndNs);
-        _traceCache[signal.Name] = (viewStartNs, viewEndNs, widthPx, signal.Transitions.Count, color, svg);
+        var svg = BuildTraceSvg(signal, widthPx, color, viewStartNs, viewEndNs, radix);
+        _traceCache[signal.Name] = (viewStartNs, viewEndNs, widthPx, signal.Transitions.Count, color, radix, svg);
+        return svg;
+    }
+
+    private bool IsCompare => _compareTracks != null && _compareTracks.Count >= 2;
+
+    /// <summary>
+    /// Total timeline length in ns for the ACTIVE mode. Single/live mode reads
+    /// it from <see cref="Data"/>; compare mode has no single Data (the Editor
+    /// passes only Snapshots), so it takes the longest of the compared runs.
+    /// The zoom + initial-fit math routes through here so the toolbar works in
+    /// compare mode too — previously those read <c>Data?.TotalTicks</c>, which
+    /// is null in compare, so every zoom handler early-returned and the buttons
+    /// (and the scroll range) were dead (issue #4).
+    /// </summary>
+    private long CurrentMaxNs()
+    {
+        if (IsCompare)
+            return _compareTracks!.Max(t => (long)t.Data.TotalTicks * Math.Max(1, t.Data.TimescaleNs));
+        ulong totalTicks = Data?.TotalTicks ?? 0UL;
+        int timescale = Math.Max(1, Data?.TimescaleNs ?? 1);
+        return (long)totalTicks * timescale;
+    }
+
+    // ─── Compare-mode trace memoisation ──────────────────────────────────
+    // Mirrors _traceCache for single mode. A compare row only changes when the
+    // width, the shared maxNs, or the set of tracks (ids/colours/transition
+    // counts) changes. Cursor hover and unrelated StateHasChanged calls must
+    // NOT rebuild every row's overlaid SVG or the compare view stalls on the
+    // single-threaded Blazor circuit — that storm was the core of issue #4.
+    private readonly Dictionary<string, (int Width, long MaxNs, string Sig, string Svg)> _compareTraceCache = new();
+
+    private string CompareTraceSvgCached(
+        string signalName,
+        List<(CompareTrack Track, WaveformSignal? Sig)> picks,
+        int widthPx,
+        long maxNs)
+    {
+        // Signature captures everything the output depends on besides width/maxNs:
+        // each track's id + colour + this signal's transition count.
+        var sig = string.Join("|", picks.Select(p =>
+            $"{p.Track.Id}:{p.Track.Colour}:{(p.Sig?.Transitions.Count ?? -1)}"));
+        if (_compareTraceCache.TryGetValue(signalName, out var e) &&
+            e.Width == widthPx && e.MaxNs == maxNs && e.Sig == sig)
+        {
+            return e.Svg;
+        }
+        var svg = BuildCompareTraceSvg(signalName, picks, widthPx, maxNs);
+        _compareTraceCache[signalName] = (widthPx, maxNs, sig, svg);
         return svg;
     }
 
@@ -637,7 +749,8 @@ else if (Data != null && Data.Signals.Count > 0)
         {
             return e.Svg;
         }
-        var svg = BuildTraceSvg(bitSig, widthPx, color, viewStartNs, viewEndNs);
+        // Bit rows are single-bit (std_logic), so the radix is irrelevant.
+        var svg = BuildTraceSvg(bitSig, widthPx, color, viewStartNs, viewEndNs, WaveRadix.Hex);
         _bitTraceCache[key] = (viewStartNs, viewEndNs, widthPx, bitSig.Transitions.Count, color, svg);
         return svg;
     }
@@ -671,17 +784,180 @@ else if (Data != null && Data.Signals.Count > 0)
 
     /// <summary>
     /// Formats a signal's value at the current cursor for the value column /
-    /// value-only track. Mirrors SchematicViewer's Debug readout: the
-    /// pre-formatted bus label (hex) when present, else 1/0 for std_logic, else
+    /// value-only track, in the signal's effective radix (dec / hex / bin / oct).
     /// "X" when the signal has no defined value at the cursor yet.
     /// </summary>
     private string FormatCursorValue(WaveformSignal signal)
     {
         if (Data == null) return "—";
-        var (val, label) = Data.ValueAt(signal, Cursor.CursorTick);
-        if (!string.IsNullOrEmpty(label)) return label!;
-        if (val.HasValue) return val.Value >= 0.5 ? "1" : "0";
-        return "X";
+        var t = Data.TransitionAt(signal, Cursor.CursorTick);
+        if (t == null) return "X";
+        return FormatRadix(t.Value, signal, EffectiveRadix(signal));
+    }
+
+    // ─── Number base (radix) for bus / integer values ────────────────────
+    // Each value display (the value column, the value-only readout, and the
+    // labels stamped inside a bus trace) renders in the signal's EFFECTIVE
+    // radix: a per-signal override if set, else the global default, else a
+    // type-aware default (hex for vectors, signed decimal for integers). Users
+    // cycle a signal's radix by clicking any of its value displays; the toolbar
+    // control cycles the global default. std_logic is always shown as 0/1/X —
+    // a single bit has no meaningful base.
+    public enum WaveRadix { UnsignedDec, SignedDec, Hex, Bin, Oct }
+
+    // null = "Auto" (type-aware default). A concrete value forces that base on
+    // every signal that has no explicit per-signal override.
+    private WaveRadix? _globalRadix;
+    private readonly Dictionary<string, WaveRadix> _radixOverride = new();
+
+    private WaveRadix DefaultRadix(WaveformSignal s)
+        => s.DataType == "integer" ? WaveRadix.SignedDec : WaveRadix.Hex;
+
+    private WaveRadix EffectiveRadix(WaveformSignal s)
+        => _radixOverride.TryGetValue(s.Name, out var r) ? r
+         : _globalRadix ?? DefaultRadix(s);
+
+    private static WaveRadix NextRadix(WaveRadix r) => r switch
+    {
+        WaveRadix.UnsignedDec => WaveRadix.SignedDec,
+        WaveRadix.SignedDec   => WaveRadix.Hex,
+        WaveRadix.Hex         => WaveRadix.Bin,
+        WaveRadix.Bin         => WaveRadix.Oct,
+        _                     => WaveRadix.UnsignedDec,
+    };
+
+    // Short, universal badge for the current base (left untranslated — these are
+    // standard digital-design tokens).
+    private static string RadixBadge(WaveRadix r) => r switch
+    {
+        WaveRadix.UnsignedDec => "DEC",
+        WaveRadix.SignedDec   => "±DEC",
+        WaveRadix.Hex         => "HEX",
+        WaveRadix.Bin         => "BIN",
+        WaveRadix.Oct         => "OCT",
+        _                     => "DEC",
+    };
+
+    private string GlobalRadixBadge => _globalRadix is { } g ? RadixBadge(g) : "AUTO";
+
+    // A single-bit signal has no base to cycle.
+    private static bool IsRadixCyclable(WaveformSignal s) => s.DataType != "std_logic";
+
+    private void CycleSignalRadix(string name)
+    {
+        var s = FindSignal(name);
+        if (s == null || !IsRadixCyclable(s)) return;
+        _radixOverride[name] = NextRadix(EffectiveRadix(s));
+        // Trace labels depend on the radix, so the memoised SVG must rebuild.
+        _traceCache.Remove(name);
+        _compareTraceCache.Remove(name);
+    }
+
+    private async Task CycleGlobalRadix()
+    {
+        // Auto → DEC → ±DEC → HEX → BIN → OCT → Auto.
+        _globalRadix = _globalRadix switch
+        {
+            null                  => WaveRadix.UnsignedDec,
+            WaveRadix.UnsignedDec => WaveRadix.SignedDec,
+            WaveRadix.SignedDec   => WaveRadix.Hex,
+            WaveRadix.Hex         => WaveRadix.Bin,
+            WaveRadix.Bin         => WaveRadix.Oct,
+            _                     => null,
+        };
+        // Global change wins over stale per-signal picks, and every trace label
+        // must re-render.
+        _radixOverride.Clear();
+        _traceCache.Clear();
+        _compareTraceCache.Clear();
+        try
+        {
+            await JS.InvokeVoidAsync("kmilaWaveformSetRadix",
+                _globalRadix?.ToString() ?? "");
+        }
+        catch { /* no JS (prerender) — the choice just isn't persisted */ }
+    }
+
+    private WaveformSignal? FindSignal(string name)
+        => Data?.Signals.FirstOrDefault(x => x.Name == name)
+        ?? _compareTracks?.SelectMany(t => t.Data.Signals)
+               .FirstOrDefault(x => x.Name == name);
+
+    /// <summary>
+    /// Formats a transition's value in the given radix. std_logic shows the
+    /// level (0/1/X). For vectors/integers it works off the raw bit string so
+    /// X/U/Z are preserved (shown verbatim when a clean numeric base can't be
+    /// computed). Uses <see cref="System.Numerics.BigInteger"/> so vectors wider
+    /// than 64 bits format correctly.
+    /// </summary>
+    private static string FormatRadix(WaveformTransition t, WaveformSignal s, WaveRadix radix)
+    {
+        if (s.DataType == "std_logic")
+            return t.Value.HasValue ? (t.Value.Value >= 0.5 ? "1" : "0") : "X";
+
+        string? bits = ResolveBits(t, s);
+        if (string.IsNullOrEmpty(bits)) return "X";
+
+        bool clean = bits.All(c => c == '0' || c == '1');
+        if (!clean)
+            // Undefined bits (X/U/Z): no clean numeric value — show them verbatim.
+            return radix == WaveRadix.Bin ? ("0b" + bits) : bits!.ToUpperInvariant();
+
+        System.Numerics.BigInteger mag = System.Numerics.BigInteger.Zero;
+        foreach (char c in bits!) mag = (mag << 1) + (c == '1' ? 1 : 0);
+        int width = bits.Length;
+
+        return radix switch
+        {
+            WaveRadix.Bin => "0b" + bits,
+            WaveRadix.Oct => "0o" + ToBaseString(mag, 8),
+            WaveRadix.Hex => "0x" + ToBaseString(mag, 16).PadLeft((width + 3) / 4, '0'),
+            WaveRadix.UnsignedDec => mag.ToString(),
+            WaveRadix.SignedDec => (bits[0] == '1'
+                ? (mag - (System.Numerics.BigInteger.One << width))
+                : mag).ToString(),
+            _ => mag.ToString(),
+        };
+    }
+
+    private static string ToBaseString(System.Numerics.BigInteger v, int @base)
+    {
+        if (v.IsZero) return "0";
+        const string digits = "0123456789ABCDEF";
+        var b = (System.Numerics.BigInteger)@base;
+        var sb = new System.Text.StringBuilder();
+        while (v > 0) { sb.Insert(0, digits[(int)(v % b)]); v /= b; }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Resolves the MSB-first bit string for a transition. Vectors use the raw
+    /// <see cref="WaveformTransition.Bits"/> (preserving X/U/Z), falling back to
+    /// the numeric value at the signal's width. Integers are treated as 32-bit
+    /// two's-complement so every base is well-defined.
+    /// </summary>
+    private static string? ResolveBits(WaveformTransition t, WaveformSignal s)
+    {
+        if (s.DataType == "std_logic_vector")
+        {
+            if (!string.IsNullOrEmpty(t.Bits)) return t.Bits;
+            if (t.Value.HasValue && t.Value.Value >= 0)
+            {
+                long lv = (long)t.Value.Value;
+                int w = Math.Max(1, s.BitWidth);
+                var bld = new System.Text.StringBuilder(w);
+                for (int i = w - 1; i >= 0; i--) bld.Append(((lv >> i) & 1) == 1 ? '1' : '0');
+                return bld.ToString();
+            }
+            return null;
+        }
+        if (s.DataType == "integer")
+        {
+            if (!t.Value.HasValue) return null;
+            uint uv = unchecked((uint)(int)t.Value.Value);
+            return Convert.ToString(uv, 2).PadLeft(32, '0');
+        }
+        return null;
     }
 
     protected override void OnInitialized()
@@ -702,15 +978,51 @@ else if (Data != null && Data.Signals.Count > 0)
     /// is unchanged (SignalCursorBus.SetCursorTick dedups).
     /// </summary>
     [JSInvokable]
-    public void OnCursorHover(double ns)
+    public Task OnCursorHover(double ns)
     {
         int scale = Math.Max(1, Data?.TimescaleNs ?? 1);
         if (ns < 0) ns = 0;
         Cursor.SetCursorTick((ulong)(ns / scale));
+        // Re-render this viewer directly rather than relying only on the shared
+        // Cursor.OnChange event: the hover originates here, so the value column
+        // must refresh even if the bus's subscriber chain is disrupted. (Fixes
+        // the value column updating only on scroll, never on hover.)
+        return InvokeAsync(StateHasChanged);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+        {
+            // Restore the user's saved label-column width before the hover /
+            // window observers read data-label-width. 0 = no saved preference.
+            try
+            {
+                var saved = await JS.InvokeAsync<int>("kmilaWaveformGetLabelWidth");
+                if (saved > 0)
+                {
+                    LabelWidthPx = Math.Clamp(saved, MinLabelWidthPx, MaxLabelWidthPx);
+                    StateHasChanged();
+                }
+            }
+            catch { /* no JS (prerender) — keep the default width */ }
+
+            // Restore the saved global number base ("" = Auto / type-default).
+            try
+            {
+                var savedRadix = await JS.InvokeAsync<string>("kmilaWaveformGetRadix");
+                if (!string.IsNullOrEmpty(savedRadix)
+                    && Enum.TryParse<WaveRadix>(savedRadix, out var gr))
+                {
+                    _globalRadix = gr;
+                    _traceCache.Clear();
+                    _compareTraceCache.Clear();
+                    StateHasChanged();
+                }
+            }
+            catch { /* no JS (prerender) — keep Auto */ }
+        }
+
         if (_hoverId <= 0)
         {
             try
@@ -718,6 +1030,11 @@ else if (Data != null && Data.Signals.Count > 0)
                 // Pass a .NET ref so the hover doubles as the value cursor.
                 _windowDotNetRef ??= DotNetObjectReference.Create(this);
                 _hoverId = await JS.InvokeAsync<int>("kmilaAttachWaveformHover",
+                    ".waveform-viewer__body", _windowDotNetRef);
+                // Wire the column resize grips (client-side drag, one call back
+                // on release). Idempotent per body element, so this is safe to
+                // run alongside the hover attach.
+                await JS.InvokeVoidAsync("kmilaWaveformInitResize",
                     ".waveform-viewer__body", _windowDotNetRef);
             }
             catch { /* prerender / no JS — hover indicator just doesn't render */ }
@@ -727,7 +1044,7 @@ else if (Data != null && Data.Signals.Count > 0)
         // signals to show. Doing it earlier (when Data is null) would
         // bind to a body element whose .waveform-grid hasn't materialised
         // yet, which the observer copes with but adds a no-op fire.
-        if (_windowId <= 0 && Data != null && Data.Signals.Count > 0)
+        if (_windowId <= 0 && ((Data != null && Data.Signals.Count > 0) || IsCompare))
         {
             try
             {
@@ -766,9 +1083,38 @@ else if (Data != null && Data.Signals.Count > 0)
         return InvokeAsync(StateHasChanged);
     }
 
+    /// <summary>
+    /// JS callback when the resize drag ends. Commits the new column width so
+    /// the windowed SVG (clientWidth − LabelWidthPx) re-sizes to match. The
+    /// CSS var + data-label-width were already set live by JS; this re-render
+    /// keeps the server-rendered values in sync. Width is persisted in
+    /// localStorage JS-side.
+    /// </summary>
+    [JSInvokable]
+    public Task OnLabelResizeEnd(int width)
+    {
+        LabelWidthPx = Math.Clamp(width, MinLabelWidthPx, MaxLabelWidthPx);
+        return InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Maps a port direction string (IN / OUT / INOUT / INTERNAL) to the
+    /// translation key for its one-line explanation, shown in the chip's
+    /// KmilaTooltip. Unknown values fall back to the internal-signal copy.
+    /// </summary>
+    private static string PortTypeTipKey(string? portType) => (portType ?? "").ToUpperInvariant() switch
+    {
+        "IN"    => "WAVEFORM_PORT_IN_TIP",
+        "OUT"   => "WAVEFORM_PORT_OUT_TIP",
+        "INOUT" => "WAVEFORM_PORT_INOUT_TIP",
+        _       => "WAVEFORM_PORT_INTERNAL_TIP",
+    };
+
     public void Dispose()
     {
         Cursor.OnChange -= OnCursorChanged;
+        _zoomDebounce?.Cancel();
+        _zoomDebounce?.Dispose();
         if (_hoverId > 0)
         {
             try { _ = JS.InvokeVoidAsync("kmilaDetachWaveformHover", _hoverId).AsTask(); }
@@ -837,6 +1183,7 @@ else if (Data != null && Data.Signals.Count > 0)
         else
         {
             _compareTracks = null;
+            _compareTraceCache.Clear();
         }
     }
 
@@ -946,16 +1293,54 @@ else if (Data != null && Data.Signals.Count > 0)
     private void EnsureInitialZoom()
     {
         if (_pxPerNs > 0) return;
-        ulong totalTicks = Data?.TotalTicks ?? 0UL;
-        int timescale = Math.Max(1, Data?.TimescaleNs ?? 1);
-        long maxNs = (long)totalTicks * timescale;
+        long maxNs = CurrentMaxNs();
         if (maxNs <= 0) return;
         int visiblePx = ComputeVisibleTrackPx();
         _pxPerNs = (double)visiblePx / maxNs;
     }
 
-    private async Task ZoomIn()  => await ZoomBy(2.0);
-    private async Task ZoomOut() => await ZoomBy(0.5);
+    private Task ZoomIn()  => QueueZoom(2.0);
+    private Task ZoomOut() => QueueZoom(0.5);
+
+    // ─── Zoom-click debounce ─────────────────────────────────────────────
+    // Coalesce bursts of zoom clicks into ONE rebuild at the final level, so
+    // spamming the buttons never queues N expensive SVG re-renders on the
+    // single-threaded UI thread. Each rebuild is already memoised/windowed
+    // (compare-mode perf fix), so this is extra insurance against stutter.
+    // Live mode is exempt — its zoom is a cheap window-duration change and
+    // should feel instant.
+    private double _pendingZoomFactor = 1.0;
+    private CancellationTokenSource? _zoomDebounce;
+    private const int ZoomDebounceMs = 110;
+
+    private Task QueueZoom(double factor)
+    {
+        if (IsLive) return ZoomBy(factor);
+
+        _pendingZoomFactor *= factor;
+        _zoomDebounce?.Cancel();
+        _zoomDebounce?.Dispose();
+        var cts = _zoomDebounce = new CancellationTokenSource();
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(ZoomDebounceMs, cts.Token);
+                // Read + reset + apply on the UI thread so it can't race with
+                // click handlers (which also run there). ZoomBy clamps to the
+                // zoom floor/ceiling, so even a huge accumulated factor lands
+                // exactly at the min/max level.
+                await InvokeAsync(async () =>
+                {
+                    double factorToApply = _pendingZoomFactor;
+                    _pendingZoomFactor = 1.0;
+                    await ZoomBy(factorToApply);
+                });
+            }
+            catch (TaskCanceledException) { /* superseded by a newer click */ }
+        });
+        return Task.CompletedTask;
+    }
 
     /// <summary>
     /// Multiplies <see cref="_pxPerNs"/> by <paramref name="factor"/> while
@@ -983,9 +1368,7 @@ else if (Data != null && Data.Signals.Count > 0)
             return;
         }
 
-        ulong totalTicks = Data?.TotalTicks ?? 0UL;
-        int timescale = Math.Max(1, Data?.TimescaleNs ?? 1);
-        long maxNs = (long)totalTicks * timescale;
+        long maxNs = CurrentMaxNs();
         if (maxNs <= 0) return;
         int visiblePx = ComputeVisibleTrackPx();
 
@@ -1025,6 +1408,10 @@ else if (Data != null && Data.Signals.Count > 0)
     /// </summary>
     private async Task ZoomReset()
     {
+        // Drop any queued zoom so a pending burst can't re-apply after reset.
+        _zoomDebounce?.Cancel();
+        _pendingZoomFactor = 1.0;
+
         // Live mode: snap the trailing window back to its default.
         if (IsLive)
         {
@@ -1034,9 +1421,7 @@ else if (Data != null && Data.Signals.Count > 0)
             return;
         }
 
-        ulong totalTicks = Data?.TotalTicks ?? 0UL;
-        int timescale = Math.Max(1, Data?.TimescaleNs ?? 1);
-        long maxNs = (long)totalTicks * timescale;
+        long maxNs = CurrentMaxNs();
         if (maxNs <= 0) return;
         try
         {
@@ -1071,7 +1456,7 @@ else if (Data != null && Data.Signals.Count > 0)
     /// happens to be. Returned as raw HTML so Blazor injects it without
     /// round-tripping through the component system.
     /// </summary>
-    private string BuildTraceSvg(WaveformSignal signal, int widthPx, string color, long viewStartNs, long viewEndNs)
+    private string BuildTraceSvg(WaveformSignal signal, int widthPx, string color, long viewStartNs, long viewEndNs, WaveRadix radix)
     {
         const int H = 40;         // row height in SVG units
         const int PadY = 4;       // vertical padding so strokes don't clip
@@ -1197,23 +1582,25 @@ else if (Data != null && Data.Signals.Count > 0)
             static string LabelText(double midX, string label) =>
                 $"<text x=\"{midX:0.##}\" y=\"{20 + 4:0.##}\" text-anchor=\"middle\" font-size=\"10\" font-family=\"ui-monospace, Menlo, monospace\" fill=\"var(--text-strong)\">{System.Net.WebUtility.HtmlEncode(label)}</text>";
 
-            if (haveEntry && !string.IsNullOrEmpty(entry.Label))
+            // Labels are formatted in the signal's effective radix (not the
+            // pre-baked hex), so cycling the base re-stamps every plateau.
+            if (haveEntry && entry.Label != null)
             {
                 double txLead = 0;
                 double nextLead = pts.Count > 0 ? X(pts[0].TimeNs) : widthPx;
                 if (nextLead - txLead >= 24)
-                    sb.Append(LabelText((txLead + nextLead) / 2.0, entry.Label!));
+                    sb.Append(LabelText((txLead + nextLead) / 2.0, FormatRadix(entry, signal, radix)));
             }
             for (int i = 0; i < pts.Count; i++)
             {
                 var t = pts[i];
-                if (string.IsNullOrEmpty(t.Label)) continue;
+                if (t.Label == null) continue;
                 double tx = X(t.TimeNs);
                 double nextX = (i + 1 < pts.Count) ? X(pts[i + 1].TimeNs) : widthPx;
                 double midX = (tx + nextX) / 2.0;
                 if (nextX - tx < 24) continue; // too narrow
 
-                sb.Append(LabelText(midX, t.Label!));
+                sb.Append(LabelText(midX, FormatRadix(t, signal, radix)));
             }
         }
 
@@ -1260,12 +1647,22 @@ else if (Data != null && Data.Signals.Count > 0)
 
             // Rebuild the same step-function path the single-mode renderer
             // uses, but with the palette colour and a touch of opacity so
-            // overlapping traces remain visible.
+            // overlapping traces remain visible. Decimate via GetWindow (the
+            // same helper single mode uses) so the path has at most ~widthPx
+            // points instead of one per transition — a 50 MHz clock over a long
+            // run used to emit thousands of segments per trace × N snapshots on
+            // every render (issue #4). Visual-only: GetWindow preserves the
+            // min/max per pixel column, so the step function looks identical.
+            var window = sig.GetWindow(0, maxNs, widthPx);
+            var pts = window.Points;
+
             var d = new System.Text.StringBuilder();
-            double curY = LevelY(sig.Transitions[0].Value);
+            double curY = window.HaveEntry
+                ? LevelY(window.Entry.Value)
+                : LevelY(sig.Transitions[0].Value);
             d.Append($"M 0 {curY:0.##} ");
 
-            foreach (var t in sig.Transitions)
+            foreach (var t in pts)
             {
                 double tx = X(t.TimeNs);
                 double nextY = LevelY(t.Value);

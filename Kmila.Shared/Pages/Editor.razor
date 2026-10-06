@@ -145,9 +145,7 @@
                             <Icon Name="@(IsSplit ? IconName.Square : IconName.LayoutSplit)" />
                         </button>
                     </KmilaTooltip>
-                    <span class="editor-shortcut" aria-hidden="true">
-                        <kbd>Ctrl</kbd><kbd>S</kbd>
-                    </span>
+                    <KeyboardShortcutsHelp />
                 </div>
             </header>
 
@@ -239,7 +237,7 @@
                internal Monaco / decorations survive tab switches. *@
             <div class="editor-workbench__view editor-workbench__view--replay"
                  style="@(_editorCardTab == EditorCardTab.Replay ? "" : "display:none")">
-                <StepReplayPanel />
+                <StepReplayPanel @ref="_stepReplayPanel" />
             </div>
 
             @* Visual canvas view — Phase 2 4th sibling tab. Lazy-mounted on
@@ -400,6 +398,7 @@
                     @ref="_filesCard"
                     OnProjectFileClicked="OnProjectFileOpened"
                     OnProjectFileRemoved="OnFileRemoved"
+                    OnNewFileRequested="ShowCreateFileInAsync"
                     Project="_project" />
             </FilesContent>
 
@@ -987,6 +986,13 @@
         try
         {
             await JS.InvokeVoidAsync("document.documentElement.setAttribute", "data-route", "editor");
+
+            // Wire the global Ctrl/Cmd+S save bridge. The document-level keydown
+            // handler in kmila-shared-head.js owns the shortcut (it has to, to
+            // suppress the browser "Save page as" dialog); it calls back into
+            // JsSaveFile so the shortcut saves regardless of Monaco focus.
+            _saveDotNetRef ??= DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("kmilaRegisterEditorSave", _saveDotNetRef);
         }
         catch
         {
@@ -1479,12 +1485,37 @@
         catch { /* TopBar not present in current layout — silent */ }
     }
 
-    private async Task ShowCreateFileModalAsync(){
-        Dictionary<string, object> parameters = new(){
-            { "Project", _project },
-            { "EditorContent", await _pane.Monaco.GetValue() },
-            { "OnProjectFileCreated", EventCallback.Factory.Create(this, OnFileCreatedAsync)}
+    private Task ShowCreateFileModalAsync() => ShowCreateFileInAsync(string.Empty);
 
+    /// <summary>
+    /// Opens the create-file modal. Both the editor-card "New file" button, the
+    /// ⌘/Ctrl+N shortcut, AND the FilesCard dock button route here so the modal
+    /// is always the editor-root <c>_multiUseModal</c> — which, unlike FilesCard's
+    /// own dock-nested modal, isn't trapped by a stacking/overflow ancestor, so
+    /// the dialog actually renders instead of leaving a frozen backdrop (#5).
+    /// Distinct name from the parameterless overload so Razor's EventCallback
+    /// binding isn't ambiguous.
+    /// </summary>
+    private async Task ShowCreateFileInAsync(string targetDir)
+    {
+        // Prefill with the active editor's content, but never let a missing /
+        // unmounted Monaco (e.g. no file open yet) throw and abort the open —
+        // that left ⌘N doing nothing at all.
+        string editorContent = string.Empty;
+        try { if (_pane?.Monaco != null) editorContent = await _pane.Monaco.GetValue(); }
+        catch { /* Monaco not ready — create against empty content */ }
+
+        Dictionary<string, object> parameters = new()
+        {
+            { "Project", _project },
+            { "EditorContent", editorContent },
+            { "TargetDirectory", targetDir ?? string.Empty },
+            // MUST be the generic EventCallback<ProjectFile> — CreateFileModal's
+            // parameter is typed, and passing a non-generic EventCallback throws
+            // InvalidCastException when Blazor sets it, crashing the whole circuit
+            // (that was #5's "freezes/breaks the app"). OnFileCreatedAsync is
+            // parameterless; the Create<TValue>(object, Func<Task>) overload adapts it.
+            { "OnProjectFileCreated", EventCallback.Factory.Create<Kmila.Shared.Models.ProjectFile>(this, OnFileCreatedAsync) }
         };
         await _multiUseModal.ShowAsync<CreateFileModal>(Traductor.T("EDITOR_CREATE_FILE_MODAL_TITLE"), parameters: parameters);
     }
@@ -2418,6 +2449,32 @@ end architecture behavioral;",
     }
 
     private DotNetObjectReference<Editor>? _bpDotNetRef;
+    private DotNetObjectReference<Editor>? _saveDotNetRef;
+
+    /// <summary>
+    /// Central dispatch for editor keyboard/menu commands. Invoked from the
+    /// global bridge in kmila-shared-head.js (web/Windows keydown) and from the
+    /// native macOS File/Run menus, so both input paths and every host hit the
+    /// same actions. Shortcuts: ⌘/Ctrl+S save, +N new file, +B build,
+    /// +Enter run, +T split. (⌘W close-tab and ⌘X/⌘C/⌘V clipboard are handled
+    /// by Monaco / the system Edit menu and intentionally not routed here.)
+    /// </summary>
+    [Microsoft.JSInterop.JSInvokable]
+    public async Task JsRunCommand(string name)
+    {
+        switch (name)
+        {
+            case "save":  await OnSaveFile();            break;
+            case "new":   await ShowCreateFileModalAsync(); break;
+            case "build": await OnBuildRequested();       break;
+            case "run":   await OnRunRequested();         break;
+            case "split": await ToggleSplitAsync();       break;
+        }
+    }
+
+    /// <summary>Back-compat shim for the earlier save-only bridge.</summary>
+    [Microsoft.JSInterop.JSInvokable]
+    public Task JsSaveFile() => OnSaveFile();
 
     /// <summary>
     /// Phase B+ (follow-up 3, 2026-05-19): which view the editor card is
@@ -2453,6 +2510,7 @@ end architecture behavioral;",
     public enum EditorCardTab { Code, Blocks, Replay, Visual }
 
     private BlockEditor? _vhdlBlockEditor;
+    private StepReplayPanel? _stepReplayPanel;
     private readonly VhdlBlockEmitter _vhdlEmitter = new();
     private readonly VhdlBlockBuilder _vhdlBuilder = new();
 
@@ -2541,6 +2599,23 @@ end architecture behavioral;",
                 }
             }
             catch { /* Monaco may not be mounted yet — fine */ }
+        }
+        else if (tab == EditorCardTab.Blocks)
+        {
+            // The Blocks canvas was first laid out while this tab was
+            // display:none (0px), so auto-stacked blocks piled up at zero
+            // height. Re-measure now that it's visible — without this the view
+            // needs a second tab flip before it renders correctly (#5b).
+            try { if (_vhdlBlockEditor != null) await _vhdlBlockEditor.ResizeAsync(); }
+            catch { /* block engine not mounted yet — fine */ }
+        }
+        else if (tab == EditorCardTab.Replay)
+        {
+            // Same hidden-tab trap for the Replay code panel's Monaco: built at
+            // 0px, its scroll viewport stays broken until re-laid-out, which is
+            // why the code wouldn't scroll to the executing line (#7).
+            try { if (_stepReplayPanel != null) await _stepReplayPanel.RelayoutAsync(); }
+            catch { /* replay player not mounted yet — fine */ }
         }
     }
 
@@ -3646,6 +3721,12 @@ end architecture behavioral;",
         try { _ = JS.InvokeVoidAsync("kmilaDisposeMonacoBreakpoints"); } catch { }
         _bpDotNetRef?.Dispose();
         _bpDotNetRef = null;
+
+        // Release the Ctrl/Cmd+S save bridge so the global handler stops calling
+        // into a disposed component after we navigate away from the editor.
+        try { _ = JS.InvokeVoidAsync("kmilaUnregisterEditorSave"); } catch { }
+        _saveDotNetRef?.Dispose();
+        _saveDotNetRef = null;
         Sim.OnChange                      -= OnSimParamsChanged;
         Snapshots.OnChange                -= OnSnapshotsChanged;
         Traductor.StaticOnLangChanged     -= OnLanguageChanged;

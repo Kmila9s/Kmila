@@ -357,6 +357,21 @@ public class WaveformData
         => signal.ValueAtNs((long)tick * Math.Max(1, TimescaleNs));
 
     /// <summary>
+    /// The full transition in effect at <paramref name="tick"/> (last-write-wins,
+    /// nearest at or before), or <c>null</c> when the signal has no sample yet.
+    /// Unlike <see cref="ValueAt"/> this exposes the raw per-bit string
+    /// (<see cref="WaveformTransition.Bits"/>) so callers can re-format the value
+    /// in any radix (dec / hex / bin / oct) rather than being limited to the
+    /// pre-formatted hex label.
+    /// </summary>
+    public WaveformTransition? TransitionAt(WaveformSignal signal, ulong tick)
+    {
+        long ns = (long)tick * Math.Max(1, TimescaleNs);
+        int idx = signal.IndexAtOrBefore(ns);
+        return idx < 0 ? (WaveformTransition?)null : signal.Transitions[idx];
+    }
+
+    /// <summary>
     /// Determines the sort order for a signal based on its port type.
     /// Inputs are displayed first, then outputs, then bidirectional, and finally internal signals.
     /// </summary>

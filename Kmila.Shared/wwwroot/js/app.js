@@ -1461,6 +1461,109 @@ window.kmilaWaveformFitWidth = function (bodySel, labelW) {
 })();
 
 
+/* ─── Waveform label-column resizer ────────────────────────────────────────
+ * Drag handles on the right edge of the sticky signal-name column. Wiring is
+ * fully client-side via ONE delegated pointerdown listener on the body: a
+ * Blazor @onpointerdown would round-trip to the server before the move
+ * listeners could attach, so a quick drag (and the first frames of any drag)
+ * would be lost on the Server circuit. Delegation also covers grips on rows
+ * added later (expanded buses, live signals) for free.
+ *
+ * During the drag it sets --wf-label-w + data-label-width on the body live
+ * (the label cells, the sticky track offset and the hover/window helpers all
+ * read them) so the column tracks the pointer with zero round-trips; on
+ * release it persists the width to localStorage (a per-user pref — the Blazor
+ * Server DB is a single shared file) and calls .NET once
+ * (WaveformViewer.OnLabelResizeEnd) so the windowed SVG re-sizes to match.
+ *
+ * Public API:
+ *   kmilaWaveformInitResize(bodySel, dotnetRef)  — idempotent per body element
+ *   kmilaWaveformGetLabelWidth() → saved px, or 0 when none
+ * --------------------------------------------------------------------- */
+(function () {
+    const KEY = 'kmila.waveform.labelWidth';
+    const MIN = 96;
+    const MAX = 480;
+
+    function clampW(w) { return Math.max(MIN, Math.min(MAX, Math.round(w))); }
+
+    window.kmilaWaveformGetLabelWidth = function () {
+        try {
+            const raw = window.localStorage.getItem(KEY);
+            if (!raw) return 0;
+            const n = parseInt(raw, 10);
+            return Number.isFinite(n) ? clampW(n) : 0;
+        } catch (_) { return 0; }
+    };
+
+    window.kmilaWaveformInitResize = function (bodySel, dotnetRef) {
+        const body = (typeof bodySel === 'string')
+            ? document.querySelector(bodySel) : bodySel;
+        if (!body || body.__kmilaResizeInit) return;
+        body.__kmilaResizeInit = true;
+
+        body.addEventListener('pointerdown', function (ev) {
+            const grip = ev.target.closest && ev.target.closest('.waveform-resize-grip');
+            if (!grip || !body.contains(grip)) return;
+            // Don't let the press reach the label's hide-toggle, and swallow the
+            // click that follows so a grip tap never toggles a signal.
+            ev.preventDefault();
+            ev.stopPropagation();
+            window.addEventListener('click', function suppress(ce) {
+                ce.preventDefault();
+                ce.stopPropagation();
+            }, { capture: true, once: true });
+
+            const startX = ev.clientX;
+            const base = clampW(parseFloat(body.dataset.labelWidth || '160'));
+            let next = base;
+
+            function onMove(mv) {
+                mv.preventDefault();
+                next = clampW(base + (mv.clientX - startX));
+                body.style.setProperty('--wf-label-w', next + 'px');
+                body.dataset.labelWidth = String(next);
+            }
+            function onUp() {
+                window.removeEventListener('pointermove', onMove);
+                window.removeEventListener('pointerup', onUp);
+                window.removeEventListener('pointercancel', onUp);
+                document.body.classList.remove('kmila-col-resizing');
+                try { window.localStorage.setItem(KEY, String(next)); } catch (_) {}
+                if (dotnetRef) {
+                    dotnetRef.invokeMethodAsync('OnLabelResizeEnd', next)
+                        .catch(function () {});
+                }
+            }
+
+            document.body.classList.add('kmila-col-resizing');
+            window.addEventListener('pointermove', onMove, { passive: false });
+            window.addEventListener('pointerup', onUp);
+            window.addEventListener('pointercancel', onUp);
+        }, { capture: true });
+    };
+})();
+
+
+/* ─── Waveform number-base (radix) persistence ─────────────────────────────
+ * Per-user preference for the global value base, kept in localStorage (the
+ * Blazor Server DB is a single shared file). "" means Auto / type-default.
+ * --------------------------------------------------------------------- */
+(function () {
+    const KEY = 'kmila.waveform.radix';
+    window.kmilaWaveformGetRadix = function () {
+        try { return window.localStorage.getItem(KEY) || ''; }
+        catch (_) { return ''; }
+    };
+    window.kmilaWaveformSetRadix = function (value) {
+        try {
+            if (value) window.localStorage.setItem(KEY, value);
+            else window.localStorage.removeItem(KEY);
+        } catch (_) {}
+    };
+})();
+
+
 /* ─── Tiny haptic helper (Android-only; iOS Safari ignores) ──────────────── */
 window.kmilaHaptic = function (kind) {
     if (!navigator.vibrate) return;
