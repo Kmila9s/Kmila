@@ -43,8 +43,16 @@ entity calc_top is
         cols_in     : in  std_logic_vector(3 downto 0);
         rows_out    : out std_logic_vector(3 downto 0);
 
-        -- LCD (2 × 16 × 8 = 256 bits, packed)
+        -- LCD packed character buffer (2 × 16 × 8 = 256 bits) — kept for the
+        -- testbenches' diagnostics; the Visual widget is driven by the raw
+        -- HD44780 bus below instead.
         lcd_chars   : out std_logic_vector(LCD_ROWS*LCD_COLS*8 - 1 downto 0);
+
+        -- Raw HD44780 4-bit bus (drives the LcdWidget in raw-4bit mode).
+        lcd_rs      : out std_logic;
+        lcd_rw      : out std_logic;
+        lcd_e       : out std_logic;
+        lcd_db      : out std_logic_vector(7 downto 4);
 
         -- 7-segment (4 digits × 7 segments = 28 bits)
         seg_bus     : out std_logic_vector(4*7 - 1 downto 0);
@@ -99,6 +107,10 @@ architecture rtl of calc_top is
     signal lcd_line0     : std_logic_vector(LCD_COLS*8 - 1 downto 0);
     signal lcd_line1     : std_logic_vector(LCD_COLS*8 - 1 downto 0);
     signal lcd_dirty     : std_logic_vector(LCD_ROWS - 1 downto 0);
+    -- Internal copy of the packed buffer for the external diagnostic port.
+    signal lcd_chars_i   : std_logic_vector(LCD_ROWS*LCD_COLS*8 - 1 downto 0);
+    -- Banner fed straight to the HD44780 sequencer (line0 in the high bytes).
+    signal lcd_buf       : std_logic_vector(LCD_ROWS*LCD_COLS*8 - 1 downto 0);
 
     -- 7-seg: display the integer part of cur_operand (bits 31..16 mod 9999).
     signal seg_value     : unsigned(13 downto 0);
@@ -217,11 +229,10 @@ begin
             div0    => alu_div0_i);
 
     -- ------------------------------------------------------------------ Displays
-    -- Trivial LCD packing: fill both lines with '0' bytes; real formatting
-    -- deferred. This keeps the LCD driver exercised in synthesis without
-    -- hard-coding a demo string.
-    lcd_line0 <= (others => '0');
-    lcd_line1 <= (others => '0');
+    -- Static banner so the LCD shows real content: line 0 = "KMILA  CALC",
+    -- line 1 = blank (16 spaces). ASCII, MSB-first (char 0 in the top bits).
+    lcd_line0 <= "01001011010011010100100101001100010000010010000000100000010000110100000101001100010000110010000000100000001000000010000000100000";
+    lcd_line1 <= "00100000001000000010000000100000001000000010000000100000001000000010000000100000001000000010000000100000001000000010000000100000";
 
     u_lcd : entity work.lcd_driver
         port map (
@@ -230,8 +241,23 @@ begin
             refresh    => refresh_tick,
             line0      => lcd_line0,
             line1      => lcd_line1,
-            chars_out  => lcd_chars,
+            chars_out  => lcd_chars_i,
             line_dirty => lcd_dirty);
+
+    -- Expose the packed buffer on the diagnostic port and stream the banner
+    -- (line 0 in the high bytes) onto the real HD44780 4-bit bus for the widget.
+    lcd_chars <= lcd_chars_i;
+    lcd_buf   <= lcd_line0 & lcd_line1;
+
+    u_lcd_seq : entity work.hd44780_seq
+        port map (
+            clk    => clk,
+            rst_n  => rst_n,
+            chars  => lcd_buf,
+            lcd_rs => lcd_rs,
+            lcd_rw => lcd_rw,
+            lcd_e  => lcd_e,
+            lcd_db => lcd_db);
 
     -- Seg7: integer part of cur_operand, saturated into the driver's 14-bit
     -- range so the display shows the natural-number portion of the operand.

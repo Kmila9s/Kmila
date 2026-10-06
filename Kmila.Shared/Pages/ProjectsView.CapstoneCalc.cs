@@ -30,6 +30,7 @@ public partial class ProjectsView
         "expr_engine.vhd",
         "keypad_scanner.vhd",
         "lcd_driver.vhd",
+        "hd44780_seq.vhd",
         "seg7_driver.vhd",
         "led_marquee.vhd",
         "buzzer_ctrl.vhd",
@@ -105,13 +106,18 @@ public partial class ProjectsView
       "type": "lcd-hd44780",
       "position": { "x": 380, "y": 60 },
       "config": {
-        "mode": "text",
+        "mode": "raw-4bit",
         "rows": 2,
         "cols": 16
       },
       "bindings": {
-        "line0": "lcd_chars[255:128]",
-        "line1": "lcd_chars[127:0]"
+        "RS": "lcd_rs",
+        "RW": "lcd_rw",
+        "E": "lcd_e",
+        "DB4": "lcd_db[4]",
+        "DB5": "lcd_db[5]",
+        "DB6": "lcd_db[6]",
+        "DB7": "lcd_db[7]"
       }
     },
     {
@@ -131,12 +137,14 @@ public partial class ProjectsView
       "type": "matrix-3x3",
       "position": { "x": 940, "y": 60 },
       "config": {
-        "mode": "value",
+        "mode": "raw",
         "color": "red",
         "brightness": 100
       },
       "bindings": {
-        "value": "led_matrix"
+        "a00": "led_matrix[0]", "a01": "led_matrix[1]", "a02": "led_matrix[2]",
+        "a10": "led_matrix[3]", "a11": "led_matrix[4]", "a12": "led_matrix[5]",
+        "a20": "led_matrix[6]", "a21": "led_matrix[7]", "a22": "led_matrix[8]"
       }
     },
     {
