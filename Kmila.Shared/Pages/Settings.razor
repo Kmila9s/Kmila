@@ -22,6 +22,7 @@
 @inject LibraryCompiler.Services.LibraryCompiler LibCompiler
 @inject Kmila.Shared.Services.ReplayState Replay
 @inject SelectedFPGA SelectedFPGA
+@inject Microsoft.JSInterop.IJSRuntime JS
 @implements IDisposable
 
 <PageTitle>@Traductor.T("NAV_SETTINGS")</PageTitle>
@@ -123,6 +124,33 @@
                         </select>
                     </div>
                 </div>
+
+                @* Advanced mode — reveals the per-widget "Expert" Visual-mode
+                   bindings (formerly "Assisted"). OFF by default so beginners
+                   only wire real device pins; a warning explains why it isn't
+                   recommended for them. *@
+                <div class="settings-row">
+                    <div class="settings-row__label">
+                        <strong>@Traductor.T("SETTINGS_ADVANCED_MODE_TITLE")</strong>
+                        <small>@Traductor.T("SETTINGS_ADVANCED_MODE_HINT")</small>
+                    </div>
+                    <div class="settings-row__control">
+                        <label class="form-check form-switch mb-0">
+                            <input type="checkbox"
+                                   class="form-check-input"
+                                   role="switch"
+                                   checked="@_advancedMode"
+                                   @onchange="OnAdvancedModeChanged" />
+                        </label>
+                    </div>
+                </div>
+                @if (_advancedMode)
+                {
+                    <p class="settings-card__hint settings-card__hint--warn">
+                        <Icon Name="IconName.ExclamationTriangleFill" />
+                        <span>@Traductor.T("SETTINGS_ADVANCED_MODE_WARN")</span>
+                    </p>
+                }
             </div>
         </article>
 
@@ -1065,6 +1093,15 @@
     /// </summary>
     private EditorSyncMode _editorSyncMode = EditorSyncMode.Auto;
 
+    /// <summary>
+    /// Advanced mode (2026-10-06). Reveals the per-widget "Expert (…)"
+    /// Visual-mode bindings and the push-button debounce toggle. OFF by
+    /// default. Per-user source of truth is localStorage ('kmila-advanced-mode',
+    /// reconciled in OnAfterRenderAsync); SQLite is native parity. See
+    /// <see cref="AppSettings.KEY_ADVANCED_MODE"/>.
+    /// </summary>
+    private bool _advancedMode;
+
     // ─── Tier 5.2 Phase B — Local API host toggle ────────────────
     // ILocalApiHost is only registered by the MAUI head; on Kmila.Web
     // this stays null and the Settings card is hidden (that host serves
@@ -1146,6 +1183,11 @@
         var syncRaw = await DbContext.GetSettingAsync(AppSettings.KEY_EDITOR_SYNC_MODE);
         _editorSyncMode = EditorSyncModeExtensions.ParseToken(syncRaw);
 
+        // Advanced-mode toggle. SQLite seed here (prerender-safe); the per-user
+        // localStorage copy wins in OnAfterRenderAsync once JS is live.
+        var advRaw = await DbContext.GetSettingAsync(AppSettings.KEY_ADVANCED_MODE);
+        _advancedMode = string.Equals(advRaw, "true", StringComparison.OrdinalIgnoreCase);
+
         // Account state — restore the cached account from the saved
         // token (no-op if logged out), then subscribe to the auth
         // service so sign-in / sign-out from elsewhere (TopBar pill)
@@ -1188,6 +1230,49 @@
     {
         _editorSyncMode = EditorSyncModeExtensions.ParseToken(e.Value?.ToString());
         await DbContext.SetSettingAsync(AppSettings.KEY_EDITOR_SYNC_MODE, _editorSyncMode.ToToken());
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Reconcile the Advanced-mode toggle from the per-user localStorage copy
+    /// once JS is available (can't run during prerender). localStorage is the
+    /// source of truth — SQLite is only a native-parity seed that, on the
+    /// shared web host, would otherwise leak one user's choice to another.
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            var ls = await JS.InvokeAsync<string?>("localStorage.getItem", "kmila-advanced-mode");
+            if (!string.IsNullOrEmpty(ls))
+            {
+                var adv = string.Equals(ls, "true", StringComparison.OrdinalIgnoreCase);
+                if (adv != _advancedMode)
+                {
+                    _advancedMode = adv;
+                    StateHasChanged();
+                }
+            }
+        }
+        catch { /* JS not ready — keep the SQLite seed */ }
+    }
+
+    /// <summary>
+    /// Persist the Advanced-mode toggle. Writes the per-user localStorage copy
+    /// first (source of truth, read by VisualPanel) then the SQLite parity copy.
+    /// </summary>
+    private async Task OnAdvancedModeChanged(ChangeEventArgs e)
+    {
+        _advancedMode = e.Value is bool b && b;
+        try
+        {
+            await JS.InvokeVoidAsync("localStorage.setItem",
+                "kmila-advanced-mode", _advancedMode ? "true" : "false");
+        }
+        catch { /* localStorage unavailable (private mode) — SQLite still holds it */ }
+        await DbContext.SetSettingAsync(
+            AppSettings.KEY_ADVANCED_MODE, _advancedMode ? "true" : "false");
         StateHasChanged();
     }
 

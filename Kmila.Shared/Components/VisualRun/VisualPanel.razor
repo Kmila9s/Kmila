@@ -280,13 +280,19 @@
                                    value="@ButtonLabel(sel)"
                                    @onchange="@(e => OnButtonLabelChange(sel, e))" />
                         </label>
-                        <label class="visual-page__props-checkbox">
-                            <input type="checkbox"
-                                   checked="@ButtonBounce(sel)"
-                                   @onchange="@(e => OnButtonBounceChange(sel, e))" />
-                            <span>@Traductor.T("VISUAL_PROP_BOUNCE")</span>
-                        </label>
-                        <small class="kmila-muted">@Traductor.T("VISUAL_PROP_BOUNCE_HINT")</small>
+                        @* Contact-bounce simulation is an expert realism option —
+                           hidden unless Advanced mode is on so beginners get a
+                           clean (debounced) button by default. *@
+                        @if (_advancedMode)
+                        {
+                            <label class="visual-page__props-checkbox">
+                                <input type="checkbox"
+                                       checked="@ButtonBounce(sel)"
+                                       @onchange="@(e => OnButtonBounceChange(sel, e))" />
+                                <span>@Traductor.T("VISUAL_PROP_BOUNCE")</span>
+                            </label>
+                            <small class="kmila-muted">@Traductor.T("VISUAL_PROP_BOUNCE_HINT")</small>
+                        }
                     }
                     else if (sel.Type == "switch")
                     {
@@ -323,15 +329,22 @@
                     }
                     else if (sel.Type == "seven-seg")
                     {
-                        <label>@Traductor.T("VISUAL_PROP_MODE")
-                            <select class="kmila-input"
-                                    value="@SevenSegMode(sel)"
-                                    @onchange="@(e => OnSevenSegModeChange(sel, e))">
-                                <option value="raw">@Traductor.T("VISUAL_SEVEN_SEG_MODE_RAW")</option>
-                                <option value="hex">@Traductor.T("VISUAL_SEVEN_SEG_MODE_HEX")</option>
-                                <option value="dec">@Traductor.T("VISUAL_SEVEN_SEG_MODE_DEC")</option>
-                            </select>
-                        </label>
+                        @* The decoded "Expert" modes (hex/dec) are only offered in
+                           Advanced mode; beginners wire the raw a..g segments. The
+                           select still shows for a legacy widget already on an
+                           expert mode so it can be switched back to raw. *@
+                        @if (_advancedMode || SevenSegMode(sel) != "raw")
+                        {
+                            <label>@Traductor.T("VISUAL_PROP_MODE")
+                                <select class="kmila-input"
+                                        value="@SevenSegMode(sel)"
+                                        @onchange="@(e => OnSevenSegModeChange(sel, e))">
+                                    <option value="raw">@Traductor.T("VISUAL_SEVEN_SEG_MODE_RAW")</option>
+                                    <option value="hex">@Traductor.T("VISUAL_SEVEN_SEG_MODE_HEX")</option>
+                                    <option value="dec">@Traductor.T("VISUAL_SEVEN_SEG_MODE_DEC")</option>
+                                </select>
+                            </label>
+                        }
                         @if (SevenSegMode(sel) == "raw")
                         {
                             <label>@Traductor.T("VISUAL_PROP_POLARITY")
@@ -367,8 +380,14 @@
                                     value="@SevenSegBankMode(sel)"
                                     @onchange="@(e => OnSevenSegBankModeChange(sel, e))">
                                 <option value="raw">@Traductor.T("VISUAL_SEVEN_SEG_MODE_RAW")</option>
-                                <option value="hex">@Traductor.T("VISUAL_SEVEN_SEG_MODE_HEX")</option>
-                                <option value="dec">@Traductor.T("VISUAL_SEVEN_SEG_MODE_DEC")</option>
+                                @if (_advancedMode || SevenSegBankMode(sel) == "hex")
+                                {
+                                    <option value="hex">@Traductor.T("VISUAL_SEVEN_SEG_MODE_HEX")</option>
+                                }
+                                @if (_advancedMode || SevenSegBankMode(sel) == "dec")
+                                {
+                                    <option value="dec">@Traductor.T("VISUAL_SEVEN_SEG_MODE_DEC")</option>
+                                }
                                 <option value="mux">@Traductor.T("VISUAL_SEVEN_SEG_MODE_MUX")</option>
                             </select>
                         </label>
@@ -453,7 +472,10 @@
                             <select class="kmila-input"
                                     value="@LcdMode(sel)"
                                     @onchange="@(e => OnLcdModeChange(sel, e))">
-                                <option value="text">@Traductor.T("VISUAL_LCD_MODE_TEXT")</option>
+                                @if (_advancedMode || LcdMode(sel) == "text")
+                                {
+                                    <option value="text">@Traductor.T("VISUAL_LCD_MODE_TEXT")</option>
+                                }
                                 <option value="raw-4bit">@Traductor.T("VISUAL_LCD_MODE_RAW_4BIT")</option>
                                 <option value="raw-8bit">@Traductor.T("VISUAL_LCD_MODE_RAW_8BIT")</option>
                             </select>
@@ -477,14 +499,19 @@
                     }
                     else if (sel.Type == "keypad-matrix")
                     {
-                        <label>@Traductor.T("VISUAL_PROP_MODE")
-                            <select class="kmila-input"
-                                    value="@KeypadMode(sel)"
-                                    @onchange="@(e => OnKeypadModeChange(sel, e))">
-                                <option value="decoded">@Traductor.T("VISUAL_KEYPAD_MODE_DECODED")</option>
-                                <option value="raw-scan">@Traductor.T("VISUAL_KEYPAD_MODE_RAW")</option>
-                            </select>
-                        </label>
+                        @* Decoded (key+pressed) is the Expert binding; beginners
+                           implement the row/col scan themselves (raw-scan). *@
+                        @if (_advancedMode || KeypadMode(sel) != "raw-scan")
+                        {
+                            <label>@Traductor.T("VISUAL_PROP_MODE")
+                                <select class="kmila-input"
+                                        value="@KeypadMode(sel)"
+                                        @onchange="@(e => OnKeypadModeChange(sel, e))">
+                                    <option value="decoded">@Traductor.T("VISUAL_KEYPAD_MODE_DECODED")</option>
+                                    <option value="raw-scan">@Traductor.T("VISUAL_KEYPAD_MODE_RAW")</option>
+                                </select>
+                            </label>
+                        }
                         <label>@Traductor.T("VISUAL_KEYPAD_ROWS")
                             <input class="kmila-input" type="number" min="3" max="4" step="1"
                                    value="@KeypadRows(sel)"
@@ -498,26 +525,36 @@
                     }
                     else if (sel.Type == "buzzer-piezo")
                     {
-                        <label>@Traductor.T("VISUAL_PROP_MODE")
-                            <select class="kmila-input"
-                                    value="@BuzzerMode(sel)"
-                                    @onchange="@(e => OnBuzzerModeChange(sel, e))">
-                                <option value="freq">@Traductor.T("VISUAL_BUZZER_MODE_FREQ")</option>
-                                <option value="signal">@Traductor.T("VISUAL_BUZZER_MODE_SIGNAL")</option>
-                            </select>
-                        </label>
+                        @* freq_hz+enable is the Expert binding; beginners drive the
+                           raw PWM `signal` pin and build the divider themselves. *@
+                        @if (_advancedMode || BuzzerMode(sel) != "signal")
+                        {
+                            <label>@Traductor.T("VISUAL_PROP_MODE")
+                                <select class="kmila-input"
+                                        value="@BuzzerMode(sel)"
+                                        @onchange="@(e => OnBuzzerModeChange(sel, e))">
+                                    <option value="freq">@Traductor.T("VISUAL_BUZZER_MODE_FREQ")</option>
+                                    <option value="signal">@Traductor.T("VISUAL_BUZZER_MODE_SIGNAL")</option>
+                                </select>
+                            </label>
+                        }
                         <small class="kmila-muted">@Traductor.T("VISUAL_BUZZER_UNLOCK_HINT")</small>
                     }
                     else if (sel.Type == "matrix-3x3-rgb")
                     {
-                        <label>@Traductor.T("VISUAL_PROP_MODE")
-                            <select class="kmila-input"
-                                    value="@RgbMatrixMode(sel)"
-                                    @onchange="@(e => OnRgbMatrixModeChange(sel, e))">
-                                <option value="planes">@Traductor.T("VISUAL_RGB_MATRIX_MODE_PLANES")</option>
-                                <option value="raw">@Traductor.T("VISUAL_RGB_MATRIX_MODE_RAW")</option>
-                            </select>
-                        </label>
+                        @* Planes (3×9-bit) is the Expert binding; beginners drive the
+                           27 raw per-cell colour anodes. *@
+                        @if (_advancedMode || RgbMatrixMode(sel) != "raw")
+                        {
+                            <label>@Traductor.T("VISUAL_PROP_MODE")
+                                <select class="kmila-input"
+                                        value="@RgbMatrixMode(sel)"
+                                        @onchange="@(e => OnRgbMatrixModeChange(sel, e))">
+                                    <option value="planes">@Traductor.T("VISUAL_RGB_MATRIX_MODE_PLANES")</option>
+                                    <option value="raw">@Traductor.T("VISUAL_RGB_MATRIX_MODE_RAW")</option>
+                                </select>
+                            </label>
+                        }
                         <label>@Traductor.T("VISUAL_PROP_BRIGHTNESS")
                             <input class="kmila-input" type="range" min="0" max="100" step="1"
                                    value="@RgbMatrixBrightness(sel)"
@@ -526,14 +563,19 @@
                     }
                     else if (sel.Type == "matrix-3x3")
                     {
-                        <label>@Traductor.T("VISUAL_PROP_MODE")
-                            <select class="kmila-input"
-                                    value="@LedMatrixMode(sel)"
-                                    @onchange="@(e => OnLedMatrixModeChange(sel, e))">
-                                <option value="value">@Traductor.T("VISUAL_MATRIX_MODE_VALUE")</option>
-                                <option value="raw">@Traductor.T("VISUAL_MATRIX_MODE_RAW")</option>
-                            </select>
-                        </label>
+                        @* 9-bit value is the Expert binding; beginners drive the raw
+                           per-cell anode/cathode pins. *@
+                        @if (_advancedMode || LedMatrixMode(sel) != "raw")
+                        {
+                            <label>@Traductor.T("VISUAL_PROP_MODE")
+                                <select class="kmila-input"
+                                        value="@LedMatrixMode(sel)"
+                                        @onchange="@(e => OnLedMatrixModeChange(sel, e))">
+                                    <option value="value">@Traductor.T("VISUAL_MATRIX_MODE_VALUE")</option>
+                                    <option value="raw">@Traductor.T("VISUAL_MATRIX_MODE_RAW")</option>
+                                </select>
+                            </label>
+                        }
                         <label>@Traductor.T("VISUAL_PROP_COLOR")
                             <select class="kmila-input"
                                     value="@LedColor(sel)"
@@ -552,26 +594,35 @@
                     }
                     else if (sel.Type == "multi-switch")
                     {
-                        <label>@Traductor.T("VISUAL_PROP_MODE")
-                            <select class="kmila-input"
-                                    value="@MultiSwitchMode(sel)"
-                                    @onchange="@(e => OnMultiSwitchModeChange(sel, e))">
-                                <option value="per-bit">@Traductor.T("VISUAL_MULTI_SWITCH_MODE_PER_BIT")</option>
-                                <option value="vector">@Traductor.T("VISUAL_MULTI_SWITCH_MODE_VECTOR")</option>
-                            </select>
-                        </label>
+                        @* `vector` collapses the bank to one std_logic_vector port —
+                           the Expert binding. Beginners wire one raw pin per switch
+                           (per-bit). *@
+                        @if (_advancedMode || MultiSwitchMode(sel) != "per-bit")
+                        {
+                            <label>@Traductor.T("VISUAL_PROP_MODE")
+                                <select class="kmila-input"
+                                        value="@MultiSwitchMode(sel)"
+                                        @onchange="@(e => OnMultiSwitchModeChange(sel, e))">
+                                    <option value="per-bit">@Traductor.T("VISUAL_MULTI_SWITCH_MODE_PER_BIT")</option>
+                                    <option value="vector">@Traductor.T("VISUAL_MULTI_SWITCH_MODE_VECTOR")</option>
+                                </select>
+                            </label>
+                        }
                         <label>@Traductor.T("VISUAL_PROP_COUNT")
                             <input class="kmila-input" type="number" min="2" max="8" step="1"
                                    value="@MultiSwitchCount(sel)"
                                    @onchange="@(e => OnMultiSwitchCountChange(sel, e))" />
                         </label>
-                        <label class="visual-page__props-checkbox">
-                            <input type="checkbox"
-                                   checked="@MultiSwitchBounce(sel)"
-                                   @onchange="@(e => OnMultiSwitchBounceChange(sel, e))" />
-                            <span>@Traductor.T("VISUAL_PROP_BOUNCE")</span>
-                        </label>
-                        <small class="kmila-muted">@Traductor.T("VISUAL_PROP_BOUNCE_HINT")</small>
+                        @if (_advancedMode)
+                        {
+                            <label class="visual-page__props-checkbox">
+                                <input type="checkbox"
+                                       checked="@MultiSwitchBounce(sel)"
+                                       @onchange="@(e => OnMultiSwitchBounceChange(sel, e))" />
+                                <span>@Traductor.T("VISUAL_PROP_BOUNCE")</span>
+                            </label>
+                            <small class="kmila-muted">@Traductor.T("VISUAL_PROP_BOUNCE_HINT")</small>
+                        }
                     }
                     <h6 class="visual-page__props-section">@Traductor.T("VISUAL_PIN_TO_PORT")</h6>
                     <div class="visual-page__props-binding">
@@ -1240,6 +1291,15 @@
         return $"{es / 60:D2}:{es % 60:D2} / {cs / 60:D2}:{cs % 60:D2}";
     }
 
+    // Advanced mode (2026-10-06). When false (default), the property pane hides
+    // the per-widget "Expert (…)" bindings and newly-added widgets stay on their
+    // raw/basic surface, so beginners only ever wire real device pins. Runtime
+    // interpretation is unaffected — a .kviz that already carries an expert
+    // `mode` still renders. Source of truth is the per-user localStorage copy
+    // (reconciled in OnAfterRenderAsync); SQLite is native parity / the
+    // pre-render seed. See AppSettings.KEY_ADVANCED_MODE.
+    private bool _advancedMode;
+
     protected override async Task OnInitializedAsync()
     {
         Traductor.StaticOnLangChanged += OnLanguageChanged;
@@ -1248,6 +1308,14 @@
             var raw = await DbContext.GetSettingAsync(AppSettings.KEY_VISUAL_RING_BUFFER);
             if (int.TryParse(raw, out var rb) && rb >= 256 && rb <= 16384)
                 _settingsRingBuffer = rb;
+        }
+        catch { }
+        try
+        {
+            // SQLite seed (prerender-safe). localStorage wins once JS is live
+            // (OnAfterRenderAsync) so the flag stays per-user on the shared web host.
+            var adv = await DbContext.GetSettingAsync(AppSettings.KEY_ADVANCED_MODE);
+            _advancedMode = string.Equals(adv, "true", StringComparison.OrdinalIgnoreCase);
         }
         catch { }
     }
@@ -1852,8 +1920,11 @@
             Position = new KvizPosition { X = 220, Y = 340 },
             Config = new()
             {
-                ["mode"]  = System.Text.Json.JsonSerializer.SerializeToElement("hex"),
-                ["color"] = System.Text.Json.JsonSerializer.SerializeToElement("red"),
+                // Raw a..g is the beginner default (real hardware); the decoded
+                // "Expert" modes are opt-in via Advanced mode.
+                ["mode"]     = System.Text.Json.JsonSerializer.SerializeToElement("raw"),
+                ["polarity"] = System.Text.Json.JsonSerializer.SerializeToElement("cathode"),
+                ["color"]    = System.Text.Json.JsonSerializer.SerializeToElement("red"),
             },
             Bindings = new(),
         });
@@ -1909,7 +1980,7 @@
             Position = new KvizPosition { X = 60, Y = 340 },
             Config = new()
             {
-                ["mode"]       = System.Text.Json.JsonSerializer.SerializeToElement("value"),
+                ["mode"]       = System.Text.Json.JsonSerializer.SerializeToElement("raw"),
                 ["color"]      = System.Text.Json.JsonSerializer.SerializeToElement("red"),
                 ["brightness"] = System.Text.Json.JsonSerializer.SerializeToElement(100),
             },
@@ -1929,7 +2000,7 @@
             Position = new KvizPosition { X = 60, Y = 460 },
             Config = new()
             {
-                ["mode"]       = System.Text.Json.JsonSerializer.SerializeToElement("planes"),
+                ["mode"]       = System.Text.Json.JsonSerializer.SerializeToElement("raw"),
                 ["brightness"] = System.Text.Json.JsonSerializer.SerializeToElement(100),
             },
             Bindings = new(),
@@ -1974,7 +2045,7 @@
             Position = new KvizPosition { X = 60, Y = 340 },
             Config = new()
             {
-                ["mode"] = System.Text.Json.JsonSerializer.SerializeToElement("text"),
+                ["mode"] = System.Text.Json.JsonSerializer.SerializeToElement("raw-4bit"),
                 ["rows"] = System.Text.Json.JsonSerializer.SerializeToElement(2),
                 ["cols"] = System.Text.Json.JsonSerializer.SerializeToElement(16),
             },
@@ -2033,7 +2104,7 @@
             Position = new KvizPosition { X = 60, Y = 340 },
             Config = new()
             {
-                ["mode"] = System.Text.Json.JsonSerializer.SerializeToElement("decoded"),
+                ["mode"] = System.Text.Json.JsonSerializer.SerializeToElement("raw-scan"),
                 ["rows"] = System.Text.Json.JsonSerializer.SerializeToElement(4),
                 ["cols"] = System.Text.Json.JsonSerializer.SerializeToElement(4),
             },
@@ -2089,7 +2160,7 @@
             Position = new KvizPosition { X = 60, Y = 580 },
             Config = new()
             {
-                ["mode"] = System.Text.Json.JsonSerializer.SerializeToElement("freq"),
+                ["mode"] = System.Text.Json.JsonSerializer.SerializeToElement("signal"),
             },
             Bindings = new(),
         });
@@ -2626,6 +2697,28 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+        {
+            // Per-user source of truth for Advanced mode. localStorage is
+            // read here (not in OnInitializedAsync) because JS interop isn't
+            // available during prerender. Falls back to the SQLite seed when
+            // the key was never written in this browser.
+            try
+            {
+                var ls = await JS.InvokeAsync<string?>("localStorage.getItem", "kmila-advanced-mode");
+                if (!string.IsNullOrEmpty(ls))
+                {
+                    var adv = string.Equals(ls, "true", StringComparison.OrdinalIgnoreCase);
+                    if (adv != _advancedMode)
+                    {
+                        _advancedMode = adv;
+                        StateHasChanged();
+                    }
+                }
+            }
+            catch { /* JS not ready — keep the SQLite seed */ }
+        }
+
         if (!_panZoomAttached)
         {
             try
