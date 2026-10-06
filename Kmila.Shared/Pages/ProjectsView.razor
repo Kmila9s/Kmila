@@ -511,6 +511,9 @@ entity demo_board is
     -- Outputs (read by visual widgets on the Visual tab)
     heartbeat : out STD_LOGIC;
     count     : out STD_LOGIC_VECTOR(3 downto 0);
+    -- Raw 7-segment bus for the hex value of `count` (bit 6 = a ... bit 0 = g,
+    -- common anode: a segment lights when its bit is '0').
+    segments  : out STD_LOGIC_VECTOR(6 downto 0);
     btn_echo  : out STD_LOGIC;
 
     -- Stepper Gray-coded phase outputs (4 pins, drive the Stepper widget)
@@ -553,6 +556,30 @@ begin
   count     <= std_logic_vector(cnt_q);
   btn_echo  <= nudge;
 
+  -- Raw hex 7-segment decoder for the 4-bit counter (0-F). Common anode, so a
+  -- '0' bit lights the segment. Order a b c d e f g (bit 6 = a ... bit 0 = g).
+  process(cnt_q)
+  begin
+    case to_integer(cnt_q) is
+      when 0  => segments <= ""0000001"";
+      when 1  => segments <= ""1001111"";
+      when 2  => segments <= ""0010010"";
+      when 3  => segments <= ""0000110"";
+      when 4  => segments <= ""1001100"";
+      when 5  => segments <= ""0100100"";
+      when 6  => segments <= ""0100000"";
+      when 7  => segments <= ""0001111"";
+      when 8  => segments <= ""0000000"";
+      when 9  => segments <= ""0000100"";
+      when 10 => segments <= ""0001000"";  -- A
+      when 11 => segments <= ""1100000"";  -- b
+      when 12 => segments <= ""0110001"";  -- C
+      when 13 => segments <= ""1000010"";  -- d
+      when 14 => segments <= ""0110000"";  -- E
+      when others => segments <= ""0111000"";  -- F
+    end case;
+  end process;
+
   -- 4-bit Gray-code stepper decoder. The 8 patterns match the Stepper
   -- widget's internal table exactly so the rotor advances one full step
   -- per clk rising edge (when RUN is on).
@@ -592,7 +619,8 @@ end architecture behavioral;
 
     { ""id"": ""led-hb"",    ""type"": ""led"",       ""position"": { ""x"": 60,  ""y"": 260 }, ""config"": { ""color"": ""red"" },                                          ""bindings"": { ""anode"":  ""heartbeat"" } },
     { ""id"": ""arr-count"", ""type"": ""led-array"", ""position"": { ""x"": 180, ""y"": 260 }, ""config"": { ""length"": 4, ""color"": ""yellow"", ""orientation"": ""h"" }, ""bindings"": { ""anodes"": ""count"" } },
-    { ""id"": ""7seg-count"",""type"": ""seven-seg"", ""position"": { ""x"": 420, ""y"": 240 }, ""config"": { ""mode"": ""hex"", ""color"": ""red"" },                         ""bindings"": { ""value"":  ""count"" } },
+    { ""id"": ""7seg-count"",""type"": ""seven-seg"", ""position"": { ""x"": 420, ""y"": 240 }, ""config"": { ""mode"": ""raw"", ""polarity"": ""anode"", ""color"": ""red"" },
+      ""bindings"": { ""a"": ""segments[6]"", ""b"": ""segments[5]"", ""c"": ""segments[4]"", ""d"": ""segments[3]"", ""e"": ""segments[2]"", ""f"": ""segments[1]"", ""g"": ""segments[0]"" } },
     { ""id"": ""led-btn"",   ""type"": ""led"",       ""position"": { ""x"": 540, ""y"": 260 }, ""config"": { ""color"": ""green"" },                                        ""bindings"": { ""anode"":  ""btn_echo"" } },
 
     { ""id"": ""step-1"", ""type"": ""stepper"", ""position"": { ""x"": 720, ""y"": 240 }, ""config"": { ""stepsPerRev"": 200, ""direction"": ""auto"" },
@@ -609,30 +637,42 @@ end architecture behavioral;
     /// rollover.
     /// </summary>
     private const string COUNTER_CLOCK_VHD =
-@"-- Kmila example: 2-digit decimal counter (00 → 99 → 00 + overflow pulse).
--- Showcases: two 7-segment displays in decoded-decimal mode + an
--- overflow LED on rollover. Try setting a breakpoint on the rollover
--- branch to watch the FSM transition step by step.
+@"-- Kmila example: 2-digit decimal counter (00 -> 99 -> 00 + overflow pulse).
+--
+-- Pure VHDL, raw 7-segment wiring (no assisted decoding). The design drives
+-- the real segment lines a..g of two common-anode displays itself, exactly
+-- like a counter you would synthesise onto an FPGA. Three building blocks:
+--   1. A BCD counter: `units` 0-9, carrying into `tens` 0-9, with an overflow
+--      pulse on the 99 -> 00 rollover. Advances one step per `tick`.
+--   2. Two 7-segment decoders: each turns a 0-9 digit into the 7 segment
+--      bits. Common anode => a segment lights when its bit is '0'.
+--   3. Output wiring: the decoded patterns leave on `units_seg` / `tens_seg`.
+--
+-- Try a breakpoint on the `t_q <= t_q + 1` line to watch the carry in
+-- step-replay, or open the Visual tab and hold TICK to see the digits run.
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 use IEEE.NUMERIC_STD.ALL;
 
 entity counter_clock is
   port (
-    clk      : in  STD_LOGIC;
-    reset    : in  STD_LOGIC;
-    tick     : in  STD_LOGIC;
-    units    : out STD_LOGIC_VECTOR(3 downto 0);
-    tens     : out STD_LOGIC_VECTOR(3 downto 0);
-    overflow : out STD_LOGIC
+    clk       : in  STD_LOGIC;
+    reset     : in  STD_LOGIC;
+    tick      : in  STD_LOGIC;
+    -- Raw segment buses: bit 6 = a, bit 5 = b, ... bit 0 = g (common anode).
+    units_seg : out STD_LOGIC_VECTOR(6 downto 0);
+    tens_seg  : out STD_LOGIC_VECTOR(6 downto 0);
+    overflow  : out STD_LOGIC
   );
 end entity counter_clock;
 
 architecture behavioral of counter_clock is
-  signal u_q  : unsigned(3 downto 0) := (others => '0');
-  signal t_q  : unsigned(3 downto 0) := (others => '0');
+  signal u_q  : unsigned(3 downto 0) := (others => '0');  -- units digit (0-9)
+  signal t_q  : unsigned(3 downto 0) := (others => '0');  -- tens  digit (0-9)
   signal ov_q : STD_LOGIC := '0';
 begin
+  -- The BCD counter. One increment per `tick`; overflow pulses for a single
+  -- clock when the display rolls 99 -> 00.
   process(clk, reset)
   begin
     if reset = '1' then
@@ -657,8 +697,43 @@ begin
     end if;
   end process;
 
-  units    <= std_logic_vector(u_q);
-  tens     <= std_logic_vector(t_q);
+  -- Units 7-segment decoder. Common anode: a segment lights when its bit is
+  -- '0'. Bit order a b c d e f g (bit 6 = a ... bit 0 = g).
+  process(u_q)
+  begin
+    case to_integer(u_q) is
+      when 0 => units_seg <= ""0000001"";
+      when 1 => units_seg <= ""1001111"";
+      when 2 => units_seg <= ""0010010"";
+      when 3 => units_seg <= ""0000110"";
+      when 4 => units_seg <= ""1001100"";
+      when 5 => units_seg <= ""0100100"";
+      when 6 => units_seg <= ""0100000"";
+      when 7 => units_seg <= ""0001111"";
+      when 8 => units_seg <= ""0000000"";
+      when 9 => units_seg <= ""0000100"";
+      when others => units_seg <= ""1111111"";
+    end case;
+  end process;
+
+  -- Tens 7-segment decoder (identical table, separate display).
+  process(t_q)
+  begin
+    case to_integer(t_q) is
+      when 0 => tens_seg <= ""0000001"";
+      when 1 => tens_seg <= ""1001111"";
+      when 2 => tens_seg <= ""0010010"";
+      when 3 => tens_seg <= ""0000110"";
+      when 4 => tens_seg <= ""1001100"";
+      when 5 => tens_seg <= ""0100100"";
+      when 6 => tens_seg <= ""0100000"";
+      when 7 => tens_seg <= ""0001111"";
+      when 8 => tens_seg <= ""0000000"";
+      when 9 => tens_seg <= ""0000100"";
+      when others => tens_seg <= ""1111111"";
+    end case;
+  end process;
+
   overflow <= ov_q;
 end architecture behavioral;
 ";
@@ -671,9 +746,11 @@ end architecture behavioral;
   ""components"": [
     { ""id"": ""btn-reset"", ""type"": ""button"", ""position"": { ""x"": 60,  ""y"": 60 }, ""config"": { ""label"": ""RESET"" },                                ""bindings"": { ""out"": ""reset"" } },
     { ""id"": ""sw-tick"",   ""type"": ""switch"", ""position"": { ""x"": 220, ""y"": 60 }, ""config"": { ""label"": ""TICK"", ""defaultState"": ""1"" },         ""bindings"": { ""out"": ""tick"" } },
-    { ""id"": ""7seg-tens"", ""type"": ""seven-seg"", ""position"": { ""x"": 80,  ""y"": 240 }, ""config"": { ""mode"": ""dec"", ""color"": ""green"" }, ""bindings"": { ""value"": ""tens"" } },
-    { ""id"": ""7seg-unit"", ""type"": ""seven-seg"", ""position"": { ""x"": 200, ""y"": 240 }, ""config"": { ""mode"": ""dec"", ""color"": ""green"" }, ""bindings"": { ""value"": ""units"" } },
-    { ""id"": ""led-ov"",    ""type"": ""led"",       ""position"": { ""x"": 380, ""y"": 260 }, ""config"": { ""color"": ""red"" },                       ""bindings"": { ""anode"": ""overflow"" } }
+    { ""id"": ""7seg-tens"", ""type"": ""seven-seg"", ""position"": { ""x"": 80,  ""y"": 240 }, ""config"": { ""mode"": ""raw"", ""polarity"": ""anode"", ""color"": ""green"" },
+      ""bindings"": { ""a"": ""tens_seg[6]"", ""b"": ""tens_seg[5]"", ""c"": ""tens_seg[4]"", ""d"": ""tens_seg[3]"", ""e"": ""tens_seg[2]"", ""f"": ""tens_seg[1]"", ""g"": ""tens_seg[0]"" } },
+    { ""id"": ""7seg-unit"", ""type"": ""seven-seg"", ""position"": { ""x"": 220, ""y"": 240 }, ""config"": { ""mode"": ""raw"", ""polarity"": ""anode"", ""color"": ""green"" },
+      ""bindings"": { ""a"": ""units_seg[6]"", ""b"": ""units_seg[5]"", ""c"": ""units_seg[4]"", ""d"": ""units_seg[3]"", ""e"": ""units_seg[2]"", ""f"": ""units_seg[1]"", ""g"": ""units_seg[0]"" } },
+    { ""id"": ""led-ov"",    ""type"": ""led"",       ""position"": { ""x"": 400, ""y"": 260 }, ""config"": { ""color"": ""red"" },                       ""bindings"": { ""anode"": ""overflow"" } }
   ],
   ""settings"": { ""ringBufferTicks"": 2000, ""defaultSpeed"": ""Normal"" }
 }
@@ -834,20 +911,32 @@ end architecture behavioral;
     /// without any bit-slice binding — the port width is the DIP count.
     /// </summary>
     private const string DIP_ADDER_VHD =
-@"library IEEE;
+@"-- Kmila example: 4-bit DIP adder (two switch banks -> 5-bit sum).
+--
+-- Pure combinational VHDL, raw per-switch wiring. Each DIP switch drives one
+-- real input bit (a[0..3] / b[0..3] in the .kviz), just like wiring eight
+-- toggle switches to FPGA pins. There is no clock: the sum follows the inputs
+-- immediately.
+--
+-- How the add works: `a` and `b` are 4-bit buses. They are read as unsigned,
+-- resized to 5 bits so the result has room for the carry-out, then added. The
+-- 5-bit `sum` therefore holds 0..30, where bit 4 is the carry of a 4-bit add.
+library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 use IEEE.NUMERIC_STD.ALL;
 
 entity dip_adder is
     port(
-        a   : in  std_logic_vector(3 downto 0);
-        b   : in  std_logic_vector(3 downto 0);
-        sum : out std_logic_vector(4 downto 0)
+        a   : in  std_logic_vector(3 downto 0);  -- DIP bank A (switches a0..a3)
+        b   : in  std_logic_vector(3 downto 0);  -- DIP bank B (switches b0..b3)
+        sum : out std_logic_vector(4 downto 0)   -- a + b, bit 4 = carry-out
     );
 end dip_adder;
 
 architecture rtl of dip_adder is
 begin
+    -- resize(...,5) widens each operand to 5 bits so the add can't overflow;
+    -- the extra top bit becomes the carry-out.
     sum <= std_logic_vector(resize(unsigned(a), 5) + resize(unsigned(b), 5));
 end rtl;
 ";
@@ -858,8 +947,10 @@ end rtl;
   ""designFile"": ""main.vhd"",
   ""canvas"": { ""width"": 1200, ""height"": 650, ""background"": ""grid"" },
   ""components"": [
-    { ""id"": ""dip-a"",   ""type"": ""multi-switch"", ""position"": { ""x"": 60,  ""y"": 80  }, ""config"": { ""mode"": ""vector"", ""count"": 4, ""bounce"": false }, ""bindings"": { ""value"": ""a"" } },
-    { ""id"": ""dip-b"",   ""type"": ""multi-switch"", ""position"": { ""x"": 60,  ""y"": 220 }, ""config"": { ""mode"": ""vector"", ""count"": 4, ""bounce"": false }, ""bindings"": { ""value"": ""b"" } },
+    { ""id"": ""dip-a"",   ""type"": ""multi-switch"", ""position"": { ""x"": 60,  ""y"": 80  }, ""config"": { ""mode"": ""per-bit"", ""count"": 4 },
+      ""bindings"": { ""out0"": ""a[0]"", ""out1"": ""a[1]"", ""out2"": ""a[2]"", ""out3"": ""a[3]"" } },
+    { ""id"": ""dip-b"",   ""type"": ""multi-switch"", ""position"": { ""x"": 60,  ""y"": 220 }, ""config"": { ""mode"": ""per-bit"", ""count"": 4 },
+      ""bindings"": { ""out0"": ""b[0]"", ""out1"": ""b[1]"", ""out2"": ""b[2]"", ""out3"": ""b[3]"" } },
     { ""id"": ""sum-arr"", ""type"": ""led-array"",    ""position"": { ""x"": 320, ""y"": 140 }, ""config"": { ""length"": 5, ""color"": ""yellow"", ""orientation"": ""h"" }, ""bindings"": { ""anodes"": ""sum"" } }
   ],
   ""settings"": { ""ringBufferTicks"": 2000, ""defaultSpeed"": ""Normal"" }
@@ -1185,15 +1276,20 @@ end rtl;
 
     private static readonly List<ExampleDef> _examples = new()
     {
-        new ExampleDef("demo",       "EXAMPLE_DEMO_NAME",       "EXAMPLE_DEMO_DESC",       SAMPLE_MAIN_VHD,     SAMPLE_MAIN_KVIZ),
+        new ExampleDef("demo",       "EXAMPLE_DEMO_NAME",       "EXAMPLE_DEMO_DESC",       SAMPLE_MAIN_VHD,     SAMPLE_MAIN_KVIZ,
+            ExtraFiles: DemoBoardExtraFiles),
         new ExampleDef("contador-9", "EXAMPLE_CONTADOR9_NAME",  "EXAMPLE_CONTADOR9_DESC",  CONTADOR9_VHD,       CONTADOR9_KVIZ,
             MainFileName: "contador_9.vhd", ExtraFiles: Contador9ExtraFiles),
         new ExampleDef("contador-9999","EXAMPLE_CONTADOR9999_NAME","EXAMPLE_CONTADOR9999_DESC",CONTADOR9999_VHD, CONTADOR9999_KVIZ,
             MainFileName: "contador_9999.vhd", ExtraFiles: Contador9999ExtraFiles),
-        new ExampleDef("counter",    "EXAMPLE_COUNTER_NAME",    "EXAMPLE_COUNTER_DESC",    COUNTER_CLOCK_VHD,   COUNTER_CLOCK_KVIZ),
-        new ExampleDef("traffic",    "EXAMPLE_TRAFFIC_NAME",    "EXAMPLE_TRAFFIC_DESC",    TRAFFIC_LIGHT_VHD,   TRAFFIC_LIGHT_KVIZ),
-        new ExampleDef("shift",      "EXAMPLE_SHIFT_NAME",      "EXAMPLE_SHIFT_DESC",      SHIFT_REGISTER_VHD,  SHIFT_REGISTER_KVIZ),
-        new ExampleDef("dip-adder",  "EXAMPLE_DIP_ADDER_NAME",  "EXAMPLE_DIP_ADDER_DESC",  DIP_ADDER_VHD,       DIP_ADDER_KVIZ),
+        new ExampleDef("counter",    "EXAMPLE_COUNTER_NAME",    "EXAMPLE_COUNTER_DESC",    COUNTER_CLOCK_VHD,   COUNTER_CLOCK_KVIZ,
+            ExtraFiles: CounterClockExtraFiles),
+        new ExampleDef("traffic",    "EXAMPLE_TRAFFIC_NAME",    "EXAMPLE_TRAFFIC_DESC",    TRAFFIC_LIGHT_VHD,   TRAFFIC_LIGHT_KVIZ,
+            ExtraFiles: TrafficLightExtraFiles),
+        new ExampleDef("shift",      "EXAMPLE_SHIFT_NAME",      "EXAMPLE_SHIFT_DESC",      SHIFT_REGISTER_VHD,  SHIFT_REGISTER_KVIZ,
+            ExtraFiles: ShiftRegisterExtraFiles),
+        new ExampleDef("dip-adder",  "EXAMPLE_DIP_ADDER_NAME",  "EXAMPLE_DIP_ADDER_DESC",  DIP_ADDER_VHD,       DIP_ADDER_KVIZ,
+            ExtraFiles: DipAdderExtraFiles),
         new ExampleDef("matrix-plus","EXAMPLE_MATRIX_NAME",     "EXAMPLE_MATRIX_DESC",     MATRIX_PLUS_VHD,     MATRIX_PLUS_KVIZ),
         new ExampleDef("rgb-rainbow","EXAMPLE_RGB_NAME",        "EXAMPLE_RGB_DESC",        RGB_RAINBOW_VHD,     RGB_RAINBOW_KVIZ),
         new ExampleDef("buzzer-scale","EXAMPLE_BUZZER_NAME",    "EXAMPLE_BUZZER_DESC",     BUZZER_SCALE_VHD,    BUZZER_SCALE_KVIZ),
