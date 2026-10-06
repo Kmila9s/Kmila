@@ -1217,34 +1217,177 @@ end rtl;
     /// the last digit on the display.
     /// </summary>
     private const string KEYPAD_DISPLAY_VHD =
-@"library IEEE;
+@"-- Kmila example: 4x4 matrix keypad scanner -> hex 7-segment (raw wiring).
+--
+-- Pure VHDL. Instead of an assisted 'key + pressed' widget, the design does the
+-- real work a keypad needs on an FPGA:
+--   1. Row driver: drives the four row lines `rows` one-hot LOW, one row at a
+--      time, stepping on an internal scan tick.
+--   2. Column sense: reads the four `cols` lines (active LOW). A grounded column
+--      while a given row is low means the key at that (row, col) is pressed.
+--   3. Debounce: a key must be seen stable for DEBOUNCE_TICKS scan cycles before
+--      it registers, and an idle window must elapse before the same key can
+--      register again (so a held key doesn't repeat).
+--   4. Decode + display: the pressed position maps to its key value (0-9, A-D,
+--      and F/E as placeholders for * / #), shown on a raw a..g 7-segment.
+--
+-- Physical layout (row-major positions 0..15):
+--   Row 0: 1 2 3 A    Row 1: 4 5 6 B    Row 2: 7 8 9 C    Row 3: * 0 # D
+--
+-- Scan tick + debounce counts are sim-scaled so a press registers within a
+-- short run. On a real board the scan tick would be ~1 kHz.
+library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
 
 entity keypad_display is
     port(
-        clk     : in  std_logic;
-        reset   : in  std_logic;
-        key     : in  std_logic_vector(3 downto 0);
-        pressed : in  std_logic;
-        display : out std_logic_vector(3 downto 0)
+        clk      : in  std_logic;
+        reset    : in  std_logic;
+        cols     : in  std_logic_vector(3 downto 0);   -- active-low column read-back
+        rows     : out std_logic_vector(3 downto 0);   -- one-hot low row drive
+        segments : out std_logic_vector(6 downto 0)    -- raw a..g, common anode
     );
 end keypad_display;
 
 architecture rtl of keypad_display is
-    signal reg : std_logic_vector(3 downto 0) := ""0000"";
+    constant SCAN_DIV       : integer := 3;   -- clocks between scan ticks (sim-scaled)
+    constant DEBOUNCE_TICKS : integer := 3;   -- stable sightings before a key registers
+    constant IDLE_RELEASE   : integer := 12;  -- idle ticks before the same key repeats
+
+    -- Position -> displayed hex nibble (matches the physical layout above).
+    -- * -> F and # -> E are placeholders (no hex digit of their own).
+    type lut_t is array(0 to 15) of std_logic_vector(3 downto 0);
+    constant KEY_LUT : lut_t := (
+        0  => ""0001"", 1  => ""0010"", 2  => ""0011"", 3  => ""1010"",  -- 1 2 3 A
+        4  => ""0100"", 5  => ""0101"", 6  => ""0110"", 7  => ""1011"",  -- 4 5 6 B
+        8  => ""0111"", 9  => ""1000"", 10 => ""1001"", 11 => ""1100"",  -- 7 8 9 C
+        12 => ""1111"", 13 => ""0000"", 14 => ""1110"", 15 => ""1101""   -- * 0 # D
+    );
+
+    signal div_cnt   : integer range 0 to SCAN_DIV := 0;
+    signal scan_tick : std_logic := '0';
+
+    signal row_idx    : integer range 0 to 3 := 0;
+    signal rows_int   : std_logic_vector(3 downto 0) := ""1111"";
+    signal last_pos   : integer range 0 to 16 := 16;   -- 16 = no key
+    signal stable_cnt : integer range 0 to 15 := 0;
+    signal idle_cnt   : integer range 0 to 31 := 0;
+    signal prev_code  : integer range 0 to 16 := 16;
+    signal code_r     : std_logic_vector(3 downto 0) := ""0000"";
 begin
+    -- Row driver: active row is driven low, the rest high.
+    process(row_idx)
+    begin
+        rows_int <= ""1111"";
+        rows_int(row_idx) <= '0';
+    end process;
+    rows <= rows_int;
+
+    -- Scan-tick divider.
     process(clk, reset)
     begin
         if reset = '1' then
-            reg <= ""0000"";
+            div_cnt   <= 0;
+            scan_tick <= '0';
         elsif rising_edge(clk) then
-            if pressed = '1' then
-                reg <= key;
+            if div_cnt >= SCAN_DIV - 1 then
+                div_cnt   <= 0;
+                scan_tick <= '1';
+            else
+                div_cnt   <= div_cnt + 1;
+                scan_tick <= '0';
             end if;
         end if;
     end process;
 
-    display <= reg;
+    -- Scan + debounce. Only one column low (one key on the active row) counts.
+    process(clk, reset)
+        variable one_low : integer range 0 to 4;
+        variable col_idx : integer range 0 to 3;
+        variable sensed  : integer range 0 to 16;
+    begin
+        if reset = '1' then
+            row_idx    <= 0;
+            last_pos   <= 16;
+            stable_cnt <= 0;
+            idle_cnt   <= 0;
+            prev_code  <= 16;
+            code_r     <= ""0000"";
+        elsif rising_edge(clk) then
+            if scan_tick = '1' then
+                one_low := 0;
+                col_idx := 0;
+                for i in 0 to 3 loop
+                    if cols(i) = '0' then
+                        one_low := one_low + 1;
+                        col_idx := i;
+                    end if;
+                end loop;
+
+                if one_low = 1 then
+                    sensed := row_idx * 4 + col_idx;
+                else
+                    sensed := 16;
+                end if;
+
+                if sensed /= 16 then
+                    idle_cnt <= 0;
+                    if sensed = last_pos then
+                        if stable_cnt < DEBOUNCE_TICKS then
+                            stable_cnt <= stable_cnt + 1;
+                        end if;
+                        if stable_cnt = DEBOUNCE_TICKS - 1 then
+                            if sensed /= prev_code then
+                                code_r    <= KEY_LUT(sensed);
+                                prev_code <= sensed;
+                            end if;
+                        end if;
+                    else
+                        stable_cnt <= 0;
+                        last_pos   <= sensed;
+                    end if;
+                else
+                    if idle_cnt < IDLE_RELEASE then
+                        idle_cnt <= idle_cnt + 1;
+                    else
+                        prev_code  <= 16;
+                        last_pos   <= 16;
+                        stable_cnt <= 0;
+                    end if;
+                end if;
+
+                if row_idx = 3 then
+                    row_idx <= 0;
+                else
+                    row_idx <= row_idx + 1;
+                end if;
+            end if;
+        end if;
+    end process;
+
+    -- Raw hex 7-segment decoder for the latched key code (common anode).
+    process(code_r)
+    begin
+        case to_integer(unsigned(code_r)) is
+            when 0  => segments <= ""0000001"";
+            when 1  => segments <= ""1001111"";
+            when 2  => segments <= ""0010010"";
+            when 3  => segments <= ""0000110"";
+            when 4  => segments <= ""1001100"";
+            when 5  => segments <= ""0100100"";
+            when 6  => segments <= ""0100000"";
+            when 7  => segments <= ""0001111"";
+            when 8  => segments <= ""0000000"";
+            when 9  => segments <= ""0000100"";
+            when 10 => segments <= ""0001000"";  -- A
+            when 11 => segments <= ""1100000"";  -- b
+            when 12 => segments <= ""0110001"";  -- C
+            when 13 => segments <= ""1000010"";  -- d
+            when 14 => segments <= ""0110000"";  -- E
+            when others => segments <= ""0111000"";  -- F
+        end case;
+    end process;
 end rtl;
 ";
 
@@ -1255,8 +1398,12 @@ end rtl;
   ""canvas"": { ""width"": 1000, ""height"": 550, ""background"": ""grid"" },
   ""components"": [
     { ""id"": ""btn-reset"", ""type"": ""button"",       ""position"": { ""x"": 60,  ""y"": 60  }, ""config"": { ""label"": ""RESET"" }, ""bindings"": { ""out"": ""reset"" } },
-    { ""id"": ""kpd-1"",     ""type"": ""keypad-matrix"", ""position"": { ""x"": 60,  ""y"": 180 }, ""config"": { ""mode"": ""decoded"", ""rows"": 4, ""cols"": 4 }, ""bindings"": { ""key"": ""key"", ""pressed"": ""pressed"" } },
-    { ""id"": ""7seg-1"",    ""type"": ""seven-seg"",    ""position"": { ""x"": 340, ""y"": 200 }, ""config"": { ""mode"": ""hex"", ""color"": ""red"" }, ""bindings"": { ""value"": ""display"" } }
+    { ""id"": ""kpd-1"",     ""type"": ""keypad-matrix"", ""position"": { ""x"": 60,  ""y"": 180 }, ""config"": { ""mode"": ""raw-scan"", ""rows"": 4, ""cols"": 4 },
+      ""bindings"": {
+        ""row0"": ""rows[0]"", ""row1"": ""rows[1]"", ""row2"": ""rows[2]"", ""row3"": ""rows[3]"",
+        ""col0"": ""cols[0]"", ""col1"": ""cols[1]"", ""col2"": ""cols[2]"", ""col3"": ""cols[3]"" } },
+    { ""id"": ""7seg-1"",    ""type"": ""seven-seg"",    ""position"": { ""x"": 420, ""y"": 200 }, ""config"": { ""mode"": ""raw"", ""polarity"": ""anode"", ""color"": ""red"" },
+      ""bindings"": { ""a"": ""segments[6]"", ""b"": ""segments[5]"", ""c"": ""segments[4]"", ""d"": ""segments[3]"", ""e"": ""segments[2]"", ""f"": ""segments[1]"", ""g"": ""segments[0]"" } }
   ],
   ""settings"": { ""ringBufferTicks"": 2000, ""defaultSpeed"": ""Normal"" }
 }
@@ -1269,39 +1416,109 @@ end rtl;
     /// banner scrolls across the top line of a 16×2 assisted LCD.
     /// </summary>
     private const string LCD_HELLO_VHD =
-@"library IEEE;
+@"-- Kmila example: HD44780 LCD banner over the real 4-bit bus (raw wiring).
+--
+-- Pure VHDL. Instead of handing the LCD widget ready-made text, the design
+-- speaks the actual HD44780 4-bit parallel protocol a real display needs:
+--   • A command/data ROM holds the bytes to send: a Clear-Display command
+--     (0x01) followed by the ASCII codes for ""HELLO KMILA"".
+--   • A sequencer writes each byte as the HD44780 expects in 4-bit mode: the
+--     HIGH nibble on DB7..DB4 latched by a rising edge on E, then the LOW
+--     nibble latched by a second E pulse (exactly two E pulses per byte).
+--   • RS selects command (0) vs data (1); RW is tied low (write only).
+--
+-- E-pulse width and the inter-step divider are sim-scaled so the whole banner
+-- is written within a short run. Watch RS / E / DB in the Waveform viewer, or
+-- open the Visual tab to see ""HELLO KMILA"" appear on the LCD.
+library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 
-entity hello_scroll is
+entity lcd_banner is
     port(
-        clk     : in  std_logic;
-        reset   : in  std_logic;
-        step_en : in  std_logic;
-        line0   : out std_logic_vector(127 downto 0)
+        clk    : in  std_logic;
+        reset  : in  std_logic;
+        lcd_rs : out std_logic;                      -- 0 = command, 1 = data
+        lcd_rw : out std_logic;                      -- tied low (write)
+        lcd_e  : out std_logic;                      -- enable strobe
+        lcd_db : out std_logic_vector(7 downto 4)    -- 4-bit data bus
     );
-end hello_scroll;
+end lcd_banner;
 
-architecture rtl of hello_scroll is
-    -- ""HELLO KMILA     "" — 16 chars × 8 bits, MSB-first (bit 127 = H).
-    -- Encoded as one 128-bit literal so the interpreter doesn't have to
-    -- unroll a long concat chain at parse time.
-    signal reg : std_logic_vector(127 downto 0) :=
-        ""01001000010001010100110001001100010011110010000001001011010011010100100101001100010000010010000000100000001000000010000000100000"";
+architecture rtl of lcd_banner is
+    constant STEP_CLKS : integer := 2;   -- clocks each micro-step is held (sim-scaled)
+
+    -- Bytes to transmit (MSB-first binary, 8 bits each).
+    type rom_t is array(0 to 11) of std_logic_vector(7 downto 0);
+    constant DATA_ROM : rom_t := (
+        0  => ""00000001"",   -- 0x01 Clear display (command)
+        1  => ""01001000"",   -- 'H'
+        2  => ""01000101"",   -- 'E'
+        3  => ""01001100"",   -- 'L'
+        4  => ""01001100"",   -- 'L'
+        5  => ""01001111"",   -- 'O'
+        6  => ""00100000"",   -- ' '
+        7  => ""01001011"",   -- 'K'
+        8  => ""01001101"",   -- 'M'
+        9  => ""01001001"",   -- 'I'
+        10 => ""01001100"",   -- 'L'
+        11 => ""01000001""    -- 'A'
+    );
+    -- RS per entry: entry 0 is a command (0), the rest are data (1).
+    constant RS_ROM : std_logic_vector(0 to 11) := ""011111111111"";
+
+    signal byte_idx : integer range 0 to 12 := 0;  -- 12 = finished
+    signal phase    : integer range 0 to 3 := 0;   -- micro-step within a byte
+    signal div_cnt  : integer range 0 to STEP_CLKS := 0;
+    signal rs_r     : std_logic := '0';
+    signal e_r      : std_logic := '0';
+    signal db_r     : std_logic_vector(7 downto 4) := ""0000"";
 begin
     process(clk, reset)
+        variable b : std_logic_vector(7 downto 0);
     begin
         if reset = '1' then
-            reg <= ""01001000010001010100110001001100010011110010000001001011010011010100100101001100010000010010000000100000001000000010000000100000"";
+            byte_idx <= 0;
+            phase    <= 0;
+            div_cnt  <= 0;
+            rs_r     <= '0';
+            e_r      <= '0';
+            db_r     <= ""0000"";
         elsif rising_edge(clk) then
-            if step_en = '1' then
-                -- Rotate left by 8 bits — move the leftmost character to
-                -- the tail so the banner appears to scroll left.
-                reg <= reg(119 downto 0) & reg(127 downto 120);
+            if byte_idx < 12 then
+                if div_cnt < STEP_CLKS - 1 then
+                    div_cnt <= div_cnt + 1;
+                else
+                    div_cnt <= 0;
+                    b := DATA_ROM(byte_idx);
+                    case phase is
+                        when 0 =>                 -- setup HIGH nibble, E low
+                            rs_r <= RS_ROM(byte_idx);
+                            db_r <= b(7 downto 4);
+                            e_r  <= '0';
+                            phase <= 1;
+                        when 1 =>                 -- E rising -> latch high nibble
+                            e_r  <= '1';
+                            phase <= 2;
+                        when 2 =>                 -- setup LOW nibble, E low
+                            e_r  <= '0';
+                            db_r <= b(3 downto 0);
+                            phase <= 3;
+                        when others =>            -- E rising -> latch low nibble
+                            e_r  <= '1';
+                            phase <= 0;
+                            byte_idx <= byte_idx + 1;
+                    end case;
+                end if;
+            else
+                e_r <= '0';   -- banner written; hold the bus idle
             end if;
         end if;
     end process;
 
-    line0 <= reg;
+    lcd_rs <= rs_r;
+    lcd_rw <= '0';
+    lcd_e  <= e_r;
+    lcd_db <= db_r;
 end rtl;
 ";
 
@@ -1312,8 +1529,8 @@ end rtl;
   ""canvas"": { ""width"": 900, ""height"": 500, ""background"": ""grid"" },
   ""components"": [
     { ""id"": ""btn-reset"", ""type"": ""button"", ""position"": { ""x"": 60,  ""y"": 60 }, ""config"": { ""label"": ""RESET"" }, ""bindings"": { ""out"": ""reset"" } },
-    { ""id"": ""sw-step"",   ""type"": ""switch"", ""position"": { ""x"": 220, ""y"": 60 }, ""config"": { ""label"": ""STEP"", ""defaultState"": ""1"" }, ""bindings"": { ""out"": ""step_en"" } },
-    { ""id"": ""lcd-1"",     ""type"": ""lcd-hd44780"", ""position"": { ""x"": 60,  ""y"": 200 }, ""config"": { ""mode"": ""text"", ""rows"": 2, ""cols"": 16 }, ""bindings"": { ""line0"": ""line0"" } }
+    { ""id"": ""lcd-1"",     ""type"": ""lcd-hd44780"", ""position"": { ""x"": 60,  ""y"": 200 }, ""config"": { ""mode"": ""raw-4bit"", ""rows"": 2, ""cols"": 16 },
+      ""bindings"": { ""RS"": ""lcd_rs"", ""RW"": ""lcd_rw"", ""E"": ""lcd_e"", ""DB4"": ""lcd_db[4]"", ""DB5"": ""lcd_db[5]"", ""DB6"": ""lcd_db[6]"", ""DB7"": ""lcd_db[7]"" } }
   ],
   ""settings"": { ""ringBufferTicks"": 2000, ""defaultSpeed"": ""Normal"" }
 }
@@ -1361,8 +1578,10 @@ end rtl;
             ExtraFiles: RgbRainbowExtraFiles),
         new ExampleDef("buzzer-scale","EXAMPLE_BUZZER_NAME",    "EXAMPLE_BUZZER_DESC",     BUZZER_SCALE_VHD,    BUZZER_SCALE_KVIZ,
             ExtraFiles: BuzzerScaleExtraFiles),
-        new ExampleDef("keypad-display","EXAMPLE_KEYPAD_NAME",  "EXAMPLE_KEYPAD_DESC",     KEYPAD_DISPLAY_VHD,  KEYPAD_DISPLAY_KVIZ),
-        new ExampleDef("lcd-hello",   "EXAMPLE_LCD_NAME",       "EXAMPLE_LCD_DESC",        LCD_HELLO_VHD,       LCD_HELLO_KVIZ),
+        new ExampleDef("keypad-display","EXAMPLE_KEYPAD_NAME",  "EXAMPLE_KEYPAD_DESC",     KEYPAD_DISPLAY_VHD,  KEYPAD_DISPLAY_KVIZ,
+            ExtraFiles: KeypadDisplayExtraFiles),
+        new ExampleDef("lcd-hello",   "EXAMPLE_LCD_NAME",       "EXAMPLE_LCD_DESC",        LCD_HELLO_VHD,       LCD_HELLO_KVIZ,
+            ExtraFiles: LcdHelloExtraFiles),
         new ExampleDef(
             "capstone-calc",
             "EXAMPLE_CAPSTONE_NAME",

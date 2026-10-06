@@ -381,6 +381,94 @@ begin
 end architecture sim;
 """;
 
+    // ---------------- Keypad -> 7-segment (raw scan) ----------------
+    private const string KEYPAD_DISPLAY_TB =
+"""
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+
+-- Testbench for the raw keypad scanner. There is no widget to ground the
+-- columns, so the testbench emulates one held key: it grounds column 1 only
+-- while row 1 is being driven low, i.e. a steady press of key "5" (row 1,
+-- col 1). After a few scan cycles the design debounces it and the hex 7-segment
+-- shows 5. 20 ns clock, one reset pulse. Suggested run: ~3 us.
+entity keypad_display_tb is
+end keypad_display_tb;
+
+architecture sim of keypad_display_tb is
+    signal clk      : STD_LOGIC := '0';
+    signal reset    : STD_LOGIC := '0';
+    signal cols     : STD_LOGIC_VECTOR(3 downto 0) := "1111";
+    signal rows     : STD_LOGIC_VECTOR(3 downto 0);
+    signal segments : STD_LOGIC_VECTOR(6 downto 0);
+begin
+    dut : entity work.keypad_display
+        port map (clk => clk, reset => reset, cols => cols, rows => rows,
+                  segments => segments);
+
+    clk_gen : process
+    begin
+        clk <= '0'; wait for 10 ns;
+        clk <= '1'; wait for 10 ns;
+    end process;
+
+    -- Emulate the widget: ground col 1 only when row 1 is active (key "5").
+    cols <= "1101" when rows(1) = '0' else "1111";
+
+    stim : process
+    begin
+        reset <= '1';
+        wait for 45 ns;
+        reset <= '0';
+        wait for 3 us;
+        report "keypad_display: testbench finished";
+        wait;
+    end process;
+end architecture sim;
+""";
+
+    // ---------------- LCD HD44780 banner (raw 4-bit) ----------------
+    private const string LCD_HELLO_TB =
+"""
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+
+-- Testbench for the HD44780 banner. 20 ns clock, one reset pulse; the sequencer
+-- then free-runs and writes "HELLO KMILA" over the 4-bit bus. Watch RS / E / the
+-- DB4..DB7 nibbles toggle. Suggested run: ~3 us.
+entity lcd_banner_tb is
+end lcd_banner_tb;
+
+architecture sim of lcd_banner_tb is
+    signal clk    : STD_LOGIC := '0';
+    signal reset  : STD_LOGIC := '0';
+    signal lcd_rs : STD_LOGIC;
+    signal lcd_rw : STD_LOGIC;
+    signal lcd_e  : STD_LOGIC;
+    signal lcd_db : STD_LOGIC_VECTOR(7 downto 4);
+begin
+    dut : entity work.lcd_banner
+        port map (clk => clk, reset => reset, lcd_rs => lcd_rs, lcd_rw => lcd_rw,
+                  lcd_e => lcd_e, lcd_db => lcd_db);
+
+    clk_gen : process
+    begin
+        clk <= '0'; wait for 10 ns;
+        clk <= '1'; wait for 10 ns;
+    end process;
+
+    stim : process
+    begin
+        reset <= '1';
+        wait for 45 ns;
+        reset <= '0';
+        wait for 3 us;
+        report "lcd_banner: testbench finished";
+        wait;
+    end process;
+end architecture sim;
+""";
+
     // ExtraFiles loaders — each injects its testbench at the project root so
     // Workbench (Testbench) stimulus mode is pre-filled when the example opens.
     private static IEnumerable<(string FileName, string Content)> DemoBoardExtraFiles()
@@ -421,5 +509,15 @@ end architecture sim;
     private static IEnumerable<(string FileName, string Content)> RgbRainbowExtraFiles()
     {
         yield return ("rgb_rainbow_tb.vhd", RGB_RAINBOW_TB);
+    }
+
+    private static IEnumerable<(string FileName, string Content)> KeypadDisplayExtraFiles()
+    {
+        yield return ("keypad_display_tb.vhd", KEYPAD_DISPLAY_TB);
+    }
+
+    private static IEnumerable<(string FileName, string Content)> LcdHelloExtraFiles()
+    {
+        yield return ("lcd_banner_tb.vhd", LCD_HELLO_TB);
     }
 }
