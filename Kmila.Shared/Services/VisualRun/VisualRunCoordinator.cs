@@ -152,7 +152,9 @@ public sealed class VisualRunCoordinator : IDisposable
         var (name, slice) = SliceHelper.Parse(binding);
         if (string.IsNullOrEmpty(name)) return string.Empty;
         var full = LatestPortValue(name);
-        return SliceHelper.Extract(full, slice);
+        // Pass the port so declared to/downto + offset ranges resolve correctly.
+        _portsByName.TryGetValue(name, out var port);
+        return SliceHelper.Extract(full, slice, port);
     }
 
     /// <summary>
@@ -398,7 +400,8 @@ public sealed class VisualRunCoordinator : IDisposable
                 if (perSlice.Count == 0) continue;
                 if (!_portsByName.TryGetValue(portName, out var port)) continue;
                 int width = port.Size > 0 ? port.Size : 1;
-                string composed = SliceHelper.Compose(width, perSlice);
+                // Pass the port so declared to/downto + offset ranges compose correctly.
+                string composed = SliceHelper.Compose(width, perSlice, port);
                 Inputs.Set(portName, composed);
             }
         }

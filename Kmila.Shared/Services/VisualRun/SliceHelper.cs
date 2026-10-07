@@ -1,3 +1,5 @@
+using Parser.Models;
+
 namespace Kmila.Shared.Services.VisualRun;
 
 // Phase 3++ (2026-06-26): bit-slice support in widget bindings.
@@ -90,6 +92,25 @@ public static class SliceHelper
         return fullValue.Substring(startPos, endPos - startPos + 1);
     }
 
+    /// <summary>
+    /// Range-aware <see cref="Extract"/>. When <paramref name="port"/> carries a
+    /// declared range (e.g. <c>(0 to 3)</c> or <c>(7 downto 4)</c>), the slice
+    /// indices are mapped through the engine's own <see cref="Variable.SliceToSpan"/>
+    /// so the extracted bits honour to/downto and non-zero low bounds. Without a
+    /// declared range it delegates to the legacy downto-0 <see cref="Extract"/>,
+    /// so existing (bare-string) behaviour is unchanged.
+    /// </summary>
+    public static string Extract(string fullValue, BitSlice? slice, Variable? port)
+    {
+        if (slice is null || port is null || !port.HasDeclaredRange)
+            return Extract(fullValue, slice);
+        if (string.IsNullOrEmpty(fullValue)) return string.Empty;
+        int width = fullValue.Length;
+        var (startPos, w) = port.SliceToSpan(slice.Value.High, slice.Value.Low, width);
+        if (startPos < 0 || w <= 0 || startPos + w > width) return string.Empty;
+        return fullValue.Substring(startPos, w);
+    }
+
     /// <summary>Convenience: render a slice back to canonical "[H:L]" or "[N]" text.</summary>
     public static string Format(BitSlice slice)
         => slice.High == slice.Low ? $"[{slice.High}]" : $"[{slice.High}:{slice.Low}]";
@@ -129,6 +150,41 @@ public static class SliceHelper
                 int bit = slice.High - b;
                 if (bit < 0 || bit >= portWidth) continue;
                 int pos = portWidth - 1 - bit;
+                buf[pos] = norm[b];
+            }
+        }
+        return new string(buf);
+    }
+
+    /// <summary>
+    /// Range-aware <see cref="Compose"/>. When <paramref name="port"/> carries a
+    /// declared range, each slice bit is placed through the engine's
+    /// <see cref="Variable.IndexToOffset"/> so composition honours to/downto and
+    /// non-zero low bounds. Without a declared range it delegates to the legacy
+    /// downto-0 <see cref="Compose"/>.
+    /// </summary>
+    public static string Compose(int portWidth, IEnumerable<KeyValuePair<BitSlice, string>> contributions, Variable? port)
+    {
+        if (port is null || !port.HasDeclaredRange)
+            return Compose(portWidth, contributions);
+        if (portWidth <= 0) return string.Empty;
+        var buf = new char[portWidth];
+        for (int i = 0; i < portWidth; i++) buf[i] = '0';
+        foreach (var kv in contributions)
+        {
+            var slice = kv.Key;
+            var raw = kv.Value ?? string.Empty;
+            int sw = slice.Width;
+            if (sw <= 0) continue;
+            string norm = raw.Length == sw
+                ? raw
+                : raw.Length < sw ? raw.PadLeft(sw, '0') : raw[^sw..];
+            // norm[0] is the slice MSB (slice.High); walk down to slice.Low.
+            for (int b = 0; b < sw; b++)
+            {
+                int bit = slice.High - b;
+                int pos = port.IndexToOffset(bit, portWidth);
+                if (pos < 0 || pos >= portWidth) continue;
                 buf[pos] = norm[b];
             }
         }
