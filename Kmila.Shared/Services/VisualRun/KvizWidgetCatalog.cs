@@ -71,7 +71,12 @@ public static class KvizWidgetCatalog
         "lcd-hd44780" => LcdPins(
             c.Config.GetString("mode", "text"),
             c.Config.GetInt("rows", 2),
-            c.Config.GetInt("cols", 16)),
+            c.Config.GetInt("cols", 16),
+            c.Config.GetInt("glassRows", 8),
+            c.Config.GetInt("glassCols", 5)),
+        "dot-matrix" => DotMatrixPins(
+            c.Config.GetInt("rows", 8),
+            c.Config.GetInt("cols", 8)),
         _ => Array.Empty<KvizPin>(),
     };
 
@@ -211,8 +216,24 @@ public static class KvizWidgetCatalog
     //   • "raw-8bit" — same but with `DB0..DB7` (full 8-bit data bus).
     // Rows clamped 2..4; cols clamped 16..20 (2×16 / 2×20 / 4×16 /
     // 4×20 — the four HD44780 variants shipped in real kits).
-    private static List<KvizPin> LcdPins(string mode, int rows, int cols)
+    //   • "raw-panel" — the LCD glass with the HD44780 removed: a passive
+    //     multiplexed dot-matrix. The design drives the raw lines itself —
+    //     `COM0..COM{glassRows-1}` (common/backplane row selects) + `SEG0..
+    //     SEG{glassCols-1}` (segment/column data) — and implements the scan
+    //     multiplexing + glyph patterns. Default a single 5×8 character cell.
+    private static List<KvizPin> LcdPins(string mode, int rows, int cols, int glassRows = 8, int glassCols = 5)
     {
+        if (mode == "raw-panel")
+        {
+            int gr = Math.Clamp(glassRows, 1, 16);
+            int gc = Math.Clamp(glassCols, 1, 40);
+            var panel = new List<KvizPin>(gr + gc);
+            for (int r = 0; r < gr; r++)
+                panel.Add(new KvizPin($"COM{r}", PinDir.In));   // backplane row select
+            for (int col = 0; col < gc; col++)
+                panel.Add(new KvizPin($"SEG{col}", PinDir.In)); // segment column data
+            return panel;
+        }
         rows = Math.Clamp(rows, 2, 4);
         cols = Math.Clamp(cols, 16, 20);
         if (mode == "raw-4bit" || mode == "raw-8bit")
@@ -234,6 +255,24 @@ public static class KvizWidgetCatalog
             textPins.Add(new KvizPin($"line{r}", PinDir.In));
         textPins.Add(new KvizPin("backlight", PinDir.In));
         return textPins;
+    }
+
+    // Dot-matrix LED display pin surface. A controller-less (no MAX7219)
+    // scanned matrix: the design drives `col0..col{cols-1}` (column selects,
+    // one active at a time) + `row0..row{rows-1}` (row data for the selected
+    // column), implementing the scan multiplexing + font ROM itself. All pins
+    // are In (the design drives both selects and data); the widget rebuilds
+    // the image by persistence of vision from the frame ring.
+    private static List<KvizPin> DotMatrixPins(int rows, int cols)
+    {
+        rows = Math.Clamp(rows, 1, 16);
+        cols = Math.Clamp(cols, 1, 16);
+        var pins = new List<KvizPin>(rows + cols);
+        for (int c = 0; c < cols; c++)
+            pins.Add(new KvizPin($"col{c}", PinDir.In)); // column select
+        for (int r = 0; r < rows; r++)
+            pins.Add(new KvizPin($"row{r}", PinDir.In)); // row data
+        return pins;
     }
 
     // 7-segment bank pin surface. Three "independent" decode modes keep the
@@ -293,7 +332,7 @@ public static class KvizWidgetCatalog
     public static WidgetDirection? DirectionOf(string widgetType) => widgetType switch
     {
         "button" or "switch" or "multi-switch"                                                                                                 => WidgetDirection.Input,
-        "led" or "led-array" or "seven-seg" or "seven-seg-bank" or "stepper" or "matrix-3x3" or "matrix-3x3-rgb" or "buzzer-piezo" or "lcd-hd44780" => WidgetDirection.Output,
+        "led" or "led-array" or "seven-seg" or "seven-seg-bank" or "stepper" or "matrix-3x3" or "matrix-3x3-rgb" or "buzzer-piezo" or "lcd-hd44780" or "dot-matrix" => WidgetDirection.Output,
         // keypad-matrix intentionally omitted: raw-scan mixes directions.
         // Panels should call PinCountsByDir to render two chips.
         _                                                                                                                                       => null,

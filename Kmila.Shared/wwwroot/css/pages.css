@@ -16417,6 +16417,58 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     color: var(--text-muted);
 }
 
+/* ───── Controller-less dot-matrix LED display (configurable rows×cols) ─────
+   A scanned LED matrix the design drives pin-by-pin. Grid size is supplied
+   inline (grid-template-columns: repeat(Cols, 12px)); cell colour/brightness
+   come from inline --kviz-dm-color / --kviz-dm-on-opacity custom props. */
+.kviz-dot-matrix {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-1);
+    touch-action: none;
+    user-select: none;
+}
+
+.kviz-dot-matrix--edit { cursor: move; }
+
+.kviz-dot-matrix__grid {
+    display: grid;
+    grid-auto-rows: 12px;
+    gap: 2px;
+    padding: var(--space-2);
+    background: var(--kviz-housing-dark, #0b0f14);
+    border-radius: 8px;
+    border: 1px solid var(--kviz-housing-border, #1f2937);
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.6);
+}
+
+.kviz-dot-matrix__cell {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, var(--kviz-housing-shadow, #1f2937) 0%, var(--kviz-housing-dark, #0b0f14) 80%);
+    border: 1px solid var(--kviz-housing-ring, #111);
+    transition: background 50ms linear, box-shadow 50ms linear, opacity 50ms linear;
+}
+
+.kviz-dot-matrix__cell--on {
+    background: radial-gradient(circle at 30% 30%,
+        color-mix(in srgb, var(--kviz-dm-color) 80%, white 20%) 0%,
+        var(--kviz-dm-color) 70%);
+    box-shadow:
+        0 0 5px var(--kviz-dm-color),
+        0 0 10px color-mix(in srgb, var(--kviz-dm-color) 60%, transparent),
+        inset 0 0 2px rgba(255,255,255,0.5);
+    opacity: var(--kviz-dm-on-opacity, 1);
+}
+
+.kviz-dot-matrix__port {
+    font-size: var(--fs-xs);
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+}
+
 /* ───── FW-1b: 3×3 RGB LED matrix ─────
    Same grid layout as FW-1 mono. Cell colour comes from an inline
    --cell-color set by the widget (mix of the three R/G/B planes). Off
@@ -16668,6 +16720,42 @@ body:has(.visual-page.is-fullscreen) .status-bar {
 }
 
 .kviz-lcd__char { white-space: pre; }
+
+/* raw-panel mode: the LCD glass with the HD44780 removed — a raw multiplexed
+   dot grid the design drives via COM/SEG. grid-template-columns supplied inline
+   (repeat(GlassCols, 10px)); lit pixels glow like the rest of the LCD. */
+.kviz-lcd__panel {
+    display: grid;
+    grid-auto-rows: 10px;
+    gap: 2px;
+    padding: 6px 8px;
+    background: #163f2c;
+    border-radius: 4px;
+    border: 2px solid #0b2a1c;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.6);
+}
+
+.kviz-lcd--on .kviz-lcd__panel {
+    background: #14532d;
+    box-shadow:
+        inset 0 1px 2px rgba(0,0,0,0.4),
+        0 0 6px rgba(163, 230, 53, 0.4);
+}
+
+.kviz-lcd--off .kviz-lcd__panel { background: #1a2e24; }
+
+.kviz-lcd__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    background: rgba(20, 40, 28, 0.55);
+    transition: background 50ms linear, box-shadow 50ms linear;
+}
+
+.kviz-lcd__dot--on {
+    background: #a7f3c4;
+    box-shadow: 0 0 3px rgba(163, 230, 53, 0.6);
+}
 
 .kviz-lcd__port {
     font-size: var(--fs-xs);
