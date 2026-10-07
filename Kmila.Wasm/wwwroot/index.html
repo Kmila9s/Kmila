@@ -121,10 +121,44 @@
     </div>
 
     <div id="blazor-error-ui">
-        An unhandled error has occurred.
+        <span id="blazor-error-text">An unhandled error has occurred.</span>
         <a href="" class="reload">Reload</a>
         <a class="dismiss">🗙</a>
     </div>
+
+    <!-- Boot-splash localization. This runs BEFORE the WASM runtime / Traductor
+         load, so it cannot use the app dictionaries; it carries its own tiny
+         table for just these four strings and picks a language from
+         navigator.language (English fallback). Once Blazor mounts it replaces
+         #app and manages language/RTL itself. -->
+    <script>
+        (function () {
+            var S = {
+                en: { load: "Loading Kmila…", sub: "Compiling the VHDL engine in your browser", err: "An unhandled error has occurred.", reload: "Reload" },
+                es: { load: "Cargando Kmila…", sub: "Compilando el motor VHDL en tu navegador", err: "Se produjo un error no controlado.", reload: "Recargar" },
+                fr: { load: "Chargement de Kmila…", sub: "Compilation du moteur VHDL dans votre navigateur", err: "Une erreur non gérée s'est produite.", reload: "Recharger" },
+                de: { load: "Kmila wird geladen…", sub: "Die VHDL-Engine wird in deinem Browser kompiliert", err: "Ein unbehandelter Fehler ist aufgetreten.", reload: "Neu laden" },
+                jp: { load: "Kmila を読み込み中…", sub: "ブラウザーで VHDL エンジンをコンパイルしています", err: "未処理のエラーが発生しました。", reload: "再読み込み" },
+                ch: { load: "正在加载 Kmila…", sub: "正在你的浏览器中编译 VHDL 引擎", err: "发生了未处理的错误。", reload: "重新加载" },
+                ar: { load: "جارٍ تحميل Kmila…", sub: "يجري تجميع محرّك VHDL في متصفّحك", err: "حدث خطأ غير معالَج.", reload: "إعادة التحميل" }
+            };
+            var raw = (navigator.language || "en").toLowerCase().slice(0, 2);
+            var code = ({ zh: "ch", ja: "jp" })[raw] || raw;
+            var t = S[code] || S.en;
+            try {
+                document.documentElement.lang = code;
+                var q = function (s) { return document.querySelector(s); };
+                var a = q(".kmila-boot-label"); if (a) a.textContent = t.load;
+                var b = q(".kmila-boot-sub"); if (b) b.textContent = t.sub;
+                var e = q("#blazor-error-text"); if (e) e.textContent = t.err;
+                var r = q("#blazor-error-ui .reload"); if (r) r.textContent = t.reload;
+                if (code === "ar") {
+                    var boot = q(".kmila-boot"); if (boot) boot.dir = "rtl";
+                    var eui = q("#blazor-error-ui"); if (eui) eui.dir = "rtl";
+                }
+            } catch (_) { }
+        })();
+    </script>
 
     <!-- Vendored Bootstrap JS, Chart.js + datalabels, SortableJS, Blazor.Bootstrap.
          All under Kmila.Shared/wwwroot/lib/ (offline-first, shared across hosts). -->

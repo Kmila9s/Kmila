@@ -1976,7 +1976,7 @@
         {
             if (workbenchRun)
             {
-                Log.Info($"Workbench: running testbench '{Sim.TestbenchFile}'.");
+                Log.Info(Traductor.T("SIM_LOG_WORKBENCH_RUNNING_FMT", Sim.TestbenchFile));
             }
             else
             {
@@ -2005,16 +2005,14 @@
 
             if (clkName != null)
             {
-                Log.Info("Auto-clock: driving '" + clkName + "' at " + effectiveClockMhz + " MHz.");
+                Log.Info(Traductor.T("SIM_LOG_AUTOCLOCK_DRIVING_FMT", clkName, effectiveClockMhz));
             }
             else if (entityName != null)
             {
                 // No clock port declared. StimulusBuilder will synthesize a
                 // virtual `_clk` signal so the waveform always carries a
                 // clock trace — helpful for combinational designs too.
-                Log.Info("Auto-clock: no clk-named port on '" + entityName +
-                         "'. Injecting a virtual _clk at " + effectiveClockMhz + " MHz " +
-                         "(tick=" + tickResNs + " ns, mode=" + tickMode.ToToken() + ").");
+                Log.Info(Traductor.T("SIM_LOG_AUTOCLOCK_VIRTUAL_FMT", entityName, effectiveClockMhz, tickResNs, tickMode.ToToken()));
             }
             }
         }
@@ -3129,17 +3127,17 @@ end architecture behavioral;",
 
             if (sigs == 0)
             {
-                Log.Warn("Simulation finished but produced no signal history — check your port moments / clock configuration.");
+                Log.Warn(Traductor.T("SIM_LOG_NO_HISTORY"));
             }
             else
             {
-                Log.Info($"Waveform built: {sigs} signals · {samples} samples.");
+                Log.Info(Traductor.T("SIM_LOG_WAVEFORM_BUILT_FMT", sigs, samples));
             }
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "[Editor] Failed to build WaveformData from history");
-            Log.Error($"Waveform build failed: {ex.Message}");
+            Log.Error(Traductor.T("SIM_LOG_WAVEFORM_FAILED_FMT", ex.Message));
         }
         InvokeAsync(StateHasChanged);
     }
