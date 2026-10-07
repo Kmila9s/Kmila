@@ -1440,7 +1440,7 @@ entity lcd_banner is
         lcd_rs : out std_logic;                      -- 0 = command, 1 = data
         lcd_rw : out std_logic;                      -- tied low (write)
         lcd_e  : out std_logic;                      -- enable strobe
-        lcd_db : out std_logic_vector(7 downto 0)    -- data bus (high nibble DB7..DB4 used in 4-bit mode)
+        lcd_db : out std_logic_vector(7 downto 4)    -- 4-bit data bus
     );
 end lcd_banner;
 
@@ -1463,8 +1463,8 @@ architecture rtl of lcd_banner is
         10 => ""01001100"",   -- 'L'
         11 => ""01000001""    -- 'A'
     );
-    -- RS per entry: entry 0 is the Clear command (RS=0); the rest are data
-    -- (RS=1). Derived from byte_idx below rather than a lookup vector.
+    -- RS per entry: entry 0 is a command (0), the rest are data (1).
+    constant RS_ROM : std_logic_vector(0 to 11) := ""011111111111"";
 
     signal byte_idx : integer range 0 to 12 := 0;  -- 12 = finished
     signal phase    : integer range 0 to 3 := 0;   -- micro-step within a byte
@@ -1492,7 +1492,7 @@ begin
                     b := DATA_ROM(byte_idx);
                     case phase is
                         when 0 =>                 -- setup HIGH nibble, E low
-                            if byte_idx = 0 then rs_r <= '0'; else rs_r <= '1'; end if;
+                            rs_r <= RS_ROM(byte_idx);
                             db_r <= b(7 downto 4);
                             e_r  <= '0';
                             phase <= 1;
@@ -1518,7 +1518,7 @@ begin
     lcd_rs <= rs_r;
     lcd_rw <= '0';
     lcd_e  <= e_r;
-    lcd_db <= db_r & ""0000"";   -- high nibble on DB7..DB4, low nibble idle
+    lcd_db <= db_r;
 end rtl;
 ";
 

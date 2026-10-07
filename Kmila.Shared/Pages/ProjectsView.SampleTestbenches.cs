@@ -445,7 +445,7 @@ architecture sim of lcd_banner_tb is
     signal lcd_rs : STD_LOGIC;
     signal lcd_rw : STD_LOGIC;
     signal lcd_e  : STD_LOGIC;
-    signal lcd_db : STD_LOGIC_VECTOR(7 downto 0);
+    signal lcd_db : STD_LOGIC_VECTOR(7 downto 4);
 begin
     dut : entity work.lcd_banner
         port map (clk => clk, reset => reset, lcd_rs => lcd_rs, lcd_rw => lcd_rw,
