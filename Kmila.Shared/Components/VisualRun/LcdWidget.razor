@@ -37,20 +37,37 @@
      data-cols="@Cols"
      data-text="@FlattenedText"
      @onpointerdown="HandlePointerDown">
-    <div class="kviz-lcd__screen" style="grid-template-columns: repeat(@Cols, 14px);">
-        @{
-            var text = CurrentText();
-        }
-        @for (int r = 0; r < Rows; r++)
-        {
-            for (int c = 0; c < Cols; c++)
+    @if (Mode == "raw-panel")
+    {
+        var cells = PanelCells();
+        <div class="kviz-lcd__panel" style="grid-template-columns: repeat(@GlassCols, 10px);">
+            @for (int r = 0; r < GlassRows; r++)
             {
-                int idx = r * Cols + c;
-                char ch = idx < text.Length ? text[idx] : ' ';
-                <div class="kviz-lcd__cell">@RenderChar(ch)</div>
+                for (int c = 0; c < GlassCols; c++)
+                {
+                    bool on = cells[r * GlassCols + c];
+                    <div class="kviz-lcd__dot @(on ? "kviz-lcd__dot--on" : "")"></div>
+                }
             }
-        }
-    </div>
+        </div>
+    }
+    else
+    {
+        <div class="kviz-lcd__screen" style="grid-template-columns: repeat(@Cols, 14px);">
+            @{
+                var text = CurrentText();
+            }
+            @for (int r = 0; r < Rows; r++)
+            {
+                for (int c = 0; c < Cols; c++)
+                {
+                    int idx = r * Cols + c;
+                    char ch = idx < text.Length ? text[idx] : ' ';
+                    <div class="kviz-lcd__cell">@RenderChar(ch)</div>
+                }
+            }
+        </div>
+    }
     <div class="kviz-lcd__port">@PortLabel</div>
 </div>
 
@@ -70,15 +87,30 @@
     private string _lastMode = "text";
     private char _prevE = '0';
 
+    // Part A fix: the HD44780 nibble decoder is edge-triggered, so it must see
+    // EVERY E rising edge to keep nibble phase. Widget renders are coalesced to
+    // ~30fps while the sim advances many ticks between renders, so sampling the
+    // live level drops edges and desyncs the pairing (→ blank display). We decode
+    // from the coordinator's per-tick FrameRing in tick order instead, mirroring
+    // SevenSegmentBankWidget's frame walk. These track the decode cursor + run.
+    private long _lastDecodedTick = -1;
+    private VisualRunCoordinator? _decodeCoordinator;
+
     private int Rows => Math.Clamp(Comp.Config.GetInt("rows", 2), 2, 4);
     private int Cols => Math.Clamp(Comp.Config.GetInt("cols", 16), 16, 20);
+
+    // raw-panel mode: the LCD glass with the HD44780 removed. The design drives
+    // the raw multiplexed dot grid directly — COM{r} row/backplane selects and
+    // SEG{c} segment/column data. Default a single 5×8 character cell.
+    private int GlassRows => Math.Clamp(Comp.Config.GetInt("glassRows", 8), 1, 16);
+    private int GlassCols => Math.Clamp(Comp.Config.GetInt("glassCols", 5), 1, 40);
 
     private string Mode
     {
         get
         {
             var m = Comp.Config.GetString("mode", "text");
-            return m == "raw-4bit" || m == "raw-8bit" ? m : "text";
+            return m == "raw-4bit" || m == "raw-8bit" || m == "raw-panel" ? m : "text";
         }
     }
 
@@ -114,6 +146,7 @@
     private string CurrentText()
     {
         EnsureDdramShape();
+        if (Mode == "raw-panel") return string.Empty; // panel renders dots, not chars
         if (Mode != "text")
         {
             RawDecodeIfNeeded();
@@ -159,24 +192,62 @@
     // Raw modes: latch on E rising edge, dispatch based on RS.
     // Minimal HD44780 subset covering the demo cases; adequate for
     // beginner init sequences and DDRAM writes.
+    //
+    // The decoder is edge-triggered and stateful, so it must observe EVERY E
+    // rising edge to keep nibble phase. Widget renders are coalesced, so we
+    // replay the coordinator's per-tick FrameRing in tick order — decoding each
+    // captured tick exactly once — instead of sampling the live level.
     private void RawDecodeIfNeeded()
     {
-        if (Coordinator == null) return;
-        if (Mode == "text") return;
-        char e = ReadBit("E");
+        if (Coordinator == null || Mode == "text") return;
+
+        // Per-run reset: a fresh run gives a brand-new coordinator (and the tick
+        // counter restarts). Clear DDRAM + nibble-pairing state so a previous
+        // run can't leave us one nibble out of phase.
+        if (!ReferenceEquals(Coordinator, _decodeCoordinator)
+            || (long)Coordinator.CurrentTick < _lastDecodedTick)
+        {
+            for (int i = 0; i < _ddram.Length; i++) _ddram[i] = ' ';
+            _ddramCursor = 0;
+            _prevE = '0';
+            _rawExpectLow = false;
+            _rawHighNibble = 0;
+            _decodeCoordinator = Coordinator;
+            _lastDecodedTick = (long)Coordinator.Frames.OldestTick - 1;
+        }
+
+        var frames = Coordinator.Frames;
+        if (frames.Count == 0) return;
+        long oldest = (long)frames.OldestTick;
+        long newest = (long)frames.NewestTick;
+        for (long t = Math.Max(_lastDecodedTick + 1, oldest); t <= newest; t++)
+        {
+            var fo = frames.TryGetByTick((ulong)t);
+            if (fo == null) continue; // evicted/gap — skip, cursor still advances
+            var frame = fo.Value;
+            DecodeStep(pin => ReadBitFromFrame(frame, pin));
+        }
+        _lastDecodedTick = newest;
+    }
+
+    // Decode a single captured tick: latch a byte on an E rising edge and
+    // dispatch on RS. `read` resolves a widget pin to its bit for THIS tick.
+    private void DecodeStep(Func<string, char> read)
+    {
+        char e = read("E");
         // Latch on rising edge only.
         if (e != '1' || _prevE == '1') { _prevE = e; return; }
         _prevE = e;
 
-        char rs = ReadBit("RS");
-        char rw = ReadBit("RW");
+        char rs = read("RS");
+        char rw = read("RW");
         if (rw == '1') return; // ignore reads
 
         byte data = 0;
         if (Mode == "raw-8bit")
         {
             for (int i = 7; i >= 0; i--)
-                data = (byte)((data << 1) | (ReadBit($"DB{i}") == '1' ? 1 : 0));
+                data = (byte)((data << 1) | (read($"DB{i}") == '1' ? 1 : 0));
         }
         else
         {
@@ -185,7 +256,7 @@
             // latches into a byte via `_rawHighNibble` / `_rawExpectLow`.
             byte nib = 0;
             for (int i = 7; i >= 4; i--)
-                nib = (byte)((nib << 1) | (ReadBit($"DB{i}") == '1' ? 1 : 0));
+                nib = (byte)((nib << 1) | (read($"DB{i}") == '1' ? 1 : 0));
             if (!_rawExpectLow)
             {
                 _rawHighNibble = nib;
@@ -197,17 +268,67 @@
         }
 
         if (rs == '1')
-        {
             WriteDdram((char)(data & 0x7F));
-        }
         else
-        {
             DecodeCommand(data);
-        }
     }
 
     private byte _rawHighNibble;
     private bool _rawExpectLow;
+
+    // raw-panel scan: reconstruct the multiplexed glass by persistence of
+    // vision. For each COM row-select, latch the SEG column data from the most
+    // recent frame in which that COM was active — the same frame-ring walk
+    // SevenSegmentBankWidget uses for its time-multiplexed digits. Memoized per
+    // render (FrameVersion) + glass size so the scan runs once, not per cell.
+    private bool[]? _panelCache;
+    private int _panelFv = int.MinValue;
+    private int _panelSig = -1;
+
+    private bool[] PanelCells()
+    {
+        int sig = GlassRows * 100 + GlassCols;
+        if (_panelCache != null && _panelFv == FrameVersion && _panelSig == sig)
+            return _panelCache;
+        _panelCache = ComputePanel();
+        _panelFv = FrameVersion;
+        _panelSig = sig;
+        return _panelCache;
+    }
+
+    private bool[] ComputePanel()
+    {
+        int rows = GlassRows, cols = GlassCols;
+        var lit = new bool[rows * cols];
+        if (Coordinator == null) return lit;
+        var frames = Coordinator.Frames;
+        long count = frames.Count;
+        if (count == 0) return lit;
+        ulong newest = frames.NewestTick;
+        ulong oldest = frames.OldestTick;
+        int cap = (int)Math.Min(count, 512);
+        var rowDone = new bool[rows];
+        int remaining = rows, examined = 0;
+        for (ulong k = 0; remaining > 0 && examined < cap && k <= newest; k++)
+        {
+            ulong tick = newest - k;
+            if (tick < oldest) break;
+            var fo = frames.TryGetByTick(tick);
+            if (fo == null) continue; // gap → skip
+            examined++;
+            var f = fo.Value;
+            for (int r = 0; r < rows; r++)
+            {
+                if (rowDone[r]) continue;
+                if (ReadBitFromFrame(f, $"COM{r}") != '1') continue; // row not selected this frame
+                for (int c = 0; c < cols; c++)
+                    lit[r * cols + c] = ReadBitFromFrame(f, $"SEG{c}") == '1';
+                rowDone[r] = true;
+                remaining--;
+            }
+        }
+        return lit;
+    }
 
     private void WriteDdram(char ch)
     {
@@ -281,12 +402,17 @@
         return row * Cols + col;
     }
 
-    private char ReadBit(string pinName)
+    // Resolve a widget pin to its bit value within a specific captured frame,
+    // honoring any slice spec in the binding (same semantics as
+    // Coordinator.LatestSlicedValue, but against a stored tick snapshot).
+    private char ReadBitFromFrame(VisualFrame f, string pinName)
     {
-        if (Coordinator == null) return '0';
-        if (!Comp.Bindings.TryGetValue(pinName, out var port) || string.IsNullOrEmpty(port))
+        if (!Comp.Bindings.TryGetValue(pinName, out var binding) || string.IsNullOrEmpty(binding))
             return '0';
-        var v = Coordinator.LatestSlicedValue(port);
+        var (name, slice) = SliceHelper.Parse(binding);
+        if (string.IsNullOrEmpty(name) || !f.PortValues.TryGetValue(name, out var full) || string.IsNullOrEmpty(full))
+            return '0';
+        var v = SliceHelper.Extract(full, slice);
         return string.IsNullOrEmpty(v) ? '0' : v[^1];
     }
 
@@ -310,6 +436,13 @@
                 for (int r = 0; r < Rows; r++)
                     if (Comp.Bindings.TryGetValue($"line{r}", out var p) && !string.IsNullOrEmpty(p)) wired++;
                 return $"{wired}/{Rows} lines";
+            }
+            if (Mode == "raw-panel")
+            {
+                var wiredPanel = 0;
+                foreach (var b in Comp.Bindings.Values)
+                    if (!string.IsNullOrEmpty(b)) wiredPanel++;
+                return $"{wiredPanel}/{GlassRows + GlassCols} wired";
             }
             var w = 0;
             foreach (var b in Comp.Bindings.Values)

@@ -472,29 +472,77 @@
                             <select class="kmila-input"
                                     value="@LcdMode(sel)"
                                     @onchange="@(e => OnLcdModeChange(sel, e))">
+                                @* HD44780 controller (4/8-bit) + raw glass (no
+                                   controller) are the real pin-level paths, always
+                                   shown. Assisted `text` stays behind Advanced mode. *@
+                                <option value="raw-4bit">@Traductor.T("VISUAL_LCD_MODE_RAW_4BIT")</option>
+                                <option value="raw-8bit">@Traductor.T("VISUAL_LCD_MODE_RAW_8BIT")</option>
+                                <option value="raw-panel">@Traductor.T("VISUAL_LCD_MODE_RAW_PANEL")</option>
                                 @if (_advancedMode || LcdMode(sel) == "text")
                                 {
                                     <option value="text">@Traductor.T("VISUAL_LCD_MODE_TEXT")</option>
                                 }
-                                <option value="raw-4bit">@Traductor.T("VISUAL_LCD_MODE_RAW_4BIT")</option>
-                                <option value="raw-8bit">@Traductor.T("VISUAL_LCD_MODE_RAW_8BIT")</option>
                             </select>
                         </label>
-                        <label>@Traductor.T("VISUAL_LCD_ROWS")
+                        @if (LcdMode(sel) == "raw-panel")
+                        {
+                            <label>@Traductor.T("VISUAL_LCD_GLASS_ROWS")
+                                <input class="kmila-input" type="number" min="1" max="16" step="1"
+                                       value="@LcdGlassRows(sel)"
+                                       @onchange="@(e => OnLcdGlassRowsChange(sel, e))" />
+                            </label>
+                            <label>@Traductor.T("VISUAL_LCD_GLASS_COLS")
+                                <input class="kmila-input" type="number" min="1" max="40" step="1"
+                                       value="@LcdGlassCols(sel)"
+                                       @onchange="@(e => OnLcdGlassColsChange(sel, e))" />
+                            </label>
+                        }
+                        else
+                        {
+                            <label>@Traductor.T("VISUAL_LCD_ROWS")
+                                <select class="kmila-input"
+                                        value="@LcdRows(sel)"
+                                        @onchange="@(e => OnLcdRowsChange(sel, e))">
+                                    <option value="2">2</option>
+                                    <option value="4">4</option>
+                                </select>
+                            </label>
+                            <label>@Traductor.T("VISUAL_LCD_COLS")
+                                <select class="kmila-input"
+                                        value="@LcdCols(sel)"
+                                        @onchange="@(e => OnLcdColsChange(sel, e))">
+                                    <option value="16">16</option>
+                                    <option value="20">20</option>
+                                </select>
+                            </label>
+                        }
+                    }
+                    else if (sel.Type == "dot-matrix")
+                    {
+                        <label>@Traductor.T("VISUAL_DOTMATRIX_ROWS")
+                            <input class="kmila-input" type="number" min="1" max="16" step="1"
+                                   value="@DotMatrixRows(sel)"
+                                   @onchange="@(e => OnDotMatrixRowsChange(sel, e))" />
+                        </label>
+                        <label>@Traductor.T("VISUAL_DOTMATRIX_COLS")
+                            <input class="kmila-input" type="number" min="1" max="16" step="1"
+                                   value="@DotMatrixCols(sel)"
+                                   @onchange="@(e => OnDotMatrixColsChange(sel, e))" />
+                        </label>
+                        <label>@Traductor.T("VISUAL_PROP_COLOR")
                             <select class="kmila-input"
-                                    value="@LcdRows(sel)"
-                                    @onchange="@(e => OnLcdRowsChange(sel, e))">
-                                <option value="2">2</option>
-                                <option value="4">4</option>
+                                    value="@DotMatrixColor(sel)"
+                                    @onchange="@(e => OnDotMatrixColorChange(sel, e))">
+                                <option value="red">@Traductor.T("VISUAL_MATRIX_COLOR_RED")</option>
+                                <option value="green">@Traductor.T("VISUAL_MATRIX_COLOR_GREEN")</option>
+                                <option value="blue">@Traductor.T("VISUAL_MATRIX_COLOR_BLUE")</option>
+                                <option value="white">@Traductor.T("VISUAL_MATRIX_COLOR_WHITE")</option>
                             </select>
                         </label>
-                        <label>@Traductor.T("VISUAL_LCD_COLS")
-                            <select class="kmila-input"
-                                    value="@LcdCols(sel)"
-                                    @onchange="@(e => OnLcdColsChange(sel, e))">
-                                <option value="16">16</option>
-                                <option value="20">20</option>
-                            </select>
+                        <label>@Traductor.T("VISUAL_PROP_BRIGHTNESS")
+                            <input class="kmila-input" type="range" min="0" max="100" step="1"
+                                   value="@DotMatrixBrightness(sel)"
+                                   @onchange="@(e => OnDotMatrixBrightnessChange(sel, e))" />
                         </label>
                     }
                     else if (sel.Type == "keypad-matrix")
@@ -778,6 +826,7 @@
         "buzzer-piezo" => IconName.VolumeUpFill,
         "keypad-matrix" => IconName.Grid,
         "lcd-hd44780" => IconName.Display,
+        "dot-matrix" => IconName.Grid3X3Gap,
         _           => IconName.Gear,
     };
 
@@ -799,6 +848,7 @@
         "buzzer-piezo" => "VISUAL_PALETTE_BUZZER",
         "keypad-matrix" => "VISUAL_PALETTE_KEYPAD",
         "lcd-hd44780" => "VISUAL_PALETTE_LCD",
+        "dot-matrix" => "VISUAL_PALETTE_DOT_MATRIX",
         _           => type,
     };
 
@@ -827,7 +877,10 @@
             "matrix-3x3-rgb" => 108,
             "buzzer-piezo" => 130,
             "keypad-matrix" => Math.Clamp(sel.Config.GetInt("cols", 4), 3, 4) * 42 + 12,
-            "lcd-hd44780" => Math.Clamp(sel.Config.GetInt("cols", 16), 16, 20) * 14 + 20,
+            "lcd-hd44780" => LcdMode(sel) == "raw-panel"
+                ? Math.Clamp(sel.Config.GetInt("glassCols", 5), 1, 40) * 10 + 20
+                : Math.Clamp(sel.Config.GetInt("cols", 16), 16, 20) * 14 + 20,
+            "dot-matrix" => Math.Clamp(sel.Config.GetInt("cols", 8), 1, 16) * 12 + 16,
             _            => 90,
         };
         double x = sel.Position.X + widgetW + Gap;
@@ -1197,6 +1250,7 @@
             "buzzer-piezo" => "VISUAL_PALETTE_BUZZER",
             "keypad-matrix" => "VISUAL_PALETTE_KEYPAD",
             "lcd-hd44780" => "VISUAL_PALETTE_LCD",
+            "dot-matrix" => "VISUAL_PALETTE_DOT_MATRIX",
             "stepper" => "VISUAL_PALETTE_STEPPER",
             "seven-seg" => "VISUAL_PALETTE_SEVEN_SEG",
             "seven-seg-bank" => "VISUAL_PALETTE_SEVEN_SEG_BANK",
@@ -1834,6 +1888,7 @@
             case "buzzer-piezo": AddBuzzer(); break;
             case "keypad-matrix": AddKeypad(); break;
             case "lcd-hd44780": AddLcd(); break;
+            case "dot-matrix": AddDotMatrix(); break;
         }
     }
 
@@ -2091,18 +2146,111 @@
     private static string LcdMode(KvizComponent c)
     {
         var m = c.Config.GetString("mode", "text");
-        return m == "raw-4bit" || m == "raw-8bit" ? m : "text";
+        return m == "raw-4bit" || m == "raw-8bit" || m == "raw-panel" ? m : "text";
     }
     private static int LcdRows(KvizComponent c) => Math.Clamp(c.Config.GetInt("rows", 2), 2, 4);
     private static int LcdCols(KvizComponent c) => Math.Clamp(c.Config.GetInt("cols", 16), 16, 20);
+    private static int LcdGlassRows(KvizComponent c) => Math.Clamp(c.Config.GetInt("glassRows", 8), 1, 16);
+    private static int LcdGlassCols(KvizComponent c) => Math.Clamp(c.Config.GetInt("glassCols", 5), 1, 40);
 
     private void OnLcdModeChange(KvizComponent c, ChangeEventArgs e)
     {
         var raw = e.Value?.ToString();
-        var v = raw == "raw-4bit" ? "raw-4bit" : raw == "raw-8bit" ? "raw-8bit" : "text";
+        var v = raw switch
+        {
+            "raw-4bit" => "raw-4bit",
+            "raw-8bit" => "raw-8bit",
+            "raw-panel" => "raw-panel",
+            _ => "text",
+        };
         c.Config["mode"] = System.Text.Json.JsonSerializer.SerializeToElement(v);
         KvizWidgetCatalog.Sanitize(_doc);
         MarkDirty();
+    }
+
+    private void OnLcdGlassRowsChange(KvizComponent c, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var n))
+        {
+            n = Math.Clamp(n, 1, 16);
+            c.Config["glassRows"] = System.Text.Json.JsonSerializer.SerializeToElement(n);
+            KvizWidgetCatalog.Sanitize(_doc);
+            MarkDirty();
+        }
+    }
+
+    private void OnLcdGlassColsChange(KvizComponent c, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var n))
+        {
+            n = Math.Clamp(n, 1, 40);
+            c.Config["glassCols"] = System.Text.Json.JsonSerializer.SerializeToElement(n);
+            KvizWidgetCatalog.Sanitize(_doc);
+            MarkDirty();
+        }
+    }
+
+    private void AddDotMatrix()
+    {
+        _doc.Components.Add(new KvizComponent
+        {
+            Id = NewId("dmx"),
+            Type = "dot-matrix",
+            // Phone-safe default: an 8×8 grid of 12px cells is ~100 CSS-px wide.
+            Position = new KvizPosition { X = 60, Y = 340 },
+            Config = new()
+            {
+                ["rows"] = System.Text.Json.JsonSerializer.SerializeToElement(8),
+                ["cols"] = System.Text.Json.JsonSerializer.SerializeToElement(8),
+                ["color"] = System.Text.Json.JsonSerializer.SerializeToElement("red"),
+                ["brightness"] = System.Text.Json.JsonSerializer.SerializeToElement(100),
+            },
+            Bindings = new(),
+        });
+        MarkDirty();
+    }
+
+    private static int DotMatrixRows(KvizComponent c) => Math.Clamp(c.Config.GetInt("rows", 8), 1, 16);
+    private static int DotMatrixCols(KvizComponent c) => Math.Clamp(c.Config.GetInt("cols", 8), 1, 16);
+    private static string DotMatrixColor(KvizComponent c) => c.Config.GetString("color", "red");
+    private static int DotMatrixBrightness(KvizComponent c) => Math.Clamp(c.Config.GetInt("brightness", 100), 0, 100);
+
+    private void OnDotMatrixRowsChange(KvizComponent c, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var n))
+        {
+            n = Math.Clamp(n, 1, 16);
+            c.Config["rows"] = System.Text.Json.JsonSerializer.SerializeToElement(n);
+            KvizWidgetCatalog.Sanitize(_doc);
+            MarkDirty();
+        }
+    }
+
+    private void OnDotMatrixColsChange(KvizComponent c, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var n))
+        {
+            n = Math.Clamp(n, 1, 16);
+            c.Config["cols"] = System.Text.Json.JsonSerializer.SerializeToElement(n);
+            KvizWidgetCatalog.Sanitize(_doc);
+            MarkDirty();
+        }
+    }
+
+    private void OnDotMatrixColorChange(KvizComponent c, ChangeEventArgs e)
+    {
+        c.Config["color"] = System.Text.Json.JsonSerializer.SerializeToElement(e.Value?.ToString() ?? "red");
+        MarkDirty();
+    }
+
+    private void OnDotMatrixBrightnessChange(KvizComponent c, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var n))
+        {
+            n = Math.Clamp(n, 0, 100);
+            c.Config["brightness"] = System.Text.Json.JsonSerializer.SerializeToElement(n);
+            MarkDirty();
+        }
     }
 
     private void OnLcdRowsChange(KvizComponent c, ChangeEventArgs e)

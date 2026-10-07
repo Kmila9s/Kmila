@@ -1,0 +1,156 @@
+@namespace Kmila.Shared.Components.VisualRun
+@using Kmila.Shared.Services.VisualRun
+
+@*
+    Controller-less dot-matrix LED display (no MAX7219 / no driver chip).
+
+    Configurable `rows`×`cols` (default 8×8). A real SCANNED matrix: the design
+    drives `col0..col{cols-1}` (column selects — exactly one active per scan
+    step) and `row0..row{rows-1}` (the row data for the currently selected
+    column), implementing the scan multiplexing + font ROM + scrolling itself in
+    VHDL. Nothing is decoded for the student — it's pixels only.
+
+    Because the widget renders at a coalesced ~30fps while the design scans
+    columns far faster, we reconstruct the image by PERSISTENCE OF VISION from
+    the coordinator's per-tick FrameRing: for each column, latch the row data
+    from the most recent frame in which that column's select was active. This is
+    the same technique SevenSegmentBankWidget uses for its multiplexed digits.
+*@
+
+<div class="kviz-widget kviz-dot-matrix @(EditMode ? "kviz-dot-matrix--edit" : "") @(Selected ? "kviz-widget--selected" : "")"
+     style="--kviz-dm-color:@ColorVar; --kviz-dm-on-opacity:@OnOpacity; left:@(Comp.Position.X)px; top:@(Comp.Position.Y)px;"
+     data-component-id="@Comp.Id"
+     data-rows="@Rows"
+     data-cols="@Cols"
+     @onpointerdown="HandlePointerDown">
+    @{
+        var cells = Cells();
+    }
+    <div class="kviz-dot-matrix__grid" style="grid-template-columns: repeat(@Cols, 12px);">
+        @for (int r = 0; r < Rows; r++)
+        {
+            for (int c = 0; c < Cols; c++)
+            {
+                var on = cells[r * Cols + c];
+                <div class="kviz-dot-matrix__cell @(on ? "kviz-dot-matrix__cell--on" : "")"
+                     data-cell-row="@r" data-cell-col="@c"></div>
+            }
+        }
+    </div>
+    <div class="kviz-dot-matrix__port">@PortLabel</div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public KvizComponent Comp { get; set; } = default!;
+    [Parameter] public VisualRunCoordinator? Coordinator { get; set; }
+    [Parameter] public bool EditMode { get; set; }
+    [Parameter] public bool Selected { get; set; }
+    [Parameter] public EventCallback<Microsoft.AspNetCore.Components.Web.PointerEventArgs> OnPointerDownExternal { get; set; }
+
+    [CascadingParameter(Name = "FrameVersion")] public int FrameVersion { get; set; }
+
+    private int Rows => Math.Clamp(Comp.Config.GetInt("rows", 8), 1, 16);
+    private int Cols => Math.Clamp(Comp.Config.GetInt("cols", 8), 1, 16);
+
+    private string ColorVar => Comp.Config.GetString("color", "red") switch
+    {
+        "green" => "#22c55e",
+        "blue"  => "#3b82f6",
+        "amber" => "#f59e0b",
+        "white" => "#f8fafc",
+        _       => "#ef4444",
+    };
+
+    private string OnOpacity
+    {
+        get
+        {
+            var b = Math.Clamp(Comp.Config.GetInt("brightness", 100), 0, 100);
+            return (b / 100.0).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+        }
+    }
+
+    private string PortLabel
+    {
+        get
+        {
+            var wired = 0;
+            foreach (var b in Comp.Bindings.Values)
+                if (!string.IsNullOrEmpty(b)) wired++;
+            return $"{wired}/{Rows + Cols} wired";
+        }
+    }
+
+    // Memoize the scan once per render (FrameVersion) + grid size, so the
+    // per-cell lookup below doesn't re-walk the frame ring for every cell.
+    private bool[]? _cache;
+    private int _cacheFv = int.MinValue;
+    private int _cacheSig = -1;
+
+    private bool[] Cells()
+    {
+        int sig = Rows * 100 + Cols;
+        if (_cache != null && _cacheFv == FrameVersion && _cacheSig == sig)
+            return _cache;
+        _cache = ComputeScan();
+        _cacheFv = FrameVersion;
+        _cacheSig = sig;
+        return _cache;
+    }
+
+    // Persistence of vision: walk the frame ring newest→oldest and, per column,
+    // latch the row data from the most recent frame that column's select was
+    // active. Mirrors SevenSegmentBankWidget.ComputeMuxPatterns.
+    private bool[] ComputeScan()
+    {
+        int rows = Rows, cols = Cols;
+        var lit = new bool[rows * cols];
+        if (Coordinator == null) return lit;
+        var frames = Coordinator.Frames;
+        long count = frames.Count;
+        if (count == 0) return lit;
+        ulong newest = frames.NewestTick;
+        ulong oldest = frames.OldestTick;
+        int cap = (int)Math.Min(count, 512);
+        var colDone = new bool[cols];
+        int remaining = cols, examined = 0;
+        for (ulong k = 0; remaining > 0 && examined < cap && k <= newest; k++)
+        {
+            ulong tick = newest - k;
+            if (tick < oldest) break;
+            var fo = frames.TryGetByTick(tick);
+            if (fo == null) continue; // gap → skip
+            examined++;
+            var f = fo.Value;
+            for (int c = 0; c < cols; c++)
+            {
+                if (colDone[c]) continue;
+                if (ReadBitFromFrame(f, $"col{c}") != '1') continue; // column not selected this frame
+                for (int r = 0; r < rows; r++)
+                    lit[r * cols + c] = ReadBitFromFrame(f, $"row{r}") == '1';
+                colDone[c] = true;
+                remaining--;
+            }
+        }
+        return lit;
+    }
+
+    // Resolve a widget pin to its bit value within a captured frame, honoring
+    // any slice spec in the binding (same semantics as LatestSlicedValue).
+    private char ReadBitFromFrame(VisualFrame f, string pinName)
+    {
+        if (!Comp.Bindings.TryGetValue(pinName, out var binding) || string.IsNullOrEmpty(binding))
+            return '0';
+        var (name, slice) = SliceHelper.Parse(binding);
+        if (string.IsNullOrEmpty(name) || !f.PortValues.TryGetValue(name, out var full) || string.IsNullOrEmpty(full))
+            return '0';
+        var v = SliceHelper.Extract(full, slice);
+        return string.IsNullOrEmpty(v) ? '0' : v[^1];
+    }
+
+    private async Task HandlePointerDown(Microsoft.AspNetCore.Components.Web.PointerEventArgs e)
+    {
+        if (OnPointerDownExternal.HasDelegate)
+            await OnPointerDownExternal.InvokeAsync(e);
+    }
+}

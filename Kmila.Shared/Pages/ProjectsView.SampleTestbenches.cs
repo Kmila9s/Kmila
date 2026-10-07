@@ -445,7 +445,7 @@ architecture sim of lcd_banner_tb is
     signal lcd_rs : STD_LOGIC;
     signal lcd_rw : STD_LOGIC;
     signal lcd_e  : STD_LOGIC;
-    signal lcd_db : STD_LOGIC_VECTOR(7 downto 4);
+    signal lcd_db : STD_LOGIC_VECTOR(7 downto 0);
 begin
     dut : entity work.lcd_banner
         port map (clk => clk, reset => reset, lcd_rs => lcd_rs, lcd_rw => lcd_rw,
@@ -464,6 +464,82 @@ begin
         reset <= '0';
         wait for 3 us;
         report "lcd_banner: testbench finished";
+        wait;
+    end process;
+end architecture sim;
+""";
+
+    private const string DOTMATRIX_HELLO_TB =
+"""
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+
+-- Testbench for the controller-less dot-matrix. 20 ns clock, one reset pulse;
+-- the design then free-runs, scanning columns and scrolling "HELLO KMILA".
+-- Watch col (one-hot) step and row carry the pixel data. Suggested run: ~40 us.
+entity dot_matrix_tb is
+end dot_matrix_tb;
+
+architecture sim of dot_matrix_tb is
+    signal clk   : STD_LOGIC := '0';
+    signal reset : STD_LOGIC := '0';
+    signal col   : STD_LOGIC_VECTOR(7 downto 0);
+    signal row   : STD_LOGIC_VECTOR(7 downto 0);
+begin
+    dut : entity work.dot_matrix
+        port map (clk => clk, reset => reset, col => col, row => row);
+
+    clk_gen : process
+    begin
+        clk <= '0'; wait for 10 ns;
+        clk <= '1'; wait for 10 ns;
+    end process;
+
+    stim : process
+    begin
+        reset <= '1';
+        wait for 45 ns;
+        reset <= '0';
+        wait for 40 us;
+        report "dot_matrix: testbench finished";
+        wait;
+    end process;
+end architecture sim;
+""";
+
+    private const string LCD_PANEL_TB =
+"""
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+
+-- Testbench for the controller-less LCD glass. 20 ns clock, one reset pulse;
+-- the design then scans COM and drives SEG from its glyph ROM, cycling the
+-- letters of "HELLO KMILA". Suggested run: ~40 us.
+entity lcd_glass_tb is
+end lcd_glass_tb;
+
+architecture sim of lcd_glass_tb is
+    signal clk   : STD_LOGIC := '0';
+    signal reset : STD_LOGIC := '0';
+    signal com   : STD_LOGIC_VECTOR(7 downto 0);
+    signal seg   : STD_LOGIC_VECTOR(4 downto 0);
+begin
+    dut : entity work.lcd_glass
+        port map (clk => clk, reset => reset, com => com, seg => seg);
+
+    clk_gen : process
+    begin
+        clk <= '0'; wait for 10 ns;
+        clk <= '1'; wait for 10 ns;
+    end process;
+
+    stim : process
+    begin
+        reset <= '1';
+        wait for 45 ns;
+        reset <= '0';
+        wait for 40 us;
+        report "lcd_glass: testbench finished";
         wait;
     end process;
 end architecture sim;
@@ -519,5 +595,15 @@ end architecture sim;
     private static IEnumerable<(string FileName, string Content)> LcdHelloExtraFiles()
     {
         yield return ("lcd_banner_tb.vhd", LCD_HELLO_TB);
+    }
+
+    private static IEnumerable<(string FileName, string Content)> DotMatrixHelloExtraFiles()
+    {
+        yield return ("dot_matrix_tb.vhd", DOTMATRIX_HELLO_TB);
+    }
+
+    private static IEnumerable<(string FileName, string Content)> LcdPanelExtraFiles()
+    {
+        yield return ("lcd_glass_tb.vhd", LCD_PANEL_TB);
     }
 }
