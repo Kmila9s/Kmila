@@ -3906,6 +3906,54 @@
     outline-offset: 2px;
 }
 
+/* Schematic render-style dropdown. Replaces the old Human/Raw pill — a
+   compact native <select> fronted by an icon so it stays legible when the
+   toolbar is crowded and scales as styles are added. */
+.schematic-style-select {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 3px 6px 3px 9px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background: var(--surface-1);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: border-color var(--duration-fast) var(--ease-standard);
+}
+.schematic-style-select:hover,
+.schematic-style-select:focus-within {
+    border-color: var(--brand-accent);
+    color: var(--text-strong);
+}
+.schematic-style-select__input {
+    appearance: none;
+    -webkit-appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--text-strong);
+    font: inherit;
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    padding-right: 14px;
+    cursor: pointer;
+    /* caret chevron */
+    background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                      linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-position: right 4px top 55%, right 0 top 55%;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+}
+.schematic-style-select__input:focus-visible {
+    outline: 2px solid var(--brand-accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+.schematic-style-select__input option {
+    color: var(--text-strong);
+    background: var(--surface-1);
+}
+
 /* Checkbox cards — same visual idiom as the scope cards but with
    a checkbox instead of a radio. Inline children stack on mobile. */
 .kmila-export-checks {

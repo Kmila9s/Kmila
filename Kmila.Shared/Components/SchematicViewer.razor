@@ -69,7 +69,7 @@ else
             <div class="schematic-viewer__title">
                 <Icon Name="IconName.Diagram3" />
                 <strong>@Traductor.T("SCHEMATIC_VIEWER")</strong>
-                <span class="schematic-viewer__chip">@_layout.Netlist.Cells.Count @Traductor.T("SCHEMATIC_CELLS")</span>
+                <span class="schematic-viewer__chip">@_layout.Netlist.Cells.Count @Traductor.T(_renderMode.IsBlock() ? "SCHEMATIC_BLOCKS" : "SCHEMATIC_CELLS")</span>
             </div>
             <div class="schematic-viewer__modes" role="tablist">
                 @foreach (var m in _modes)
@@ -86,27 +86,18 @@ else
                 }
             </div>
             <div class="schematic-viewer__actions">
-                <div class="kmila-export-pill" role="radiogroup"
-                     aria-label="@Traductor.T("SCHEMATIC_MODE_TITLE")"
-                     data-render-mode="@_renderMode"
-                     title="@Traductor.T("SCHEMATIC_MODE_TITLE")">
-                    <button type="button" role="radio"
-                            aria-checked="@(_renderMode == SchematicRenderMode.Human)"
-                            data-mode-option="Human"
-                            class="kmila-export-pill__opt @(_renderMode == SchematicRenderMode.Human ? "is-active" : "")"
-                            @onclick="() => SetRenderMode(SchematicRenderMode.Human)">
-                        <Icon Name="IconName.PersonHearts" />
-                        <span>@Traductor.T("SCHEMATIC_MODE_HUMAN")</span>
-                    </button>
-                    <button type="button" role="radio"
-                            aria-checked="@(_renderMode == SchematicRenderMode.Raw)"
-                            data-mode-option="Raw"
-                            class="kmila-export-pill__opt @(_renderMode == SchematicRenderMode.Raw ? "is-active" : "")"
-                            @onclick="() => SetRenderMode(SchematicRenderMode.Raw)">
-                        <Icon Name="IconName.Diagram2" />
-                        <span>@Traductor.T("SCHEMATIC_MODE_RAW")</span>
-                    </button>
-                </div>
+                <label class="schematic-style-select" data-render-mode="@_renderMode"
+                       title="@Traductor.T("SCHEMATIC_STYLE_TITLE")">
+                    <Icon Name="IconName.Diagram2" />
+                    <select class="schematic-style-select__input"
+                            aria-label="@Traductor.T("SCHEMATIC_STYLE_TITLE")"
+                            @onchange="OnStyleChanged">
+                        <option value="Grouped" selected="@(_renderMode == SchematicRenderMode.Grouped)">@Traductor.T("SCHEMATIC_STYLE_GROUPED")</option>
+                        <option value="Rtl" selected="@(_renderMode == SchematicRenderMode.Rtl)">@Traductor.T("SCHEMATIC_STYLE_RTL")</option>
+                        <option value="Nodes" selected="@(_renderMode == SchematicRenderMode.Nodes)">@Traductor.T("SCHEMATIC_STYLE_NODES")</option>
+                        <option value="Raw" selected="@(_renderMode == SchematicRenderMode.Raw)">@Traductor.T("SCHEMATIC_MODE_RAW")</option>
+                    </select>
+                </label>
                 <KmilaTooltip TextKey="SCHEMATIC_SELECT_MODE">
                     <button type="button"
                             class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm @(_selectMode ? "is-active" : "")"
@@ -247,8 +238,22 @@ else
                  preserveAspectRatio="xMinYMin meet"
                  @onclick="ClearSelection">
 
-                @* Naive-mode source-line tints sit underneath everything. *@
-                @if (_mode == ViewMode.Naive)
+                @* RTL style draws bus arrows; the marker inherits each wire's
+                   stroke via context-stroke so it matches the net's colour. *@
+                @if (_renderMode == SchematicRenderMode.Rtl)
+                {
+                    <defs>
+                        <marker id="schematic-arrow" markerWidth="8" markerHeight="8"
+                                refX="6.5" refY="4" orient="auto-start-reverse"
+                                markerUnits="userSpaceOnUse">
+                            <path d="M0,1 L7,4 L0,7 Z" fill="context-stroke" />
+                        </marker>
+                    </defs>
+                }
+
+                @* Naive-mode source-line tints / Grouped-style containers sit
+                   underneath everything. *@
+                @if (_mode == ViewMode.Naive || _renderMode == SchematicRenderMode.Grouped)
                 {
                     @((MarkupString)BuildGroupTints())
                 }
@@ -264,17 +269,24 @@ else
                     if (net == null) continue;
                     if (wire.FromCellId != null && IsCellHidden(wire.FromCellId)) continue;
                     if (wire.ToCellId != null && IsCellHidden(wire.ToCellId)) continue;
-                    var path = BuildWirePath(wire);
+                    // Nodos draws node-editor bezier links; the other styles
+                    // keep the orthogonal Manhattan routing.
+                    var path = _renderMode == SchematicRenderMode.Nodes
+                        ? BuildWireBezier(wire) : BuildWirePath(wire);
                     var stroke = WireColour(net);
-                    // Human mode thickens both bus and wire strokes so a
-                    // dense diagram is easier to trace at a glance. Raw
-                    // keeps the original tighter values.
-                    int sw = _renderMode == SchematicRenderMode.Human
-                        ? (net.Kind == NetKind.Bus ? 4 : 3)
-                        : (net.Kind == NetKind.Bus ? 3 : 2);
+                    // The human styles thicken both bus and wire strokes so a
+                    // dense diagram is easier to trace at a glance. Nodos keeps
+                    // them a touch thinner so its many bezier links read as
+                    // crossings rather than heavy blobs. Raw stays tightest.
+                    int sw = _renderMode == SchematicRenderMode.Nodes
+                        ? (net.Kind == NetKind.Bus ? 3 : 2)
+                        : _renderMode.IsHuman()
+                            ? (net.Kind == NetKind.Bus ? 4 : 3)
+                            : (net.Kind == NetKind.Bus ? 3 : 2);
                     var classes = WireCssClasses(net, wire);
                     <path class="@classes" d="@path" fill="none" stroke="@stroke"
                           stroke-width="@sw" stroke-linejoin="round"
+                          marker-end="@(_renderMode == SchematicRenderMode.Rtl ? "url(#schematic-arrow)" : null)"
                           data-net="@net.Name"
                           @onclick="@(e => SelectNet(net.Id, e))"
                           @onclick:stopPropagation="true" />
@@ -460,8 +472,16 @@ else
     private void ToggleFullscreen()
     {
         _isFullscreen = !_isFullscreen;
+        // Entering/leaving fullscreen changes the viewport dramatically but
+        // not _layout, so OnAfterRenderAsync won't re-attach. Flag a re-fit
+        // there so the schematic reframes to the new size.
+        _needsRefit = true;
         StateHasChanged();
     }
+
+    /// <summary>Set when a non-layout viewport change (e.g. fullscreen
+    /// toggle) needs the pan-zoom view re-fitted on the next render.</summary>
+    private bool _needsRefit;
     private double _zoom = 1.0;
     private LaidOutNetlist? _layout;
     // The literal netlist straight from synthesis. Cached so toggling
@@ -528,14 +548,68 @@ else
     /// (session-local) — no AppSettings persistence in v1. Also seeds
     /// the export modal's initial mode so the export matches the view.
     /// </summary>
-    private SchematicRenderMode _renderMode = SchematicRenderMode.Human;
+    private SchematicRenderMode _renderMode = SchematicRenderMode.Grouped;
+    private const string RenderModeStorageKey = "kmila.schematic.style";
 
-    private void SetRenderMode(SchematicRenderMode mode)
+    private async Task OnStyleChanged(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<SchematicRenderMode>(e.Value?.ToString(), out var m))
+            await SetRenderMode(m);
+    }
+
+    private async Task SetRenderMode(SchematicRenderMode mode)
     {
         if (_renderMode == mode) return;
+        // Gate-level (Raw/Grouped) and block-level (Rtl/Nodes) are different
+        // pipelines: crossing that line swaps the netlist + layout, so rebuild.
+        // Staying on the same side (Raw↔Grouped, Rtl↔Nodes) only re-skins the
+        // identical geometry, so a re-render is enough.
+        bool pipelineChanges = _renderMode.IsBlock() != mode.IsBlock();
         _renderMode = mode;
+        if (pipelineChanges && _rawNetlist != null)
+        {
+            RebuildDisplayLayout();
+            RegenerateColours(reseed: false);
+            ClearSelection(); // cell ids differ between the gate and block netlists
+        }
+        await PersistRenderModeAsync();
         StateHasChanged();
     }
+
+    /// <summary>Saves the chosen style per-user in localStorage. Per-user UI
+    /// preference — not the shared web DB (that file is one row for everyone).</summary>
+    private async Task PersistRenderModeAsync()
+    {
+        try { await JS.InvokeVoidAsync("localStorage.setItem", RenderModeStorageKey, _renderMode.ToString()); }
+        catch { /* prerender / storage blocked — the in-memory choice still applies */ }
+    }
+
+    /// <summary>Restores the saved style on first interactive render. Returns
+    /// true when it changed the current style (caller rebuilds + re-renders).</summary>
+    private async Task<bool> LoadRenderModeAsync()
+    {
+        try
+        {
+            var saved = await JS.InvokeAsync<string?>("localStorage.getItem", RenderModeStorageKey);
+            if (!string.IsNullOrEmpty(saved)
+                && Enum.TryParse<SchematicRenderMode>(saved, out var m) && m != _renderMode)
+            {
+                bool pipelineChanges = _renderMode.IsBlock() != m.IsBlock();
+                _renderMode = m;
+                if (pipelineChanges && _rawNetlist != null)
+                {
+                    RebuildDisplayLayout();
+                    RegenerateColours(reseed: false);
+                    ClearSelection();
+                }
+                return true;
+            }
+        }
+        catch { /* prerender / storage blocked — keep the default style */ }
+        return false;
+    }
+
+    private bool _renderModeLoaded;
 
     /// <summary>Per-cell colour assignments. Cells of the same kind share
     /// a hue, vary by lightness across instances. Reseeded on every
@@ -598,8 +672,32 @@ else
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        // Restore the per-user style on the first interactive render (JS /
+        // localStorage aren't available during prerender). If it changes the
+        // style the layout is rebuilt here, and the render below re-attaches
+        // pan-zoom to the new layout.
+        if (firstRender && !_renderModeLoaded)
+        {
+            _renderModeLoaded = true;
+            if (await LoadRenderModeAsync()) StateHasChanged();
+        }
+
         if (_layout == null) return;
-        if (ReferenceEquals(_layout, _panZoomBoundLayout) && _panZoomId > 0) return;
+        if (ReferenceEquals(_layout, _panZoomBoundLayout) && _panZoomId > 0)
+        {
+            // Layout unchanged, so no re-attach. But a viewport change that
+            // doesn't touch _layout — notably the fullscreen toggle, which
+            // flips the body between docked and position:fixed inset:0 —
+            // leaves the old frame locked in. Force a re-fit against the new
+            // size when asked (fit() reframes regardless of manual zoom).
+            if (_needsRefit && _panZoomId > 0)
+            {
+                _needsRefit = false;
+                try { await JS.InvokeVoidAsync("kmilaPanZoomFit", _panZoomId); }
+                catch { /* JS not ready (prerender / sandbox) */ }
+            }
+            return;
+        }
         try
         {
             if (_panZoomId > 0)
@@ -609,8 +707,21 @@ else
             }
             _panZoomId = await JS.InvokeAsync<int>("kmilaAttachPanZoom",
                 ".schematic-viewer__body",
-                new { targetSelector = ".schematic-svg", minScale = 0.2, maxScale = 6, fitOnAttach = true });
+                new
+                {
+                    targetSelector = ".schematic-svg",
+                    // Lower floor than the old 0.2: a wide 100+ cell canvas
+                    // needs to shrink well past that to fit a small dock.
+                    minScale = 0.05,
+                    maxScale = 6,
+                    fitOnAttach = true,
+                    // Declare the exact canvas size so the fit maths never
+                    // depends on a transient/zeroed SVG client rect.
+                    naturalWidth = _layout.CanvasWidth,
+                    naturalHeight = _layout.CanvasHeight,
+                });
             _panZoomBoundLayout = _layout;
+            _needsRefit = false;
         }
         catch
         {
@@ -678,11 +789,40 @@ else
     private void RebuildDisplayLayout()
     {
         if (_rawNetlist == null) { _layout = null; return; }
+        if (_renderMode.IsBlock())
+        {
+            // Block styles (RTL / Nodos) coarsen the simplified netlist into
+            // named functional blocks and lay those out with per-block sizing.
+            // The naive literal netlist has no meaning at block level, so block
+            // styles always build on the simplified one regardless of the tab.
+            var blocks = BlockGraphBuilder.Build(SchematicSimplifier.SimplifyNetlist(_rawNetlist));
+            _layout = LayeredLayout.Layout(blocks, groupAware: false, sizeOf: BlockGraphBuilder.BlockSize, colGap: 260, rowGap: 120, crossingSweeps: 4);
+        }
+        else
+        {
+            var display = _mode == ViewMode.Naive
+                ? _rawNetlist
+                : SchematicSimplifier.SimplifyNetlist(_rawNetlist);
+            _layout = LayeredLayout.Layout(display);
+        }
+        BuildLookups();
+    }
+
+    /// <summary>Builds a layout for an arbitrary render style from the cached
+    /// raw netlist, without mutating viewer state. Used by the export flow so
+    /// it can render a style other than the one currently on screen.</summary>
+    private LaidOutNetlist? BuildLayoutFor(SchematicRenderMode mode)
+    {
+        if (_rawNetlist == null) return null;
+        if (mode.IsBlock())
+        {
+            var blocks = BlockGraphBuilder.Build(SchematicSimplifier.SimplifyNetlist(_rawNetlist));
+            return LayeredLayout.Layout(blocks, groupAware: false, sizeOf: BlockGraphBuilder.BlockSize, colGap: 260, rowGap: 120, crossingSweeps: 4);
+        }
         var display = _mode == ViewMode.Naive
             ? _rawNetlist
             : SchematicSimplifier.SimplifyNetlist(_rawNetlist);
-        _layout = LayeredLayout.Layout(display);
-        BuildLookups();
+        return LayeredLayout.Layout(display);
     }
 
     private void BuildLookups()
@@ -753,8 +893,23 @@ else
            && int.TryParse(c.SourceLine, out var ln)
            && active.Contains(ln);
 
-    private void Zoom(double factor)
+    private async Task Zoom(double factor)
     {
+        // Prefer the JS transform layer so the +/- buttons zoom about the
+        // viewport centre using the SAME transform that gesture/pinch zoom
+        // drives — previously these buttons scaled the SVG width/height
+        // attribute (a second, uncoordinated zoom system) which fought the
+        // pan-zoom transform and could push content out of reach.
+        if (_panZoomId > 0)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("kmilaPanZoomZoom", _panZoomId, factor);
+                return;
+            }
+            catch { /* JS not ready (prerender / sandbox) — fall through */ }
+        }
+        // No-JS fallback: scale the rendered SVG box directly.
         _zoom = Math.Clamp(_zoom * factor, 0.25, 4.0);
         StateHasChanged();
     }
@@ -1188,8 +1343,25 @@ else
         return sb.ToString();
     }
 
+    /// <summary>Internal bookkeeping attrs the block builder stamps on a block
+    /// cell — never shown in the inspector (the block branch surfaces the
+    /// useful ones as clean fields instead).</summary>
+    private static readonly HashSet<string> _hiddenAttrKeys = new(StringComparer.Ordinal)
+    {
+        BlockGraphBuilder.BlockAttr, BlockGraphBuilder.LabelAttr,
+        BlockGraphBuilder.MembersAttr, BlockGraphBuilder.SubAttr,
+    };
+
     private void BuildSelectionFields(Cell cell)
     {
+        // Block cells get a clean, block-level inspector — no internal attrs,
+        // no raw intermediate net names (the gate path shows those).
+        if (IsBlockCell(cell))
+        {
+            BuildBlockSelectionFields(cell);
+            return;
+        }
+
         var fields = new List<(string, string)>();
         // Title is the operator, prominent so the user can see at a
         // glance what they clicked. Falls back to cell-kind.
@@ -1208,10 +1380,37 @@ else
         {
             foreach (var (k, v) in cell.Attrs)
             {
-                if (k == "Op") continue; // already in the title
+                if (k == "Op" || _hiddenAttrKeys.Contains(k)) continue; // in title / internal
                 fields.Add((LocalizeAttrKey(k), LocalizeAttrValue(k, v)));
             }
         }
+        _selectionFields = fields;
+    }
+
+    /// <summary>Clean inspector for a merged functional block: its name, the
+    /// operation, how many gates it folds, the VHDL statement, and its ports
+    /// by their friendly names (not the internal net ids).</summary>
+    private void BuildBlockSelectionFields(Cell cell)
+    {
+        var attrs = cell.Attrs!;
+        _selectionTitle = attrs.TryGetValue(BlockGraphBuilder.LabelAttr, out var label) && !string.IsNullOrEmpty(label)
+            ? label : GateGlyphs.Label(cell.Kind);
+        var fields = new List<(string, string)>();
+        if (attrs.TryGetValue(BlockGraphBuilder.SubAttr, out var sub) && !string.IsNullOrEmpty(sub))
+            fields.Add((Traductor.T("SCHEMATIC_INFO_OP"), sub));
+        if (attrs.TryGetValue(BlockGraphBuilder.MembersAttr, out var mem) && !string.IsNullOrEmpty(mem))
+        {
+            int gates = mem.Split(',', StringSplitOptions.RemoveEmptyEntries).Length;
+            fields.Add((Traductor.T("SCHEMATIC_INFO_GATES"), gates.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        }
+        if (!string.IsNullOrEmpty(cell.SourceLine))
+            fields.Add((Traductor.T("SCHEMATIC_INFO_SOURCE"), cell.SourceLine));
+        var ins = string.Join(", ", cell.Inputs.Select(p => p.Name).Where(n => !string.IsNullOrEmpty(n) && n != "·"));
+        if (!string.IsNullOrEmpty(ins))
+            fields.Add((Traductor.T("SCHEMATIC_INFO_INPUTS"), ins));
+        var outs = string.Join(", ", cell.Outputs.Select(p => p.Name).Where(n => !string.IsNullOrEmpty(n) && n != "·"));
+        if (!string.IsNullOrEmpty(outs))
+            fields.Add((Traductor.T("SCHEMATIC_INFO_OUTPUT"), outs));
         _selectionFields = fields;
     }
 
@@ -1482,10 +1681,14 @@ else
     /// </summary>
     private string BuildCellInner(Cell c)
     {
+        // Block styles (RTL / Nodos) draw a box/card instead of a gate glyph.
+        if (_renderMode.IsBlock() && IsBlockCell(c))
+            return BuildBlockCellInner(c);
+
         var col = CellColour(c);
         string label = CellLabel(c);
         var ci = System.Globalization.CultureInfo.InvariantCulture;
-        bool human = _renderMode == SchematicRenderMode.Human;
+        bool human = _renderMode.IsHuman();
         int labelFont = human ? 14 : 11;
         var sb = new System.Text.StringBuilder();
         foreach (var d in GateGlyphs.Paths(c.Kind))
@@ -1518,6 +1721,40 @@ else
         return sb.ToString();
     }
 
+    private static bool IsBlockCell(Cell c)
+        => c.Attrs != null && c.Attrs.ContainsKey(BlockGraphBuilder.BlockAttr);
+
+    /// <summary>Draws one functional block (RTL box or Nodos card) via the
+    /// shared <see cref="BlockSkins"/> helper so screen + export match.</summary>
+    private string BuildBlockCellInner(Cell c)
+    {
+        if (_layout == null || !_layout.CellBounds.TryGetValue(c.Id, out var b)) return "";
+        var col = CellColour(c);
+        var colors = new BlockSkins.Colors(
+            Fill: col.Body,
+            Stroke: col.Stroke,
+            HeaderFill: col.Stroke,
+            HeaderText: "#ffffff",
+            Title: col.Label,
+            Sub: "var(--text-muted)",
+            Glyph: col.Label,
+            PortFill: "var(--schematic-cell-bg)",
+            PortStroke: col.Stroke,
+            PortLabel: "var(--text-strong)");
+        bool IsBus(string netId) => _netById.TryGetValue(netId, out var n) && n.Kind == NetKind.Bus;
+        return BlockSkins.Build(c, b.Width, b.Height, _renderMode, colors, IsBus);
+    }
+
+    /// <summary>Node-editor bezier for Nodos: a smooth curve from the wire's
+    /// source anchor straight to its sink, ignoring the Manhattan mid-points.</summary>
+    private static string BuildWireBezier(WirePath wire)
+    {
+        if (wire.Points.Count < 2) return BuildWirePath(wire);
+        var (x1, y1) = wire.Points[0];
+        var (x2, y2) = wire.Points[^1];
+        return BlockSkins.BezierPath(x1, y1, x2, y2);
+    }
+
     private string BuildPortInner(PortPin port, (double X, double Y) pos)
     {
         bool isInput = port.Direction is PortDir.In or PortDir.InOut;
@@ -1525,7 +1762,7 @@ else
         string anchor = isInput ? "start" : "end";
         string colour = PortColour(port);
         var ci = System.Globalization.CultureInfo.InvariantCulture;
-        bool human = _renderMode == SchematicRenderMode.Human;
+        bool human = _renderMode.IsHuman();
         int portFont = human ? 14 : 11;
         var sb = new System.Text.StringBuilder();
         sb.Append($"<circle cx=\"{pos.X.ToString("0.##", ci)}\" cy=\"{pos.Y.ToString("0.##", ci)}\" ")
@@ -1554,32 +1791,40 @@ else
                 || string.Equals(c.SourceLine, _focusedSourceLine, StringComparison.Ordinal))
             .GroupBy(c => c.SourceLine!)
             .ToList();
-        string[] palette = new[]
-        {
-            "rgba(60,130,246,.10)", "rgba(245,158,11,.10)", "rgba(16,185,129,.10)",
-            "rgba(168,85,247,.10)", "rgba(239,68,68,.10)",  "rgba(6,182,212,.10)",
-            "rgba(236,72,153,.10)",
-        };
+        // Grouped style draws stronger, titled containers (visible outline,
+        // display-font title) so the statement structure reads first. Naive
+        // keeps the original faint, label-only tints.
+        bool grouped = _renderMode == SchematicRenderMode.Grouped;
+        string[] hues = new[] { "60,130,246", "245,158,11", "16,185,129",
+            "168,85,247", "239,68,68", "6,182,212", "236,72,153" };
         for (int i = 0; i < groups.Count; i++)
         {
             var g = groups[i];
-            string fill = palette[i % palette.Length];
+            string hue = hues[i % hues.Length];
             var rects = g.Select(c => _layout.CellBounds.TryGetValue(c.Id, out var r) ? r : default)
                          .Where(r => r.Width > 0).ToList();
             if (rects.Count == 0) continue;
             double x0 = rects.Min(r => r.X) - 20;
-            double y0 = rects.Min(r => r.Y) - 32;
+            double y0 = rects.Min(r => r.Y) - (grouped ? 34 : 32);
             double x1 = rects.Max(r => r.X + r.Width) + 20;
             double y1 = rects.Max(r => r.Y + r.Height) + 16;
-            sb.Append($"<rect x=\"{x0.ToString("0.##", ci)}\" y=\"{y0.ToString("0.##", ci)}\" ")
-              .Append($"width=\"{(x1 - x0).ToString("0.##", ci)}\" height=\"{(y1 - y0).ToString("0.##", ci)}\" ")
-              .Append($"rx=\"10\" fill=\"{fill}\" stroke=\"none\" />");
             string text = g.Key.Length > 64 ? g.Key.Substring(0, 61) + "…" : g.Key;
-            sb.Append($"<text x=\"{(x0 + 8).ToString("0.##", ci)}\" y=\"{(y0 + 14).ToString("0.##", ci)}\" ")
-              .Append("font-size=\"10\" font-family=\"ui-monospace, Menlo, monospace\" ")
-              .Append("fill=\"var(--text-strong)\">")
-              .Append(System.Net.WebUtility.HtmlEncode(text))
-              .Append("</text>");
+            if (grouped)
+            {
+                sb.Append(BlockSkins.GroupContainer(x0, y0, x1 - x0, y1 - y0, text,
+                    $"rgba({hue},.09)", $"rgba({hue},.55)", "var(--text-strong)"));
+            }
+            else
+            {
+                sb.Append($"<rect x=\"{x0.ToString("0.##", ci)}\" y=\"{y0.ToString("0.##", ci)}\" ")
+                  .Append($"width=\"{(x1 - x0).ToString("0.##", ci)}\" height=\"{(y1 - y0).ToString("0.##", ci)}\" ")
+                  .Append($"rx=\"10\" fill=\"rgba({hue},.10)\" stroke=\"none\" />");
+                sb.Append($"<text x=\"{(x0 + 8).ToString("0.##", ci)}\" y=\"{(y0 + 14).ToString("0.##", ci)}\" ")
+                  .Append("font-size=\"10\" font-family=\"ui-monospace, Menlo, monospace\" ")
+                  .Append("fill=\"var(--text-strong)\">")
+                  .Append(System.Net.WebUtility.HtmlEncode(text))
+                  .Append("</text>");
+            }
         }
         return sb.ToString();
     }
@@ -1701,28 +1946,56 @@ else
         if (_layout == null) return;
         await _exportModal.HideAsync();
 
-        FilteredLayout filtered;
+        // The export renders in the style the modal chose (req.Mode). When
+        // that style uses a different pipeline than the on-screen view
+        // (gate ↔ block), temporarily swap in a layout + palette built for it
+        // so the filter, geometry and colours all match — then restore before
+        // the first await, so the live view never flickers to the swapped state.
+        bool swap = req.Mode.IsBlock() != _renderMode.IsBlock() && _rawNetlist != null;
+        var savedLayout = _layout;
+        var savedCellColours = _cellColours;
+        var savedPortColours = _portColours;
+        if (swap)
+        {
+            _layout = BuildLayoutFor(req.Mode);
+            BuildLookups();
+            RegenerateColours(reseed: false);
+            // Selection / Naive-focus picks are ids from the other pipeline —
+            // they don't exist in this layout, so widen to the whole diagram.
+            if (req.Scope is SchematicExportScope.Selection or SchematicExportScope.NaiveBlock)
+                req.Scope = SchematicExportScope.Full;
+        }
+
+        string svg;
         try
         {
-            filtered = BuildFilter(req);
+            if (_layout == null) return;
+            var filtered = BuildFilter(req);
+            string title = $"{_layout.Netlist.EntityName}  ·  {ScopeTitle(req)}";
+            // Hand the palette down so a colour export keeps the exact hues on
+            // screen (including Shuffle clicks). Mono mode ignores it.
+            var palette = new SchematicColourPalette
+            {
+                Cells = new Dictionary<string, SchematicCellColours>(_cellColours),
+                Ports = new Dictionary<string, string>(_portColours),
+            };
+            svg = SchematicExporter.BuildSvg(filtered, req, title, palette);
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "[SchematicViewer] Failed to build export filter");
+            Logger.LogError(ex, "[SchematicViewer] Failed to build export SVG");
             return;
         }
-
-        string title = $"{_layout.Netlist.EntityName}  ·  {ScopeTitle(req)}";
-        // Hand the on-screen palette down so a colour export keeps the
-        // exact hues the user is looking at — including the result of
-        // any Shuffle clicks since the last layout refresh. Mono mode
-        // ignores the palette entirely.
-        var palette = new SchematicColourPalette
+        finally
         {
-            Cells = new Dictionary<string, SchematicCellColours>(_cellColours),
-            Ports = new Dictionary<string, string>(_portColours),
-        };
-        string svg = SchematicExporter.BuildSvg(filtered, req, title, palette);
+            if (swap)
+            {
+                _layout = savedLayout;
+                _cellColours = savedCellColours;
+                _portColours = savedPortColours;
+                BuildLookups();
+            }
+        }
 
         string baseName = SanitizeFileName($"kmila-schematic_{_layout.Netlist.EntityName}_{req.Scope}");
         string ext = req.Format == SchematicExportFormat.Svg ? "svg" : "png";

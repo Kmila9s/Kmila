@@ -646,6 +646,13 @@ window.downloadFile = function (fileName, content) {
     // expose those in modern browsers; fall back to bounding-rect-divided-by-
     // scale when they're 0 (older WebKit on iOS sometimes reports 0 for SVG).
     function measureNatural(state) {
+        // Trust the caller's declared canvas size when given — it's exact and
+        // immune to the clientWidth===0 / transform-inflation quirks below.
+        if (state.naturalWHint > 0 && state.naturalHHint > 0) {
+            state.naturalW = state.naturalWHint;
+            state.naturalH = state.naturalHHint;
+            return;
+        }
         let w = state.target.clientWidth || 0;
         let h = state.target.clientHeight || 0;
         if (!w || !h) {
@@ -701,11 +708,21 @@ window.downloadFile = function (fileName, content) {
         const pad = 16;
         const sx = (rect.width  - pad * 2) / state.naturalW;
         const sy = (rect.height - pad * 2) / state.naturalH;
-        state.scale = clamp(Math.min(sx, sy), state.minScale, state.maxScale);
+        const fitScale = Math.min(sx, sy);
+        // A wide schematic (CanvasWidth can be several thousand px) must be
+        // allowed to shrink below the configured pan floor, or it stays
+        // clipped on every edge. Lower the pan floor to the fitted scale so
+        // the content can fit AND the user can't then zoom back out past the
+        // fitted frame into empty space. Never exceed maxScale.
+        if (fitScale > 0 && fitScale < state.minScale) state.minScale = fitScale;
+        state.scale = clamp(fitScale, state.minScale, state.maxScale);
         const ox = state.target.offsetLeft || 0;
         const oy = state.target.offsetTop  || 0;
         state.tx = (rect.width  - state.naturalW * state.scale) / 2 - ox;
         state.ty = (rect.height - state.naturalH * state.scale) / 2 - oy;
+        // A fresh fit reframes the content, so the view is no longer a
+        // user-chosen one — let resize re-fit again until they adjust it.
+        state.userAdjusted = false;
         applyTransform(state);
         return true;
     }
@@ -753,6 +770,21 @@ window.downloadFile = function (fileName, content) {
             // Natural (pre-transform) content size — measured at attach and
             // re-measured on resize. Used to clamp pan and to fit-to-view.
             naturalW: 0, naturalH: 0,
+            // Caller-supplied natural size (the layout's own canvas pixels).
+            // When present it is the source of truth for measureNatural,
+            // sidestepping the browser quirks where an <svg> reports
+            // clientWidth/Height === 0 (older WebKit) or a transformed
+            // getBoundingClientRect has to be divided back by scale (which
+            // inflates the box whenever scale !== 1). Pass 0/undefined to
+            // keep the pure-DOM measurement path (waveform, Visual canvas).
+            naturalWHint: Number.isFinite(opts.naturalWidth)  && opts.naturalWidth  > 0 ? opts.naturalWidth  : 0,
+            naturalHHint: Number.isFinite(opts.naturalHeight) && opts.naturalHeight > 0 ? opts.naturalHeight : 0,
+            // True once the user has manually panned/pinched/zoomed. While
+            // false, a root resize (dock resize, fullscreen toggle, rotate)
+            // re-fits so the content stays framed; once the user takes
+            // control we stop auto-framing and only re-clamp, so their view
+            // isn't yanked back on the next resize.
+            userAdjusted: false,
             // Initial framing strategy. fitOnAttach=true centers and scales
             // the content into the root (schematic); false keeps the
             // identity transform so the user starts at the top-left of the
@@ -843,6 +875,7 @@ window.downloadFile = function (fileName, content) {
                 }
                 state.tx = state.panStartTx + dx;
                 state.ty = state.panStartTy + dy;
+                state.userAdjusted = true;
                 applyTransform(state);
                 e.preventDefault();
             } else if (pointers.size === 2 && state.pinchStartDist > 0) {
@@ -862,6 +895,7 @@ window.downloadFile = function (fileName, content) {
                 state.scale = newScale;
                 state.tx = cx - worldX * state.scale;
                 state.ty = cy - worldY * state.scale;
+                state.userAdjusted = true;
                 applyTransform(state);
                 e.preventDefault();
             }
@@ -901,6 +935,7 @@ window.downloadFile = function (fileName, content) {
                 state.scale = newScale;
                 state.tx = cx - worldX * state.scale;
                 state.ty = cy - worldY * state.scale;
+                state.userAdjusted = true;
                 applyTransform(state);
                 return;
             }
@@ -917,6 +952,7 @@ window.downloadFile = function (fileName, content) {
                 state.tx -= e.deltaX;
                 state.ty -= e.deltaY;
             }
+            state.userAdjusted = true;
             applyTransform(state);
         }
 
@@ -947,6 +983,7 @@ window.downloadFile = function (fileName, content) {
             state.scale = newScale;
             state.tx = cx - worldX * state.scale;
             state.ty = cy - worldY * state.scale;
+            state.userAdjusted = true;
             applyTransform(state);
         }
         function onGestureEnd(e) {
@@ -1001,6 +1038,12 @@ window.downloadFile = function (fileName, content) {
                 measureNatural(state);
                 if (state.needsFit) {
                     if (fitToView(state)) state.needsFit = false;
+                } else if (state.fitOnAttach && !state.userAdjusted) {
+                    // Root changed size (dock resize, fullscreen enter/exit,
+                    // orientation) and the user hasn't taken manual control —
+                    // re-frame so the content stays fitted instead of locking
+                    // in whatever frame the first (possibly 0-size) attach got.
+                    fitToView(state);
                 } else {
                     applyTransform(state);
                 }
@@ -1049,6 +1092,7 @@ window.downloadFile = function (fileName, content) {
         s.scale = Math.max(s.minScale, Math.min(s.maxScale, s.scale * factor));
         s.tx = cx - worldX * s.scale;
         s.ty = cy - worldY * s.scale;
+        s.userAdjusted = true;
         applyTransform(s);
     }
 
