@@ -745,35 +745,126 @@
     // pair of listeners covers every wrapper on the page, present or future,
     // with no per-instance JS interop required from Blazor.
     // -------------------------------------------------------------------------
-    function _kmilaTooltipAnchorSync(target) {
-        if (!(target instanceof Element)) return;
-        var tip = target.closest ? target.closest(".kmila-tooltip") : null;
-        if (!tip) return;
-        // The wrapper is display: contents (v=30 followup: fixes widget
-        // palette chips not stretching), so it has no box of its own and
-        // getBoundingClientRect() on it returns zeros. Use the first real
-        // child (the wrapped button in the canonical case) as the anchor
-        // instead — its rect is what we want the bubble to point at anyway.
+    // v=7 (2026-10-08): a single bubble appended to <body>. A body child sits
+    // OUTSIDE every app stacking context, so it can never be painted over by a
+    // transformed / contained / will-change ancestor's sibling layer (the old
+    // position:fixed pseudo was still trapped by those). We also flip the bubble
+    // to the side that fits and clamp it to the viewport, so it is adaptive to
+    // the trigger's position instead of always honouring a fixed side.
+    var _ktBubble = null, _ktArrow = null, _ktTimer = null, _ktCurrent = null;
+    var KT_MARGIN = 8, KT_GAP = 8;
+
+    function _ktEnsure() {
+        if (_ktBubble || !document.body) return;
+        _ktBubble = document.createElement("div");
+        _ktBubble.className = "kmila-tip-bubble";
+        _ktBubble.setAttribute("aria-hidden", "true");
+        _ktArrow = document.createElement("div");
+        _ktArrow.className = "kmila-tip-arrow";
+        _ktArrow.setAttribute("aria-hidden", "true");
+        document.body.appendChild(_ktBubble);
+        document.body.appendChild(_ktArrow);
+    }
+
+    function _ktHide() {
+        if (_ktTimer) { clearTimeout(_ktTimer); _ktTimer = null; }
+        _ktCurrent = null;
+        if (_ktBubble) _ktBubble.classList.remove("is-visible");
+        if (_ktArrow) _ktArrow.classList.remove("is-visible");
+    }
+
+    function _ktPreferred(tip) {
+        if (tip.classList.contains("kmila-tooltip--bottom")) return "bottom";
+        if (tip.classList.contains("kmila-tooltip--left")) return "left";
+        if (tip.classList.contains("kmila-tooltip--right")) return "right";
+        return "top";
+    }
+
+    function _ktPlace(tip, rect) {
+        var vw = window.innerWidth, vh = window.innerHeight;
+        var bw = _ktBubble.offsetWidth, bh = _ktBubble.offsetHeight;
+        var pref = _ktPreferred(tip);
+        if (document.documentElement.getAttribute("dir") === "rtl") {
+            if (pref === "left") pref = "right"; else if (pref === "right") pref = "left";
+        }
+        var opp = { top: "bottom", bottom: "top", left: "right", right: "left" };
+        var order = [pref, opp[pref]];
+        ["top", "bottom", "left", "right"].forEach(function (s) {
+            if (order.indexOf(s) < 0) order.push(s);
+        });
+        function fits(side) {
+            if (side === "top") return rect.top - KT_GAP - bh >= KT_MARGIN;
+            if (side === "bottom") return rect.bottom + KT_GAP + bh <= vh - KT_MARGIN;
+            if (side === "left") return rect.left - KT_GAP - bw >= KT_MARGIN;
+            return rect.right + KT_GAP + bw <= vw - KT_MARGIN;
+        }
+        var side = pref;
+        for (var i = 0; i < order.length; i++) { if (fits(order[i])) { side = order[i]; break; } }
+
+        var cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+        var left, top;
+        if (side === "top") { left = cx - bw / 2; top = rect.top - KT_GAP - bh; }
+        else if (side === "bottom") { left = cx - bw / 2; top = rect.bottom + KT_GAP; }
+        else if (side === "left") { left = rect.left - KT_GAP - bw; top = cy - bh / 2; }
+        else { left = rect.right + KT_GAP; top = cy - bh / 2; }
+
+        left = Math.max(KT_MARGIN, Math.min(left, vw - KT_MARGIN - bw));
+        top = Math.max(KT_MARGIN, Math.min(top, vh - KT_MARGIN - bh));
+        _ktBubble.style.left = left + "px";
+        _ktBubble.style.top = top + "px";
+
+        var ax, ay;
+        if (side === "top") { ax = Math.min(Math.max(cx, left + 8), left + bw - 8); ay = top + bh; }
+        else if (side === "bottom") { ax = Math.min(Math.max(cx, left + 8), left + bw - 8); ay = top; }
+        else if (side === "left") { ax = left + bw; ay = Math.min(Math.max(cy, top + 8), top + bh - 8); }
+        else { ax = left; ay = Math.min(Math.max(cy, top + 8), top + bh - 8); }
+        _ktArrow.style.left = ax + "px";
+        _ktArrow.style.top = ay + "px";
+    }
+
+    function _ktShow(tip) {
+        _ktEnsure();
+        if (!_ktBubble) return;
+        // The wrapper is display:contents (no box), so anchor to its first real
+        // child (the wrapped button) — that is the rect the bubble points at.
         var anchor = tip.firstElementChild || tip;
         var r = anchor.getBoundingClientRect();
-        // A wrapper still detached from the visible layout (hidden ancestor,
-        // Blazor not yet rendered) reports a zero-size rect — skip so the
-        // pseudo keeps its last known coords instead of jumping to (0,0).
-        if (r.width === 0 && r.height === 0) return;
-        var s = tip.style;
-        s.setProperty("--kt-l", r.left + "px");
-        s.setProperty("--kt-r", r.right + "px");
-        s.setProperty("--kt-t", r.top + "px");
-        s.setProperty("--kt-b", r.bottom + "px");
-        s.setProperty("--kt-w", r.width + "px");
-        s.setProperty("--kt-h", r.height + "px");
+        if (r.width === 0 && r.height === 0) return; // detached / not yet laid out
+        var text = tip.getAttribute("data-kmila-tip") || "";
+        if (!text) return;
+        _ktCurrent = tip;
+        _ktBubble.textContent = text;
+        _ktPlace(tip, r); // measurable: bubble is opacity:0, not display:none
+        _ktBubble.classList.add("is-visible");
+        _ktArrow.classList.add("is-visible");
     }
-    document.addEventListener("mouseover", function (e) {
-        _kmilaTooltipAnchorSync(e.target);
-    });
-    document.addEventListener("focusin", function (e) {
-        _kmilaTooltipAnchorSync(e.target);
-    });
+
+    function _ktOver(e) {
+        var t = e.target;
+        var tip = (t && t.closest) ? t.closest(".kmila-tooltip") : null;
+        if (!tip || tip === _ktCurrent) return;
+        if (_ktTimer) clearTimeout(_ktTimer);
+        var touch = window.matchMedia && window.matchMedia("(hover: none)").matches;
+        var delay = _ktCurrent ? 0 : (touch ? 150 : 500); // instant switch between tips
+        _ktTimer = setTimeout(function () { _ktShow(tip); }, delay);
+    }
+    function _ktOut(e) {
+        var t = e.target;
+        var tip = (t && t.closest) ? t.closest(".kmila-tooltip") : null;
+        if (!tip) return;
+        var to = e.relatedTarget;
+        if (to && to.closest && to.closest(".kmila-tooltip")) return; // moving to another tip
+        _ktHide();
+    }
+
+    document.addEventListener("mouseover", _ktOver, true);
+    document.addEventListener("mouseout", _ktOut, true);
+    document.addEventListener("focusin", _ktOver, true);
+    document.addEventListener("focusout", _ktOut, true);
+    window.addEventListener("scroll", _ktHide, true);
+    window.addEventListener("resize", _ktHide);
+    document.addEventListener("pointerdown", _ktHide, true);
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape") _ktHide(); }, true);
 
     // -------------------------------------------------------------------------
     // NAV-1 (2026-07-24) — Android hardware back key handler.

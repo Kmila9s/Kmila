@@ -5,6 +5,7 @@ using Interpreter.Synthesis;
 using Interpreter.Synthesis.Layout;
 using Kmila.Shared.Components.Schematic;
 using Kmila.Shared.Models;
+using Kmila.Shared.Models.Schematic;
 
 namespace Kmila.Shared.Services;
 
@@ -51,7 +52,8 @@ public static class SchematicExporter
         FilteredLayout filtered,
         SchematicExportRequest req,
         string title,
-        SchematicColourPalette? palette = null)
+        SchematicColourPalette? palette = null,
+        IReadOnlyList<SchematicAnnotation>? annotations = null)
     {
         var ci = CultureInfo.InvariantCulture;
         bool human = req.Mode.IsHuman();
@@ -71,6 +73,19 @@ public static class SchematicExporter
         int wireStroke = nodes ? 2 : human ? 3 : 2;
 
         var bounds = filtered.Bounds;
+        // Fold annotation cards into the bounding box so trimming never clips a
+        // note/pinned card that sits outside the diagram's own extent.
+        if (annotations is { Count: > 0 })
+        {
+            foreach (var a in annotations)
+            {
+                double x0 = Math.Min(bounds.X, a.X);
+                double y0 = Math.Min(bounds.Y, a.Y);
+                double x1 = Math.Max(bounds.X + bounds.Width, a.X + a.W);
+                double y1 = Math.Max(bounds.Y + bounds.Height, a.Y + a.H);
+                bounds = new Interpreter.Synthesis.Layout.Rect(x0, y0, x1 - x0, y1 - y0);
+            }
+        }
         bool trim = req.TrimToBounds;
         bool useColor = req.ColorMode == SchematicExportColorMode.Color && palette != null;
 
@@ -298,6 +313,20 @@ public static class SchematicExporter
               .Append("</text>\n");
         }
 
+        // Annotation cards (notes + pinned info) float on top of the diagram,
+        // at the same canvas coordinates they occupy on screen.
+        if (annotations is { Count: > 0 })
+        {
+            foreach (var a in annotations)
+            {
+                double x = a.X + offsetX;
+                double y = a.Y + offsetY;
+                sb.Append(ci, $"<g transform=\"translate({x.ToString("0.##", ci)} {y.ToString("0.##", ci)})\">");
+                sb.Append(AnnotationSkins.Build(a));
+                sb.Append("</g>\n");
+            }
+        }
+
         sb.Append("</svg>");
         return sb.ToString();
     }
@@ -318,13 +347,12 @@ public static class SchematicExporter
         return sb.ToString();
     }
 
-    // Node-editor bezier from source to sink (Nodos style), ignoring the
-    // Manhattan mid-points — mirrors the on-screen viewer.
+    // Node-editor link (Nodos style): a smooth curve following the routed
+    // polyline with rounded corners — mirrors the on-screen viewer.
     private static string BuildWireBezier(WirePath wire, double offsetX, double offsetY)
     {
         if (wire.Points.Count < 2) return BuildWirePath(wire, offsetX, offsetY);
-        var (x1, y1) = wire.Points[0];
-        var (x2, y2) = wire.Points[^1];
-        return BlockSkins.BezierPath(x1 + offsetX, y1 + offsetY, x2 + offsetX, y2 + offsetY);
+        var shifted = wire.Points.Select(p => (p.X + offsetX, p.Y + offsetY)).ToList();
+        return BlockSkins.RoundedPolyline(shifted);
     }
 }

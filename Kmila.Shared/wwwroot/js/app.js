@@ -2130,3 +2130,166 @@ document.addEventListener('keydown', function (e) {
         if (btn && !btn.disabled) { e.preventDefault(); btn.click(); }
     }
 });
+
+// =====================================================================
+// Schematic annotation cards — drag + resize (JS-delegated).
+// The cards are SVG <g class="schematic-annotation"> inside the pan-zoom
+// target, so they pan/zoom natively. Dragging/resizing is done in JS for
+// smoothness (a Blazor Server @onpointermove round-trips and drops frames,
+// see the waveform resize grip for the same rationale). We update the <g>
+// transform / card rects live and commit the final geometry to .NET on
+// pointer-up. Client deltas are divided by the current pan-zoom scale so a
+// card tracks the cursor 1:1 at any zoom. Capture-phase listener runs before
+// the canvas pan handler; .schematic-annotation is also a pan skip-target.
+// =====================================================================
+(function () {
+    function parseTranslate(g) {
+        const t = g.getAttribute('transform') || '';
+        const m = /translate\(\s*(-?[\d.]+)[ ,]+(-?[\d.]+)/.exec(t);
+        return m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : { x: 0, y: 0 };
+    }
+
+    window.kmilaAttachAnnotations = function (rootSelector, dotNetRef, svgSelector) {
+        const root = document.querySelector(rootSelector);
+        if (!root) return 0;
+        if (root._kmilaAnnDown) {
+            root.removeEventListener('pointerdown', root._kmilaAnnDown, true);
+        }
+
+        let drag = null;
+
+        function scale() {
+            try {
+                const s = window.kmilaGetTransformScale(svgSelector);
+                return (s && s > 0.01) ? s : 1;
+            } catch (_) { return 1; }
+        }
+
+        function onMove(e) {
+            if (!drag) return;
+            const dx = (e.clientX - drag.sx) / drag.s;
+            const dy = (e.clientY - drag.sy) / drag.s;
+            if (drag.mode === 'move') {
+                drag.nx = drag.x0 + dx;
+                drag.ny = drag.y0 + dy;
+                drag.g.setAttribute('transform', 'translate(' + drag.nx + ' ' + drag.ny + ')');
+            } else {
+                drag.nw = Math.max(120, drag.w0 + dx);
+                drag.nh = Math.max(60, drag.h0 + dy);
+                const r = drag.rects;
+                // r[0] = clip rect, r[1] = background rect, last = resize grip
+                r[0].setAttribute('width', drag.nw); r[0].setAttribute('height', drag.nh);
+                r[1].setAttribute('width', drag.nw); r[1].setAttribute('height', drag.nh);
+                const grip = r[r.length - 1];
+                grip.setAttribute('x', drag.nw - 14); grip.setAttribute('y', drag.nh - 14);
+            }
+            e.preventDefault();
+        }
+
+        function onUp() {
+            window.removeEventListener('pointermove', onMove);
+            window.removeEventListener('pointerup', onUp);
+            window.removeEventListener('pointercancel', onUp);
+            if (!drag) return;
+            const d = drag; drag = null;
+            try {
+                if (d.mode === 'move' && d.nx !== undefined) {
+                    dotNetRef.invokeMethodAsync('OnAnnotationMoved', d.id, d.nx, d.ny);
+                } else if (d.mode === 'resize' && d.nw !== undefined) {
+                    dotNetRef.invokeMethodAsync('OnAnnotationResized', d.id, d.nw, d.nh);
+                }
+            } catch (_) { /* circuit gone */ }
+        }
+
+        function onDown(e) {
+            if (e.button !== undefined && e.button !== 0) return;
+            const g = e.target.closest('.schematic-annotation');
+            if (!g) return;
+            const id = g.getAttribute('data-ann-id');
+            const resize = e.target.closest('[data-ann-resize]');
+            const s = scale();
+            if (resize) {
+                const rects = g.querySelectorAll('rect');
+                const bg = rects[1] || rects[0];
+                drag = {
+                    mode: 'resize', g: g, id: id, s: s, rects: rects,
+                    sx: e.clientX, sy: e.clientY,
+                    w0: parseFloat(bg.getAttribute('width')) || 220,
+                    h0: parseFloat(bg.getAttribute('height')) || 140,
+                };
+            } else {
+                const p = parseTranslate(g);
+                drag = { mode: 'move', g: g, id: id, s: s, sx: e.clientX, sy: e.clientY, x0: p.x, y0: p.y };
+            }
+            // Capture-phase + stopPropagation keeps the canvas from panning.
+            // (No preventDefault here — it would swallow the click/dblclick that
+            // drive select/edit; onMove preventDefaults once a drag is underway.)
+            e.stopPropagation();
+            window.addEventListener('pointermove', onMove, { passive: false });
+            window.addEventListener('pointerup', onUp);
+            window.addEventListener('pointercancel', onUp);
+        }
+
+        root.addEventListener('pointerdown', onDown, true);
+        root._kmilaAnnDown = onDown;
+        return 1;
+    };
+
+    window.kmilaDetachAnnotations = function (rootSelector) {
+        const root = document.querySelector(rootSelector);
+        if (root && root._kmilaAnnDown) {
+            root.removeEventListener('pointerdown', root._kmilaAnnDown, true);
+            root._kmilaAnnDown = null;
+        }
+    };
+})();
+
+// =====================================================================
+// Schematic live-activity animation (Debug free-run). Driven by
+// ReplayState.OnLiveRunFrame → SchematicViewer → here, ~18 Hz. We toggle
+// classes directly on the existing SVG nodes (matched by data-cell /
+// data-net / data-port) instead of re-rendering the Blazor component, so a
+// big diagram animates smoothly without starving the circuit. Diffed against
+// the previous frame so elements that stay active don't restart their glow.
+// =====================================================================
+(function () {
+    var liveOn = new Set();
+    var liveCtx = new Set();
+
+    function elsFor(root, key) {
+        var val = key.slice(2);
+        try {
+            if (key[0] === 'c') {
+                return root.querySelectorAll('.schematic-cell[data-cell="' + CSS.escape(val) + '"]');
+            }
+            return root.querySelectorAll(
+                '.schematic-wire[data-net="' + CSS.escape(val) + '"], ' +
+                '.schematic-port[data-port="' + CSS.escape(val) + '"]');
+        } catch (_) { return []; }
+    }
+    function toggleKey(root, key, cls, on) {
+        var els = elsFor(root, key);
+        for (var i = 0; i < els.length; i++) els[i].classList.toggle(cls, on);
+    }
+
+    window.kmilaSchematicActivity = function (svgSelector, focus, activeCells, activeNets, ctxCells, ctxNets) {
+        var root = document.querySelector(svgSelector);
+        if (!root) return;
+        root.classList.toggle('is-live-focus', !!focus);
+
+        var nextOn = new Set();
+        (activeCells || []).forEach(function (id) { nextOn.add('c:' + id); });
+        (activeNets || []).forEach(function (n) { nextOn.add('n:' + n); });
+        var nextCtx = new Set();
+        (ctxCells || []).forEach(function (id) { nextCtx.add('c:' + id); });
+        (ctxNets || []).forEach(function (n) { nextCtx.add('n:' + n); });
+
+        liveOn.forEach(function (k) { if (!nextOn.has(k)) toggleKey(root, k, 'is-live-on', false); });
+        nextOn.forEach(function (k) { if (!liveOn.has(k)) toggleKey(root, k, 'is-live-on', true); });
+        liveCtx.forEach(function (k) { if (!nextCtx.has(k)) toggleKey(root, k, 'is-live-context', false); });
+        nextCtx.forEach(function (k) { if (!liveCtx.has(k)) toggleKey(root, k, 'is-live-context', true); });
+
+        liveOn = nextOn;
+        liveCtx = nextCtx;
+    };
+})();

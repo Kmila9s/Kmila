@@ -247,6 +247,25 @@ public class ReplayState
     public event Action? OnLiveStepChanged;
 
     /// <summary>
+    /// Opt-in: when true, <see cref="OnLiveRunFrame"/> fires (throttled ~18 Hz)
+    /// on every delta DURING a free run too, not only when paused. The schematic
+    /// sets this in Debug so it can animate the live activity wavefront via a
+    /// lightweight JS DOM update (no Blazor re-render), which the paused-only
+    /// <see cref="OnLiveStepChanged"/> path deliberately avoids. Default false,
+    /// so no other consumer's cost changes.
+    /// </summary>
+    public bool AnimateDuringRun { get; set; }
+
+    /// <summary>
+    /// Throttled per-delta nudge during a free run, gated by
+    /// <see cref="AnimateDuringRun"/>. Consumers read
+    /// <see cref="LiveActiveLines"/> / <see cref="LiveActiveSignals"/> and update
+    /// the DOM directly — they must NOT trigger a full component re-render here.
+    /// </summary>
+    public event Action? OnLiveRunFrame;
+    private DateTime _lastRunFrame = DateTime.MinValue;
+
+    /// <summary>
     /// True when the given 1-based line carries a signal/variable assignment
     /// that a breakpoint could pause on. False for conditions, declarations,
     /// comments, blank lines — anything the engine emits no transition for.
@@ -554,6 +573,18 @@ public class ReplayState
         {
             _lastStepNudge = DateTime.UtcNow;
             OnLiveStepChanged?.Invoke();
+        }
+        // Live-activity animation during a FREE run (opt-in). Throttled to ~18 Hz
+        // and delivered through a separate event so the consumer updates the DOM
+        // directly (JS) rather than re-rendering the whole schematic per frame.
+        else if (AnimateDuringRun && TrackActiveLines)
+        {
+            var now = DateTime.UtcNow;
+            if ((now - _lastRunFrame).TotalMilliseconds >= 55)
+            {
+                _lastRunFrame = now;
+                OnLiveRunFrame?.Invoke();
+            }
         }
 
         // Throttle the OnChange nudge to ~10 Hz. Only relevant when

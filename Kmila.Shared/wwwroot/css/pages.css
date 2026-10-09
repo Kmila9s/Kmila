@@ -12069,6 +12069,11 @@ body:has(.visual-page.is-fullscreen) .status-bar {
 .schematic-svg {
     display: block;
     cursor: default;
+    /* Don't clip to the viewBox: annotation cards (and the odd wire) may sit
+       past the diagram's 0..Canvas bounds, and the pannable area extends there.
+       The body (.schematic-viewer__body) stays the real viewport. The SVG is a
+       CSS-transformed subtree, so its visual overflow never adds body scrollbars. */
+    overflow: visible;
 }
 
 .schematic-cell,
@@ -12088,6 +12093,56 @@ body:has(.visual-page.is-fullscreen) .status-bar {
 .schematic-svg.has-selection .schematic-wire.is-traced,
 .schematic-svg.has-selection .schematic-port.is-traced {
     opacity: 1;
+}
+
+/* Debug "focus active path": the changed signals/cells stay at full brightness
+   (and still pulse via .is-active-step); their 1-hop neighbours fade to context;
+   everything else drops to a faint-but-readable ghost so you keep spatial
+   orientation while watching the live wavefront. */
+.schematic-cell.is-focus-context,
+.schematic-wire.is-focus-context,
+.schematic-port.is-focus-context {
+    opacity: 0.28;
+}
+.schematic-cell.is-focus-ghost,
+.schematic-wire.is-focus-ghost,
+.schematic-port.is-focus-ghost {
+    opacity: 0.06;
+}
+
+/* Live run animation (JS-driven; toggled by kmilaSchematicActivity, no Blazor
+   re-render). A longer transition on these props means that when an element
+   leaves the active set its glow fades out smoothly — the "turn off" effect. */
+.schematic-cell,
+.schematic-wire,
+.schematic-port {
+    transition: opacity 0.2s ease, stroke 0.3s ease, stroke-width 0.3s ease, filter 0.35s ease;
+}
+/* Focus-scope dimming for the live run (root class set by JS). */
+.schematic-svg.is-live-focus .schematic-cell,
+.schematic-svg.is-live-focus .schematic-wire,
+.schematic-svg.is-live-focus .schematic-port {
+    opacity: 0.06;
+}
+.schematic-svg.is-live-focus .schematic-cell.is-live-context,
+.schematic-svg.is-live-focus .schematic-wire.is-live-context,
+.schematic-svg.is-live-focus .schematic-port.is-live-context {
+    opacity: 0.28;
+}
+/* The active wavefront: glow, full opacity, accent-coloured wires. */
+.schematic-cell.is-live-on {
+    opacity: 1 !important;
+    filter: drop-shadow(0 0 6px var(--accent));
+}
+.schematic-port.is-live-on {
+    opacity: 1 !important;
+    filter: drop-shadow(0 0 5px var(--accent));
+}
+.schematic-wire.is-live-on {
+    opacity: 1 !important;
+    stroke: var(--accent) !important;
+    stroke-width: 4 !important;
+    filter: drop-shadow(0 0 4px var(--accent));
 }
 
 .schematic-cell.is-hidden,
@@ -12238,6 +12293,59 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     justify-content: flex-end;
     gap: .25rem;
 }
+
+/* Canvas annotation cards (post-it notes + pinned info). */
+.schematic-annotation { cursor: grab; }
+.schematic-annotation:active { cursor: grabbing; }
+.schematic-annotation .ann-bg { transition: stroke .1s ease; }
+.schematic-annotation.is-selected .ann-bg { stroke: #6366f1; stroke-width: 2.5; }
+.schematic-annotation__resize {
+    fill: rgba(99, 102, 241, .55);
+    cursor: nwse-resize;
+    opacity: 0;
+    transition: opacity .1s ease;
+}
+.schematic-annotation:hover .schematic-annotation__resize,
+.schematic-annotation.is-selected .schematic-annotation__resize { opacity: 1; }
+
+/* Floating note / pinned-card editor popover. */
+.schematic-note-editor {
+    position: absolute;
+    top: 1rem;
+    inset-inline-start: 1rem;
+    width: 280px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-subtle, rgba(0,0,0,.12));
+    border-radius: 8px;
+    box-shadow: var(--shadow-2);
+    padding: .6rem;
+    z-index: 6;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+}
+.schematic-note-editor__field {
+    display: flex;
+    flex-direction: column;
+    gap: .2rem;
+    font-size: var(--fs-sm);
+}
+.schematic-note-editor__row {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: .5rem;
+}
+.schematic-note-editor__color input[type="color"] {
+    width: 48px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--border-subtle, rgba(0,0,0,.2));
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+}
+.schematic-note-editor__delete { color: #dc2626; }
 
 .schematic-cell.is-traced > path:first-child {
     stroke-width: 2;
@@ -17278,6 +17386,60 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     .kmila-tooltip:focus-within::before {
         transition-delay: 150ms;
     }
+}
+
+/* ─── KmilaTooltip v7 (2026-10-08): body-portal singleton bubble ───────────
+   The ::after/::before bubble above is position:fixed with a max z-index, but
+   a fixed element is STILL trapped inside any ancestor that creates a stacking
+   context (transform / filter / contain:paint / will-change / opacity<1), so a
+   sibling layer paints over it — the "tooltip hidden behind another element"
+   bug. The real fix is a single bubble appended to <body> (kmila-shared-head.js
+   drives it): a body child sits outside every app stacking context, and the JS
+   flips/clamps it to the viewport so it is adaptive to the trigger's position.
+   The pseudo bubble is disabled here; the wrapper + sr-only span stay for a11y. */
+.kmila-tooltip::after,
+.kmila-tooltip::before { content: none !important; display: none !important; }
+
+.kmila-tip-bubble {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 2147483000;        /* guaranteed-win layer (body child) */
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 120ms ease;
+    padding: var(--space-1, 4px) var(--space-3, 10px);
+    background-color: var(--surface-inverse, #0f172a);
+    color: var(--text-inverse, #f8fafc);
+    font-size: var(--fs-xs, 12px);
+    font-weight: var(--fw-medium, 500);
+    line-height: 1.35;
+    max-width: 260px;
+    width: max-content;
+    white-space: normal;
+    text-align: center;
+    border-radius: var(--radius-sm, 6px);
+    box-shadow: var(--shadow-2, 0 4px 12px rgba(0,0,0,0.18));
+}
+.kmila-tip-bubble.is-visible { opacity: 1; }
+
+.kmila-tip-arrow {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 2147482999;        /* just under the bubble so it hides the inner half */
+    width: 8px;
+    height: 8px;
+    background: var(--surface-inverse, #0f172a);
+    transform: translate(-50%, -50%) rotate(45deg);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 120ms ease;
+}
+.kmila-tip-arrow.is-visible { opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+    .kmila-tip-bubble, .kmila-tip-arrow { transition: opacity 60ms ease; }
 }
 
 

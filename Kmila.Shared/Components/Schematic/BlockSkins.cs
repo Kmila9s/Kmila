@@ -157,6 +157,42 @@ public static class BlockSkins
         return $"M {F(x1)} {F(y1)} C {F(x1 + hx)} {F(y1 + bow)}, {F(x2 - hx)} {F(y2 + bow)}, {F(x2)} {F(y2)}";
     }
 
+    /// <summary>Smooth path that follows an orthogonal routed polyline, rounding
+    /// each corner with a quadratic so Nodos keeps its soft node-editor look
+    /// while honouring the obstacle-aware waypoints (instead of a straight
+    /// endpoint-to-endpoint bezier that would cut across blocks).</summary>
+    public static string RoundedPolyline(IReadOnlyList<(double X, double Y)> pts, double radius = 10)
+    {
+        if (pts.Count == 0) return "";
+        if (pts.Count <= 2)
+        {
+            var a0 = pts[0];
+            var b0 = pts[^1];
+            return $"M {F(a0.X)} {F(a0.Y)} L {F(b0.X)} {F(b0.Y)}";
+        }
+
+        static (double X, double Y) Toward((double X, double Y) from, (double X, double Y) to, double dist)
+        {
+            double dx = to.X - from.X, dy = to.Y - from.Y;
+            double len = Math.Sqrt(dx * dx + dy * dy);
+            if (len < 1e-6) return from;
+            double t = Math.Min(dist, len / 2) / len;
+            return (from.X + dx * t, from.Y + dy * t);
+        }
+
+        var sb = new StringBuilder();
+        sb.Append($"M {F(pts[0].X)} {F(pts[0].Y)}");
+        for (int i = 1; i < pts.Count - 1; i++)
+        {
+            var entry = Toward(pts[i], pts[i - 1], radius);
+            var exit = Toward(pts[i], pts[i + 1], radius);
+            sb.Append($" L {F(entry.X)} {F(entry.Y)} Q {F(pts[i].X)} {F(pts[i].Y)} {F(exit.X)} {F(exit.Y)}");
+        }
+        var last = pts[^1];
+        sb.Append($" L {F(last.X)} {F(last.Y)}");
+        return sb.ToString();
+    }
+
     private static string Text(double x, double y, string s, double size, int weight, string fill,
         string anchor, string? family = null)
         => $"<text x=\"{F(x)}\" y=\"{F(y)}\" text-anchor=\"{anchor}\" font-size=\"{F(size)}\" "
