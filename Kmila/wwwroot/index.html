@@ -53,6 +53,20 @@
                 startOnLoad: false,
                 securityLevel: 'strict',
                 theme: 'base',
+                // Big control-flow diagrams hit Mermaid's default ceilings
+                // (maxEdges:500, maxTextSize:50000) and fall back to a "Syntax
+                // error" box. Raise them so large designs render. flowchart.
+                // useMaxWidth:false stops Mermaid from shrinking wide diagrams
+                // to the column width; the viewer's pan-zoom handles size.
+                maxEdges: 2000,
+                maxTextSize: 200000,
+                flowchart: {
+                    useMaxWidth: false,
+                    htmlLabels: true,
+                    nodeSpacing: 40,
+                    rankSpacing: 50,
+                    padding: 12,
+                },
                 themeVariables: {
                     fontFamily: cssVar('--font-sans', 'system-ui, sans-serif'),
                     background: cssVar('--surface-1', dark ? '#0f172a' : '#ffffff'),
@@ -129,7 +143,7 @@
          ╚═══════════════════════════════════════════════════════════════════╝ -->
     <link rel="stylesheet" href="_content/Kmila.Shared/css/tokens.css?v=8" />
     <link rel="stylesheet" href="_content/Kmila.Shared/app.css?v=9" />
-    <link rel="stylesheet" href="_content/Kmila.Shared/css/pages.css?v=48" />
+    <link rel="stylesheet" href="_content/Kmila.Shared/css/pages.css?v=49" />
     <link rel="stylesheet" href="_content/Kmila.Shared/css/buttons.css?v=14" />
     <link rel="stylesheet" href="app.css" />
     <link rel="stylesheet" href="Kmila.styles.css" />
@@ -218,7 +232,7 @@
          language) and after editor.main.js (provides colorizeElement). -->
     <script src="_content/Kmila.Shared/js/lesson-code.js?v=20260522a"></script>
     <!-- Kmila app utilities (file download, etc.) -->
-    <script src="_content/Kmila.Shared/js/app.js?v=20261005a"></script>
+    <script src="_content/Kmila.Shared/js/app.js?v=20261009d"></script>
     <!-- Visual Runtime canvas rasteriser (§6 Items 1+2). Bespoke pure-2D
          painter for the 12 widget families — no html2canvas, no CSS
          parsing, no external deps. Must load BEFORE the record/export

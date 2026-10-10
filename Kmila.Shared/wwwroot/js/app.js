@@ -412,8 +412,17 @@ window.downloadFile = function (fileName, content) {
         let prep = _kmilaPrepFlowSvg(container);
         if (prep.ok) return prep;
 
-        const hasSource = !!document.querySelector('.flow-diagram__body pre.mermaid, pre.mermaid');
-        if (!hasSource) return { ok: false, reason: 'no-diagram' };
+        // The viewer re-keys (@key) the <pre> on every render, so there's a
+        // brief window where neither the source nor the rendered <svg> is in
+        // the DOM. Don't declare "no diagram" on the first miss — give the DOM
+        // one frame to settle and re-check, otherwise an export clicked right
+        // as the diagram refreshes falsely reports "not ready".
+        let hasSource = !!document.querySelector('.flow-diagram__body pre.mermaid, pre.mermaid');
+        if (!hasSource) {
+            await new Promise(function (r) { requestAnimationFrame(function () { r(); }); });
+            hasSource = !!document.querySelector('.flow-diagram__body pre.mermaid, pre.mermaid');
+            if (!hasSource) return { ok: false, reason: 'no-diagram' };
+        }
 
         // Kick a render, then POLL for the <svg> — deliberately without awaiting
         // kmilaMermaidRun(): a large flowchart can take several seconds to lay
@@ -423,7 +432,7 @@ window.downloadFile = function (fileName, content) {
         // bounded ceiling recovers the diagram when it finishes and fails fast
         // (render-failed) otherwise, so the export never hangs.
         try { window.kmilaMermaidRun(); } catch (e) { /* fall through to poll */ }
-        for (let i = 0; i < 100; i++) {          // ~5s ceiling (100 × 50ms)
+        for (let i = 0; i < 200; i++) {          // ~10s ceiling (200 × 50ms)
             await new Promise(function (r) { setTimeout(r, 50); });
             prep = _kmilaPrepFlowSvg(container);
             if (prep.ok) return prep;
@@ -458,54 +467,130 @@ window.downloadFile = function (fileName, content) {
             _kmilaEnsureFlowSvg(container).then(function (prep) {
               try {
                 if (!prep.ok) { resolve('ERR:' + prep.reason); return; }
-                const dpr = Math.max(1, window.devicePixelRatio || 1) * 2;
-                const canvas = document.createElement('canvas');
-                canvas.width  = Math.max(1, Math.floor(prep.w * dpr));
-                canvas.height = Math.max(1, Math.floor(prep.h * dpr));
-                const ctx = canvas.getContext('2d');
-                ctx.scale(dpr, dpr);
-                ctx.fillStyle = prep.bg;
-                ctx.fillRect(0, 0, prep.w, prep.h);
 
+                // A browser <canvas> has hard limits (~16384 px per side on
+                // Chrome, lower on Safari/iOS; plus a max total AREA), and —
+                // crucially — toBlob() can silently return null on a canvas
+                // that is merely large (not over the documented cap) depending
+                // on the platform / available memory. So instead of picking one
+                // size and failing when it doesn't take, we build a ladder of
+                // pixel ratios (crisp first) and rasterise at the first one that
+                // actually yields bytes. This way the PNG ALWAYS exports — just
+                // a bit softer for giant diagrams — rather than surfacing the
+                // misleading "diagram not ready" toast. SVG export stays lossless.
+                const MAX_DIM = 16384;
+                const MAX_AREA = 16384 * 8192;
+                let dpr = Math.max(1, window.devicePixelRatio || 1) * 2;
+                dpr = Math.min(dpr, MAX_DIM / prep.w, MAX_DIM / prep.h,
+                               Math.sqrt(MAX_AREA / (prep.w * prep.h)));
+                const ratios = [];
+                for (let r = dpr; r >= 0.12; r *= 0.6) ratios.push(r);
+                if (ratios.length === 0) ratios.push(Math.max(0.1, dpr));
+
+                const finish = function (blobUrl, val) {
+                    if (blobUrl) { try { URL.revokeObjectURL(blobUrl); } catch (_) {} }
+                    resolve(val);
+                };
+
+                // Rasterise the already-loaded <img> at ratios[i]; on any miss
+                // (toBlob null, draw/encode throw, reader error) drop to the
+                // next smaller ratio. Only when the whole ladder is exhausted do
+                // we report a genuine PNG failure (→ "export as SVG").
+                const rasterize = function (img, blobUrl) {
+                    const tryAt = function (i) {
+                        if (i >= ratios.length) { finish(blobUrl, 'ERR:png-failed'); return; }
+                        const r = ratios[i];
+                        try {
+                            const canvas = document.createElement('canvas');
+                            canvas.width  = Math.max(1, Math.floor(prep.w * r));
+                            canvas.height = Math.max(1, Math.floor(prep.h * r));
+                            const ctx = canvas.getContext('2d');
+                            ctx.scale(r, r);
+                            ctx.fillStyle = prep.bg;
+                            ctx.fillRect(0, 0, prep.w, prep.h);
+                            ctx.drawImage(img, 0, 0, prep.w, prep.h);
+                            canvas.toBlob(function (blob) {
+                                if (!blob) { tryAt(i + 1); return; }   // too big here → smaller
+                                const reader = new FileReader();
+                                reader.onloadend = function () {
+                                    const result = String(reader.result || '');
+                                    const comma = result.indexOf(',');
+                                    if (comma >= 0) finish(blobUrl, result.substring(comma + 1));
+                                    else tryAt(i + 1);
+                                };
+                                reader.onerror = function () { tryAt(i + 1); };
+                                reader.readAsDataURL(blob);
+                            }, 'image/png');
+                        } catch (e) {
+                            console.warn('[kmilaSerializeFlowPng] rasterise miss @' + r, e);
+                            tryAt(i + 1);
+                        }
+                    };
+                    tryAt(0);
+                };
+
+                // Load the SVG as an <img>. Prefer a Blob URL; if that fails to
+                // load (some WebViews choke on blob: SVGs), retry once via a
+                // data: URL before giving up.
                 const svgBlob = new Blob([prep.svg], { type: 'image/svg+xml;charset=utf-8' });
                 const blobUrl = URL.createObjectURL(svgBlob);
                 const img = new Image();
-                img.onload = function () {
-                    try {
-                        ctx.drawImage(img, 0, 0, prep.w, prep.h);
-                        canvas.toBlob(function (blob) {
-                            URL.revokeObjectURL(blobUrl);
-                            if (!blob) { resolve(''); return; }
-                            const reader = new FileReader();
-                            reader.onloadend = function () {
-                                const result = reader.result || '';
-                                const comma = String(result).indexOf(',');
-                                resolve(comma >= 0 ? String(result).substring(comma + 1) : '');
-                            };
-                            reader.onerror = function () { resolve(''); };
-                            reader.readAsDataURL(blob);
-                        }, 'image/png');
-                    } catch (drawErr) {
-                        URL.revokeObjectURL(blobUrl);
-                        console.error('[kmilaSerializeFlowPng] draw failed', drawErr);
-                        resolve('');
-                    }
-                };
-                img.onerror = function (e) {
-                    URL.revokeObjectURL(blobUrl);
-                    console.error('[kmilaSerializeFlowPng] image load failed', e);
-                    resolve('');
+                img.onload = function () { rasterize(img, blobUrl); };
+                img.onerror = function () {
+                    try { URL.revokeObjectURL(blobUrl); } catch (_) {}
+                    const img2 = new Image();
+                    img2.onload = function () { rasterize(img2, null); };
+                    img2.onerror = function (e) {
+                        console.error('[kmilaSerializeFlowPng] image load failed', e);
+                        resolve('ERR:png-failed');
+                    };
+                    img2.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(prep.svg);
                 };
                 img.src = blobUrl;
               } catch (e) {
                 console.error('[kmilaSerializeFlowPng]', e);
-                resolve('');
+                resolve('ERR:png-failed');
               }
             }, function (e) {
                 console.error('[kmilaSerializeFlowPng] ensure failed', e);
                 resolve('ERR:render-failed');
             });
         });
+    };
+
+    // Ensures the flow diagram's mermaid <svg> is rendered, then attaches the
+    // shared pan-zoom to it — returning the handle id (or -1). FlowDiagramViewer
+    // calls this instead of kmilaAttachPanZoom directly: the on-screen diagram
+    // is produced by an ASYNC mermaid pipeline (kmilaMermaidRun, which also
+    // lazy-loads its flowchart grammar chunk on first use), so at OnAfterRender
+    // time the <pre> is usually still raw text. A bare attach would see no <svg>,
+    // return -1, and the zoom toolbar (which needs a live handle) would stay
+    // dead even after the diagram appears. Here we kick the render and poll for
+    // the <svg> (same primitive the export path uses) before binding, so the
+    // handle reliably attaches no matter how long the first render takes.
+    window.kmilaAttachFlowPanZoom = async function (rootSelector, opts) {
+        try {
+            const root = (typeof rootSelector === 'string')
+                ? document.querySelector(rootSelector) : rootSelector;
+            if (!root) return -1;
+            const sel = (opts && opts.targetSelector) || 'svg';
+            let svg = root.querySelector(sel);
+            if (!svg) {
+                const hasSource = !!(root.querySelector('pre.mermaid') || document.querySelector('pre.mermaid'));
+                if (hasSource) {
+                    try { window.kmilaMermaidRun(); } catch (e) { /* poll anyway */ }
+                    for (let i = 0; i < 200 && !svg; i++) {       // ~10s ceiling
+                        await new Promise(function (r) { setTimeout(r, 50); });
+                        svg = root.querySelector(sel);
+                    }
+                }
+            }
+            if (!svg) return -1;
+            return window.kmilaAttachPanZoom(root, opts);
+        } catch (e) {
+            console.error('[kmilaAttachFlowPanZoom]', e);
+            return -1;
+        }
     };
 
     // Legacy anchor-download path. Kept for the Web target (browser sandbox)

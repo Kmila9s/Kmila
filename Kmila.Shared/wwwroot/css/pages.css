@@ -4601,6 +4601,15 @@
     border: 0;
 }
 
+/* Let large flowcharts render at their natural size instead of being capped
+   to the column width (Mermaid also runs with flowchart.useMaxWidth:false).
+   The viewer's pan-zoom transform handles navigating big diagrams, so the
+   SVG must not be shrunk or clipped here. */
+.flow-diagram__body pre.mermaid svg {
+    max-width: none !important;
+    height: auto;
+}
+
 .flow-diagram__empty {
     flex: 1 1 auto;
     display: flex;
