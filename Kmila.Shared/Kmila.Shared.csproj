@@ -142,6 +142,38 @@
     the same values in ResolveStaticWebAssetsConfiguration; this override is
     a no-op for that target.
   -->
+  <!--
+    Build stamp. Bakes the git short-SHA (plus "+local" when the working tree
+    has uncommitted edits) as assembly metadata so the sidebar version-chip
+    tooltip can show which commit the running build came from — letting you
+    confirm a clean rebuild actually took effect. Git may be absent (published
+    source / CI tarball); it degrades to no metadata without failing the build.
+    The build TIME is read at runtime from this assembly's file stamp (see
+    BuildInfo.cs), so nothing here changes every build: the metadata moves only
+    when HEAD or the clean/dirty state changes, keeping incremental builds
+    incremental. Runs per TFM, before the SDK writes AssemblyInfo.
+  -->
+  <Target Name="KmilaBuildStamp" BeforeTargets="GetAssemblyAttributes">
+    <Exec Command="git -C &quot;$(MSBuildProjectDirectory)&quot; rev-parse --short=9 HEAD"
+          ConsoleToMSBuild="true" ContinueOnError="true"
+          StandardOutputImportance="low" StandardErrorImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_KmilaSha" />
+    </Exec>
+    <Exec Command="git -C &quot;$(MSBuildProjectDirectory)&quot; status --porcelain"
+          ConsoleToMSBuild="true" ContinueOnError="true"
+          StandardOutputImportance="low" StandardErrorImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_KmilaDirty" />
+    </Exec>
+    <PropertyGroup>
+      <_KmilaSha>$(_KmilaSha.Trim())</_KmilaSha>
+      <_KmilaCommit Condition="'$(_KmilaSha)' != '' and '$(_KmilaDirty.Trim())' != ''">$(_KmilaSha)+local</_KmilaCommit>
+      <_KmilaCommit Condition="'$(_KmilaSha)' != '' and '$(_KmilaDirty.Trim())' == ''">$(_KmilaSha)</_KmilaCommit>
+    </PropertyGroup>
+    <ItemGroup Condition="'$(_KmilaCommit)' != ''">
+      <AssemblyMetadata Include="KmilaGitCommit" Value="$(_KmilaCommit)" />
+    </ItemGroup>
+  </Target>
+
   <Target Name="_KmilaSharedForceRclSwa"
           BeforeTargets="ResolveStaticWebAssetsConfiguration;ComputeReferenceStaticWebAssetItems;DefineStaticWebAssets;ConvertStaticWebAssetsToMauiAssets;_GenerateStaticWebAssetsBuildManifest">
     <PropertyGroup>

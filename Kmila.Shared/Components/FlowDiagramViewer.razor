@@ -64,6 +64,30 @@
                     <span>UML</span>
                 </button>
             </KmilaTooltip>
+            <KmilaTooltip TextKey="WAVEFORM_ZOOM_IN">
+                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                        @onclick="() => Zoom(1.25)" aria-label="@Traductor.T("WAVEFORM_ZOOM_IN")">
+                    <Icon Name="IconName.ZoomIn" />
+                </button>
+            </KmilaTooltip>
+            <KmilaTooltip TextKey="WAVEFORM_ZOOM_OUT">
+                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                        @onclick="() => Zoom(0.8)" aria-label="@Traductor.T("WAVEFORM_ZOOM_OUT")">
+                    <Icon Name="IconName.ZoomOut" />
+                </button>
+            </KmilaTooltip>
+            <KmilaTooltip TextKey="FLOW_ZOOM_FIT">
+                <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                        @onclick="FitAsync" aria-label="@Traductor.T("FLOW_ZOOM_FIT")">
+                    <Icon Name="IconName.AspectRatioFill" />
+                </button>
+            </KmilaTooltip>
+            <KmilaTooltip TextKey="WAVEFORM_ZOOM_RESET">
+                <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
+                        @onclick="ResetZoomAsync" aria-label="@Traductor.T("WAVEFORM_ZOOM_RESET")">
+                    <Icon Name="IconName.ArrowCounterclockwise" />
+                </button>
+            </KmilaTooltip>
             <KmilaTooltip TextKey="@(_isFullscreen ? "SCHEMATIC_FULLSCREEN_EXIT" : "SCHEMATIC_FULLSCREEN_ENTER")">
                 <button type="button"
                         class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm @(_isFullscreen ? "is-active" : "")"
@@ -136,13 +160,22 @@
     {
         if (firstRender && !string.IsNullOrEmpty(_mermaidSource))
             await KickMermaidAsync();
-        // (Re)attach pan-zoom whenever the body re-renders. AttachPanZoomAsync
-        // is idempotent — the JS side detaches the previous handle on the
-        // same root before binding new listeners.
-        await AttachPanZoomAsync();
+        // Only (re)attach when the diagram actually changed (new _renderKey) or
+        // we don't have a live handle yet. Blazor re-renders this component after
+        // EVERY event handler — including each toolbar zoom click — and a blind
+        // re-attach here runs fitOnAttach, which would snap the view back to the
+        // fitted scale and wipe out the zoom/pan the user just applied (the
+        // "zoom buttons don't work" bug). A genuine new render bumps _renderKey,
+        // so a fresh diagram still re-fits.
+        if (_panZoomId <= 0 || _attachedKey != _renderKey)
+        {
+            await AttachPanZoomAsync();
+            if (_panZoomId > 0) _attachedKey = _renderKey;
+        }
     }
 
     private int _panZoomId = -1;
+    private Guid _attachedKey = Guid.Empty;
 
     /// <summary>
     /// Hands the rendered mermaid SVG to <c>kmilaAttachPanZoom</c> so trackpad
@@ -152,9 +185,12 @@
     /// becomes stale. Safe to call before mermaid has finished — the JS
     /// helper returns -1 when no target SVG is present yet.
     /// </summary>
+    private bool _attaching;
+
     private async Task AttachPanZoomAsync()
     {
-        if (string.IsNullOrEmpty(_mermaidSource)) return;
+        if (string.IsNullOrEmpty(_mermaidSource) || _attaching) return;
+        _attaching = true;
         try
         {
             if (_panZoomId > 0)
@@ -162,15 +198,71 @@
                 try { await JS.InvokeVoidAsync("kmilaDetachPanZoom", _panZoomId); } catch { }
                 _panZoomId = -1;
             }
-            _panZoomId = await JS.InvokeAsync<int>("kmilaAttachPanZoom",
+            // Mermaid converts <pre> → <svg> asynchronously (and lazy-loads its
+            // flowchart grammar chunk on first use), so the SVG usually isn't in
+            // the DOM yet when OnAfterRender fires. kmilaAttachFlowPanZoom kicks
+            // the render if needed, waits for the <svg>, then binds — so both
+            // gestures AND the zoom toolbar (which need a valid _panZoomId)
+            // reliably attach once the diagram finishes rendering, no matter how
+            // long the first lazy-chunk load takes. Returns -1 if it never
+            // renders.
+            _panZoomId = await JS.InvokeAsync<int>("kmilaAttachFlowPanZoom",
                 ".flow-diagram__body",
                 new { targetSelector = "svg", minScale = 0.2, maxScale = 6, fitOnAttach = true });
         }
         catch
         {
-            // Prerender or missing helper — toolbar zoom isn't part of this
-            // viewer; gestures simply unavailable until next render.
+            // Prerender or missing helper — zoom simply unavailable until the
+            // next render / next toolbar click re-tries via EnsurePanZoomAsync.
         }
+        finally { _attaching = false; }
+    }
+
+    /// <summary>
+    /// Guarantees a live pan-zoom handle before a toolbar action. The initial
+    /// attach in OnAfterRender can lose the race against the async Mermaid
+    /// render; since the user only clicks a zoom button once they can SEE the
+    /// diagram, re-attaching on demand (waiting out any in-flight attach first)
+    /// makes the toolbar work regardless of render timing.
+    /// </summary>
+    private async Task<bool> EnsurePanZoomAsync()
+    {
+        if (_panZoomId > 0) return true;
+        // Attach directly (not via AttachPanZoomAsync) so a still-running
+        // mount-time attach — e.g. one polling for a slow first render — can't
+        // block us through the _attaching guard. The user only clicks a toolbar
+        // button once the diagram is on screen, so the <svg> exists and
+        // kmilaAttachFlowPanZoom binds immediately.
+        try
+        {
+            var id = await JS.InvokeAsync<int>("kmilaAttachFlowPanZoom",
+                ".flow-diagram__body",
+                new { targetSelector = "svg", minScale = 0.2, maxScale = 6, fitOnAttach = true });
+            if (id > 0) _panZoomId = id;
+        }
+        catch { }
+        return _panZoomId > 0;
+    }
+
+    /// <summary>Toolbar zoom in/out — multiplies the current scale.</summary>
+    private async Task Zoom(double factor)
+    {
+        if (!await EnsurePanZoomAsync()) return;
+        try { await JS.InvokeVoidAsync("kmilaPanZoomZoom", _panZoomId, factor); } catch { }
+    }
+
+    /// <summary>Toolbar reset — back to 1× at the origin.</summary>
+    private async Task ResetZoomAsync()
+    {
+        if (!await EnsurePanZoomAsync()) return;
+        try { await JS.InvokeVoidAsync("kmilaPanZoomReset", _panZoomId); } catch { }
+    }
+
+    /// <summary>Toolbar fit — reframe the whole diagram inside the viewport.</summary>
+    private async Task FitAsync()
+    {
+        if (!await EnsurePanZoomAsync()) return;
+        try { await JS.InvokeVoidAsync("kmilaPanZoomFit", _panZoomId); } catch { }
     }
 
     private void OnLangChanged() => InvokeAsync(StateHasChanged);
@@ -261,9 +353,13 @@
         }
         if (payload.StartsWith("ERR:", StringComparison.Ordinal))
         {
-            messageKey = payload == "ERR:render-failed"
-                ? "FLOW_RENDER_FAILED"
-                : "FLOW_MERMAID_NOT_READY";
+            messageKey = payload switch
+            {
+                "ERR:render-failed" => "FLOW_RENDER_FAILED",
+                "ERR:too-large"     => "FLOW_PNG_TOO_LARGE",
+                "ERR:png-failed"    => "FLOW_PNG_FAILED",
+                _                   => "FLOW_MERMAID_NOT_READY",
+            };
             return true;
         }
         messageKey = string.Empty;
@@ -519,156 +615,142 @@
     /// Knows the common control-flow shapes (if/case/loops); unknown task
     /// types render as a generic statement box.
     /// </summary>
-    private string EmitSequential(System.Text.StringBuilder sb, string prevId, object task, int idx, IdCounter ctr)
+    private string EmitSequential(System.Text.StringBuilder sb, string prevId, object task, int idx, IdCounter ctr,
+        string? inLabel = null, bool inDotted = false)
     {
         if (task == null) return prevId;
         var typeName = task.GetType().Name;
 
         if (typeName == "IfStructure")
         {
-            var diamondId = ctr.Next("if");
-            // Pull the FIRST branch's condition for the diamond label so the
-            // diagram reads as "if a = '1'" rather than a bare "if". The
-            // VHDL keywords (if/else/then/elsif) we keep verbatim — they're
-            // language tokens, not prose.
-            string IF = Traductor.T("FLOW_IF"), THEN = Traductor.T("FLOW_THEN"),
-                   ELSIF = Traductor.T("FLOW_ELSIF"), ELSE = Traductor.T("FLOW_ELSE"),
+            // Decision-tree layout: one diamond per condition, chained through
+            // the "no" edge so the diagram mirrors VHDL if/elsif priority
+            // (conditions are tried top-to-bottom). No redundant "then/elsif/
+            // else" label boxes — the branch outcome lives on the edge, and the
+            // body statements follow directly. The VHDL keywords (if/elsif) we
+            // keep verbatim in the diamond; sí/no label the outgoing edges.
+            string IF = Traductor.T("FLOW_IF"), ELSIF = Traductor.T("FLOW_ELSIF"),
                    ENDIF = Traductor.T("FLOW_END_IF"),
-                   FALSE_PATH = Traductor.T("FLOW_FALSE_PATH");
-            string ifLabel = IF;
-            try
-            {
-                var firstBr = ((dynamic)task).Branches?[0];
-                var cond    = firstBr?.Condition;
-                var raw     = cond != null ? TryGetString(cond, "RawData") : null;
-                if (!string.IsNullOrWhiteSpace(raw)) ifLabel = $"{IF} {Truncate(raw!.Trim(), 48)}";
-            }
-            catch { }
-            sb.AppendLine($"    {diamondId}{{{{\"{Esc(ifLabel)}\"}}}}:::cond");
-            sb.AppendLine($"    {prevId} --> {diamondId}");
+                   YES = Traductor.T("FLOW_YES"), NO = Traductor.T("FLOW_NO");
+
             string endId = ctr.Next("ifend");
             sb.AppendLine($"    {endId}([\"{Esc(ENDIF)}\"]):::stmt");
-            // Track whether any branch was the implicit `else`. VHDL allows
-            // an if without one ("if X then … end if"), in which case the
-            // diagram used to dead-end the diamond on its only true edge —
-            // students couldn't see *what happens when the condition is
-            // false*. Below we emit a synthetic "false" edge from the
-            // diamond straight to the end-if to make that skip path
-            // visible.
-            bool hasElseBranch = false;
+
+            var branches = new List<object>();
             try
             {
-                var branches = (task as dynamic).Branches as System.Collections.IEnumerable;
-                if (branches != null)
-                {
-                    int b = 0;
-                    foreach (var br in branches)
-                    {
-                        b++;
-                        bool isElse = false;
-                        try { isElse = (bool)((dynamic)br).IsElse; } catch { }
-                        if (isElse) hasElseBranch = true;
-                        string branchLabel = isElse ? ELSE : (b == 1 ? THEN : ELSIF);
-                        if (!isElse && b > 1)
-                        {
-                            try
-                            {
-                                var raw = TryGetString(((dynamic)br).Condition, "RawData");
-                                if (!string.IsNullOrWhiteSpace(raw))
-                                    branchLabel = $"{ELSIF} {Truncate(raw!.Trim(), 32)}";
-                            }
-                            catch { }
-                        }
-                        var bodyTasks = ((dynamic)br).Tasks as System.Collections.IEnumerable;
-                        // First node of the branch
-                        var startId = ctr.Next("br");
-                        sb.AppendLine($"    {startId}[\"{Esc(branchLabel)}\"]:::stmt");
-                        // Edge label wrapped in double-quotes so content with
-                        // spaces / underscores / Unicode brackets parses as
-                        // one token instead of confusing the |…| delimiter.
-                        sb.AppendLine($"    {diamondId} -->|\"{Esc(branchLabel)}\"| {startId}");
-                        string lastId = startId;
-                        if (bodyTasks != null)
-                        {
-                            int j = 0;
-                            foreach (var t in bodyTasks)
-                            {
-                                j++;
-                                lastId = EmitSequential(sb, lastId, t, j, ctr);
-                            }
-                        }
-                        sb.AppendLine($"    {lastId} --> {endId}");
-                    }
-                }
+                var brs = (task as dynamic).Branches as System.Collections.IEnumerable;
+                if (brs != null) foreach (var br in brs) if (br != null) branches.Add(br);
             }
             catch { }
 
-            // No else? Make the implicit skip path explicit so the diamond
-            // shows *both* outcomes — true (down through the body) and
-            // false (jump to end-if). Dotted edge so it reads as the
-            // implicit/skip branch instead of code we wrote.
-            if (!hasElseBranch)
+            // Degenerate: no parseable branches — pass straight through so the
+            // chain doesn't dead-end.
+            if (branches.Count == 0)
             {
-                sb.AppendLine($"    {diamondId} -.->|\"{Esc(FALSE_PATH)}\"| {endId}");
+                sb.AppendLine(Edge(prevId, endId, inLabel, inDotted));
+                return endId;
             }
+
+            string? currentFrom = prevId;   // source for the next condition / branch
+            bool fromIsDiamond = false;     // true once we've emitted a diamond
+            bool sawElse = false;
+            bool first = true;
+
+            foreach (var br in branches)
+            {
+                bool isElse = false;
+                try { isElse = (bool)((dynamic)br).IsElse; } catch { }
+                var body = ((dynamic)br).Tasks as System.Collections.IEnumerable;
+
+                if (isElse)
+                {
+                    // else body hangs off the previous diamond's "no" edge.
+                    sawElse = true;
+                    EmitBranchBody(sb, currentFrom!, body, endId,
+                        fromIsDiamond ? NO : (first ? inLabel : null),
+                        dotted: first && inDotted, ctr);
+                    currentFrom = null;
+                    break; // else is terminal
+                }
+
+                string? condRaw = null;
+                try { condRaw = TryGetString(((dynamic)br).Condition, "RawData"); } catch { }
+                string keyword = first ? IF : ELSIF;
+                string diaLabel = string.IsNullOrWhiteSpace(condRaw)
+                    ? keyword
+                    : $"{keyword} {Truncate(condRaw!.Trim(), 48)}";
+                string diaId = ctr.Next("if");
+                sb.AppendLine($"    {diaId}{{{{\"{Esc(diaLabel)}\"}}}}:::cond");
+
+                // Incoming edge: the caller's label for the very first diamond,
+                // otherwise the previous diamond's "no" path.
+                if (first)
+                    sb.AppendLine(Edge(prevId, diaId, inLabel, inDotted));
+                else
+                    sb.AppendLine(Edge(currentFrom!, diaId, NO, false));
+
+                // "yes" edge → this branch's body → merge node.
+                EmitBranchBody(sb, diaId, body, endId, YES, dotted: false, ctr);
+
+                currentFrom = diaId;
+                fromIsDiamond = true;
+                first = false;
+            }
+
+            // No else? The last diamond's "no" outcome is the implicit skip —
+            // draw it (dotted) so the diamond shows both outcomes.
+            if (!sawElse && currentFrom != null && fromIsDiamond)
+                sb.AppendLine(Edge(currentFrom, endId, NO, dotted: true));
+
             return endId;
         }
 
         if (typeName == "CaseStructure")
         {
-            var diamondId = ctr.Next("case");
-            string CASE = Traductor.T("FLOW_CASE"), WHEN = Traductor.T("FLOW_WHEN"),
+            string CASE = Traductor.T("FLOW_CASE"),
                    ENDCASE = Traductor.T("FLOW_END_CASE"),
                    OTHERS_PATH = Traductor.T("FLOW_OTHERS_PATH");
-            string caseLabel = CASE;
-            var sel = TryGetString(task, "SelectorExpression")
-                   ?? TryGetString(task, "Selector")
-                   ?? TryGetString(task, "Expression")
-                   ?? TryGetString(task, "RawData");
-            if (!string.IsNullOrWhiteSpace(sel)) caseLabel = $"{CASE} {Truncate(sel!.Trim(), 48)}";
+
+            var diamondId = ctr.Next("case");
+            var sel = CaseSelectorLabel(task);
+            string caseLabel = string.IsNullOrWhiteSpace(sel) || sel == "?"
+                ? CASE
+                : $"{CASE} {Truncate(sel, 48)}";
             sb.AppendLine($"    {diamondId}{{{{\"{Esc(caseLabel)}\"}}}}:::cond");
-            sb.AppendLine($"    {prevId} --> {diamondId}");
+            sb.AppendLine(Edge(prevId, diamondId, inLabel, inDotted));
             string endId = ctr.Next("caseend");
             sb.AppendLine($"    {endId}([\"{Esc(ENDCASE)}\"]):::stmt");
+
+            var branches = new List<object>();
             try
             {
-                var dyn = (dynamic)task;
-                System.Collections.IEnumerable? cases = null;
-                try { cases = dyn.Branches as System.Collections.IEnumerable; } catch { }
-                if (cases == null)
-                    try { cases = dyn.Cases as System.Collections.IEnumerable; } catch { }
-                bool hasOthers = false;
-                if (cases != null)
-                {
-                    int c = 0;
-                    foreach (var ce in cases)
-                    {
-                        c++;
-                        var label = $"{WHEN} #{c}";
-                        try { label = ((dynamic)ce).Label as string ?? label; } catch { }
-                        // VHDL `when others =>` — the catch-all branch.
-                        // Detected on the label since the AST shape is
-                        // open (no IsOthers boolean). Substring match is
-                        // good enough; nothing else legitimately ends in
-                        // "others" in this position.
-                        if (label.TrimEnd().EndsWith("others", StringComparison.OrdinalIgnoreCase))
-                            hasOthers = true;
-                        var startId = ctr.Next("when");
-                        sb.AppendLine($"    {startId}[\"{Esc(label)}\"]:::stmt");
-                        sb.AppendLine($"    {diamondId} -->|\"{Esc(label)}\"| {startId}");
-                        sb.AppendLine($"    {startId} --> {endId}");
-                    }
-                }
-                // Same intent as the if-without-else fix above: when the
-                // case body doesn't include `when others`, expose the
-                // implicit fall-through so the diamond doesn't read as
-                // exhaustive.
-                if (!hasOthers)
-                {
-                    sb.AppendLine($"    {diamondId} -.->|\"{Esc(OTHERS_PATH)}\"| {endId}");
-                }
+                var brs = (task as dynamic).Branches as System.Collections.IEnumerable;
+                if (brs == null) try { brs = (task as dynamic).Cases as System.Collections.IEnumerable; } catch { }
+                if (brs != null) foreach (var ce in brs) if (ce != null) branches.Add(ce);
             }
             catch { }
+
+            bool hasOthers = false;
+            int c = 0;
+            foreach (var ce in branches)
+            {
+                c++;
+                bool isOthers = false;
+                try { isOthers = (bool)((dynamic)ce).IsOthers; } catch { }
+                if (isOthers) hasOthers = true;
+                // Edge carries the real choice values ("01" | "10", others, …);
+                // the body statements follow directly — no redundant when box.
+                string whenLabel = CaseWhenLabel(ce, c);
+                var body = ((dynamic)ce).Tasks as System.Collections.IEnumerable;
+                EmitBranchBody(sb, diamondId, body, endId, whenLabel, dotted: false, ctr);
+            }
+
+            // No explicit `when others`? Expose the implicit fall-through so the
+            // diamond doesn't read as exhaustive.
+            if (!hasOthers)
+                sb.AppendLine(Edge(diamondId, endId, OTHERS_PATH, dotted: true));
+
             return endId;
         }
 
@@ -684,7 +766,7 @@
                 _                     => typeName
             };
             sb.AppendLine($"    {loopId}[/\"{Esc(label)}\"/]:::loop");
-            sb.AppendLine($"    {prevId} --> {loopId}");
+            sb.AppendLine(Edge(prevId, loopId, inLabel, inDotted));
             try
             {
                 var tasks = (task as dynamic).Tasks as System.Collections.IEnumerable;
@@ -711,7 +793,7 @@
         var stmtId = ctr.Next("s");
         var stmtLabel = DescribeConcurrent(task, typeName);
         sb.AppendLine($"    {stmtId}[\"{Esc(stmtLabel)}\"]:::stmt");
-        sb.AppendLine($"    {prevId} --> {stmtId}");
+        sb.AppendLine(Edge(prevId, stmtId, inLabel, inDotted));
         return stmtId;
     }
 
@@ -730,6 +812,118 @@
             return p?.GetValue(obj) as string;
         }
         catch { return null; }
+    }
+
+    /// <summary>Reflection-only property reader (any type). Null on miss.</summary>
+    private static object? TryGetProp(object? obj, string name)
+    {
+        if (obj == null) return null;
+        try
+        {
+            return obj.GetType().GetProperty(name,
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)?.GetValue(obj);
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// Emits one Mermaid edge <c>from --> to</c>, optionally labeled and/or
+    /// dotted. The label is wrapped in double-quotes so spaces / underscores /
+    /// escaped glyphs parse as one token instead of breaking the <c>|…|</c>
+    /// delimiter. Keeps all edge construction (plain, labeled, implicit-skip)
+    /// in one place.
+    /// </summary>
+    private static string Edge(string from, string to, string? label, bool dotted)
+    {
+        var arrow = dotted ? "-.->" : "-->";
+        return string.IsNullOrEmpty(label)
+            ? $"    {from} {arrow} {to}"
+            : $"    {from} {arrow}|\"{Esc(label)}\"| {to}";
+    }
+
+    /// <summary>
+    /// Chains a branch body (if/elsif/else arm, or case when arm) off
+    /// <paramref name="from"/> into the shared merge node <paramref name="endId"/>.
+    /// The FIRST incoming edge carries <paramref name="firstLabel"/> (sí/no/the
+    /// when-choice) so there's no redundant label box. An empty body collapses
+    /// to a single labeled edge straight to the merge node.
+    /// </summary>
+    private void EmitBranchBody(System.Text.StringBuilder sb, string from,
+        System.Collections.IEnumerable? body, string endId, string? firstLabel, bool dotted, IdCounter ctr)
+    {
+        var items = new List<object>();
+        if (body != null) foreach (var t in body) if (t != null) items.Add(t);
+
+        if (items.Count == 0)
+        {
+            sb.AppendLine(Edge(from, endId, firstLabel, dotted));
+            return;
+        }
+
+        string last = from;
+        for (int j = 0; j < items.Count; j++)
+        {
+            last = j == 0
+                ? EmitSequential(sb, from, items[j], j + 1, ctr, firstLabel, dotted)
+                : EmitSequential(sb, last, items[j], j + 1, ctr);
+        }
+        sb.AppendLine(Edge(last, endId, null, false));
+    }
+
+    /// <summary>
+    /// Builds the case selector label from the real AST shape:
+    /// <c>CaseStructure.SelectorName</c> (falling back to the resolved
+    /// <c>Selector.Name</c>), with the slice appended for a sliced selector
+    /// like <c>case op(3 downto 0) is</c>. Returns "?" when nothing readable.
+    /// </summary>
+    private static string CaseSelectorLabel(object task)
+    {
+        var sel = TryGetString(task, "SelectorName");
+        if (string.IsNullOrWhiteSpace(sel))
+        {
+            var selVar = TryGetProp(task, "Selector");
+            sel = selVar != null ? TryGetString(selVar, "Name") : null;
+        }
+        if (string.IsNullOrWhiteSpace(sel)) return "?";
+        sel = sel!.Trim();
+        try
+        {
+            if (TryGetProp(task, "HasSelectorSlice") is bool has && has
+                && TryGetProp(task, "SelectorSliceHigh") is int h && h >= 0
+                && TryGetProp(task, "SelectorSliceLow") is int l && l >= 0)
+            {
+                sel = $"{sel}({h} downto {l})";
+            }
+        }
+        catch { }
+        return sel;
+    }
+
+    /// <summary>
+    /// Builds a <c>when</c> arm label from the real AST shape: "others" for the
+    /// catch-all (<c>IsOthers</c>), otherwise the branch's <c>Choices</c> joined
+    /// with " | " (e.g. <c>"01" | "10"</c>). Falls back to <c>when #n</c> only
+    /// when no choices are readable.
+    /// </summary>
+    private string CaseWhenLabel(object branch, int index)
+    {
+        try
+        {
+            if (TryGetProp(branch, "IsOthers") is bool b && b)
+                return Traductor.T("FLOW_OTHERS_PATH");
+            if (TryGetProp(branch, "Choices") is System.Collections.IEnumerable ch)
+            {
+                var parts = new List<string>();
+                foreach (var c in ch)
+                {
+                    var s = c?.ToString();
+                    if (!string.IsNullOrWhiteSpace(s)) parts.Add(s!.Trim());
+                }
+                if (parts.Count > 0) return string.Join(" | ", parts);
+            }
+        }
+        catch { }
+        return $"{Traductor.T("FLOW_WHEN")} #{index}";
     }
 
     /// <summary>

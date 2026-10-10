@@ -1,0 +1,93 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Kmila.CLI — the terminal head of Kmila, a FIFTH variant alongside
+    Kmila (MAUI), Kmila.Web (Blazor Server) and Kmila.Wasm (Blazor WASM).
+    This one has no GUI: it runs the same VHDL engine from a console, for
+    low-resource / headless machines. Two modes:
+      kmila sim ...   non-interactive simulate → VCD/TXT/CSV/JSON/SVG
+      kmila ui        full-screen zero-dependency ANSI TUI
+
+    Like every other head it references ONLY Kmila.Shared (the engine libs
+    Debugger/Interpreter/LibraryCompiler → Parser/TimeMachine flow in
+    transitively). The three existing console tools at the repo root
+    (SimulatorBench, PracticeValidator, RoundTripAudit) do exactly this and
+    prove a plain console Exe over Kmila.Shared's net9.0 flavor builds and
+    runs. No extra NuGet packages: the TUI is hand-rolled ANSI so the tool
+    ships with the smallest possible footprint and the widest terminal reach.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Kmila.CLI</RootNamespace>
+    <AssemblyName>kmila</AssemblyName>
+    <InvariantGlobalization>false</InvariantGlobalization>
+
+    <!-- `dotnet tool install` / `dotnet pack` ship the `kmila` command. Only
+         consulted by `dotnet pack`; harmless for build/run. -->
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>kmila</ToolCommandName>
+    <PackageId>Kmila.CLI</PackageId>
+
+    <!-- Same analyzer-suppression set the other heads carry (see each head's
+         csproj). Keeps the CA migration noise out of this new project. -->
+    <NoWarn>$(NoWarn);CS1587;CS1591;CS1570;CS1573;CS1574;CS1998;CS8602;CS8604;CS8625;CS8892;CS0219;CS0618;CS4014;NETSDK1206</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Kmila.Shared/Kmila.Shared.csproj" />
+  </ItemGroup>
+
+  <!--
+    Make the fpga flag and Spanish i18n work even in a published,
+    self-contained binary: copy (read-only) the device specs and UI
+    dictionaries that live in Kmila.Shared into THIS project's output. We only
+    READ those files at build time into our own bin/; Kmila.Shared is never
+    modified. At runtime FpgaResolver / Strings also fall back to walking up to
+    the repo's Kmila.Shared/wwwroot when these copies are absent (bare run).
+  -->
+  <ItemGroup>
+    <Content Include="..\Kmila.Shared\wwwroot\Devices\*.json" Link="Devices\%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\Kmila.Shared\wwwroot\Dictionaries\es.json" Link="Dictionaries\es.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\Kmila.Shared\wwwroot\Dictionaries\en.json" Link="Dictionaries\en.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <!--
+    Bundle the Practice exercise content so `kmila practice` works in a published
+    binary. We copy a LEAN subset (the grader needs manifest + solution/starter/
+    tests; `show` uses the es/en statements) instead of all 7 languages + the
+    audit report, keeping the output small. Structure is preserved via
+    %(RecursiveDir). In a source checkout these are also found by walking up to
+    Kmila.Shared/wwwroot/Practice, so a bare `dotnet run` works without them too.
+  -->
+  <ItemGroup>
+    <Content Include="..\Kmila.Shared\wwwroot\Practice\manifest.json" Link="Practice\manifest.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\Kmila.Shared\wwwroot\Practice\**\solution.vhdl" Link="Practice\%(RecursiveDir)solution.vhdl">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\Kmila.Shared\wwwroot\Practice\**\starter.vhdl" Link="Practice\%(RecursiveDir)starter.vhdl">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\Kmila.Shared\wwwroot\Practice\**\tests.json" Link="Practice\%(RecursiveDir)tests.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\Kmila.Shared\wwwroot\Practice\**\statement.es.md" Link="Practice\%(RecursiveDir)statement.es.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\Kmila.Shared\wwwroot\Practice\**\statement.en.md" Link="Practice\%(RecursiveDir)statement.en.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>

@@ -5,6 +5,7 @@ using Interpreter.Synthesis;
 using Interpreter.Synthesis.Layout;
 using Kmila.Shared.Components.Schematic;
 using Kmila.Shared.Models;
+using Kmila.Shared.Models.Schematic;
 
 namespace Kmila.Shared.Services;
 
@@ -40,23 +41,27 @@ public static class SchematicExporter
     /// exported file matches the live diagram pixel-for-pixel
     /// (modulo trim and background).
     ///
-    /// When <see cref="SchematicExportRequest.Mode"/> is
-    /// <see cref="SchematicRenderMode.Human"/>, the layout is first
-    /// piped through <see cref="SchematicSimplifier.Simplify"/> and
-    /// several rendering knobs shift toward readability: padding
+    /// When <see cref="SchematicExportRequest.Mode"/> is one of the human
+    /// styles, several rendering knobs shift toward readability: padding
     /// grows, fonts grow, wire strokes thicken, and muted internal
-    /// output-net labels are hidden so trivial diagrams don't look
-    /// noisy.
+    /// output-net labels are hidden so trivial diagrams don't look noisy.
+    /// The block styles (Rtl, Nodes) additionally draw each cell as a box
+    /// or card via <see cref="BlockSkins"/> instead of gate glyphs.
     /// </summary>
     public static string BuildSvg(
         FilteredLayout filtered,
         SchematicExportRequest req,
         string title,
-        SchematicColourPalette? palette = null)
+        SchematicColourPalette? palette = null,
+        IReadOnlyList<SchematicAnnotation>? annotations = null)
     {
         var ci = CultureInfo.InvariantCulture;
-        bool human = req.Mode == SchematicRenderMode.Human;
-        if (human)
+        bool human = req.Mode.IsHuman();
+        bool block = req.Mode.IsBlock();
+        bool rtl = req.Mode == SchematicRenderMode.Rtl;
+        bool nodes = req.Mode == SchematicRenderMode.Nodes;
+        bool grouped = req.Mode == SchematicRenderMode.Grouped;
+        if (human && !block)
         {
             filtered = SchematicSimplifier.Simplify(filtered, palette);
         }
@@ -64,10 +69,23 @@ public static class SchematicExporter
         int labelFont = human ? 14 : 11;
         int titleFont = human ? 16 : 13;
         int portLabelFont = human ? 14 : 11;
-        int busStroke = human ? 4 : 3;
-        int wireStroke = human ? 3 : 2;
+        int busStroke = nodes ? 3 : human ? 4 : 3;
+        int wireStroke = nodes ? 2 : human ? 3 : 2;
 
         var bounds = filtered.Bounds;
+        // Fold annotation cards into the bounding box so trimming never clips a
+        // note/pinned card that sits outside the diagram's own extent.
+        if (annotations is { Count: > 0 })
+        {
+            foreach (var a in annotations)
+            {
+                double x0 = Math.Min(bounds.X, a.X);
+                double y0 = Math.Min(bounds.Y, a.Y);
+                double x1 = Math.Max(bounds.X + bounds.Width, a.X + a.W);
+                double y1 = Math.Max(bounds.Y + bounds.Height, a.Y + a.H);
+                bounds = new Interpreter.Synthesis.Layout.Rect(x0, y0, x1 - x0, y1 - y0);
+            }
+        }
         bool trim = req.TrimToBounds;
         bool useColor = req.ColorMode == SchematicExportColorMode.Color && palette != null;
 
@@ -114,8 +132,45 @@ public static class SchematicExporter
               .Append("</text>\n");
         }
 
-        // Wires first so cells render on top of them at junctions.
         bool darkBg = req.Background == SchematicExportBackground.Dark;
+
+        // RTL arrowhead marker (inherits each wire's stroke via context-stroke).
+        if (rtl)
+        {
+            sb.Append("<defs><marker id=\"schematic-arrow\" markerWidth=\"8\" markerHeight=\"8\" ")
+              .Append("refX=\"6.5\" refY=\"4\" orient=\"auto-start-reverse\" markerUnits=\"userSpaceOnUse\">")
+              .Append("<path d=\"M0,1 L7,4 L0,7 Z\" fill=\"context-stroke\" /></marker></defs>\n");
+        }
+
+        // Grouped style: titled containers behind the gates, one per statement.
+        if (grouped)
+        {
+            string[] hues = { "60,130,246", "245,158,11", "16,185,129",
+                "168,85,247", "239,68,68", "6,182,212", "236,72,153" };
+            string groupText = darkBg ? "#f1f5f9" : "#1f2937";
+            var groups = filtered.Layout.Netlist.Cells
+                .Where(c => filtered.VisibleCellIds.Contains(c.Id) && !string.IsNullOrEmpty(c.SourceLine))
+                .GroupBy(c => c.SourceLine!)
+                .ToList();
+            for (int gi = 0; gi < groups.Count; gi++)
+            {
+                var rects = groups[gi]
+                    .Select(c => filtered.Layout.CellBounds.TryGetValue(c.Id, out var r) ? r : default)
+                    .Where(r => r.Width > 0).ToList();
+                if (rects.Count == 0) continue;
+                double gx0 = rects.Min(r => r.X) - 20 + offsetX;
+                double gy0 = rects.Min(r => r.Y) - 34 + offsetY;
+                double gx1 = rects.Max(r => r.X + r.Width) + 20 + offsetX;
+                double gy1 = rects.Max(r => r.Y + r.Height) + 16 + offsetY;
+                string hue = hues[gi % hues.Length];
+                string gkey = groups[gi].Key;
+                string gtext = gkey.Length > 64 ? gkey.Substring(0, 61) + "…" : gkey;
+                sb.Append(BlockSkins.GroupContainer(gx0, gy0, gx1 - gx0, gy1 - gy0, gtext,
+                    $"rgba({hue},.09)", $"rgba({hue},.55)", groupText)).Append('\n');
+            }
+        }
+
+        // Wires first so cells render on top of them at junctions.
         string wireDefault = darkBg ? "#94a3b8" : "#475569";
         foreach (var wire in filtered.Layout.Wires)
         {
@@ -129,7 +184,9 @@ public static class SchematicExporter
             var net = filtered.Layout.Netlist.Nets.FirstOrDefault(n => n.Id == wire.NetId);
             if (net == null) continue;
             int sw = net.Kind == NetKind.Bus ? busStroke : wireStroke;
-            string d = BuildWirePath(wire, offsetX, offsetY);
+            string d = nodes
+                ? BuildWireBezier(wire, offsetX, offsetY)
+                : BuildWirePath(wire, offsetX, offsetY);
             string stroke = wireDefault;
             if (useColor && palette != null)
             {
@@ -143,8 +200,9 @@ public static class SchematicExporter
                 else if (palette.Ports.TryGetValue(wire.NetId, out var portCol))
                     stroke = portCol;
             }
+            string marker = rtl ? " marker-end=\"url(#schematic-arrow)\"" : "";
             sb.Append(ci, $"<path d=\"{d}\" fill=\"none\" stroke=\"{stroke}\" ")
-              .Append(ci, $"stroke-width=\"{sw}\" stroke-linejoin=\"round\" />\n");
+              .Append(ci, $"stroke-width=\"{sw}\" stroke-linejoin=\"round\"{marker} />\n");
         }
 
         // Cells.
@@ -168,6 +226,24 @@ public static class SchematicExporter
             double x = b.X + offsetX;
             double y = b.Y + offsetY;
             sb.Append(ci, $"<g transform=\"translate({x.ToString("0.##", ci)} {y.ToString("0.##", ci)})\">");
+
+            // Block styles draw a box/card instead of gate glyphs.
+            if (block && c.Attrs != null && c.Attrs.ContainsKey(BlockGraphBuilder.BlockAttr))
+            {
+                var bcolors = new BlockSkins.Colors(
+                    Fill: body, Stroke: stroke, HeaderFill: stroke, HeaderText: darkBg ? "#0f172a" : "#ffffff",
+                    Title: lbl, Sub: darkBg ? "#94a3b8" : "#64748b", Glyph: lbl,
+                    PortFill: cellBodyDefault, PortStroke: stroke, PortLabel: labelDefault);
+                bool IsBus(string netId)
+                {
+                    var n = filtered.Layout.Netlist.Nets.FirstOrDefault(x => x.Id == netId);
+                    return n is { Kind: NetKind.Bus };
+                }
+                sb.Append(BlockSkins.Build(c, b.Width, b.Height, req.Mode, bcolors, IsBus));
+                sb.Append("</g>\n");
+                continue;
+            }
+
             foreach (var path in GateGlyphs.Paths(c.Kind))
             {
                 sb.Append(ci, $"<path d=\"{path}\" fill=\"{body}\" ")
@@ -237,6 +313,20 @@ public static class SchematicExporter
               .Append("</text>\n");
         }
 
+        // Annotation cards (notes + pinned info) float on top of the diagram,
+        // at the same canvas coordinates they occupy on screen.
+        if (annotations is { Count: > 0 })
+        {
+            foreach (var a in annotations)
+            {
+                double x = a.X + offsetX;
+                double y = a.Y + offsetY;
+                sb.Append(ci, $"<g transform=\"translate({x.ToString("0.##", ci)} {y.ToString("0.##", ci)})\">");
+                sb.Append(AnnotationSkins.Build(a));
+                sb.Append("</g>\n");
+            }
+        }
+
         sb.Append("</svg>");
         return sb.ToString();
     }
@@ -255,5 +345,14 @@ public static class SchematicExporter
             sb.Append(' ');
         }
         return sb.ToString();
+    }
+
+    // Node-editor link (Nodos style): a smooth curve following the routed
+    // polyline with rounded corners — mirrors the on-screen viewer.
+    private static string BuildWireBezier(WirePath wire, double offsetX, double offsetY)
+    {
+        if (wire.Points.Count < 2) return BuildWirePath(wire, offsetX, offsetY);
+        var shifted = wire.Points.Select(p => (p.X + offsetX, p.Y + offsetY)).ToList();
+        return BlockSkins.RoundedPolyline(shifted);
     }
 }

@@ -220,12 +220,8 @@ public static class PlantUmlFlowEmitter
     private static void EmitCase(StringBuilder sb, object task, int indent)
     {
         var pad = Pad(indent);
-        var sel = TryGetString(task, "SelectorExpression")
-               ?? TryGetString(task, "Selector")
-               ?? TryGetString(task, "Expression")
-               ?? TryGetString(task, "RawData")
-               ?? "?";
-        sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{pad}switch (\"{EscapeQuoted(Truncate(sel.Trim(), 48))}\")");
+        var sel = CaseSelectorLabel(task);
+        sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{pad}switch (\"{EscapeQuoted(Truncate(sel, 48))}\")");
 
         var cases = TryGetProp(task, "Branches") as IEnumerable
                  ?? TryGetProp(task, "Cases") as IEnumerable;
@@ -235,8 +231,8 @@ public static class PlantUmlFlowEmitter
             foreach (var ce in cases)
             {
                 c++;
-                var label = TryGetString(ce, "Label") ?? $"when #{c}";
-                sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{pad}case (\"{EscapeQuoted(Truncate(label.Trim(), 32))}\")");
+                var label = CaseWhenLabel(ce, c);
+                sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{pad}case (\"{EscapeQuoted(Truncate(label, 32))}\")");
                 var body = TryGetProp(ce, "Tasks") as IEnumerable;
                 if (body != null)
                 {
@@ -246,6 +242,62 @@ public static class PlantUmlFlowEmitter
             }
         }
         sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{pad}endswitch");
+    }
+
+    /// <summary>
+    /// Builds the case selector label from the real AST shape: the
+    /// <c>SelectorName</c> string (falling back to the resolved
+    /// <c>Selector.Name</c>), with the slice appended when the case targets a
+    /// sliced selector like <c>case op(3 downto 0) is</c>. Returns "?" only
+    /// when nothing readable is present.
+    /// </summary>
+    private static string CaseSelectorLabel(object task)
+    {
+        var sel = TryGetString(task, "SelectorName");
+        if (string.IsNullOrWhiteSpace(sel))
+        {
+            var selVar = TryGetProp(task, "Selector");
+            sel = selVar != null ? TryGetString(selVar, "Name") : null;
+        }
+        if (string.IsNullOrWhiteSpace(sel)) return "?";
+        sel = sel!.Trim();
+        try
+        {
+            if (TryGetProp(task, "HasSelectorSlice") is bool has && has
+                && TryGetProp(task, "SelectorSliceHigh") is int h && h >= 0
+                && TryGetProp(task, "SelectorSliceLow") is int l && l >= 0)
+            {
+                sel = $"{sel}({h} downto {l})";
+            }
+        }
+        catch { }
+        return sel;
+    }
+
+    /// <summary>
+    /// Builds a <c>when</c> arm label from the real AST shape: "others" for the
+    /// catch-all (<c>IsOthers</c>), otherwise the branch's <c>Choices</c> joined
+    /// with " | " (e.g. <c>"01" | "10"</c>). Falls back to <c>when #n</c> only
+    /// when no choices are readable.
+    /// </summary>
+    private static string CaseWhenLabel(object branch, int index)
+    {
+        try
+        {
+            if (TryGetProp(branch, "IsOthers") is bool b && b) return "others";
+            if (TryGetProp(branch, "Choices") is IEnumerable ch)
+            {
+                var parts = new List<string>();
+                foreach (var c in ch)
+                {
+                    var s = c?.ToString();
+                    if (!string.IsNullOrWhiteSpace(s)) parts.Add(s!.Trim());
+                }
+                if (parts.Count > 0) return string.Join(" | ", parts);
+            }
+        }
+        catch { }
+        return $"when #{index}";
     }
 
     private static void EmitLoop(StringBuilder sb, object task, string typeName, int indent)

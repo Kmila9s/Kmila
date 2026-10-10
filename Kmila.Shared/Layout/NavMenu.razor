@@ -32,7 +32,20 @@
         <img src="_content/Kmila.Shared/img/Logo.png" alt="Kmila" class="kmila-sidebar__logo" />
         <span class="kmila-sidebar__wordmark">
             <span class="kmila-sidebar__name">Kmila</span>
-            <span class="kmila-sidebar__version">@Traductor.T("APP_VERSION")</span>
+            @* Version chip. When build provenance is available, the chip carries
+               a tooltip with the exact build time + git commit so you can
+               confirm which build is running (e.g. that a clean rebuild took
+               effect). See BuildInfo. *@
+            @if (BuildInfo.HasStamp)
+            {
+                <KmilaTooltip TextKey="BUILD_STAMP_FMT" TextArgs="_buildStampArgs" Placement="Right">
+                    <span class="kmila-sidebar__version">@Traductor.T("APP_VERSION")</span>
+                </KmilaTooltip>
+            }
+            else
+            {
+                <span class="kmila-sidebar__version">@Traductor.T("APP_VERSION")</span>
+            }
         </span>
     </a>
 
@@ -326,6 +339,14 @@
     private string _rootClass =>
         (SidebarState.IsCollapsed ? "kmila-sidebar--collapsed " : "") +
         (SidebarState.IsMobileOpen ? "kmila-sidebar--open " : "");
+
+    /// <summary>Args for the version-chip BUILD_STAMP_FMT tooltip: {0} build
+    /// time, {1} git commit. Each falls back to "—" when unavailable.</summary>
+    private readonly object[] _buildStampArgs =
+    {
+        BuildInfo.BuildTimeDisplay.Length > 0 ? BuildInfo.BuildTimeDisplay : "—",
+        BuildInfo.Commit.Length > 0 ? BuildInfo.Commit : "—",
+    };
 
     protected override async Task OnInitializedAsync()
     {

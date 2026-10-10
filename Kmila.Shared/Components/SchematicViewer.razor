@@ -69,7 +69,7 @@ else
             <div class="schematic-viewer__title">
                 <Icon Name="IconName.Diagram3" />
                 <strong>@Traductor.T("SCHEMATIC_VIEWER")</strong>
-                <span class="schematic-viewer__chip">@_layout.Netlist.Cells.Count @Traductor.T("SCHEMATIC_CELLS")</span>
+                <span class="schematic-viewer__chip">@_layout.Netlist.Cells.Count @Traductor.T(_renderMode.IsBlock() ? "SCHEMATIC_BLOCKS" : "SCHEMATIC_CELLS")</span>
             </div>
             <div class="schematic-viewer__modes" role="tablist">
                 @foreach (var m in _modes)
@@ -86,27 +86,30 @@ else
                 }
             </div>
             <div class="schematic-viewer__actions">
-                <div class="kmila-export-pill" role="radiogroup"
-                     aria-label="@Traductor.T("SCHEMATIC_MODE_TITLE")"
-                     data-render-mode="@_renderMode"
-                     title="@Traductor.T("SCHEMATIC_MODE_TITLE")">
-                    <button type="button" role="radio"
-                            aria-checked="@(_renderMode == SchematicRenderMode.Human)"
-                            data-mode-option="Human"
-                            class="kmila-export-pill__opt @(_renderMode == SchematicRenderMode.Human ? "is-active" : "")"
-                            @onclick="() => SetRenderMode(SchematicRenderMode.Human)">
-                        <Icon Name="IconName.PersonHearts" />
-                        <span>@Traductor.T("SCHEMATIC_MODE_HUMAN")</span>
-                    </button>
-                    <button type="button" role="radio"
-                            aria-checked="@(_renderMode == SchematicRenderMode.Raw)"
-                            data-mode-option="Raw"
-                            class="kmila-export-pill__opt @(_renderMode == SchematicRenderMode.Raw ? "is-active" : "")"
-                            @onclick="() => SetRenderMode(SchematicRenderMode.Raw)">
-                        <Icon Name="IconName.Diagram2" />
-                        <span>@Traductor.T("SCHEMATIC_MODE_RAW")</span>
-                    </button>
-                </div>
+                <label class="schematic-style-select" data-render-mode="@_renderMode"
+                       title="@Traductor.T("SCHEMATIC_STYLE_TITLE")">
+                    <Icon Name="IconName.Diagram2" />
+                    <select class="schematic-style-select__input"
+                            aria-label="@Traductor.T("SCHEMATIC_STYLE_TITLE")"
+                            @onchange="OnStyleChanged">
+                        <option value="Grouped" selected="@(_renderMode == SchematicRenderMode.Grouped)">@Traductor.T("SCHEMATIC_STYLE_GROUPED")</option>
+                        <option value="Rtl" selected="@(_renderMode == SchematicRenderMode.Rtl)">@Traductor.T("SCHEMATIC_STYLE_RTL")</option>
+                        <option value="Nodes" selected="@(_renderMode == SchematicRenderMode.Nodes)">@Traductor.T("SCHEMATIC_STYLE_NODES")</option>
+                        <option value="Raw" selected="@(_renderMode == SchematicRenderMode.Raw)">@Traductor.T("SCHEMATIC_MODE_RAW")</option>
+                    </select>
+                </label>
+                @if (_mode == ViewMode.Debug)
+                {
+                    <KmilaTooltip TextKey="SCHEMATIC_DEBUG_FOCUS_HINT">
+                        <button type="button"
+                                class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm @(_debugFocusActive ? "is-active" : "")"
+                                @onclick="ToggleDebugFocus"
+                                aria-pressed="@_debugFocusActive"
+                                aria-label="@Traductor.T("SCHEMATIC_DEBUG_FOCUS")">
+                            <Icon Name="IconName.Activity" />
+                        </button>
+                    </KmilaTooltip>
+                }
                 <KmilaTooltip TextKey="SCHEMATIC_SELECT_MODE">
                     <button type="button"
                             class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm @(_selectMode ? "is-active" : "")"
@@ -116,6 +119,12 @@ else
                         {
                             <span class="schematic-toolbar__count">@(_selCells.Count + _selNets.Count + _selPortNets.Count)</span>
                         }
+                    </button>
+                </KmilaTooltip>
+                <KmilaTooltip TextKey="SCHEMATIC_NOTE_ADD">
+                    <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
+                            @onclick="AddNoteAsync" aria-label="@Traductor.T("SCHEMATIC_NOTE_ADD")">
+                        <Icon Name="IconName.JournalText" />
                     </button>
                 </KmilaTooltip>
                 <KmilaTooltip TextKey="SCHEMATIC_SHUFFLE_COLOURS">
@@ -245,10 +254,24 @@ else
                  width="@(w.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))"
                  height="@(h.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))"
                  preserveAspectRatio="xMinYMin meet"
-                 @onclick="ClearSelection">
+                 @onclick="OnCanvasBackgroundClick">
 
-                @* Naive-mode source-line tints sit underneath everything. *@
-                @if (_mode == ViewMode.Naive)
+                @* RTL style draws bus arrows; the marker inherits each wire's
+                   stroke via context-stroke so it matches the net's colour. *@
+                @if (_renderMode == SchematicRenderMode.Rtl)
+                {
+                    <defs>
+                        <marker id="schematic-arrow" markerWidth="8" markerHeight="8"
+                                refX="6.5" refY="4" orient="auto-start-reverse"
+                                markerUnits="userSpaceOnUse">
+                            <path d="M0,1 L7,4 L0,7 Z" fill="context-stroke" />
+                        </marker>
+                    </defs>
+                }
+
+                @* Naive-mode source-line tints / Grouped-style containers sit
+                   underneath everything. *@
+                @if (_mode == ViewMode.Naive || _renderMode == SchematicRenderMode.Grouped)
                 {
                     @((MarkupString)BuildGroupTints())
                 }
@@ -264,17 +287,24 @@ else
                     if (net == null) continue;
                     if (wire.FromCellId != null && IsCellHidden(wire.FromCellId)) continue;
                     if (wire.ToCellId != null && IsCellHidden(wire.ToCellId)) continue;
-                    var path = BuildWirePath(wire);
+                    // Nodos draws node-editor bezier links; the other styles
+                    // keep the orthogonal Manhattan routing.
+                    var path = _renderMode == SchematicRenderMode.Nodes
+                        ? BuildWireBezier(wire) : BuildWirePath(wire);
                     var stroke = WireColour(net);
-                    // Human mode thickens both bus and wire strokes so a
-                    // dense diagram is easier to trace at a glance. Raw
-                    // keeps the original tighter values.
-                    int sw = _renderMode == SchematicRenderMode.Human
-                        ? (net.Kind == NetKind.Bus ? 4 : 3)
-                        : (net.Kind == NetKind.Bus ? 3 : 2);
+                    // The human styles thicken both bus and wire strokes so a
+                    // dense diagram is easier to trace at a glance. Nodos keeps
+                    // them a touch thinner so its many bezier links read as
+                    // crossings rather than heavy blobs. Raw stays tightest.
+                    int sw = _renderMode == SchematicRenderMode.Nodes
+                        ? (net.Kind == NetKind.Bus ? 3 : 2)
+                        : _renderMode.IsHuman()
+                            ? (net.Kind == NetKind.Bus ? 4 : 3)
+                            : (net.Kind == NetKind.Bus ? 3 : 2);
                     var classes = WireCssClasses(net, wire);
                     <path class="@classes" d="@path" fill="none" stroke="@stroke"
                           stroke-width="@sw" stroke-linejoin="round"
+                          marker-end="@(_renderMode == SchematicRenderMode.Rtl ? "url(#schematic-arrow)" : null)"
                           data-net="@net.Name"
                           @onclick="@(e => SelectNet(net.Id, e))"
                           @onclick:stopPropagation="true" />
@@ -340,6 +370,25 @@ else
                 {
                     @((MarkupString)BuildDebugValues())
                 }
+
+                @* User annotation cards (post-it notes + pinned info), in canvas
+                   coordinates so they pan/zoom with the diagram and export at the
+                   same spot. Drag/resize is handled by kmilaAttachAnnotations (JS)
+                   which commits the new geometry back to .NET on pointer-up. *@
+                @foreach (var ann in _annotations)
+                {
+                    <g class="schematic-annotation @(_selectedAnnId == ann.Id ? "is-selected" : "")"
+                       data-ann-id="@ann.Id"
+                       transform="@($"translate({Fmt(ann.X)} {Fmt(ann.Y)})")"
+                       @onclick="@(e => SelectAnnotation(ann.Id))"
+                       @onclick:stopPropagation="true"
+                       @ondblclick="@(() => EditAnnotation(ann.Id))"
+                       @ondblclick:stopPropagation="true">
+                        @((MarkupString)AnnotationSkins.Build(ann))
+                        <rect class="schematic-annotation__resize" data-ann-resize="@ann.Id"
+                              x="@Fmt(ann.W - 14)" y="@Fmt(ann.H - 14)" width="14" height="14" rx="3" />
+                    </g>
+                }
             </svg>
 
             @* Floating info panel for the currently-selected element.
@@ -354,6 +403,13 @@ else
                 <aside class="schematic-info" style="@_infoStyle" @onclick:stopPropagation="true">
                     <header class="schematic-info__head">
                         <strong>@_selectionTitle</strong>
+                        <KmilaTooltip TextKey="SCHEMATIC_INFO_PIN">
+                            <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
+                                    @onclick="PinSelectionAsync"
+                                    aria-label="@Traductor.T("SCHEMATIC_INFO_PIN")">
+                                <Icon Name="IconName.PinAngle" />
+                            </button>
+                        </KmilaTooltip>
                         <KmilaTooltip TextKey="SCHEMATIC_CLOSE_INFO">
                             <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
                                     @onclick="ClearSelection"
@@ -415,6 +471,83 @@ else
                 </aside>
             }
 
+            @* Multi-select basket: shows what's collected for a scoped export
+               and drives Clear / Export. Only rendered while the basket holds
+               something; the toolbar toggle (SCHEMATIC_SELECT_MODE) enters the
+               mode, clicks collect items. *@
+            @if (HasMultiSelection)
+            {
+                <div class="schematic-basket" @onclick:stopPropagation="true">
+                    <div class="schematic-basket__head">
+                        <Icon Name="IconName.UiChecksGrid" />
+                        <strong>@Traductor.T("SCHEMATIC_BASKET_TITLE")</strong>
+                        <span class="schematic-basket__hint">@Traductor.T("SCHEMATIC_BASKET_HINT")</span>
+                    </div>
+                    <div class="schematic-basket__counts">
+                        @if (_selCells.Count > 0)
+                        {
+                            <span class="schematic-basket__chip">@_selCells.Count <small>@Traductor.T("SCHEMATIC_BASKET_CELLS")</small></span>
+                        }
+                        @if (_selNets.Count > 0)
+                        {
+                            <span class="schematic-basket__chip">@_selNets.Count <small>@Traductor.T("SCHEMATIC_BASKET_WIRES")</small></span>
+                        }
+                        @if (_selPortNets.Count > 0)
+                        {
+                            <span class="schematic-basket__chip">@_selPortNets.Count <small>@Traductor.T("SCHEMATIC_BASKET_PORTS")</small></span>
+                        }
+                    </div>
+                    <div class="schematic-basket__actions">
+                        <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--sm"
+                                @onclick="ClearMultiSelection">
+                            @Traductor.T("SCHEMATIC_BASKET_CLEAR")
+                        </button>
+                        <button type="button" class="kmila-btn kmila-btn--primary kmila-btn--sm"
+                                @onclick="OpenExportModalAsync">
+                            @Traductor.T("SCHEMATIC_BASKET_EXPORT")
+                        </button>
+                    </div>
+                </div>
+            }
+
+            @* Note / pinned-card editor popover. Shown on double-click of a card. *@
+            @if (_editingAnn is not null)
+            {
+                <aside class="schematic-note-editor" @onclick:stopPropagation="true">
+                    <header class="schematic-info__head">
+                        <strong>@Traductor.T(_editingAnn.Kind == SchematicAnnotationKind.Note ? "SCHEMATIC_NOTE_ADD" : "SCHEMATIC_INFO_PIN")</strong>
+                        <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
+                                @onclick="CloseEditor" aria-label="@Traductor.T("SCHEMATIC_CLOSE_INFO")">
+                            <Icon Name="IconName.XLg" />
+                        </button>
+                    </header>
+                    <label class="schematic-note-editor__field">
+                        <span>@Traductor.T("SCHEMATIC_NOTE_TITLE")</span>
+                        <input class="kmila-input" type="text" placeholder="@Traductor.T("SCHEMATIC_NOTE_TITLE_PH")"
+                               @bind="_editingAnn.Title" @bind:after="OnAnnEdited" />
+                    </label>
+                    @if (_editingAnn.Kind == SchematicAnnotationKind.Note)
+                    {
+                        <label class="schematic-note-editor__field">
+                            <span>@Traductor.T("SCHEMATIC_NOTE_BODY")</span>
+                            <textarea class="kmila-input" rows="4" placeholder="@Traductor.T("SCHEMATIC_NOTE_BODY_PH")"
+                                      @bind="_editingAnn.Body" @bind:after="OnAnnEdited"></textarea>
+                        </label>
+                    }
+                    <div class="schematic-note-editor__row">
+                        <label class="schematic-note-editor__field schematic-note-editor__color">
+                            <span>@Traductor.T("SCHEMATIC_NOTE_COLOR")</span>
+                            <input type="color" @bind="_editingAnn.Color" @bind:after="OnAnnEdited" />
+                        </label>
+                        <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--sm schematic-note-editor__delete"
+                                @onclick="DeleteEditingAsync">
+                            <Icon Name="IconName.Trash" />
+                            <span>@Traductor.T("SCHEMATIC_NOTE_DELETE")</span>
+                        </button>
+                    </div>
+                </aside>
+            }
+
         </div>
     </section>
 
@@ -460,8 +593,16 @@ else
     private void ToggleFullscreen()
     {
         _isFullscreen = !_isFullscreen;
+        // Entering/leaving fullscreen changes the viewport dramatically but
+        // not _layout, so OnAfterRenderAsync won't re-attach. Flag a re-fit
+        // there so the schematic reframes to the new size.
+        _needsRefit = true;
         StateHasChanged();
     }
+
+    /// <summary>Set when a non-layout viewport change (e.g. fullscreen
+    /// toggle) needs the pan-zoom view re-fitted on the next render.</summary>
+    private bool _needsRefit;
     private double _zoom = 1.0;
     private LaidOutNetlist? _layout;
     // The literal netlist straight from synthesis. Cached so toggling
@@ -496,20 +637,17 @@ else
     private CellDoc? _selectionDoc;
 
     /// <summary>
-    /// In Naive mode the click-handler not only traces the path but
-    /// pins the source-line group of the clicked element. When set,
-    /// the renderer hides every cell and wire that doesn't belong to
-    /// this group — turning the schematic into a solo view of one
-    /// VHDL line's gate cluster. Cleared on background click. Only
-    /// active in Naive mode; the other modes keep the dim-everything-
-    /// else behaviour because they don't carry source-line groupings.
+    /// In Naive mode, the source-line statement of the last-clicked element.
+    /// Used only to offer the "export this statement block" scope
+    /// (<see cref="SchematicExportScope.NaiveBlock"/>); it does not affect the
+    /// on-screen highlight, which is the shared signal-path trace in every mode.
+    /// Cleared on background click.
     /// </summary>
     private string? _focusedSourceLine;
-    private HashSet<string> _focusedNets = new();
 
     /// <summary>
     /// Multi-select state for the export flow. Decoupled from the
-    /// trace selection (_selectedCellId / _tracedCells / _focusedNets)
+    /// trace selection (_selectedCellId / _tracedCells / _tracedNets)
     /// because the user can pick a basket of items to export *while*
     /// still tracing or isolating a different element. When
     /// <see cref="_selectMode"/> is on, clicks toggle membership;
@@ -521,6 +659,21 @@ else
     private HashSet<string> _selNets = new();
     private HashSet<string> _selPortNets = new();
 
+    // ───────────────────────── Canvas annotations ─────────────────────────
+    /// <summary>User-placed cards (post-it notes + pinned info) in canvas
+    /// coordinates. Rendered by the shared <see cref="AnnotationSkins"/> on
+    /// screen and in the exporter; persisted per-user per-design in localStorage.</summary>
+    private List<SchematicAnnotation> _annotations = new();
+    private string? _selectedAnnId;
+    private SchematicAnnotation? _editingAnn;
+    private string? _annLoadedKey;
+    private bool _annInteropAttached;
+    private Microsoft.JSInterop.DotNetObjectReference<SchematicViewer>? _annDotNetRef;
+    private const double NoteDefaultW = 220;
+    private const double NoteDefaultH = 140;
+
+    private static string Fmt(double v) => v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
     /// <summary>
     /// Human vs. Raw render mode for the on-screen viewer. Human is
     /// the default so the schematic opens looking legible; Raw shows
@@ -528,14 +681,68 @@ else
     /// (session-local) — no AppSettings persistence in v1. Also seeds
     /// the export modal's initial mode so the export matches the view.
     /// </summary>
-    private SchematicRenderMode _renderMode = SchematicRenderMode.Human;
+    private SchematicRenderMode _renderMode = SchematicRenderMode.Grouped;
+    private const string RenderModeStorageKey = "kmila.schematic.style";
 
-    private void SetRenderMode(SchematicRenderMode mode)
+    private async Task OnStyleChanged(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<SchematicRenderMode>(e.Value?.ToString(), out var m))
+            await SetRenderMode(m);
+    }
+
+    private async Task SetRenderMode(SchematicRenderMode mode)
     {
         if (_renderMode == mode) return;
+        // Gate-level (Raw/Grouped) and block-level (Rtl/Nodes) are different
+        // pipelines: crossing that line swaps the netlist + layout, so rebuild.
+        // Staying on the same side (Raw↔Grouped, Rtl↔Nodes) only re-skins the
+        // identical geometry, so a re-render is enough.
+        bool pipelineChanges = _renderMode.IsBlock() != mode.IsBlock();
         _renderMode = mode;
+        if (pipelineChanges && _rawNetlist != null)
+        {
+            RebuildDisplayLayout();
+            RegenerateColours(reseed: false);
+            ClearSelection(); // cell ids differ between the gate and block netlists
+        }
+        await PersistRenderModeAsync();
         StateHasChanged();
     }
+
+    /// <summary>Saves the chosen style per-user in localStorage. Per-user UI
+    /// preference — not the shared web DB (that file is one row for everyone).</summary>
+    private async Task PersistRenderModeAsync()
+    {
+        try { await JS.InvokeVoidAsync("localStorage.setItem", RenderModeStorageKey, _renderMode.ToString()); }
+        catch { /* prerender / storage blocked — the in-memory choice still applies */ }
+    }
+
+    /// <summary>Restores the saved style on first interactive render. Returns
+    /// true when it changed the current style (caller rebuilds + re-renders).</summary>
+    private async Task<bool> LoadRenderModeAsync()
+    {
+        try
+        {
+            var saved = await JS.InvokeAsync<string?>("localStorage.getItem", RenderModeStorageKey);
+            if (!string.IsNullOrEmpty(saved)
+                && Enum.TryParse<SchematicRenderMode>(saved, out var m) && m != _renderMode)
+            {
+                bool pipelineChanges = _renderMode.IsBlock() != m.IsBlock();
+                _renderMode = m;
+                if (pipelineChanges && _rawNetlist != null)
+                {
+                    RebuildDisplayLayout();
+                    RegenerateColours(reseed: false);
+                    ClearSelection();
+                }
+                return true;
+            }
+        }
+        catch { /* prerender / storage blocked — keep the default style */ }
+        return false;
+    }
+
+    private bool _renderModeLoaded;
 
     /// <summary>Per-cell colour assignments. Cells of the same kind share
     /// a hue, vary by lightness across instances. Reseeded on every
@@ -559,6 +766,9 @@ else
         // whenever this viewer is mounted. The flag flips back off when
         // the viewer is disposed.
         Replay.TrackActiveLines = true;
+        // Live activity animation during a free run (Debug only) — JS-driven.
+        Replay.OnLiveRunFrame += OnLiveRunFrame;
+        Replay.AnimateDuringRun = _mode == ViewMode.Debug;
     }
 
     /// <summary>Re-render when the live engine steps so the executing cell pulses.</summary>
@@ -573,6 +783,64 @@ else
     private HashSet<int> _activeStep = new();
     private HashSet<string> _activeStepSignals = new(StringComparer.OrdinalIgnoreCase);
 
+    // Debug "focus active path": when on, only the signals/cells that changed
+    // this delta stay bright; their 1-hop neighbours fade to context; everything
+    // else drops to a faint ghost — so the live wavefront reads in big diagrams.
+    private bool _debugFocusActive;
+    private HashSet<string> _focusActiveCells = new(StringComparer.Ordinal);
+    private HashSet<string> _focusActiveNets = new(StringComparer.Ordinal);
+    private HashSet<string> _focusContextCells = new(StringComparer.Ordinal);
+    private HashSet<string> _focusContextNets = new(StringComparer.Ordinal);
+
+    // The Blazor focus-class path runs only while PAUSED/stepping. During a free
+    // run the JS live-activity path owns the visuals (OnLiveRunFrame) so we don't
+    // re-render the whole SVG per frame.
+    private bool IsDebugFocusActive
+        => _mode == ViewMode.Debug && _debugFocusActive && Replay.IsLivePaused
+           && (_focusActiveCells.Count > 0 || _focusActiveNets.Count > 0);
+
+    private void ToggleDebugFocus()
+    {
+        _debugFocusActive = !_debugFocusActive;
+        RefreshFocusSets();
+        if (!Replay.IsLivePaused) _ = ApplyLiveActivityJsAsync(); // reflect immediately mid-run
+        StateHasChanged();
+    }
+
+    /// <summary>Free-run frame (throttled, off the UI thread): update the live
+    /// activity layer via JS only — never a full re-render.</summary>
+    private void OnLiveRunFrame()
+    {
+        _ = InvokeAsync(async () =>
+        {
+            RefreshActiveStepCache();
+            await ApplyLiveActivityJsAsync();
+        });
+    }
+
+    /// <summary>Pushes the current active (+ 1-hop context when focus is on) set
+    /// to JS, which toggles classes on the existing DOM nodes — components glow
+    /// when called and fade when they go idle, with no Blazor diff.</summary>
+    private async Task ApplyLiveActivityJsAsync()
+    {
+        if (_mode != ViewMode.Debug || !Replay.IsLiveActive) return;
+        var activeCells = _focusActiveCells.ToArray();
+        var activeNets = _focusActiveNets
+            .Select(id => _netById.TryGetValue(id, out var n) ? n.Name : "")
+            .Where(s => s.Length > 0).ToArray();
+        var ctxCells = _debugFocusActive ? _focusContextCells.ToArray() : System.Array.Empty<string>();
+        var ctxNets = _debugFocusActive
+            ? _focusContextNets.Select(id => _netById.TryGetValue(id, out var n) ? n.Name : "")
+                .Where(s => s.Length > 0).ToArray()
+            : System.Array.Empty<string>();
+        try
+        {
+            await JS.InvokeVoidAsync("kmilaSchematicActivity", ".schematic-svg",
+                _debugFocusActive, activeCells, activeNets, ctxCells, ctxNets);
+        }
+        catch { /* JS not ready / circuit gone */ }
+    }
+
     private void RefreshActiveStepCache()
     {
         if (Replay.IsLiveActive)
@@ -585,7 +853,55 @@ else
             _activeStep = new();
             _activeStepSignals = new(StringComparer.OrdinalIgnoreCase);
         }
+        RefreshFocusSets();
     }
+
+    // Recomputes the three focus tiers (active / 1-hop context / ghost) from the
+    // current delta's active set. O(cells + nets); cheap enough per step.
+    private void RefreshFocusSets()
+    {
+        _focusActiveCells = new(StringComparer.Ordinal);
+        _focusActiveNets = new(StringComparer.Ordinal);
+        _focusContextCells = new(StringComparer.Ordinal);
+        _focusContextNets = new(StringComparer.Ordinal);
+        // Compute whenever Debug + live (regardless of focus toggle) so the JS
+        // run path has the active set for the glow even in full-diagram mode.
+        if (_layout == null || _mode != ViewMode.Debug || !Replay.IsLiveActive)
+            return;
+
+        foreach (var c in _layout.Netlist.Cells)
+            if (IsCellActiveStep(c, _activeStep)) _focusActiveCells.Add(c.Id);
+        foreach (var n in _layout.Netlist.Nets)
+            if (_activeStepSignals.Contains(n.Name)) _focusActiveNets.Add(n.Id);
+
+        // 1-hop: cells on an active net, nets on an active cell.
+        foreach (var netId in _focusActiveNets)
+        {
+            if (_producerOfNet.TryGetValue(netId, out var prod) && !_focusActiveCells.Contains(prod))
+                _focusContextCells.Add(prod);
+            if (_consumersOfNet.TryGetValue(netId, out var cons))
+                foreach (var cid in cons)
+                    if (!_focusActiveCells.Contains(cid)) _focusContextCells.Add(cid);
+        }
+        foreach (var cellId in _focusActiveCells)
+        {
+            if (!_cellById.TryGetValue(cellId, out var cell)) continue;
+            foreach (var pin in cell.Inputs)
+                if (!_focusActiveNets.Contains(pin.NetId)) _focusContextNets.Add(pin.NetId);
+            foreach (var pin in cell.Outputs)
+                if (!_focusActiveNets.Contains(pin.NetId)) _focusContextNets.Add(pin.NetId);
+        }
+    }
+
+    // Focus tier class for a cell / net / port. "" = active (full brightness).
+    private string FocusCellClass(string cellId)
+        => _focusActiveCells.Contains(cellId) ? ""
+           : _focusContextCells.Contains(cellId) ? " is-focus-context"
+           : " is-focus-ghost";
+    private string FocusNetClass(string netId)
+        => _focusActiveNets.Contains(netId) ? ""
+           : _focusContextNets.Contains(netId) ? " is-focus-context"
+           : " is-focus-ghost";
 
     /// <summary>
     /// Tracks the JS-side handle returned by <c>kmilaAttachPanZoom</c>. Re-attached
@@ -598,8 +914,43 @@ else
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        // Restore the per-user style on the first interactive render (JS /
+        // localStorage aren't available during prerender). If it changes the
+        // style the layout is rebuilt here, and the render below re-attaches
+        // pan-zoom to the new layout.
+        if (firstRender && !_renderModeLoaded)
+        {
+            _renderModeLoaded = true;
+            if (await LoadRenderModeAsync()) StateHasChanged();
+        }
+
         if (_layout == null) return;
-        if (ReferenceEquals(_layout, _panZoomBoundLayout) && _panZoomId > 0) return;
+
+        // Load this design's saved annotation cards (per-user localStorage) the
+        // first time we see a given entity, or when the entity changes.
+        var annKey = AnnStorageKey();
+        if (annKey != null && annKey != _annLoadedKey)
+        {
+            _annLoadedKey = annKey;
+            await LoadAnnotationsAsync(annKey);
+            StateHasChanged();
+        }
+
+        if (ReferenceEquals(_layout, _panZoomBoundLayout) && _panZoomId > 0)
+        {
+            // Layout unchanged, so no re-attach. But a viewport change that
+            // doesn't touch _layout — notably the fullscreen toggle, which
+            // flips the body between docked and position:fixed inset:0 —
+            // leaves the old frame locked in. Force a re-fit against the new
+            // size when asked (fit() reframes regardless of manual zoom).
+            if (_needsRefit && _panZoomId > 0)
+            {
+                _needsRefit = false;
+                try { await JS.InvokeVoidAsync("kmilaPanZoomFit", _panZoomId); }
+                catch { /* JS not ready (prerender / sandbox) */ }
+            }
+            return;
+        }
         try
         {
             if (_panZoomId > 0)
@@ -609,8 +960,34 @@ else
             }
             _panZoomId = await JS.InvokeAsync<int>("kmilaAttachPanZoom",
                 ".schematic-viewer__body",
-                new { targetSelector = ".schematic-svg", minScale = 0.2, maxScale = 6, fitOnAttach = true });
+                new
+                {
+                    targetSelector = ".schematic-svg",
+                    // Lower floor than the old 0.2: a wide 100+ cell canvas
+                    // needs to shrink well past that to fit a small dock.
+                    minScale = 0.05,
+                    maxScale = 6,
+                    fitOnAttach = true,
+                    // A pointerdown on an annotation card drags the card, not
+                    // the canvas.
+                    skipTargetSelectors = new[] { ".schematic-annotation" },
+                    // Declare the exact canvas size so the fit maths never
+                    // depends on a transient/zeroed SVG client rect.
+                    naturalWidth = _layout.CanvasWidth,
+                    naturalHeight = _layout.CanvasHeight,
+                });
             _panZoomBoundLayout = _layout;
+            _needsRefit = false;
+
+            // Attach the annotation drag/resize delegation once (it listens on
+            // the body, so it survives layout re-attaches and card re-renders).
+            if (!_annInteropAttached)
+            {
+                _annDotNetRef ??= Microsoft.JSInterop.DotNetObjectReference.Create(this);
+                await JS.InvokeVoidAsync("kmilaAttachAnnotations",
+                    ".schematic-viewer__body", _annDotNetRef, ".schematic-svg");
+                _annInteropAttached = true;
+            }
         }
         catch
         {
@@ -678,11 +1055,40 @@ else
     private void RebuildDisplayLayout()
     {
         if (_rawNetlist == null) { _layout = null; return; }
+        if (_renderMode.IsBlock())
+        {
+            // Block styles (RTL / Nodos) coarsen the simplified netlist into
+            // named functional blocks and lay those out with per-block sizing.
+            // The naive literal netlist has no meaning at block level, so block
+            // styles always build on the simplified one regardless of the tab.
+            var blocks = BlockGraphBuilder.Build(SchematicSimplifier.SimplifyNetlist(_rawNetlist));
+            _layout = LayeredLayout.Layout(blocks, groupAware: false, sizeOf: BlockGraphBuilder.BlockSize, colGap: 260, rowGap: 120, crossingSweeps: 4, obstacleRouting: true);
+        }
+        else
+        {
+            var display = _mode == ViewMode.Naive
+                ? _rawNetlist
+                : SchematicSimplifier.SimplifyNetlist(_rawNetlist);
+            _layout = LayeredLayout.Layout(display);
+        }
+        BuildLookups();
+    }
+
+    /// <summary>Builds a layout for an arbitrary render style from the cached
+    /// raw netlist, without mutating viewer state. Used by the export flow so
+    /// it can render a style other than the one currently on screen.</summary>
+    private LaidOutNetlist? BuildLayoutFor(SchematicRenderMode mode)
+    {
+        if (_rawNetlist == null) return null;
+        if (mode.IsBlock())
+        {
+            var blocks = BlockGraphBuilder.Build(SchematicSimplifier.SimplifyNetlist(_rawNetlist));
+            return LayeredLayout.Layout(blocks, groupAware: false, sizeOf: BlockGraphBuilder.BlockSize, colGap: 260, rowGap: 120, crossingSweeps: 4, obstacleRouting: true);
+        }
         var display = _mode == ViewMode.Naive
             ? _rawNetlist
             : SchematicSimplifier.SimplifyNetlist(_rawNetlist);
-        _layout = LayeredLayout.Layout(display);
-        BuildLookups();
+        return LayeredLayout.Layout(display);
     }
 
     private void BuildLookups()
@@ -720,8 +1126,20 @@ else
         }
         // TrackActiveLines stays on independent of mode — live-step pulses
         // are useful in Synthesis/Naive too (set in OnInitialized).
+        // The free-run activity animation is Debug-only; leaving Debug also
+        // clears any lingering JS glow.
+        Replay.AnimateDuringRun = _mode == ViewMode.Debug;
+        if (_mode != ViewMode.Debug) _ = ClearLiveActivityJsAsync();
         RefreshActiveStepCache();
         StateHasChanged();
+    }
+
+    private async Task ClearLiveActivityJsAsync()
+    {
+        try { await JS.InvokeVoidAsync("kmilaSchematicActivity", ".schematic-svg", false,
+            System.Array.Empty<string>(), System.Array.Empty<string>(),
+            System.Array.Empty<string>(), System.Array.Empty<string>()); }
+        catch { }
     }
 
     /// <summary>
@@ -753,8 +1171,23 @@ else
            && int.TryParse(c.SourceLine, out var ln)
            && active.Contains(ln);
 
-    private void Zoom(double factor)
+    private async Task Zoom(double factor)
     {
+        // Prefer the JS transform layer so the +/- buttons zoom about the
+        // viewport centre using the SAME transform that gesture/pinch zoom
+        // drives — previously these buttons scaled the SVG width/height
+        // attribute (a second, uncoordinated zoom system) which fought the
+        // pan-zoom transform and could push content out of reach.
+        if (_panZoomId > 0)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("kmilaPanZoomZoom", _panZoomId, factor);
+                return;
+            }
+            catch { /* JS not ready (prerender / sandbox) — fall through */ }
+        }
+        // No-JS fallback: scale the rendered SVG box directly.
         _zoom = Math.Clamp(_zoom * factor, 0.25, 4.0);
         StateHasChanged();
     }
@@ -933,6 +1366,15 @@ else
         StateHasChanged();
     }
 
+    /// <summary>Background (empty canvas) click: drop both the component
+    /// selection and any annotation selection / open editor.</summary>
+    private void OnCanvasBackgroundClick()
+    {
+        _editingAnn = null;
+        _selectedAnnId = null;
+        ClearSelection();
+    }
+
     private void ClearSelection()
     {
         _selectedCellId = null;
@@ -943,7 +1385,6 @@ else
         _selectionTitle = "";
         _selectionDoc = null;
         _focusedSourceLine = null;
-        _focusedNets = new();
         _infoStyle = "";
         Cursor.SetSelectedNet(null);
         StateHasChanged();
@@ -1035,31 +1476,164 @@ else
         StateHasChanged();
     }
 
+    // ───────────────────────── Canvas annotations ─────────────────────────
+
+    /// <summary>Per-user, per-design localStorage key for the annotation cards.</summary>
+    private string? AnnStorageKey()
+    {
+        var name = _rawNetlist?.EntityName;
+        return string.IsNullOrEmpty(name) ? null : "kmila.schematic.notes." + name;
+    }
+
+    private async Task LoadAnnotationsAsync(string key)
+    {
+        try
+        {
+            var json = await JS.InvokeAsync<string?>("localStorage.getItem", key);
+            _annotations = string.IsNullOrEmpty(json)
+                ? new()
+                : System.Text.Json.JsonSerializer.Deserialize<List<SchematicAnnotation>>(json) ?? new();
+        }
+        catch { _annotations = new(); }
+    }
+
+    private async Task SaveAnnotationsAsync()
+    {
+        var key = AnnStorageKey();
+        if (key == null) return;
+        try
+        {
+            var json = System.Text.Json.JsonSerializer.Serialize(_annotations);
+            await JS.InvokeVoidAsync("localStorage.setItem", key, json);
+        }
+        catch { /* prerender / storage blocked — the in-memory cards still apply */ }
+    }
+
+    // Default spawn point: centre of the canvas, nudged per card so they fan out.
+    private (double X, double Y) SpawnAt(double w, double h)
+    {
+        double cx = (_layout?.CanvasWidth ?? 400) / 2.0 - w / 2.0 + _annotations.Count * 18;
+        double cy = (_layout?.CanvasHeight ?? 300) / 2.0 - h / 2.0 + _annotations.Count * 18;
+        return (cx, cy);
+    }
+
+    private async Task AddNoteAsync()
+    {
+        var (x, y) = SpawnAt(NoteDefaultW, NoteDefaultH);
+        var ann = new SchematicAnnotation
+        {
+            Kind = SchematicAnnotationKind.Note,
+            X = x, Y = y, W = NoteDefaultW, H = NoteDefaultH,
+            Color = "#fde68a",
+        };
+        _annotations.Add(ann);
+        _selectedAnnId = ann.Id;
+        _editingAnn = ann;
+        await SaveAnnotationsAsync();
+        StateHasChanged();
+    }
+
+    /// <summary>Pins the current component info card onto the canvas as a
+    /// movable, read-only snapshot. Multiple pins can coexist.</summary>
+    private async Task PinSelectionAsync()
+    {
+        if (_selectedCellId == null && _selectedNetId == null) return;
+        var ann = new SchematicAnnotation
+        {
+            Kind = SchematicAnnotationKind.Info,
+            Color = "#e2e8f0",
+            W = 280,
+            Title = _selectionTitle,
+            Fields = _selectionFields.Select(f => new[] { f.Item1, f.Item2 }).ToList(),
+            Summary = _selectionDoc?.Summary,
+            Description = _selectionDoc?.Description,
+            TruthTable = _selectionDoc?.TruthTable?.ToList(),
+        };
+        ann.H = AnnotationSkins.ContentHeight(ann);
+        var (x, y) = SpawnAt(ann.W, ann.H);
+        ann.X = x; ann.Y = y;
+        _annotations.Add(ann);
+        _selectedAnnId = ann.Id;
+        ClearSelection(); // dismiss the transient follow-cursor card
+        await SaveAnnotationsAsync();
+        StateHasChanged();
+    }
+
+    private void SelectAnnotation(string id)
+    {
+        _selectedAnnId = id;
+        // Bring to front: last in the list paints on top.
+        var a = _annotations.FirstOrDefault(x => x.Id == id);
+        if (a != null && !ReferenceEquals(a, _annotations[^1]))
+        {
+            _annotations.Remove(a);
+            _annotations.Add(a);
+        }
+        StateHasChanged();
+    }
+
+    private void EditAnnotation(string id)
+    {
+        _editingAnn = _annotations.FirstOrDefault(x => x.Id == id);
+        _selectedAnnId = id;
+        StateHasChanged();
+    }
+
+    private void CloseEditor()
+    {
+        _editingAnn = null;
+        StateHasChanged();
+    }
+
+    private async Task OnAnnEdited() => await SaveAnnotationsAsync();
+
+    private async Task DeleteEditingAsync()
+    {
+        if (_editingAnn == null) return;
+        if (_selectedAnnId == _editingAnn.Id) _selectedAnnId = null;
+        _annotations.Remove(_editingAnn);
+        _editingAnn = null;
+        await SaveAnnotationsAsync();
+        StateHasChanged();
+    }
+
+    /// <summary>JS commits a drag here on pointer-up (canvas-unit coordinates).</summary>
+    [Microsoft.JSInterop.JSInvokable]
+    public async Task OnAnnotationMoved(string id, double x, double y)
+    {
+        var a = _annotations.FirstOrDefault(z => z.Id == id);
+        if (a == null) return;
+        a.X = x;
+        a.Y = y;
+        await SaveAnnotationsAsync();
+        StateHasChanged();
+    }
+
+    /// <summary>JS commits a resize here on pointer-up (canvas-unit size).</summary>
+    [Microsoft.JSInterop.JSInvokable]
+    public async Task OnAnnotationResized(string id, double w, double h)
+    {
+        var a = _annotations.FirstOrDefault(z => z.Id == id);
+        if (a == null) return;
+        a.W = Math.Max(120, w);
+        a.H = Math.Max(60, h);
+        await SaveAnnotationsAsync();
+        StateHasChanged();
+    }
+
     /// <summary>
-    /// In Naive mode, pin the clicked element's source-line group as
-    /// the visible-only block. <see cref="_focusedNets"/> caches every
-    /// net touched by a focused cell so the wire/port renderers can do
-    /// O(1) is-hidden lookups during the next render. In any other
-    /// mode this is a no-op — Synthesis / Debug keep showing the whole
-    /// netlist with the dim-everything-else trace highlight.
+    /// Records the clicked element's source-line statement in Naive mode so the
+    /// export flow can offer a "this statement block" scope
+    /// (<see cref="SchematicExportScope.NaiveBlock"/>). It no longer drives the
+    /// on-screen highlight — selection highlighting is the shared signal-path
+    /// trace in every mode (see <see cref="ShouldHideOnTrace"/>). A no-op outside
+    /// Naive.
     /// </summary>
     private void UpdateNaiveFocus(string? sourceLine)
     {
-        if (_mode != ViewMode.Naive || string.IsNullOrEmpty(sourceLine) || _layout == null)
-        {
-            _focusedSourceLine = null;
-            _focusedNets = new();
-            return;
-        }
-        _focusedSourceLine = sourceLine;
-        var nets = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var c in _layout.Netlist.Cells)
-        {
-            if (!string.Equals(c.SourceLine, sourceLine, StringComparison.Ordinal)) continue;
-            foreach (var p in c.Inputs) nets.Add(p.NetId);
-            foreach (var p in c.Outputs) nets.Add(p.NetId);
-        }
-        _focusedNets = nets;
+        _focusedSourceLine = _mode == ViewMode.Naive && !string.IsNullOrEmpty(sourceLine)
+            ? sourceLine
+            : null;
     }
 
     /// <summary>BFS-style trace forward (toward sinks) from a starting
@@ -1122,7 +1696,8 @@ else
     /// leave bypass strokes hovering between hidden gates because
     /// they used to render unconditionally.
     /// </summary>
-    private sealed record BypassWire(string PathD, string Stroke, int Width, string InNetId, string OutNetId);
+    private sealed record BypassWire(string PathD, string Stroke, int Width, string InNetId, string OutNetId,
+        string? FromCellId, string? ToCellId);
 
     /// <summary>
     /// For each hidden BUF cell, finds the wire ending at its D pin
@@ -1164,7 +1739,11 @@ else
             var inNet = _netById.GetValueOrDefault(inNetId);
             string stroke = inNet is null ? "var(--text-muted)" : WireColour(inNet);
             int width = inNet is { Kind: NetKind.Bus } ? 3 : 2;
-            yield return new BypassWire(d, stroke, width, inNetId, outNetId);
+            // Carry the bypass's real endpoint cells (the gate upstream of the
+            // BUF and the one downstream) so trace isolation can hide the bypass
+            // when either end is off-path, just like a real wire.
+            yield return new BypassWire(d, stroke, width, inNetId, outNetId,
+                inWire.FromCellId, outWire.ToCellId);
         }
     }
 
@@ -1178,18 +1757,37 @@ else
     private string BypassWireCssClasses(BypassWire bw)
     {
         var sb = new System.Text.StringBuilder("schematic-wire schematic-wire--bypass");
-        if (HasTrace && _mode != ViewMode.Naive)
+        if (HasTrace)
         {
             bool traced = _tracedNets.Contains(bw.InNetId)
                        || _tracedNets.Contains(bw.OutNetId);
-            if (traced) sb.Append(" is-traced");
+            bool fromVisible = bw.FromCellId == null || _tracedCells.Contains(bw.FromCellId);
+            bool toVisible = bw.ToCellId == null || _tracedCells.Contains(bw.ToCellId);
+            if (traced && fromVisible && toVisible) sb.Append(" is-traced");
             else sb.Append(ShouldHideOnTrace ? " is-hidden" : " is-dimmed");
         }
         return sb.ToString();
     }
 
+    /// <summary>Internal bookkeeping attrs the block builder stamps on a block
+    /// cell — never shown in the inspector (the block branch surfaces the
+    /// useful ones as clean fields instead).</summary>
+    private static readonly HashSet<string> _hiddenAttrKeys = new(StringComparer.Ordinal)
+    {
+        BlockGraphBuilder.BlockAttr, BlockGraphBuilder.LabelAttr,
+        BlockGraphBuilder.MembersAttr, BlockGraphBuilder.SubAttr,
+    };
+
     private void BuildSelectionFields(Cell cell)
     {
+        // Block cells get a clean, block-level inspector — no internal attrs,
+        // no raw intermediate net names (the gate path shows those).
+        if (IsBlockCell(cell))
+        {
+            BuildBlockSelectionFields(cell);
+            return;
+        }
+
         var fields = new List<(string, string)>();
         // Title is the operator, prominent so the user can see at a
         // glance what they clicked. Falls back to cell-kind.
@@ -1208,10 +1806,37 @@ else
         {
             foreach (var (k, v) in cell.Attrs)
             {
-                if (k == "Op") continue; // already in the title
+                if (k == "Op" || _hiddenAttrKeys.Contains(k)) continue; // in title / internal
                 fields.Add((LocalizeAttrKey(k), LocalizeAttrValue(k, v)));
             }
         }
+        _selectionFields = fields;
+    }
+
+    /// <summary>Clean inspector for a merged functional block: its name, the
+    /// operation, how many gates it folds, the VHDL statement, and its ports
+    /// by their friendly names (not the internal net ids).</summary>
+    private void BuildBlockSelectionFields(Cell cell)
+    {
+        var attrs = cell.Attrs!;
+        _selectionTitle = attrs.TryGetValue(BlockGraphBuilder.LabelAttr, out var label) && !string.IsNullOrEmpty(label)
+            ? label : GateGlyphs.Label(cell.Kind);
+        var fields = new List<(string, string)>();
+        if (attrs.TryGetValue(BlockGraphBuilder.SubAttr, out var sub) && !string.IsNullOrEmpty(sub))
+            fields.Add((Traductor.T("SCHEMATIC_INFO_OP"), sub));
+        if (attrs.TryGetValue(BlockGraphBuilder.MembersAttr, out var mem) && !string.IsNullOrEmpty(mem))
+        {
+            int gates = mem.Split(',', StringSplitOptions.RemoveEmptyEntries).Length;
+            fields.Add((Traductor.T("SCHEMATIC_INFO_GATES"), gates.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        }
+        if (!string.IsNullOrEmpty(cell.SourceLine))
+            fields.Add((Traductor.T("SCHEMATIC_INFO_SOURCE"), cell.SourceLine));
+        var ins = string.Join(", ", cell.Inputs.Select(p => p.Name).Where(n => !string.IsNullOrEmpty(n) && n != "·"));
+        if (!string.IsNullOrEmpty(ins))
+            fields.Add((Traductor.T("SCHEMATIC_INFO_INPUTS"), ins));
+        var outs = string.Join(", ", cell.Outputs.Select(p => p.Name).Where(n => !string.IsNullOrEmpty(n) && n != "·"));
+        if (!string.IsNullOrEmpty(outs))
+            fields.Add((Traductor.T("SCHEMATIC_INFO_OUTPUT"), outs));
         _selectionFields = fields;
     }
 
@@ -1295,32 +1920,33 @@ else
     private bool HasTrace => _selectedCellId != null || _selectedNetId != null;
 
     /// <summary>
-    /// Naive-mode focus check. In Naive view, when the user clicks a
-    /// cell or wire, the schematic isolates the source-line group that
-    /// owns it — every other cell and wire goes <c>is-hidden</c>. The
-    /// other view modes ignore this and use the regular trace dimming.
+    /// Selection highlighting is ONE behaviour across every view mode: clicking
+    /// a cell or wire traces the signal path (<see cref="TraceForward"/> /
+    /// <see cref="TraceBackward"/>) and everything off that path drops away. The
+    /// only per-mode difference is the visual treatment below — Naive and
+    /// Synthesis hide the off-path elements outright so the picked signal reads
+    /// as a self-contained sub-circuit; Debug only dims them, because its live
+    /// value annotations on every wire are part of what makes that mode useful.
     /// </summary>
-    private bool IsNaiveFocusActive => _mode == ViewMode.Naive && _focusedSourceLine != null;
+    private bool ShouldHideOnTrace => _mode != ViewMode.Debug;
 
-    /// <summary>
-    /// In Synthesis the user asked for the same "isolate the picked element"
-    /// behavior Naive already does — non-traced cells/wires/ports drop out
-    /// instead of just dimming. Debug stays dimmed because the value
-    /// annotations on every wire are part of what makes the mode useful.
-    /// </summary>
-    private bool ShouldHideOnTrace => _mode == ViewMode.Synthesis;
+    /// <summary>True when a cell will actually be painted given the current
+    /// trace selection — used so group tints only backdrop visible cells
+    /// instead of leaving empty coloured rectangles over hidden ones.</summary>
+    private bool IsCellVisible(string cellId)
+    {
+        if (IsCellHidden(cellId)) return false;
+        if (HasTrace && ShouldHideOnTrace && !_tracedCells.Contains(cellId)) return false;
+        return true;
+    }
 
     private string CellCssClasses(Cell c)
     {
         var sb = new System.Text.StringBuilder("schematic-cell schematic-cell--");
         sb.Append(c.Kind.ToString().ToLowerInvariant());
-        if (IsNaiveFocusActive)
+        if (IsDebugFocusActive)
         {
-            // Hide cells from other source-line groups outright. Cells
-            // with no source line (synthetic stubs) also drop out so
-            // the focused cluster reads cleanly.
-            if (!string.Equals(c.SourceLine, _focusedSourceLine, StringComparison.Ordinal))
-                sb.Append(" is-hidden");
+            sb.Append(FocusCellClass(c.Id));
         }
         else if (HasTrace)
         {
@@ -1340,23 +1966,21 @@ else
     private string WireCssClasses(Net net, WirePath wire)
     {
         var sb = new System.Text.StringBuilder("schematic-wire");
-        if (IsNaiveFocusActive)
+        if (IsDebugFocusActive)
         {
-            // Per-branch visibility: a fan-out from `a` to six gates
-            // produces six WirePath records. When the user isolates one
-            // gate, we want the branches into the other five hidden
-            // even though the net itself (a) is still part of the
-            // focused group. Hide a branch when EITHER endpoint is a
-            // cell outside the focus.
-            bool fromHidden = wire.FromCellId != null
-                && !IsCellInFocus(wire.FromCellId);
-            bool toHidden = wire.ToCellId != null
-                && !IsCellInFocus(wire.ToCellId);
-            if (fromHidden || toHidden) sb.Append(" is-hidden");
+            sb.Append(FocusNetClass(net.Id));
         }
         else if (HasTrace)
         {
-            if (_tracedNets.Contains(net.Id)) sb.Append(" is-traced");
+            // A wire branch only belongs to the trace if its net is traced AND
+            // both of its endpoint cells are on the traced path. Backward tracing
+            // adds a net's producer but not its sibling consumers, so a fan-out
+            // branch to an off-path cell would otherwise keep its wire visible
+            // while the cell itself is hidden — a route dangling into empty space.
+            // (A null endpoint is an entity port, handled by PortCssClasses.)
+            bool fromVisible = wire.FromCellId == null || _tracedCells.Contains(wire.FromCellId);
+            bool toVisible = wire.ToCellId == null || _tracedCells.Contains(wire.ToCellId);
+            if (_tracedNets.Contains(net.Id) && fromVisible && toVisible) sb.Append(" is-traced");
             else sb.Append(ShouldHideOnTrace ? " is-hidden" : " is-dimmed");
         }
         if (_selectedNetId == net.Id) sb.Append(" is-selected");
@@ -1367,27 +1991,13 @@ else
         return sb.ToString();
     }
 
-    /// <summary>
-    /// Cell membership check used by the per-branch wire filter when
-    /// Naive-mode isolation is active. <c>null</c> cell ids belong to
-    /// entity ports — those endpoints are visible if the wire's net
-    /// is in the focused set, which we already established earlier
-    /// when picking the wire to render at all.
-    /// </summary>
-    private bool IsCellInFocus(string cellId)
-        => _cellById.TryGetValue(cellId, out var c)
-           && string.Equals(c.SourceLine, _focusedSourceLine, StringComparison.Ordinal);
-
     private string PortCssClasses(PortPin port)
     {
         var sb = new System.Text.StringBuilder("schematic-port schematic-port--");
         sb.Append(port.Direction.ToString().ToLowerInvariant());
-        if (IsNaiveFocusActive)
+        if (IsDebugFocusActive)
         {
-            // Keep ports that are wired into the focused group; hide
-            // the rest so the visible block looks like a self-contained
-            // sub-circuit with just its own I/O.
-            if (!_focusedNets.Contains(port.NetId)) sb.Append(" is-hidden");
+            sb.Append(FocusNetClass(port.NetId));
         }
         else if (HasTrace)
         {
@@ -1482,10 +2092,14 @@ else
     /// </summary>
     private string BuildCellInner(Cell c)
     {
+        // Block styles (RTL / Nodos) draw a box/card instead of a gate glyph.
+        if (_renderMode.IsBlock() && IsBlockCell(c))
+            return BuildBlockCellInner(c);
+
         var col = CellColour(c);
         string label = CellLabel(c);
         var ci = System.Globalization.CultureInfo.InvariantCulture;
-        bool human = _renderMode == SchematicRenderMode.Human;
+        bool human = _renderMode.IsHuman();
         int labelFont = human ? 14 : 11;
         var sb = new System.Text.StringBuilder();
         foreach (var d in GateGlyphs.Paths(c.Kind))
@@ -1518,6 +2132,39 @@ else
         return sb.ToString();
     }
 
+    private static bool IsBlockCell(Cell c)
+        => c.Attrs != null && c.Attrs.ContainsKey(BlockGraphBuilder.BlockAttr);
+
+    /// <summary>Draws one functional block (RTL box or Nodos card) via the
+    /// shared <see cref="BlockSkins"/> helper so screen + export match.</summary>
+    private string BuildBlockCellInner(Cell c)
+    {
+        if (_layout == null || !_layout.CellBounds.TryGetValue(c.Id, out var b)) return "";
+        var col = CellColour(c);
+        var colors = new BlockSkins.Colors(
+            Fill: col.Body,
+            Stroke: col.Stroke,
+            HeaderFill: col.Stroke,
+            HeaderText: "#ffffff",
+            Title: col.Label,
+            Sub: "var(--text-muted)",
+            Glyph: col.Label,
+            PortFill: "var(--schematic-cell-bg)",
+            PortStroke: col.Stroke,
+            PortLabel: "var(--text-strong)");
+        bool IsBus(string netId) => _netById.TryGetValue(netId, out var n) && n.Kind == NetKind.Bus;
+        return BlockSkins.Build(c, b.Width, b.Height, _renderMode, colors, IsBus);
+    }
+
+    /// <summary>Node-editor link for Nodos: a smooth curve that follows the
+    /// obstacle-aware routed polyline with rounded corners, so it keeps the soft
+    /// node-editor look without cutting across blocks.</summary>
+    private static string BuildWireBezier(WirePath wire)
+    {
+        if (wire.Points.Count < 2) return BuildWirePath(wire);
+        return BlockSkins.RoundedPolyline(wire.Points);
+    }
+
     private string BuildPortInner(PortPin port, (double X, double Y) pos)
     {
         bool isInput = port.Direction is PortDir.In or PortDir.InOut;
@@ -1525,7 +2172,7 @@ else
         string anchor = isInput ? "start" : "end";
         string colour = PortColour(port);
         var ci = System.Globalization.CultureInfo.InvariantCulture;
-        bool human = _renderMode == SchematicRenderMode.Human;
+        bool human = _renderMode.IsHuman();
         int portFont = human ? 14 : 11;
         var sb = new System.Text.StringBuilder();
         sb.Append($"<circle cx=\"{pos.X.ToString("0.##", ci)}\" cy=\"{pos.Y.ToString("0.##", ci)}\" ")
@@ -1546,40 +2193,46 @@ else
         var sb = new System.Text.StringBuilder();
         var groups = _layout.Netlist.Cells
             .Where(c => !string.IsNullOrEmpty(c.SourceLine))
-            // When the user has isolated one source-line group, drop
-            // the other groups' tinted backdrops so the canvas isn't
-            // littered with empty colored rectangles where the now-
-            // hidden cells used to sit.
-            .Where(c => !IsNaiveFocusActive
-                || string.Equals(c.SourceLine, _focusedSourceLine, StringComparison.Ordinal))
+            // Only backdrop cells that are actually painted, so a trace that
+            // hides off-path cells doesn't leave empty coloured rectangles
+            // where the now-hidden cells used to sit.
+            .Where(c => IsCellVisible(c.Id))
             .GroupBy(c => c.SourceLine!)
             .ToList();
-        string[] palette = new[]
-        {
-            "rgba(60,130,246,.10)", "rgba(245,158,11,.10)", "rgba(16,185,129,.10)",
-            "rgba(168,85,247,.10)", "rgba(239,68,68,.10)",  "rgba(6,182,212,.10)",
-            "rgba(236,72,153,.10)",
-        };
+        // Grouped style draws stronger, titled containers (visible outline,
+        // display-font title) so the statement structure reads first. Naive
+        // keeps the original faint, label-only tints.
+        bool grouped = _renderMode == SchematicRenderMode.Grouped;
+        string[] hues = new[] { "60,130,246", "245,158,11", "16,185,129",
+            "168,85,247", "239,68,68", "6,182,212", "236,72,153" };
         for (int i = 0; i < groups.Count; i++)
         {
             var g = groups[i];
-            string fill = palette[i % palette.Length];
+            string hue = hues[i % hues.Length];
             var rects = g.Select(c => _layout.CellBounds.TryGetValue(c.Id, out var r) ? r : default)
                          .Where(r => r.Width > 0).ToList();
             if (rects.Count == 0) continue;
             double x0 = rects.Min(r => r.X) - 20;
-            double y0 = rects.Min(r => r.Y) - 32;
+            double y0 = rects.Min(r => r.Y) - (grouped ? 34 : 32);
             double x1 = rects.Max(r => r.X + r.Width) + 20;
             double y1 = rects.Max(r => r.Y + r.Height) + 16;
-            sb.Append($"<rect x=\"{x0.ToString("0.##", ci)}\" y=\"{y0.ToString("0.##", ci)}\" ")
-              .Append($"width=\"{(x1 - x0).ToString("0.##", ci)}\" height=\"{(y1 - y0).ToString("0.##", ci)}\" ")
-              .Append($"rx=\"10\" fill=\"{fill}\" stroke=\"none\" />");
             string text = g.Key.Length > 64 ? g.Key.Substring(0, 61) + "…" : g.Key;
-            sb.Append($"<text x=\"{(x0 + 8).ToString("0.##", ci)}\" y=\"{(y0 + 14).ToString("0.##", ci)}\" ")
-              .Append("font-size=\"10\" font-family=\"ui-monospace, Menlo, monospace\" ")
-              .Append("fill=\"var(--text-strong)\">")
-              .Append(System.Net.WebUtility.HtmlEncode(text))
-              .Append("</text>");
+            if (grouped)
+            {
+                sb.Append(BlockSkins.GroupContainer(x0, y0, x1 - x0, y1 - y0, text,
+                    $"rgba({hue},.09)", $"rgba({hue},.55)", "var(--text-strong)"));
+            }
+            else
+            {
+                sb.Append($"<rect x=\"{x0.ToString("0.##", ci)}\" y=\"{y0.ToString("0.##", ci)}\" ")
+                  .Append($"width=\"{(x1 - x0).ToString("0.##", ci)}\" height=\"{(y1 - y0).ToString("0.##", ci)}\" ")
+                  .Append($"rx=\"10\" fill=\"rgba({hue},.10)\" stroke=\"none\" />");
+                sb.Append($"<text x=\"{(x0 + 8).ToString("0.##", ci)}\" y=\"{(y0 + 14).ToString("0.##", ci)}\" ")
+                  .Append("font-size=\"10\" font-family=\"ui-monospace, Menlo, monospace\" ")
+                  .Append("fill=\"var(--text-strong)\">")
+                  .Append(System.Net.WebUtility.HtmlEncode(text))
+                  .Append("</text>");
+            }
         }
         return sb.ToString();
     }
@@ -1599,6 +2252,13 @@ else
         foreach (var c in _layout.Netlist.Cells)
         {
             if (IsCellHidden(c.Id)) continue;
+
+            // Build this cell's chips into a local buffer first; a chip belongs
+            // to its consuming block, so the whole set must hide/dim/trace with
+            // that block. Without the wrapper the chips stayed fully visible when
+            // Synthesis trace-isolation hid the owning block (display:none),
+            // leaving the constant labels floating in empty space.
+            var chips = new System.Text.StringBuilder();
             foreach (var pin in c.Inputs)
             {
                 var net = _netById.GetValueOrDefault(pin.NetId);
@@ -1611,18 +2271,23 @@ else
                 double w = Math.Max(22, val.Length * 7.2 + 10);
                 double x = pos.X - 8 - w;   // right edge sits 8px left of the pin
                 double y = pos.Y - h / 2;
-                sb.Append($"<line x1=\"{(x + w).ToString("0.##", ci)}\" y1=\"{pos.Y.ToString("0.##", ci)}\" ")
+                chips.Append($"<line x1=\"{(x + w).ToString("0.##", ci)}\" y1=\"{pos.Y.ToString("0.##", ci)}\" ")
                   .Append($"x2=\"{pos.X.ToString("0.##", ci)}\" y2=\"{pos.Y.ToString("0.##", ci)}\" ")
                   .Append("stroke=\"#94a3b8\" stroke-width=\"1.5\" />");
-                sb.Append($"<rect x=\"{x.ToString("0.##", ci)}\" y=\"{y.ToString("0.##", ci)}\" ")
+                chips.Append($"<rect x=\"{x.ToString("0.##", ci)}\" y=\"{y.ToString("0.##", ci)}\" ")
                   .Append($"width=\"{w.ToString("0.##", ci)}\" height=\"{h.ToString("0.##", ci)}\" rx=\"4\" ")
                   .Append("fill=\"#cbd5e1\" stroke=\"#64748b\" stroke-width=\"1\" />");
-                sb.Append($"<text x=\"{(x + w / 2).ToString("0.##", ci)}\" y=\"{(pos.Y + 4).ToString("0.##", ci)}\" ")
+                chips.Append($"<text x=\"{(x + w / 2).ToString("0.##", ci)}\" y=\"{(pos.Y + 4).ToString("0.##", ci)}\" ")
                   .Append("text-anchor=\"middle\" font-size=\"11\" font-family=\"ui-monospace, Menlo, monospace\" ")
                   .Append("fill=\"#0f172a\">")
                   .Append(System.Net.WebUtility.HtmlEncode(val))
                   .Append("</text>");
             }
+
+            if (chips.Length == 0) continue;
+            // Reuse the owning cell's classes so is-hidden / is-dimmed / is-traced
+            // apply to the chips exactly as they do to the block body.
+            sb.Append($"<g class=\"{CellCssClasses(c)}\">").Append(chips).Append("</g>");
         }
         return sb.ToString();
     }
@@ -1701,28 +2366,56 @@ else
         if (_layout == null) return;
         await _exportModal.HideAsync();
 
-        FilteredLayout filtered;
+        // The export renders in the style the modal chose (req.Mode). When
+        // that style uses a different pipeline than the on-screen view
+        // (gate ↔ block), temporarily swap in a layout + palette built for it
+        // so the filter, geometry and colours all match — then restore before
+        // the first await, so the live view never flickers to the swapped state.
+        bool swap = req.Mode.IsBlock() != _renderMode.IsBlock() && _rawNetlist != null;
+        var savedLayout = _layout;
+        var savedCellColours = _cellColours;
+        var savedPortColours = _portColours;
+        if (swap)
+        {
+            _layout = BuildLayoutFor(req.Mode);
+            BuildLookups();
+            RegenerateColours(reseed: false);
+            // Selection / Naive-focus picks are ids from the other pipeline —
+            // they don't exist in this layout, so widen to the whole diagram.
+            if (req.Scope is SchematicExportScope.Selection or SchematicExportScope.NaiveBlock)
+                req.Scope = SchematicExportScope.Full;
+        }
+
+        string svg;
         try
         {
-            filtered = BuildFilter(req);
+            if (_layout == null) return;
+            var filtered = BuildFilter(req);
+            string title = $"{_layout.Netlist.EntityName}  ·  {ScopeTitle(req)}";
+            // Hand the palette down so a colour export keeps the exact hues on
+            // screen (including Shuffle clicks). Mono mode ignores it.
+            var palette = new SchematicColourPalette
+            {
+                Cells = new Dictionary<string, SchematicCellColours>(_cellColours),
+                Ports = new Dictionary<string, string>(_portColours),
+            };
+            svg = SchematicExporter.BuildSvg(filtered, req, title, palette, _annotations);
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "[SchematicViewer] Failed to build export filter");
+            Logger.LogError(ex, "[SchematicViewer] Failed to build export SVG");
             return;
         }
-
-        string title = $"{_layout.Netlist.EntityName}  ·  {ScopeTitle(req)}";
-        // Hand the on-screen palette down so a colour export keeps the
-        // exact hues the user is looking at — including the result of
-        // any Shuffle clicks since the last layout refresh. Mono mode
-        // ignores the palette entirely.
-        var palette = new SchematicColourPalette
+        finally
         {
-            Cells = new Dictionary<string, SchematicCellColours>(_cellColours),
-            Ports = new Dictionary<string, string>(_portColours),
-        };
-        string svg = SchematicExporter.BuildSvg(filtered, req, title, palette);
+            if (swap)
+            {
+                _layout = savedLayout;
+                _cellColours = savedCellColours;
+                _portColours = savedPortColours;
+                BuildLookups();
+            }
+        }
 
         string baseName = SanitizeFileName($"kmila-schematic_{_layout.Netlist.EntityName}_{req.Scope}");
         string ext = req.Format == SchematicExportFormat.Svg ? "svg" : "png";
@@ -1830,12 +2523,20 @@ else
         Traductor.StaticOnLangChanged -= StateHasChangedSafe;
         Replay.OnLiveStepChanged -= OnLiveStepChanged;
         Replay.OnLiveChanged     -= OnLiveStepChanged;
+        Replay.OnLiveRunFrame    -= OnLiveRunFrame;
         // Stop the per-frame bookkeeping when no schematic is watching.
         Replay.TrackActiveLines = false;
+        Replay.AnimateDuringRun = false;
         if (_panZoomId > 0)
         {
             try { _ = JS.InvokeVoidAsync("kmilaDetachPanZoom", _panZoomId).AsTask(); }
             catch { /* circuit gone */ }
         }
+        if (_annInteropAttached)
+        {
+            try { _ = JS.InvokeVoidAsync("kmilaDetachAnnotations", ".schematic-viewer__body").AsTask(); }
+            catch { /* circuit gone */ }
+        }
+        _annDotNetRef?.Dispose();
     }
 }

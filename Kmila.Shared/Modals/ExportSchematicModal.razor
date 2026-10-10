@@ -66,9 +66,11 @@
             </div>
 
             <div class="kmila-export-field">
-                <label class="form-label" for="schex-mode">@Traductor.T("EXPORT_MODAL_MODE_LABEL")</label>
+                <label class="form-label" for="schex-mode">@Traductor.T("SCHEMATIC_STYLE_TITLE")</label>
                 <select id="schex-mode" class="form-select form-select-sm" @bind="_mode">
-                    <option value="@SchematicRenderMode.Human">@Traductor.T("SCHEMATIC_MODE_HUMAN")</option>
+                    <option value="@SchematicRenderMode.Grouped">@Traductor.T("SCHEMATIC_STYLE_GROUPED")</option>
+                    <option value="@SchematicRenderMode.Rtl">@Traductor.T("SCHEMATIC_STYLE_RTL")</option>
+                    <option value="@SchematicRenderMode.Nodes">@Traductor.T("SCHEMATIC_STYLE_NODES")</option>
                     <option value="@SchematicRenderMode.Raw">@Traductor.T("SCHEMATIC_MODE_RAW")</option>
                 </select>
             </div>
@@ -178,8 +180,8 @@
 
     /// <summary>Initial render mode surfaced by the modal — the viewer
     /// hands in whatever the user is currently looking at so the export
-    /// defaults match the on-screen view. When absent, Human wins.</summary>
-    [Parameter] public SchematicRenderMode InitialMode { get; set; } = SchematicRenderMode.Human;
+    /// defaults match the on-screen view. When absent, Grouped wins.</summary>
+    [Parameter] public SchematicRenderMode InitialMode { get; set; } = SchematicRenderMode.Grouped;
 
     private SchematicExportFormat _format = SchematicExportFormat.Svg;
     private int _pngScale = 2;
@@ -187,7 +189,7 @@
     private string? _byKind;
     private SchematicExportBackground _background = SchematicExportBackground.White;
     private SchematicExportColorMode _colorMode = SchematicExportColorMode.Color;
-    private SchematicRenderMode _mode = SchematicRenderMode.Human;
+    private SchematicRenderMode _mode = SchematicRenderMode.Grouped;
     private bool _trim = true;
     private bool _autoInclude = true;
     private bool _includeTitle = true;

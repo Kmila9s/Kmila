@@ -412,8 +412,17 @@ window.downloadFile = function (fileName, content) {
         let prep = _kmilaPrepFlowSvg(container);
         if (prep.ok) return prep;
 
-        const hasSource = !!document.querySelector('.flow-diagram__body pre.mermaid, pre.mermaid');
-        if (!hasSource) return { ok: false, reason: 'no-diagram' };
+        // The viewer re-keys (@key) the <pre> on every render, so there's a
+        // brief window where neither the source nor the rendered <svg> is in
+        // the DOM. Don't declare "no diagram" on the first miss — give the DOM
+        // one frame to settle and re-check, otherwise an export clicked right
+        // as the diagram refreshes falsely reports "not ready".
+        let hasSource = !!document.querySelector('.flow-diagram__body pre.mermaid, pre.mermaid');
+        if (!hasSource) {
+            await new Promise(function (r) { requestAnimationFrame(function () { r(); }); });
+            hasSource = !!document.querySelector('.flow-diagram__body pre.mermaid, pre.mermaid');
+            if (!hasSource) return { ok: false, reason: 'no-diagram' };
+        }
 
         // Kick a render, then POLL for the <svg> — deliberately without awaiting
         // kmilaMermaidRun(): a large flowchart can take several seconds to lay
@@ -423,7 +432,7 @@ window.downloadFile = function (fileName, content) {
         // bounded ceiling recovers the diagram when it finishes and fails fast
         // (render-failed) otherwise, so the export never hangs.
         try { window.kmilaMermaidRun(); } catch (e) { /* fall through to poll */ }
-        for (let i = 0; i < 100; i++) {          // ~5s ceiling (100 × 50ms)
+        for (let i = 0; i < 200; i++) {          // ~10s ceiling (200 × 50ms)
             await new Promise(function (r) { setTimeout(r, 50); });
             prep = _kmilaPrepFlowSvg(container);
             if (prep.ok) return prep;
@@ -458,54 +467,130 @@ window.downloadFile = function (fileName, content) {
             _kmilaEnsureFlowSvg(container).then(function (prep) {
               try {
                 if (!prep.ok) { resolve('ERR:' + prep.reason); return; }
-                const dpr = Math.max(1, window.devicePixelRatio || 1) * 2;
-                const canvas = document.createElement('canvas');
-                canvas.width  = Math.max(1, Math.floor(prep.w * dpr));
-                canvas.height = Math.max(1, Math.floor(prep.h * dpr));
-                const ctx = canvas.getContext('2d');
-                ctx.scale(dpr, dpr);
-                ctx.fillStyle = prep.bg;
-                ctx.fillRect(0, 0, prep.w, prep.h);
 
+                // A browser <canvas> has hard limits (~16384 px per side on
+                // Chrome, lower on Safari/iOS; plus a max total AREA), and —
+                // crucially — toBlob() can silently return null on a canvas
+                // that is merely large (not over the documented cap) depending
+                // on the platform / available memory. So instead of picking one
+                // size and failing when it doesn't take, we build a ladder of
+                // pixel ratios (crisp first) and rasterise at the first one that
+                // actually yields bytes. This way the PNG ALWAYS exports — just
+                // a bit softer for giant diagrams — rather than surfacing the
+                // misleading "diagram not ready" toast. SVG export stays lossless.
+                const MAX_DIM = 16384;
+                const MAX_AREA = 16384 * 8192;
+                let dpr = Math.max(1, window.devicePixelRatio || 1) * 2;
+                dpr = Math.min(dpr, MAX_DIM / prep.w, MAX_DIM / prep.h,
+                               Math.sqrt(MAX_AREA / (prep.w * prep.h)));
+                const ratios = [];
+                for (let r = dpr; r >= 0.12; r *= 0.6) ratios.push(r);
+                if (ratios.length === 0) ratios.push(Math.max(0.1, dpr));
+
+                const finish = function (blobUrl, val) {
+                    if (blobUrl) { try { URL.revokeObjectURL(blobUrl); } catch (_) {} }
+                    resolve(val);
+                };
+
+                // Rasterise the already-loaded <img> at ratios[i]; on any miss
+                // (toBlob null, draw/encode throw, reader error) drop to the
+                // next smaller ratio. Only when the whole ladder is exhausted do
+                // we report a genuine PNG failure (→ "export as SVG").
+                const rasterize = function (img, blobUrl) {
+                    const tryAt = function (i) {
+                        if (i >= ratios.length) { finish(blobUrl, 'ERR:png-failed'); return; }
+                        const r = ratios[i];
+                        try {
+                            const canvas = document.createElement('canvas');
+                            canvas.width  = Math.max(1, Math.floor(prep.w * r));
+                            canvas.height = Math.max(1, Math.floor(prep.h * r));
+                            const ctx = canvas.getContext('2d');
+                            ctx.scale(r, r);
+                            ctx.fillStyle = prep.bg;
+                            ctx.fillRect(0, 0, prep.w, prep.h);
+                            ctx.drawImage(img, 0, 0, prep.w, prep.h);
+                            canvas.toBlob(function (blob) {
+                                if (!blob) { tryAt(i + 1); return; }   // too big here → smaller
+                                const reader = new FileReader();
+                                reader.onloadend = function () {
+                                    const result = String(reader.result || '');
+                                    const comma = result.indexOf(',');
+                                    if (comma >= 0) finish(blobUrl, result.substring(comma + 1));
+                                    else tryAt(i + 1);
+                                };
+                                reader.onerror = function () { tryAt(i + 1); };
+                                reader.readAsDataURL(blob);
+                            }, 'image/png');
+                        } catch (e) {
+                            console.warn('[kmilaSerializeFlowPng] rasterise miss @' + r, e);
+                            tryAt(i + 1);
+                        }
+                    };
+                    tryAt(0);
+                };
+
+                // Load the SVG as an <img>. Prefer a Blob URL; if that fails to
+                // load (some WebViews choke on blob: SVGs), retry once via a
+                // data: URL before giving up.
                 const svgBlob = new Blob([prep.svg], { type: 'image/svg+xml;charset=utf-8' });
                 const blobUrl = URL.createObjectURL(svgBlob);
                 const img = new Image();
-                img.onload = function () {
-                    try {
-                        ctx.drawImage(img, 0, 0, prep.w, prep.h);
-                        canvas.toBlob(function (blob) {
-                            URL.revokeObjectURL(blobUrl);
-                            if (!blob) { resolve(''); return; }
-                            const reader = new FileReader();
-                            reader.onloadend = function () {
-                                const result = reader.result || '';
-                                const comma = String(result).indexOf(',');
-                                resolve(comma >= 0 ? String(result).substring(comma + 1) : '');
-                            };
-                            reader.onerror = function () { resolve(''); };
-                            reader.readAsDataURL(blob);
-                        }, 'image/png');
-                    } catch (drawErr) {
-                        URL.revokeObjectURL(blobUrl);
-                        console.error('[kmilaSerializeFlowPng] draw failed', drawErr);
-                        resolve('');
-                    }
-                };
-                img.onerror = function (e) {
-                    URL.revokeObjectURL(blobUrl);
-                    console.error('[kmilaSerializeFlowPng] image load failed', e);
-                    resolve('');
+                img.onload = function () { rasterize(img, blobUrl); };
+                img.onerror = function () {
+                    try { URL.revokeObjectURL(blobUrl); } catch (_) {}
+                    const img2 = new Image();
+                    img2.onload = function () { rasterize(img2, null); };
+                    img2.onerror = function (e) {
+                        console.error('[kmilaSerializeFlowPng] image load failed', e);
+                        resolve('ERR:png-failed');
+                    };
+                    img2.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(prep.svg);
                 };
                 img.src = blobUrl;
               } catch (e) {
                 console.error('[kmilaSerializeFlowPng]', e);
-                resolve('');
+                resolve('ERR:png-failed');
               }
             }, function (e) {
                 console.error('[kmilaSerializeFlowPng] ensure failed', e);
                 resolve('ERR:render-failed');
             });
         });
+    };
+
+    // Ensures the flow diagram's mermaid <svg> is rendered, then attaches the
+    // shared pan-zoom to it — returning the handle id (or -1). FlowDiagramViewer
+    // calls this instead of kmilaAttachPanZoom directly: the on-screen diagram
+    // is produced by an ASYNC mermaid pipeline (kmilaMermaidRun, which also
+    // lazy-loads its flowchart grammar chunk on first use), so at OnAfterRender
+    // time the <pre> is usually still raw text. A bare attach would see no <svg>,
+    // return -1, and the zoom toolbar (which needs a live handle) would stay
+    // dead even after the diagram appears. Here we kick the render and poll for
+    // the <svg> (same primitive the export path uses) before binding, so the
+    // handle reliably attaches no matter how long the first render takes.
+    window.kmilaAttachFlowPanZoom = async function (rootSelector, opts) {
+        try {
+            const root = (typeof rootSelector === 'string')
+                ? document.querySelector(rootSelector) : rootSelector;
+            if (!root) return -1;
+            const sel = (opts && opts.targetSelector) || 'svg';
+            let svg = root.querySelector(sel);
+            if (!svg) {
+                const hasSource = !!(root.querySelector('pre.mermaid') || document.querySelector('pre.mermaid'));
+                if (hasSource) {
+                    try { window.kmilaMermaidRun(); } catch (e) { /* poll anyway */ }
+                    for (let i = 0; i < 200 && !svg; i++) {       // ~10s ceiling
+                        await new Promise(function (r) { setTimeout(r, 50); });
+                        svg = root.querySelector(sel);
+                    }
+                }
+            }
+            if (!svg) return -1;
+            return window.kmilaAttachPanZoom(root, opts);
+        } catch (e) {
+            console.error('[kmilaAttachFlowPanZoom]', e);
+            return -1;
+        }
     };
 
     // Legacy anchor-download path. Kept for the Web target (browser sandbox)
@@ -646,6 +731,13 @@ window.downloadFile = function (fileName, content) {
     // expose those in modern browsers; fall back to bounding-rect-divided-by-
     // scale when they're 0 (older WebKit on iOS sometimes reports 0 for SVG).
     function measureNatural(state) {
+        // Trust the caller's declared canvas size when given — it's exact and
+        // immune to the clientWidth===0 / transform-inflation quirks below.
+        if (state.naturalWHint > 0 && state.naturalHHint > 0) {
+            state.naturalW = state.naturalWHint;
+            state.naturalH = state.naturalHHint;
+            return;
+        }
         let w = state.target.clientWidth || 0;
         let h = state.target.clientHeight || 0;
         if (!w || !h) {
@@ -701,11 +793,21 @@ window.downloadFile = function (fileName, content) {
         const pad = 16;
         const sx = (rect.width  - pad * 2) / state.naturalW;
         const sy = (rect.height - pad * 2) / state.naturalH;
-        state.scale = clamp(Math.min(sx, sy), state.minScale, state.maxScale);
+        const fitScale = Math.min(sx, sy);
+        // A wide schematic (CanvasWidth can be several thousand px) must be
+        // allowed to shrink below the configured pan floor, or it stays
+        // clipped on every edge. Lower the pan floor to the fitted scale so
+        // the content can fit AND the user can't then zoom back out past the
+        // fitted frame into empty space. Never exceed maxScale.
+        if (fitScale > 0 && fitScale < state.minScale) state.minScale = fitScale;
+        state.scale = clamp(fitScale, state.minScale, state.maxScale);
         const ox = state.target.offsetLeft || 0;
         const oy = state.target.offsetTop  || 0;
         state.tx = (rect.width  - state.naturalW * state.scale) / 2 - ox;
         state.ty = (rect.height - state.naturalH * state.scale) / 2 - oy;
+        // A fresh fit reframes the content, so the view is no longer a
+        // user-chosen one — let resize re-fit again until they adjust it.
+        state.userAdjusted = false;
         applyTransform(state);
         return true;
     }
@@ -753,6 +855,21 @@ window.downloadFile = function (fileName, content) {
             // Natural (pre-transform) content size — measured at attach and
             // re-measured on resize. Used to clamp pan and to fit-to-view.
             naturalW: 0, naturalH: 0,
+            // Caller-supplied natural size (the layout's own canvas pixels).
+            // When present it is the source of truth for measureNatural,
+            // sidestepping the browser quirks where an <svg> reports
+            // clientWidth/Height === 0 (older WebKit) or a transformed
+            // getBoundingClientRect has to be divided back by scale (which
+            // inflates the box whenever scale !== 1). Pass 0/undefined to
+            // keep the pure-DOM measurement path (waveform, Visual canvas).
+            naturalWHint: Number.isFinite(opts.naturalWidth)  && opts.naturalWidth  > 0 ? opts.naturalWidth  : 0,
+            naturalHHint: Number.isFinite(opts.naturalHeight) && opts.naturalHeight > 0 ? opts.naturalHeight : 0,
+            // True once the user has manually panned/pinched/zoomed. While
+            // false, a root resize (dock resize, fullscreen toggle, rotate)
+            // re-fits so the content stays framed; once the user takes
+            // control we stop auto-framing and only re-clamp, so their view
+            // isn't yanked back on the next resize.
+            userAdjusted: false,
             // Initial framing strategy. fitOnAttach=true centers and scales
             // the content into the root (schematic); false keeps the
             // identity transform so the user starts at the top-left of the
@@ -843,6 +960,7 @@ window.downloadFile = function (fileName, content) {
                 }
                 state.tx = state.panStartTx + dx;
                 state.ty = state.panStartTy + dy;
+                state.userAdjusted = true;
                 applyTransform(state);
                 e.preventDefault();
             } else if (pointers.size === 2 && state.pinchStartDist > 0) {
@@ -862,6 +980,7 @@ window.downloadFile = function (fileName, content) {
                 state.scale = newScale;
                 state.tx = cx - worldX * state.scale;
                 state.ty = cy - worldY * state.scale;
+                state.userAdjusted = true;
                 applyTransform(state);
                 e.preventDefault();
             }
@@ -901,6 +1020,7 @@ window.downloadFile = function (fileName, content) {
                 state.scale = newScale;
                 state.tx = cx - worldX * state.scale;
                 state.ty = cy - worldY * state.scale;
+                state.userAdjusted = true;
                 applyTransform(state);
                 return;
             }
@@ -917,6 +1037,7 @@ window.downloadFile = function (fileName, content) {
                 state.tx -= e.deltaX;
                 state.ty -= e.deltaY;
             }
+            state.userAdjusted = true;
             applyTransform(state);
         }
 
@@ -947,6 +1068,7 @@ window.downloadFile = function (fileName, content) {
             state.scale = newScale;
             state.tx = cx - worldX * state.scale;
             state.ty = cy - worldY * state.scale;
+            state.userAdjusted = true;
             applyTransform(state);
         }
         function onGestureEnd(e) {
@@ -1001,6 +1123,12 @@ window.downloadFile = function (fileName, content) {
                 measureNatural(state);
                 if (state.needsFit) {
                     if (fitToView(state)) state.needsFit = false;
+                } else if (state.fitOnAttach && !state.userAdjusted) {
+                    // Root changed size (dock resize, fullscreen enter/exit,
+                    // orientation) and the user hasn't taken manual control —
+                    // re-frame so the content stays fitted instead of locking
+                    // in whatever frame the first (possibly 0-size) attach got.
+                    fitToView(state);
                 } else {
                     applyTransform(state);
                 }
@@ -1049,6 +1177,7 @@ window.downloadFile = function (fileName, content) {
         s.scale = Math.max(s.minScale, Math.min(s.maxScale, s.scale * factor));
         s.tx = cx - worldX * s.scale;
         s.ty = cy - worldY * s.scale;
+        s.userAdjusted = true;
         applyTransform(s);
     }
 
@@ -2086,3 +2215,166 @@ document.addEventListener('keydown', function (e) {
         if (btn && !btn.disabled) { e.preventDefault(); btn.click(); }
     }
 });
+
+// =====================================================================
+// Schematic annotation cards — drag + resize (JS-delegated).
+// The cards are SVG <g class="schematic-annotation"> inside the pan-zoom
+// target, so they pan/zoom natively. Dragging/resizing is done in JS for
+// smoothness (a Blazor Server @onpointermove round-trips and drops frames,
+// see the waveform resize grip for the same rationale). We update the <g>
+// transform / card rects live and commit the final geometry to .NET on
+// pointer-up. Client deltas are divided by the current pan-zoom scale so a
+// card tracks the cursor 1:1 at any zoom. Capture-phase listener runs before
+// the canvas pan handler; .schematic-annotation is also a pan skip-target.
+// =====================================================================
+(function () {
+    function parseTranslate(g) {
+        const t = g.getAttribute('transform') || '';
+        const m = /translate\(\s*(-?[\d.]+)[ ,]+(-?[\d.]+)/.exec(t);
+        return m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : { x: 0, y: 0 };
+    }
+
+    window.kmilaAttachAnnotations = function (rootSelector, dotNetRef, svgSelector) {
+        const root = document.querySelector(rootSelector);
+        if (!root) return 0;
+        if (root._kmilaAnnDown) {
+            root.removeEventListener('pointerdown', root._kmilaAnnDown, true);
+        }
+
+        let drag = null;
+
+        function scale() {
+            try {
+                const s = window.kmilaGetTransformScale(svgSelector);
+                return (s && s > 0.01) ? s : 1;
+            } catch (_) { return 1; }
+        }
+
+        function onMove(e) {
+            if (!drag) return;
+            const dx = (e.clientX - drag.sx) / drag.s;
+            const dy = (e.clientY - drag.sy) / drag.s;
+            if (drag.mode === 'move') {
+                drag.nx = drag.x0 + dx;
+                drag.ny = drag.y0 + dy;
+                drag.g.setAttribute('transform', 'translate(' + drag.nx + ' ' + drag.ny + ')');
+            } else {
+                drag.nw = Math.max(120, drag.w0 + dx);
+                drag.nh = Math.max(60, drag.h0 + dy);
+                const r = drag.rects;
+                // r[0] = clip rect, r[1] = background rect, last = resize grip
+                r[0].setAttribute('width', drag.nw); r[0].setAttribute('height', drag.nh);
+                r[1].setAttribute('width', drag.nw); r[1].setAttribute('height', drag.nh);
+                const grip = r[r.length - 1];
+                grip.setAttribute('x', drag.nw - 14); grip.setAttribute('y', drag.nh - 14);
+            }
+            e.preventDefault();
+        }
+
+        function onUp() {
+            window.removeEventListener('pointermove', onMove);
+            window.removeEventListener('pointerup', onUp);
+            window.removeEventListener('pointercancel', onUp);
+            if (!drag) return;
+            const d = drag; drag = null;
+            try {
+                if (d.mode === 'move' && d.nx !== undefined) {
+                    dotNetRef.invokeMethodAsync('OnAnnotationMoved', d.id, d.nx, d.ny);
+                } else if (d.mode === 'resize' && d.nw !== undefined) {
+                    dotNetRef.invokeMethodAsync('OnAnnotationResized', d.id, d.nw, d.nh);
+                }
+            } catch (_) { /* circuit gone */ }
+        }
+
+        function onDown(e) {
+            if (e.button !== undefined && e.button !== 0) return;
+            const g = e.target.closest('.schematic-annotation');
+            if (!g) return;
+            const id = g.getAttribute('data-ann-id');
+            const resize = e.target.closest('[data-ann-resize]');
+            const s = scale();
+            if (resize) {
+                const rects = g.querySelectorAll('rect');
+                const bg = rects[1] || rects[0];
+                drag = {
+                    mode: 'resize', g: g, id: id, s: s, rects: rects,
+                    sx: e.clientX, sy: e.clientY,
+                    w0: parseFloat(bg.getAttribute('width')) || 220,
+                    h0: parseFloat(bg.getAttribute('height')) || 140,
+                };
+            } else {
+                const p = parseTranslate(g);
+                drag = { mode: 'move', g: g, id: id, s: s, sx: e.clientX, sy: e.clientY, x0: p.x, y0: p.y };
+            }
+            // Capture-phase + stopPropagation keeps the canvas from panning.
+            // (No preventDefault here — it would swallow the click/dblclick that
+            // drive select/edit; onMove preventDefaults once a drag is underway.)
+            e.stopPropagation();
+            window.addEventListener('pointermove', onMove, { passive: false });
+            window.addEventListener('pointerup', onUp);
+            window.addEventListener('pointercancel', onUp);
+        }
+
+        root.addEventListener('pointerdown', onDown, true);
+        root._kmilaAnnDown = onDown;
+        return 1;
+    };
+
+    window.kmilaDetachAnnotations = function (rootSelector) {
+        const root = document.querySelector(rootSelector);
+        if (root && root._kmilaAnnDown) {
+            root.removeEventListener('pointerdown', root._kmilaAnnDown, true);
+            root._kmilaAnnDown = null;
+        }
+    };
+})();
+
+// =====================================================================
+// Schematic live-activity animation (Debug free-run). Driven by
+// ReplayState.OnLiveRunFrame → SchematicViewer → here, ~18 Hz. We toggle
+// classes directly on the existing SVG nodes (matched by data-cell /
+// data-net / data-port) instead of re-rendering the Blazor component, so a
+// big diagram animates smoothly without starving the circuit. Diffed against
+// the previous frame so elements that stay active don't restart their glow.
+// =====================================================================
+(function () {
+    var liveOn = new Set();
+    var liveCtx = new Set();
+
+    function elsFor(root, key) {
+        var val = key.slice(2);
+        try {
+            if (key[0] === 'c') {
+                return root.querySelectorAll('.schematic-cell[data-cell="' + CSS.escape(val) + '"]');
+            }
+            return root.querySelectorAll(
+                '.schematic-wire[data-net="' + CSS.escape(val) + '"], ' +
+                '.schematic-port[data-port="' + CSS.escape(val) + '"]');
+        } catch (_) { return []; }
+    }
+    function toggleKey(root, key, cls, on) {
+        var els = elsFor(root, key);
+        for (var i = 0; i < els.length; i++) els[i].classList.toggle(cls, on);
+    }
+
+    window.kmilaSchematicActivity = function (svgSelector, focus, activeCells, activeNets, ctxCells, ctxNets) {
+        var root = document.querySelector(svgSelector);
+        if (!root) return;
+        root.classList.toggle('is-live-focus', !!focus);
+
+        var nextOn = new Set();
+        (activeCells || []).forEach(function (id) { nextOn.add('c:' + id); });
+        (activeNets || []).forEach(function (n) { nextOn.add('n:' + n); });
+        var nextCtx = new Set();
+        (ctxCells || []).forEach(function (id) { nextCtx.add('c:' + id); });
+        (ctxNets || []).forEach(function (n) { nextCtx.add('n:' + n); });
+
+        liveOn.forEach(function (k) { if (!nextOn.has(k)) toggleKey(root, k, 'is-live-on', false); });
+        nextOn.forEach(function (k) { if (!liveOn.has(k)) toggleKey(root, k, 'is-live-on', true); });
+        liveCtx.forEach(function (k) { if (!nextCtx.has(k)) toggleKey(root, k, 'is-live-context', false); });
+        nextCtx.forEach(function (k) { if (!liveCtx.has(k)) toggleKey(root, k, 'is-live-context', true); });
+
+        liveOn = nextOn;
+        liveCtx = nextCtx;
+    };
+})();

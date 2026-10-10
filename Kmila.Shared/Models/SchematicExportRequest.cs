@@ -102,33 +102,59 @@ public class SchematicExportRequest
     /// button click since the viewer last rebuilt.</summary>
     public SchematicExportColorMode ColorMode { get; set; } = SchematicExportColorMode.Color;
 
-    /// <summary>Render simplification mode. Human = education-friendly
-    /// (bigger padding + fonts, muted internal names hidden, thicker
-    /// buses, planned-for-v2 structural collapse). Raw = every glyph
-    /// and label the netlist produces. Human is the default so the
-    /// diagram opens looking readable; Raw is one click away for the
-    /// full picture.</summary>
-    public SchematicRenderMode Mode { get; set; } = SchematicRenderMode.Human;
+    /// <summary>Render style. Chooses how the same netlist is drawn —
+    /// see <see cref="SchematicRenderMode"/>. <c>Grouped</c> is the default
+    /// so the diagram opens looking readable; <c>Raw</c> is one pick away
+    /// for the full per-glyph picture.</summary>
+    public SchematicRenderMode Mode { get; set; } = SchematicRenderMode.Grouped;
 }
 
 /// <summary>
-/// How much simplification the schematic renderer applies before
-/// emission. Ships in v1 as two modes; a future version may expose a
-/// slider for intermediate levels of detail.
+/// Render style for the schematic — how the same synthesized netlist is
+/// presented. <see cref="Raw"/> keeps the gate-level diagram exactly as it
+/// has always been. The three "human" styles make the schematic readable in
+/// different ways: <see cref="Grouped"/> stays gate-level but wraps each VHDL
+/// statement in a titled container; <see cref="Rtl"/> and <see cref="Nodes"/>
+/// collapse gates into named functional blocks (built by
+/// <see cref="Interpreter.Synthesis.Layout.BlockGraphBuilder"/>) and differ
+/// only in skin (datapath blocks vs node-editor cards).
 /// </summary>
 public enum SchematicRenderMode
 {
-    /// <summary>Everything the netlist produces, per-instance, per-bit.
-    /// Same output the viewer + exporter shipped before this mode was
-    /// introduced.</summary>
+    /// <summary>Every glyph and label the netlist produces, per-instance,
+    /// per-bit. The gate-level view the viewer + exporter always shipped —
+    /// unchanged.</summary>
     Raw,
 
-    /// <summary>Education-friendly view: bigger padding + fonts, muted
-    /// internal net names suppressed, thicker bus strokes. Structural
-    /// simplification passes (bus collapse, register consolidation,
-    /// buffer elision) are planned for v2 and live in
-    /// <see cref="Kmila.Shared.Services.SchematicSimplifier"/>.</summary>
-    Human,
+    /// <summary>Gate-level, but each VHDL statement / process is wrapped in a
+    /// titled, translucent container and drawn with human-sized labels. Keeps
+    /// every cell (the full cell count).</summary>
+    Grouped,
+
+    /// <summary>Block-level datapath: gates are merged into named functional
+    /// blocks (Registro, Sumador, MUX, Comparador, ROM…) drawn as rectangles
+    /// with a glyph, a name, and bus arrows carrying bit-widths.</summary>
+    Rtl,
+
+    /// <summary>Block-level node-editor: the same merged blocks drawn as
+    /// rounded cards with a titled header, typed input/output ports, and
+    /// smooth bezier links colour-coded per net.</summary>
+    Nodes,
+}
+
+/// <summary>Classification helpers for <see cref="SchematicRenderMode"/>.</summary>
+public static class SchematicRenderModes
+{
+    /// <summary>Block-level styles (Rtl, Nodes) collapse gates into named
+    /// functional blocks via <c>BlockGraphBuilder</c>; the gate-level styles
+    /// (Raw, Grouped) keep every cell.</summary>
+    public static bool IsBlock(this SchematicRenderMode m)
+        => m is SchematicRenderMode.Rtl or SchematicRenderMode.Nodes;
+
+    /// <summary>The three education-friendly styles. Raw is the odd one out:
+    /// it keeps tiny internal net labels and the original tighter typography.</summary>
+    public static bool IsHuman(this SchematicRenderMode m)
+        => m is not SchematicRenderMode.Raw;
 }
 
 /// <summary>
