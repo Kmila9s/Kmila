@@ -179,9 +179,17 @@
         try
         {
             _selfRef ??= Microsoft.JSInterop.DotNetObjectReference.Create(this);
-            await JS.InvokeVoidAsync("kmilaDockDragStart", _selfRef, e.ClientY);
+            await JS.InvokeVoidAsync("kmilaDockDragStart", _selfRef, e.ClientY, e.PointerId);
         }
-        catch { /* JS missing — no-op */ }
+        catch (Exception ex)
+        {
+            // Previously a silent `catch {}` swallowed a missing/stale
+            // kmilaDockDragStart, so the grabber highlighted on hover but
+            // never resized. Surface it to the console so a cache/JS failure
+            // is diagnosable instead of invisible.
+            try { await JS.InvokeVoidAsync("console.error", "kmilaDockDragStart failed", ex.Message); }
+            catch { /* console unavailable — nothing more we can do */ }
+        }
     }
 
     /// <summary>Called from JS during drag with the current delta (px).</summary>
@@ -198,7 +206,11 @@
     {
         await PersistAsync();
         try { await JS.InvokeVoidAsync("kmilaBroadcastEditorResize"); }
-        catch { /* JS missing — no-op */ }
+        catch (Exception ex)
+        {
+            try { await JS.InvokeVoidAsync("console.error", "kmilaBroadcastEditorResize failed", ex.Message); }
+            catch { /* console unavailable — nothing more we can do */ }
+        }
     }
 
     protected override void OnInitialized()
