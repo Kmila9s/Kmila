@@ -393,9 +393,10 @@
     //    dock body since the grabber sits on top of it. PointerEvents
     //    unify mouse/touch/pen with one code path.
     // -------------------------------------------------------------------------
-    window.kmilaDockDragStart = function (dotnetRef, startY) {
+    window.kmilaDockDragStart = function (dotnetRef, startY, pointerId) {
         var dockEl = document.querySelector(".kmila-dock");
-        if (!dockEl) return;
+        var grabEl = document.querySelector(".kmila-dock__grabber");
+        if (!dockEl || !grabEl) return;
         var startHeight = dockEl.getBoundingClientRect().height;
         var moved = false;
         // Tracked so onUp can snap based on where the user *wanted* the dock
@@ -403,24 +404,55 @@
         // .kmila-dock to `height: var(--dock-h) !important` (snap-class
         // driven), so getBoundingClientRect never reflects mid-drag intent.
         var lastNext = startHeight;
+        // Capture the pointer on the grabber and listen on IT, not on window.
+        // The grabber is only a few px tall, so the pointer leaves it instantly;
+        // capture routes every subsequent move/up back to it. This is what makes
+        // the drag work inside the macOS/iOS WKWebView (the MAUI BlazorWebView
+        // host): there, a trackpad/mouse drag otherwise hands the gesture to the
+        // WebView's own pan recogniser, which fires `pointercancel` (or stops
+        // dispatching `pointermove` to window) and the old window-listener drag
+        // never tracked — only hover (CSS) and collapse (no interop) worked.
+        // Falls back to window listeners where capture is unavailable.
+        var captured = false;
+        try {
+            if (pointerId != null) {
+                grabEl.setPointerCapture(pointerId);
+                captured = true;
+            }
+        } catch (e) {
+            captured = false;
+        }
+        var evTarget = captured ? grabEl : window;
         function onMove(ev) {
             ev.preventDefault();
             var delta = startY - ev.clientY;
             if (Math.abs(delta) > 2) moved = true;
+            // Clamp to the SAME bounds C# SetHeight uses (200..1200) so the
+            // committed height on release matches what was shown mid-drag.
             var next = Math.max(
-                160,
+                200,
                 Math.min(
-                    window.innerHeight - 80,
+                    Math.min(window.innerHeight - 80, 1200),
                     Math.round(startHeight + delta)
                 )
             );
             lastNext = next;
-            dotnetRef.invokeMethodAsync("OnGrabberMove", next);
+            // Drive the height DIRECTLY on the DOM for a smooth, round-trip-free
+            // drag. Previously every pointermove called OnGrabberMove, so each
+            // pixel of movement forced a Blazor Server round-trip (SetHeight ->
+            // OnChange -> PersistAsync's 3 localStorage writes + a full
+            // re-render). A real drag fires dozens of moves/second, flooding the
+            // SignalR circuit until the dock looked frozen — resize "did nothing"
+            // while hover/collapse (no per-move interop) kept working. We now
+            // commit to C# once, on pointer-up.
+            dockEl.style.setProperty("--kmila-dock-height", next + "px");
         }
-        function onUp() {
-            window.removeEventListener("pointermove", onMove);
-            window.removeEventListener("pointerup", onUp);
-            window.removeEventListener("pointercancel", onUp);
+        function end() {
+            evTarget.removeEventListener("pointermove", onMove);
+            evTarget.removeEventListener("pointerup", end);
+            evTarget.removeEventListener("pointercancel", end);
+            grabEl.removeEventListener("lostpointercapture", end);
+            try { if (captured) grabEl.releasePointerCapture(pointerId); } catch (e) {}
             // Snap to closest preset on phones. Use lastNext (dragged intent)
             // not the rect height — see the lastNext comment above.
             if (window.matchMedia("(max-width: 768px)").matches && moved) {
@@ -433,13 +465,27 @@
                             : "full";
                 if (window.kmilaSetDockSnap) window.kmilaSetDockSnap(snap);
             }
-            dotnetRef.invokeMethodAsync("OnGrabberUp").catch(function () {});
+            // Commit the final height to C# ONCE (persists to localStorage and
+            // keeps DockState.Height in sync for reloads), then run OnGrabberUp.
+            // Skipped when the drag never moved, to avoid a spurious write on a
+            // plain click.
+            if (moved) {
+                dotnetRef
+                    .invokeMethodAsync("OnGrabberMove", lastNext)
+                    .then(function () {
+                        return dotnetRef.invokeMethodAsync("OnGrabberUp");
+                    })
+                    .catch(function () {});
+            } else {
+                dotnetRef.invokeMethodAsync("OnGrabberUp").catch(function () {});
+            }
             // Ref lifetime is owned by EditorDock.razor (_selfRef, disposed in
             // Dispose()). Disposing here breaks every drag after the first.
         }
-        window.addEventListener("pointermove", onMove, { passive: false });
-        window.addEventListener("pointerup", onUp);
-        window.addEventListener("pointercancel", onUp);
+        evTarget.addEventListener("pointermove", onMove, { passive: false });
+        evTarget.addEventListener("pointerup", end);
+        evTarget.addEventListener("pointercancel", end);
+        grabEl.addEventListener("lostpointercapture", end);
     };
 
 
