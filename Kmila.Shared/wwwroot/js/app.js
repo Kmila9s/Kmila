@@ -1745,6 +1745,40 @@ window.kmilaBroadcastEditorResize = function () {
     }
 };
 
+/* Re-layout every Monaco editor after a split toggle (open OR close), where
+ * the pane count changed and the surviving pane's editor is left stuck at the
+ * old (half) width with a blank band beside it. Three things make this
+ * reliable where a plain kmilaBroadcastEditorResize was not:
+ *   1. EXPLICIT dimensions. With `automaticLayout: true`, a no-arg layout()
+ *      can reuse Monaco's cached container size (the ResizeObserver misses the
+ *      pane resize — the whole reason the band appears), so we measure the
+ *      editor's own container and pass {width,height} to force the new size.
+ *   2. PER-EDITOR try/catch. A transient editor (a pane mid-init, or a pane
+ *      being disposed after unsplit) can throw on layout(); a single
+ *      try/catch around the whole loop would abort before reaching the editor
+ *      that actually needs resizing.
+ *   3. Runs SYNCHRONOUSLY first (reading clientWidth forces the pending
+ *      reflow), then again after two animation frames to catch the layout
+ *      settling and the removed pane finishing its disposal. */
+window.kmilaRelayoutMonacoSoon = function () {
+    var run = function () {
+        if (typeof monaco === 'undefined' || !monaco.editor) return;
+        monaco.editor.getEditors().forEach(function (e) {
+            try {
+                if (!e || typeof e.layout !== 'function') return;
+                var c = e.getContainerDomNode && e.getContainerDomNode();
+                if (c && c.clientWidth > 0) {
+                    e.layout({ width: c.clientWidth, height: c.clientHeight });
+                } else {
+                    e.layout();
+                }
+            } catch (_) {}
+        });
+    };
+    run();
+    try { requestAnimationFrame(function () { requestAnimationFrame(run); }); } catch (_) {}
+};
+
 /* Visual runtime: scroll the canvas-stack so a widget's just-opened floating
  * props card is visible. Called from VisualPanel after a widget is newly
  * selected — the card is rendered in canvas coords (1200×800), but the phone
