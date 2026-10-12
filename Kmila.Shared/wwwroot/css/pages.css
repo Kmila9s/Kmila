@@ -4994,6 +4994,16 @@
     margin-right: var(--space-2);
 }
 
+.editor-split-toggle:disabled,
+.editor-split-toggle[disabled] {
+    /* Disabled while the pane holds fewer than two files: splitting MOVES
+       the active file to a new pane, so there'd be nothing to split off.
+       Dimmed + non-interactive; the compound selector beats buttons.css. */
+    opacity: 0.4;
+    cursor: default;
+    pointer-events: none;
+}
+
 @media (max-width: 900px) {
     /* buttons.css loads after pages.css and sets `.kmila-btn { display:
        inline-flex }` at the same specificity, which beats a bare class

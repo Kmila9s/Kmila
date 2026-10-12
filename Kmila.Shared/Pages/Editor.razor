@@ -136,10 +136,15 @@
                     <span class="editor-position" dir="ltr">
                         @Traductor.T("EDITOR_LINE_ABBR") @_cursorLine · @Traductor.T("EDITOR_COL_ABBR") @_cursorColumn
                     </span>
+                    @* Split toggle. Disabled when NOT split and the focused
+                       pane has fewer than 2 files: splitting MOVES the active
+                       file to a new pane, so with a single file there'd be
+                       nothing left in the original (and nothing to compare). *@
                     <KmilaTooltip TextKey="@(IsSplit ? "EDITOR_SPLIT_OFF" : "EDITOR_SPLIT_ON")">
                         <button type="button"
                                 class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm editor-split-toggle"
                                 @onclick="ToggleSplitAsync"
+                                disabled="@(!IsSplit && _pane.Tabs.Count < 2)"
                                 aria-label="@Traductor.T(IsSplit ? "EDITOR_SPLIT_OFF" : "EDITOR_SPLIT_ON")"
                                 aria-pressed="@IsSplit">
                             <Icon Name="@(IsSplit ? IconName.Square : IconName.LayoutSplit)" />
@@ -982,6 +987,19 @@
     /// </summary>
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        // After a split toggle the pane count changed; Monaco's internal
+        // canvas doesn't always catch the container resize via its polling
+        // AutomaticLayout, which leaves the surviving pane's editor stuck at
+        // the old (half) width with a stale blank band beside it. An immediate
+        // layout() here reads the pre-reflow width and the pane being removed
+        // may not have finished disposing yet, so defer across two animation
+        // frames (kmilaRelayoutMonacoSoon) until the new layout has settled.
+        if (_pendingEditorRelayout)
+        {
+            _pendingEditorRelayout = false;
+            try { await JS.InvokeVoidAsync("kmilaRelayoutMonacoSoon"); } catch { }
+        }
+
         if (!firstRender) return;
         try
         {
@@ -2153,6 +2171,15 @@
                 if(result){
                     _originalContent = _openedFile.Content;
                     _hasUnsavedChanges = false;
+                    // Keep split mirrors (same shared model) in sync: reset
+                    // their baseline + clear the dirty dot too.
+                    var savedModel = _pane.ActiveTab?.Model;
+                    if (savedModel != null)
+                        foreach (var t in TabsSharingModel(savedModel))
+                        {
+                            t.OriginalContent = _openedFile.Content;
+                            t.HasUnsavedChanges = false;
+                        }
                     // Persist the block-workspace sidecar so the next open
                     // restores the authored block layout instead of a
                     // regex-parsed approximation. No-op when the workspace
@@ -2448,6 +2475,38 @@ end architecture behavioral;",
 
     private DotNetObjectReference<Editor>? _bpDotNetRef;
     private DotNetObjectReference<Editor>? _saveDotNetRef;
+
+    /// <summary>Set when a split toggle changes the pane count, so the next
+    /// OnAfterRenderAsync forces every Monaco editor to re-layout and the
+    /// surviving pane reclaims the full width without a stale white band.</summary>
+    private bool _pendingEditorRelayout;
+
+    /// <summary>A shared, empty Monaco model shown by a pane that has no open
+    /// tabs. Reused across split toggles so blanking a pane never mutates a
+    /// real file's model (which would wipe its buffer).</summary>
+    private BlazorMonaco.Editor.TextModel? _blankModel;
+
+    /// <summary>Lazily creates (once per page instance) the throwaway empty
+    /// model used to blank a pane with no tabs. GUID URI so it can't collide
+    /// in Monaco's global registry across navigations.</summary>
+    private async Task<BlazorMonaco.Editor.TextModel> GetBlankModelAsync()
+    {
+        _blankModel ??= await BlazorMonaco.Editor.Global.CreateModel(
+            JS, string.Empty, "plaintext", $"inmemory://kmila/blank-{Guid.NewGuid():N}");
+        return _blankModel;
+    }
+
+    /// <summary>Every open tab (across all panes) backed by the same Monaco
+    /// <paramref name="model"/> instance — i.e. the split mirrors of one
+    /// shared buffer. Used to keep dirty/baseline state and disposal in sync.</summary>
+    private IEnumerable<OpenFileTab> TabsSharingModel(BlazorMonaco.Editor.TextModel? model)
+    {
+        if (model == null) yield break;
+        foreach (var p in _panes)
+            foreach (var t in p.Tabs)
+                if (ReferenceEquals(t.Model, model))
+                    yield return t;
+    }
 
     /// <summary>
     /// Central dispatch for editor keyboard/menu commands. Invoked from the
@@ -2980,6 +3039,14 @@ end architecture behavioral;",
         var currentContent = await _pane.Monaco.GetValue();
         _hasUnsavedChanges = currentContent != _originalContent;
 
+        // Split mirrors share one model, so an edit dirties the file in both
+        // panes. Mirror the dirty flag onto every tab backed by this model so
+        // both tab strips show the unsaved dot consistently.
+        var editedModel = _pane.ActiveTab?.Model;
+        if (editedModel != null)
+            foreach (var t in TabsSharingModel(editedModel))
+                t.HasUnsavedChanges = currentContent != t.OriginalContent;
+
         // Editor sync mode (2026-07-06): in Manual mode, a Monaco edit
         // marks the block canvas as out-of-date so the stale-preview pip
         // surfaces on the Blocks tab. Only meaningful when Blocks-editable
@@ -3287,9 +3354,12 @@ end architecture behavioral;",
         };
         if (tab.IsMarkdown) tab.MarkdownPreview = file.Content ?? string.Empty;
 
-        if (pane.Initialized)
-            tab.Model = await CreateModelForTabAsync(tab);
-
+        // Register the tab in the list BEFORE any await. A single click on a
+        // file row can dispatch two OpenFileAsync calls (the row + the inner
+        // button both fire), and if we yielded on model creation first, both
+        // calls would see IndexOf == -1 and add a duplicate tab. Adding here
+        // makes a concurrent second call find the tab via IndexOf and just
+        // activate it. ActivateTabAsync materialises the Monaco model lazily.
         pane.Tabs.Add(tab);
         _focusedPaneIndex = paneIdx;
         await ActivateTabAsync(pane.Tabs.Count - 1, paneIdx);
@@ -3397,9 +3467,21 @@ end architecture behavioral;",
         if (pane.Tabs.Count == 0)
         {
             pane.ActiveIndex = -1;
+            // While split, an emptied pane must not linger as dead half-width
+            // space: collapse to the surviving pane at full width (as if the
+            // user had un-split). CollapseEmptyPaneAsync owns the re-layout +
+            // save, so we're done here.
+            if (IsSplit)
+            {
+                await CollapseEmptyPaneAsync(paneIdx);
+                return;
+            }
             if (pane.Initialized)
             {
-                try { await pane.Monaco.SetValue(string.Empty); } catch { }
+                // Single, un-split pane: swap to a blank placeholder model
+                // rather than SetValue("") — SetValue would mutate (wipe) the
+                // closed tab's model if anything still referenced it.
+                try { await pane.Monaco.SetModel(await GetBlankModelAsync()); } catch { }
             }
         }
         else if (wasActive || idx <= pane.ActiveIndex)
@@ -3423,7 +3505,7 @@ end architecture behavioral;",
             pane.ActiveIndex = -1;
             if (pane.Initialized)
             {
-                try { await pane.Monaco.SetValue(string.Empty); } catch { }
+                try { await pane.Monaco.SetModel(await GetBlankModelAsync()); } catch { }
             }
         }
     }
@@ -3435,6 +3517,17 @@ end architecture behavioral;",
     private async Task DisposeTabModelAsync(OpenFileTab tab)
     {
         if (tab.Model == null) return;
+        // A split mirror shares its TextModel with a tab in the other pane.
+        // Only the LAST tab referencing a model may dispose it — otherwise the
+        // surviving pane's editor would lose its content. If another tab still
+        // holds this model, just drop this tab's reference and leave it alive.
+        bool sharedByOther = _panes.Any(p => p.Tabs.Any(t =>
+            !ReferenceEquals(t, tab) && t.Model != null && ReferenceEquals(t.Model, tab.Model)));
+        if (sharedByOther)
+        {
+            tab.Model = null;
+            return;
+        }
         try { await tab.Model.DisposeModel(); }
         catch
         {
@@ -3576,29 +3669,46 @@ end architecture behavioral;",
     }
 
     /// <summary>
-    /// Toggles split mode. Splitting clones the focused pane's active
-    /// file (if any) into a fresh second pane so the user starts with
-    /// a useful side-by-side view rather than an empty right pane.
-    /// Unsplitting moves any tabs from pane B back into pane A's tab
-    /// list (preserving their order and dirty state) so no buffer is
-    /// silently dropped.
+    /// Toggles split mode. Splitting MOVES the focused pane's active file into
+    /// a fresh second pane (the file leaves pane A — no duplicate, no shared
+    /// buffer), so the two panes show different files side by side. Unsplitting
+    /// merges pane B's tabs back into pane A, skipping any file pane A already
+    /// holds so it isn't listed twice. After either direction Monaco is
+    /// force-relaid-out (via <c>kmilaRelayoutMonacoSoon</c> in OnAfterRenderAsync)
+    /// so each pane reclaims the width immediately instead of leaving a stale
+    /// white band.
     /// </summary>
     private async Task ToggleSplitAsync()
     {
         if (IsSplit)
         {
-            // Merge pane B's tabs back into pane A and tear down pane B.
+            // Merge pane B's tabs back into pane A and tear down pane B. With
+            // move-semantics panes no longer share a model, but the same file
+            // can be open independently in both panes (e.g. opened by hand), so
+            // skip any tab whose file (or, defensively, model) pane A already
+            // holds — re-adding it would list the same file twice.
             var srcPane = _panes[1];
             var destPane = _panes[0];
             foreach (var tab in srcPane.Tabs)
-                destPane.Tabs.Add(tab);
+            {
+                bool alreadyHere = destPane.Tabs.Any(t =>
+                    (tab.File != null && t.File?.Id == tab.File.Id) ||
+                    (t.Model != null && ReferenceEquals(t.Model, tab.Model)));
+                if (alreadyHere)
+                    await DisposeTabModelAsync(tab);   // drop the duplicate; pane A keeps its copy
+                else
+                    destPane.Tabs.Add(tab);
+            }
             srcPane.Tabs.Clear();
             srcPane.ActiveIndex = -1;
             _panes.RemoveAt(1);
             _focusedPaneIndex = 0;
-            // The Monaco models stay valid (their URIs are tab-scoped,
-            // not pane-scoped) but the active model needs re-binding to
-            // pane A's editor since the destination changed.
+
+            // Safety net: never leave pane A with tabs but no active index.
+            if (destPane.ActiveIndex < 0 && destPane.Tabs.Count > 0)
+                destPane.ActiveIndex = 0;
+
+            // Re-assert pane A's active model on its editor instance.
             if (destPane.ActiveTab?.Model != null && destPane.Initialized)
             {
                 try { await destPane.Monaco.SetModel(destPane.ActiveTab.Model); }
@@ -3607,18 +3717,112 @@ end architecture behavioral;",
         }
         else
         {
-            // Add an empty pane B. Auto-clone the focused tab so the
-            // user lands on a useful side-by-side rather than an empty
-            // right column screaming "drag a tab here".
-            _panes.Add(new EditorPane());
-            _focusedPaneIndex = 1;
-            var sourceTab = _panes[0].ActiveTab;
-            if (sourceTab?.File != null)
+            // Split: MOVE the focused pane's active file into a fresh pane B,
+            // leaving it behind in pane A. The tab object (and its own Monaco
+            // model) is transferred, so the file ends up in pane B ONLY — no
+            // duplicate, no shared buffer. Pane A re-points to whatever tab is
+            // left. The split toggle is disabled unless pane A has >=2 files,
+            // so there's always at least one tab remaining in A after the move.
+            var src    = _panes[0];
+            var srcIdx = src.ActiveIndex;
+            var srcTab = src.ActiveTab;
+            if (srcTab == null) return;   // nothing to move; stay un-split
+
+            var newPane = new EditorPane();
+
+            // Pull the active tab out of pane A and clamp A's active index
+            // onto a surviving neighbour (same clamp logic as CloseTabAsync).
+            src.Tabs.RemoveAt(srcIdx);
+            if (src.Tabs.Count == 0)
+                src.ActiveIndex = -1;
+            else if (src.ActiveIndex >= src.Tabs.Count)
+                src.ActiveIndex = src.Tabs.Count - 1;
+
+            newPane.Tabs.Add(srcTab);
+            newPane.ActiveIndex = 0;
+            _panes.Add(newPane);
+
+            // Re-point pane A's editor to its new active tab. The moved tab's
+            // model was attached to pane A's Monaco, so A must now show a
+            // different buffer. ActivateTabAsync sets _focusedPaneIndex = 0,
+            // so we override the focus to pane B afterwards.
+            if (src.Tabs.Count > 0)
             {
-                await OpenFileInTabAsync(sourceTab.File, 1);
+                await ActivateTabAsync(src.ActiveIndex, 0);
+            }
+            else if (src.Initialized)
+            {
+                try { await src.Monaco.SetModel(await GetBlankModelAsync()); } catch { }
+            }
+
+            // pane B's Monaco mounts on the next render; OnEditorInitAsync will
+            // SetModel srcTab.Model (already set, so it won't recreate one).
+            // Bind now only if that editor is somehow already live.
+            if (newPane.Initialized && srcTab.Model != null)
+            {
+                try { await newPane.Monaco.SetModel(srcTab.Model); }
+                catch (Exception ex) { Logger.LogWarning(ex, "[Editor] SetModel failed on split move"); }
+            }
+
+            _focusedPaneIndex = 1;
+        }
+        _pendingEditorRelayout = true;
+        StateHasChanged();
+        RequestSaveSession();
+    }
+
+    /// <summary>
+    /// Collapses a two-pane split down to a single full-width pane when one
+    /// pane has been emptied (last tab closed or dragged out). Keeps the
+    /// "pane 0 survives, index 1 is removed" invariant that the markup's
+    /// <c>@key</c> and the <c>.editor-pane { flex:1 1 0 }</c> CSS rely on: if
+    /// the EMPTY pane is index 0, the surviving pane's tabs are first moved
+    /// into pane 0, then index 1 is dropped. Triggers a Monaco re-layout so
+    /// the survivor reclaims the full width with no leftover dead space.
+    /// </summary>
+    private async Task CollapseEmptyPaneAsync(int emptyPaneIdx)
+    {
+        if (!IsSplit) return;
+
+        int survivorIdx = emptyPaneIdx == 0 ? 1 : 0;
+
+        // If pane 0 is the empty one, pull the survivor's tabs into pane 0 so
+        // we can always remove index 1 (stable component identity).
+        if (survivorIdx == 1)
+        {
+            var dest = _panes[0];
+            var surv = _panes[1];
+            dest.Tabs.Clear();
+            dest.Tabs.AddRange(surv.Tabs);
+            dest.ActiveIndex = surv.ActiveIndex >= 0 && surv.ActiveIndex < dest.Tabs.Count
+                ? surv.ActiveIndex
+                : (dest.Tabs.Count > 0 ? 0 : -1);
+            surv.Tabs.Clear();
+            surv.ActiveIndex = -1;
+        }
+
+        _panes.RemoveAt(1);
+        _focusedPaneIndex = 0;
+        _pendingEditorRelayout = true;
+
+        var keep = _panes[0];
+        if (keep.Tabs.Count > 0)
+        {
+            int idx = keep.ActiveIndex >= 0 && keep.ActiveIndex < keep.Tabs.Count
+                ? keep.ActiveIndex
+                : 0;
+            await ActivateTabAsync(idx, 0);
+        }
+        else
+        {
+            keep.ActiveIndex = -1;
+            if (keep.Initialized)
+            {
+                try { await keep.Monaco.SetModel(await GetBlankModelAsync()); } catch { }
             }
         }
-        StateHasChanged();
+
+        await InvokeAsync(StateHasChanged);
         RequestSaveSession();
     }
 
@@ -3688,6 +3892,14 @@ end architecture behavioral;",
                 try { await destPane.Monaco.SetModel(moved.Model); }
                 catch (Exception ex) { Logger.LogWarning(ex, "[Editor] SetModel failed during cross-pane move"); }
             }
+
+            // Dragging the last tab out of a pane leaves it empty — collapse to
+            // the surviving pane at full width, same as closing the last tab.
+            if (srcPane.Tabs.Count == 0 && IsSplit)
+            {
+                await CollapseEmptyPaneAsync(req.SrcPaneIndex);
+                return;
+            }
         }
 
         StateHasChanged();
@@ -3739,6 +3951,15 @@ end architecture behavioral;",
         _markdownDebounce?.Cancel();
         _markdownDebounce?.Dispose();
         _markdownDebounce = null;
+
+        // Release the shared blank placeholder model (used to blank an empty
+        // pane) so it doesn't linger in Monaco's global registry.
+        if (_blankModel != null)
+        {
+            var blank = _blankModel;
+            _blankModel = null;
+            try { _ = blank.DisposeModel(); } catch { }
+        }
 
         // Flush the session right before unmount so the very last edit
         // before navigating away survives — the debounced timer would
