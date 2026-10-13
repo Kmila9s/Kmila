@@ -78,18 +78,38 @@
                 </button>
             </KmilaTooltip>
             <span class="kmila-block-toolbar__sep" aria-hidden="true"></span>
-            <details class="kmila-block-export">
-                <summary class="kmila-block-toolbar__btn" role="button"
-                         title="@Traductor.T("BLOCK_EDITOR_EXPORT")"
-                         aria-label="@Traductor.T("BLOCK_EDITOR_EXPORT")">
-                    <i class="bi bi-download" aria-hidden="true"></i>
-                </summary>
-                <div class="kmila-block-export__menu" role="menu">
-                    <button type="button" role="menuitem" @onclick='() => ExportAsync("png")'>PNG</button>
-                    <button type="button" role="menuitem" @onclick='() => ExportAsync("svg")'>SVG</button>
-                    <button type="button" role="menuitem" @onclick='() => ExportAsync("pdf")'>PDF</button>
-                </div>
-            </details>
+            @* Export menu. Blazor-controlled open state (not a native <details>) so
+               the open/close is deterministic and immune to the global
+               <details>-closing handlers + Blazor re-renders that made the old
+               one collapse on first click. A transparent backdrop closes it on
+               an outside click; the download button shows a spinner while an
+               export is in flight so the user always sees progress. *@
+            <div class="kmila-block-export @(_exportOpen ? "is-open" : "")">
+                <button type="button" class="kmila-block-toolbar__btn"
+                        title="@Traductor.T("BLOCK_EDITOR_EXPORT")"
+                        aria-label="@Traductor.T("BLOCK_EDITOR_EXPORT")"
+                        aria-haspopup="menu" aria-expanded="@(_exportOpen ? "true" : "false")"
+                        disabled="@_exporting"
+                        @onclick="ToggleExportMenu">
+                    @if (_exporting)
+                    {
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-download" aria-hidden="true"></i>
+                    }
+                </button>
+                @if (_exportOpen)
+                {
+                    <div class="kmila-block-export__backdrop" @onclick="CloseExportMenu"></div>
+                    <div class="kmila-block-export__menu" role="menu">
+                        <button type="button" role="menuitem" @onclick='() => ExportAsync("png")'>PNG</button>
+                        <button type="button" role="menuitem" @onclick='() => ExportAsync("svg")'>SVG</button>
+                        <button type="button" role="menuitem" @onclick='() => ExportAsync("pdf")'>PDF</button>
+                    </div>
+                }
+            </div>
             <span class="kmila-block-toolbar__sep" aria-hidden="true"></span>
             <KmilaTooltip TextKey="BLOCK_EDITOR_CLEAR">
                 <button type="button" class="kmila-block-toolbar__btn kmila-block-toolbar__btn--danger"
@@ -242,14 +262,46 @@
         catch { }
     }
 
-    // #6 Phase C — export the workspace as PNG / SVG / PDF via the JS engine
-    // (foreignObject serialisation + jsPDF). Best-effort; a false return just
-    // means the browser couldn't rasterise, never a thrown error to the user.
+    // Export-menu open state + in-flight guard. Blazor-controlled so the
+    // dropdown no longer relies on native <details> (which raced with the
+    // global <details>-closers and collapsed on first click).
+    private bool _exportOpen;
+    private bool _exporting;
+
+    private void ToggleExportMenu() => _exportOpen = !_exportOpen;
+    private void CloseExportMenu() => _exportOpen = false;
+
+    // #6 Phase C — export the workspace as PNG / SVG / PDF via the JS engine.
+    // The JS returns false when the browser couldn't produce the file (e.g. a
+    // tainted canvas); surface both that and any thrown error as a toast, and
+    // show a spinner on the button while it runs, so the user always knows
+    // whether the export is working, succeeded, or failed.
     private async Task ExportAsync(string format)
     {
-        if (!_mounted) return;
-        try { await JS.InvokeAsync<bool>("kmilaBlocksExport", _workspaceId, format); }
-        catch { }
+        if (!_mounted || _exporting) return;
+        _exportOpen = false;
+        _exporting = true;
+        StateHasChanged();
+
+        bool ok = false;
+        string? error = null;
+        try { ok = await JS.InvokeAsync<bool>("kmilaBlocksExport", _workspaceId, format); }
+        catch (Exception ex) { error = ex.Message; }
+
+        _exporting = false;
+        StateHasChanged();
+
+        var fmt = format.ToUpperInvariant();
+        if (ok)
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"),
+                string.Format(Traductor.T("BLOCK_EXPORT_OK"), fmt), ToastType.Success));
+        }
+        else
+        {
+            ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
+                error ?? Traductor.T("COMMON_EXPORT_FAILED"), ToastType.Danger));
+        }
     }
 
     /// <summary>
