@@ -1477,30 +1477,94 @@
             img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
         });
     }
+    // Build the diagram as REAL SVG (<rect>/<text>) by walking the rendered
+    // block DOM — NOT an HTML <foreignObject>. Chrome/Safari taint any canvas
+    // drawn from a foreignObject-bearing SVG, which silently broke PNG/PDF
+    // export (canvas.toBlob returned null); a real SVG rasterises cleanly and
+    // also opens correctly in external viewers (Inkscape, Illustrator, …) where
+    // foreignObject renders blank. Geometry is read live and normalised back to
+    // 1× (undoing the zoom transform); block notches/gradients aren't
+    // reproduced, but every block body + field label is, faithfully placed.
+    function kmilaBlocksRenderSvgBody(ws, PAD) {
+        const content = ws.contentEl;
+        const origin = content.getBoundingClientRect();
+        const scale = (content.offsetWidth > 0) ? (origin.width / content.offsetWidth) : 1;
+        const s = (scale > 0 && isFinite(scale)) ? scale : 1;
+        const esc = (t) => String(t)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const transparent = (c) => !c || c === 'transparent' ||
+            /rgba?\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)/.test(c);
+        const nx = (v) => ((v - origin.left) / s + PAD);
+        const ny = (v) => ((v - origin.top) / s + PAD);
+        const rects = [], texts = [];
+
+        // 1) Backgrounds + borders for every element that paints one.
+        content.querySelectorAll('*').forEach((el) => {
+            const r = el.getBoundingClientRect();
+            if (r.width <= 0 || r.height <= 0) return;
+            const cs = window.getComputedStyle(el);
+            if (cs.visibility === 'hidden' || cs.display === 'none') return;
+            const bw = parseFloat(cs.borderTopWidth) || 0;
+            const hasBg = !transparent(cs.backgroundColor);
+            const hasBorder = bw > 0 && cs.borderTopStyle !== 'none' && !transparent(cs.borderTopColor);
+            if (!hasBg && !hasBorder) return;
+            const rx = (parseFloat(cs.borderTopLeftRadius) || 0) / s;
+            rects.push('<rect x="' + nx(r.left).toFixed(1) + '" y="' + ny(r.top).toFixed(1) +
+                '" width="' + (r.width / s).toFixed(1) + '" height="' + (r.height / s).toFixed(1) +
+                '" rx="' + rx.toFixed(1) + '"' +
+                (hasBg ? ' fill="' + cs.backgroundColor + '"' : ' fill="none"') +
+                (hasBorder ? ' stroke="' + cs.borderTopColor + '" stroke-width="' + (bw / s).toFixed(1) + '"' : '') +
+                '/>');
+        });
+
+        // 2) Text: field labels, statement labels, and flattened input/select
+        //    values (form controls don't render as SVG text on their own).
+        content.querySelectorAll(
+            '.kmila-block__field--label, .kmila-block__statement-label,' +
+            '.kmila-block__field--text, .kmila-block__field--dropdown'
+        ).forEach((el) => {
+            let txt = '';
+            if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+                txt = el.value || el.getAttribute('placeholder') || '';
+            } else if (el.tagName === 'SELECT') {
+                const opt = el.options[el.selectedIndex];
+                txt = (opt && opt.text) || el.value || '';
+            } else {
+                txt = el.textContent || '';
+            }
+            txt = txt.trim();
+            if (!txt) return;
+            const r = el.getBoundingClientRect();
+            if (r.width <= 0 || r.height <= 0) return;
+            const cs = window.getComputedStyle(el);
+            const fs = (parseFloat(cs.fontSize) || 13) / s;
+            const padL = (parseFloat(cs.paddingLeft) || 0) / s;
+            const x = nx(r.left) + padL;
+            const y = ny(r.top) + (r.height / s) / 2;
+            const weight = (cs.fontWeight && cs.fontWeight !== '400') ? ' font-weight="' + cs.fontWeight + '"' : '';
+            texts.push('<text x="' + x.toFixed(1) + '" y="' + y.toFixed(1) +
+                '" font-size="' + fs.toFixed(1) + '" fill="' + cs.color + '"' + weight +
+                ' dominant-baseline="central" style="white-space:pre">' + esc(txt) + '</text>');
+        });
+
+        // Rects first (so text sits on top), each in DOM order (outer → inner).
+        return rects.join('') + texts.join('');
+    }
+
     async function kmilaBlocksRunExport(ws, bounds, format) {
         const PAD = 16;
         const W = bounds.w + PAD * 2, H = bounds.h + PAD * 2;
-        const src = ws.contentEl;
-        const clone = src.cloneNode(true);
-        kmilaBlocksInlineStyles(src, clone);
-        clone.style.transform = 'none';   // export at 1×
-        clone.style.position = 'absolute';
-        clone.style.left = PAD + 'px';
-        clone.style.top = PAD + 'px';
-        kmilaBlocksFlattenInputs(src, clone);
         const bg = window.getComputedStyle(ws.canvasEl).backgroundColor || '#0b1220';
-        const wrap = document.createElement('div');
-        wrap.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
-        wrap.style.cssText = 'position:relative;width:' + W + 'px;height:' + H +
-            'px;background:' + bg + ';';
-        wrap.appendChild(clone);
         const font = await kmilaBlocksFontCss();
-        const xml = new XMLSerializer().serializeToString(wrap);
+        const body = kmilaBlocksRenderSvgBody(ws, PAD);
         const svg = '<?xml version="1.0" encoding="UTF-8"?>\n' +
             '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H +
-            '" viewBox="0 0 ' + W + ' ' + H + '"><defs><style>' + font + '</style></defs>' +
-            '<foreignObject x="0" y="0" width="' + W + '" height="' + H + '">' + xml +
-            '</foreignObject></svg>';
+            '" viewBox="0 0 ' + W + ' ' + H + '">' +
+            '<defs><style>' + font +
+            " text{font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;}" +
+            '</style></defs>' +
+            '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="' + bg + '"/>' +
+            body + '</svg>';
         if (format === 'svg') {
             kmilaBlocksDownload(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }), 'kmila-blocks.svg');
             return true;
