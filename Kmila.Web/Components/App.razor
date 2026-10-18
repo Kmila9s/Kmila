@@ -53,6 +53,12 @@
                 startOnLoad: false,
                 securityLevel: 'strict',
                 theme: 'base',
+                // Top-level htmlLabels governs NODE labels (mermaid's labelHelper
+                // reads getConfig().htmlLabels, not flowchart.htmlLabels — which
+                // only governs edge labels). Both must be false or node/card text
+                // renders in a <foreignObject> that the export sanitiser strips,
+                // leaving empty boxes. See flowchart.htmlLabels below.
+                htmlLabels: false,
                 // Big control-flow diagrams hit Mermaid's default ceilings
                 // (maxEdges:500, maxTextSize:50000) and fall back to a "Syntax
                 // error" box. Raise them so large designs render. flowchart.
@@ -63,7 +69,13 @@
                 maxTextSize: 200000,
                 flowchart: {
                     useMaxWidth: false,
-                    htmlLabels: true,
+                    // htmlLabels:false renders labels as native SVG <text> rather
+                    // than HTML in a <foreignObject>. The PNG/SVG export sanitiser
+                    // strips every foreignObject (a WebKit canvas-taint source),
+                    // which was deleting ALL label text from exports — empty boxes,
+                    // no sí/no edge labels. Native <text> survives serialisation
+                    // and never taints the canvas, so exports keep their text.
+                    htmlLabels: false,
                     nodeSpacing: 40,
                     rankSpacing: 50,
                     padding: 12,
