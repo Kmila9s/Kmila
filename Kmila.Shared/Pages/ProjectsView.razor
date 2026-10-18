@@ -1888,6 +1888,13 @@ end rtl;
     // `ExtraFiles` is a lazy loader for additional VHDL files created after
     // the main file — used by the capstone example whose 15-file corpus
     // ships as embedded resources rather than inline consts.
+    // `TestbenchFile` (2026-10-14) names the project-relative testbench to
+    // auto-select when the sample is created, so the project opens straight
+    // into Workbench mode with a populated waveform instead of the empty
+    // port-moment timeline. null = don't auto-select a testbench (used by
+    // `demo`, which ships a curated port-moment configuration instead). It is
+    // declared explicitly rather than inferred from a `_tb.vhd` naming rule
+    // because capstone-calc's testbench is `testbench.vhd`.
     private sealed record ExampleDef(
         string Id,
         string NameKey,
@@ -1895,38 +1902,39 @@ end rtl;
         string Vhd,
         string Kviz,
         string MainFileName = "main.vhd",
-        Func<IEnumerable<(string FileName, string Content)>>? ExtraFiles = null);
+        Func<IEnumerable<(string FileName, string Content)>>? ExtraFiles = null,
+        string? TestbenchFile = null);
 
     private static readonly List<ExampleDef> _examples = new()
     {
         new ExampleDef("demo",       "EXAMPLE_DEMO_NAME",       "EXAMPLE_DEMO_DESC",       SAMPLE_MAIN_VHD,     SAMPLE_MAIN_KVIZ,
             ExtraFiles: DemoBoardExtraFiles),
         new ExampleDef("contador-9", "EXAMPLE_CONTADOR9_NAME",  "EXAMPLE_CONTADOR9_DESC",  CONTADOR9_VHD,       CONTADOR9_KVIZ,
-            MainFileName: "contador_9.vhd", ExtraFiles: Contador9ExtraFiles),
+            MainFileName: "contador_9.vhd", ExtraFiles: Contador9ExtraFiles, TestbenchFile: "contador_9_tb.vhd"),
         new ExampleDef("contador-9999","EXAMPLE_CONTADOR9999_NAME","EXAMPLE_CONTADOR9999_DESC",CONTADOR9999_VHD, CONTADOR9999_KVIZ,
-            MainFileName: "contador_9999.vhd", ExtraFiles: Contador9999ExtraFiles),
+            MainFileName: "contador_9999.vhd", ExtraFiles: Contador9999ExtraFiles, TestbenchFile: "contador_9999_tb.vhd"),
         new ExampleDef("counter",    "EXAMPLE_COUNTER_NAME",    "EXAMPLE_COUNTER_DESC",    COUNTER_CLOCK_VHD,   COUNTER_CLOCK_KVIZ,
-            ExtraFiles: CounterClockExtraFiles),
+            ExtraFiles: CounterClockExtraFiles, TestbenchFile: "counter_clock_tb.vhd"),
         new ExampleDef("traffic",    "EXAMPLE_TRAFFIC_NAME",    "EXAMPLE_TRAFFIC_DESC",    TRAFFIC_LIGHT_VHD,   TRAFFIC_LIGHT_KVIZ,
-            ExtraFiles: TrafficLightExtraFiles),
+            ExtraFiles: TrafficLightExtraFiles, TestbenchFile: "traffic_light_tb.vhd"),
         new ExampleDef("shift",      "EXAMPLE_SHIFT_NAME",      "EXAMPLE_SHIFT_DESC",      SHIFT_REGISTER_VHD,  SHIFT_REGISTER_KVIZ,
-            ExtraFiles: ShiftRegisterExtraFiles),
+            ExtraFiles: ShiftRegisterExtraFiles, TestbenchFile: "shift_register_tb.vhd"),
         new ExampleDef("dip-adder",  "EXAMPLE_DIP_ADDER_NAME",  "EXAMPLE_DIP_ADDER_DESC",  DIP_ADDER_VHD,       DIP_ADDER_KVIZ,
-            ExtraFiles: DipAdderExtraFiles),
+            ExtraFiles: DipAdderExtraFiles, TestbenchFile: "dip_adder_tb.vhd"),
         new ExampleDef("matrix-plus","EXAMPLE_MATRIX_NAME",     "EXAMPLE_MATRIX_DESC",     MATRIX_PLUS_VHD,     MATRIX_PLUS_KVIZ,
-            ExtraFiles: MatrixPlusExtraFiles),
+            ExtraFiles: MatrixPlusExtraFiles, TestbenchFile: "plus_sign_scroller_tb.vhd"),
         new ExampleDef("rgb-rainbow","EXAMPLE_RGB_NAME",        "EXAMPLE_RGB_DESC",        RGB_RAINBOW_VHD,     RGB_RAINBOW_KVIZ,
-            ExtraFiles: RgbRainbowExtraFiles),
+            ExtraFiles: RgbRainbowExtraFiles, TestbenchFile: "rgb_rainbow_tb.vhd"),
         new ExampleDef("buzzer-scale","EXAMPLE_BUZZER_NAME",    "EXAMPLE_BUZZER_DESC",     BUZZER_SCALE_VHD,    BUZZER_SCALE_KVIZ,
-            ExtraFiles: BuzzerScaleExtraFiles),
+            ExtraFiles: BuzzerScaleExtraFiles, TestbenchFile: "scale_generator_tb.vhd"),
         new ExampleDef("keypad-display","EXAMPLE_KEYPAD_NAME",  "EXAMPLE_KEYPAD_DESC",     KEYPAD_DISPLAY_VHD,  KEYPAD_DISPLAY_KVIZ,
-            ExtraFiles: KeypadDisplayExtraFiles),
+            ExtraFiles: KeypadDisplayExtraFiles, TestbenchFile: "keypad_display_tb.vhd"),
         new ExampleDef("lcd-hello",   "EXAMPLE_LCD_NAME",       "EXAMPLE_LCD_DESC",        LCD_HELLO_VHD,       LCD_HELLO_KVIZ,
-            ExtraFiles: LcdHelloExtraFiles),
+            ExtraFiles: LcdHelloExtraFiles, TestbenchFile: "lcd_banner_tb.vhd"),
         new ExampleDef("dot-matrix-hello", "EXAMPLE_DOTMATRIX_NAME", "EXAMPLE_DOTMATRIX_DESC", DOTMATRIX_HELLO_VHD, DOTMATRIX_HELLO_KVIZ,
-            ExtraFiles: DotMatrixHelloExtraFiles),
+            ExtraFiles: DotMatrixHelloExtraFiles, TestbenchFile: "dot_matrix_tb.vhd"),
         new ExampleDef("lcd-raw-panel", "EXAMPLE_LCD_RAWPANEL_NAME", "EXAMPLE_LCD_RAWPANEL_DESC", LCD_PANEL_VHD, LCD_PANEL_KVIZ,
-            ExtraFiles: LcdPanelExtraFiles),
+            ExtraFiles: LcdPanelExtraFiles, TestbenchFile: "lcd_glass_tb.vhd"),
         new ExampleDef(
             "capstone-calc",
             "EXAMPLE_CAPSTONE_NAME",
@@ -1934,17 +1942,18 @@ end rtl;
             "", // main file content injected via ExtraFiles loader below (calc_top.vhd is first entry)
             CAPSTONE_CALC_KVIZ,
             MainFileName: CAPSTONE_CALC_MAIN,
-            ExtraFiles: LoadCapstoneCalcFiles),
+            ExtraFiles: LoadCapstoneCalcFiles,
+            TestbenchFile: "testbench.vhd"),
 
         // Multi-component (structural / port map) examples.
         new ExampleDef("full-adder", "EXAMPLE_FULLADDER_NAME", "EXAMPLE_FULLADDER_DESC", FULL_ADDER_VHD, FULL_ADDER_KVIZ,
-            MainFileName: "full_adder.vhd", ExtraFiles: FullAdderExtraFiles),
+            MainFileName: "full_adder.vhd", ExtraFiles: FullAdderExtraFiles, TestbenchFile: "full_adder_tb.vhd"),
         new ExampleDef("ripple-adder4", "EXAMPLE_RIPPLE4_NAME", "EXAMPLE_RIPPLE4_DESC", RIPPLE4_VHD, RIPPLE4_KVIZ,
-            MainFileName: "ripple_adder4.vhd", ExtraFiles: Ripple4ExtraFiles),
+            MainFileName: "ripple_adder4.vhd", ExtraFiles: Ripple4ExtraFiles, TestbenchFile: "ripple_adder4_tb.vhd"),
         new ExampleDef("mux4", "EXAMPLE_MUX4_NAME", "EXAMPLE_MUX4_DESC", MUX4_VHD, MUX4_KVIZ,
-            MainFileName: "mux4.vhd", ExtraFiles: Mux4ExtraFiles),
+            MainFileName: "mux4.vhd", ExtraFiles: Mux4ExtraFiles, TestbenchFile: "mux4_tb.vhd"),
         new ExampleDef("comparator4", "EXAMPLE_CMP4_NAME", "EXAMPLE_CMP4_DESC", CMP4_VHD, CMP4_KVIZ,
-            MainFileName: "comparator4.vhd", ExtraFiles: Comparator4ExtraFiles),
+            MainFileName: "comparator4.vhd", ExtraFiles: Comparator4ExtraFiles, TestbenchFile: "comparator4_tb.vhd"),
     };
 
     private bool _examplesModalOpen;
@@ -2169,6 +2178,18 @@ end rtl;
             {
                 await SaveSampleConfigurationAsync();
                 Sim.PendingConfigurationName = Traductor.T("PROJECTS_SAMPLE_CONFIG_NAME");
+            }
+            // Auto-select the sample's testbench (2026-10-14) so the project
+            // opens straight into Workbench mode with a populated waveform
+            // instead of the empty port-moment timeline. The Editor's open
+            // path restores this marker and switches to Testbench stimulus.
+            // Samples that declare no TestbenchFile (demo) keep their
+            // port-moment configuration above. Best-effort — never blocks
+            // sample creation.
+            else if (!string.IsNullOrEmpty(def.TestbenchFile))
+            {
+                try { await DbContext.SetProjectTestbenchAsync(project.Id, def.TestbenchFile); }
+                catch { /* non-fatal: user can still pick the testbench manually */ }
             }
 
             ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"),

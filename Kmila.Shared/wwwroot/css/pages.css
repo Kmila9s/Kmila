@@ -12792,6 +12792,29 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
 }
 
+/* Lesson figure card — frames an embedded interactive anatomy animation (an
+   <iframe> to a language-neutral drawing under /_content/Kmila.Shared/anatomia/).
+   Mirrors .kmila-gate-canvas so figures read as one family with the gate/fsm
+   players; the explanatory text lives in the surrounding Markdown, not here. */
+.lesson-figure {
+    margin: var(--space-3) auto;
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: var(--space-2);
+    overflow: hidden;
+}
+
+.lesson-figure iframe {
+    width: 100%;
+    aspect-ratio: 16 / 10;   /* matches the figure's 640x400 drawing; responsive, no fixed px */
+    height: auto;
+    border: 0;
+    display: block;
+    background: transparent;
+    color-scheme: normal;
+}
+
 /* Wires: thin lines that fade between "carrying 0" (cold) and "carrying 1"
    (hot). Each unique source-node id gets its own HSL hue (mirrors the
    SchematicViewer port-colour scheme), applied via an inline style on the
@@ -17606,4 +17629,85 @@ html[data-kmila-kbd="open"] .schematic-info {
    `data-kmila-kbd` is not set, the calc collapses to 0 so nothing moves. */
 html[data-kmila-kbd="open"] #blazor-error-ui {
     bottom: calc(100dvh - var(--kmila-viewport-h, 100dvh));
+}
+
+/* ---- Entity-scope viewer (2026-10-14) -------------------------------------
+   The Entities/Schematic dock tabs gained a scope dropdown (main file · all
+   project files · imported libraries) and a schematic entity picker. Mirrors
+   the look of .schematic-style-select so the dock reads as one surface. */
+.entity-scope-select {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin: var(--space-2) var(--space-2) var(--space-1);
+    padding: 3px 6px 3px 9px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background: var(--surface-1);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: border-color var(--duration-fast) var(--ease-standard);
+}
+.entity-scope-select:hover,
+.entity-scope-select:focus-within {
+    border-color: var(--brand-accent);
+    color: var(--text-strong);
+}
+.entity-scope-select select {
+    appearance: none;
+    -webkit-appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--text-strong);
+    font: inherit;
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    padding-right: 14px;
+    cursor: pointer;
+    background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                      linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-position: right 4px top 55%, right 0 top 55%;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+}
+.entity-scope-select select:focus-visible {
+    outline: 2px solid var(--brand-accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+/* Library scope: packages + the functions/types they publish. */
+.entity-lib-card {
+    margin: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background: var(--surface-1);
+}
+.entity-lib-card__name {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-weight: 600;
+    color: var(--text-strong);
+}
+.entity-lib-card__symbols {
+    list-style: none;
+    margin: var(--space-1) 0 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-2);
+}
+.entity-lib-card__symbols li {
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+}
+.entity-lib-card__kind {
+    display: inline-block;
+    font-size: 0.7em;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--brand-accent);
+    margin-right: 4px;
 }

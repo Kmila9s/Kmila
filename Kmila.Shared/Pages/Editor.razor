@@ -285,31 +285,80 @@
                     OutputReady="@(Log.Entries.Count > 0)">
 
             <EntitiesContent>
-                @if (Builder.Parser != null && Builder.Parser.Entities.Any())
+                @* Scope selector (2026-10-14): main file only · all project
+                   files · imported libraries. Lets a multi-file structural
+                   design show every linked entity, not just the built top. *@
+                <label class="entity-scope-select">
+                    <Icon Name="IconName.Diagram3" />
+                    <select value="@_entityScope" @onchange="OnEntityScopeChanged">
+                        <option value="@EntityScope.MainFile" selected="@(_entityScope == EntityScope.MainFile)">@Traductor.T("ENTITY_SCOPE_MAIN")</option>
+                        <option value="@EntityScope.AllProjectFiles" selected="@(_entityScope == EntityScope.AllProjectFiles)">@Traductor.T("ENTITY_SCOPE_ALL")</option>
+                        <option value="@EntityScope.Libraries" selected="@(_entityScope == EntityScope.Libraries)">@Traductor.T("ENTITY_SCOPE_LIBS")</option>
+                    </select>
+                </label>
+
+                @if (_entityScope == EntityScope.Libraries)
                 {
-                    @foreach (var entity in Builder.Parser.Entities)
+                    @* Libraries publish packages + functions/types, not
+                       entities, so list those rather than EntityView cards. *@
+                    @if (Builder.CompiledLibraries != null && Builder.CompiledLibraries.Count > 0)
                     {
-                        <EntityView Entity="entity" />
+                        @foreach (var lib in Builder.CompiledLibraries)
+                        {
+                            <div class="entity-lib-card">
+                                <div class="entity-lib-card__name"><Icon Name="IconName.Book" /> @lib.LibraryName</div>
+                                @if (lib.Functions != null && lib.Functions.Count > 0)
+                                {
+                                    <ul class="entity-lib-card__symbols">
+                                        @foreach (var sym in lib.Functions)
+                                        {
+                                            <li><span class="entity-lib-card__kind">@sym.Kind</span> @sym.Name</li>
+                                        }
+                                    </ul>
+                                }
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="kmila-dock__empty">
+                            <div class="kmila-dock__empty-icon"><Icon Name="IconName.Book" /></div>
+                            <p>@Traductor.T("EDITOR_EMPTY_LIBS")</p>
+                        </div>
                     }
                 }
                 else
                 {
-                    @* Audit F-C-03 (2026-07-11): Entities tab used to be blank
-                       before the first Build. The parent always supplies
-                       EntitiesContent (non-null), so EditorDock's RenderEmpty
-                       fallback never fires — emit the same "compile first"
-                       hint inline instead. *@
-                    <div class="kmila-dock__empty">
-                        <div class="kmila-dock__empty-icon"><Icon Name="IconName.Diagram3" /></div>
-                        <p>@Traductor.T("EDITOR_EMPTY_ENTITIES")</p>
-                    </div>
+                    var entities = _entityScope == EntityScope.AllProjectFiles
+                        ? _scopedEntities
+                        : (Builder.Parser?.Entities?.ToList() ?? new List<Interpreter.Services.Entity>());
+                    @if (entities.Count > 0)
+                    {
+                        @foreach (var entity in entities)
+                        {
+                            <EntityView Entity="entity" />
+                        }
+                    }
+                    else
+                    {
+                        @* Audit F-C-03 (2026-07-11): Entities tab used to be blank
+                           before the first Build. The parent always supplies
+                           EntitiesContent (non-null), so EditorDock's RenderEmpty
+                           fallback never fires — emit the same "compile first"
+                           hint inline instead. *@
+                        <div class="kmila-dock__empty">
+                            <div class="kmila-dock__empty-icon"><Icon Name="IconName.Diagram3" /></div>
+                            <p>@Traductor.T("EDITOR_EMPTY_ENTITIES")</p>
+                        </div>
+                    }
                 }
             </EntitiesContent>
 
             <SchematicContent>
-                @* Renders the first entity with an architecture; deeper
-                   designs (multiple entities) are rare in TT1 and out of
-                   scope for this view.
+                @* Entity picker (2026-10-14): designs with several entities
+                   (especially the "all project files" scope) can now choose
+                   which one to draw, instead of always the first with an
+                   architecture.
 
                    The ErrorBoundary is critical: SchematicViewer builds
                    inline SVG via MarkupString and indexes into several
@@ -318,9 +367,32 @@
                    BlazorWebView that meant a stale schematic dropped the
                    whole shell into the "Reload window" state. Containing
                    the failure here keeps the rest of the dock usable. *@
+                @{
+                    var schematicCandidates = (_entityScope == EntityScope.AllProjectFiles
+                            ? _scopedEntities
+                            : (Builder.Parser?.Entities?.ToList() ?? new List<Interpreter.Services.Entity>()))
+                        .Where(e => e.Architecture != null)
+                        .ToList();
+                    var selectedEntity = _schematicEntity != null
+                        && schematicCandidates.Any(e => string.Equals(e.Name, _schematicEntity.Name, StringComparison.OrdinalIgnoreCase))
+                            ? _schematicEntity
+                            : schematicCandidates.FirstOrDefault();
+                }
+                @if (schematicCandidates.Count > 1)
+                {
+                    <label class="entity-scope-select">
+                        <Icon Name="IconName.Diagram2" />
+                        <select value="@selectedEntity?.Name" @onchange="OnSchematicEntityChanged">
+                            @foreach (var e in schematicCandidates)
+                            {
+                                <option value="@e.Name" selected="@(e == selectedEntity)">@e.Name</option>
+                            }
+                        </select>
+                    </label>
+                }
                 <ErrorBoundary>
                     <ChildContent>
-                        <SchematicViewer Entity="@(Builder.Parser?.Entities.FirstOrDefault(e => e.Architecture != null))"
+                        <SchematicViewer Entity="@selectedEntity"
                                          Waveform="_waveformData" />
                     </ChildContent>
                     <ErrorContent Context="ex">
@@ -596,6 +668,104 @@
 
     // Waveform data from simulation
     private WaveformData? _waveformData;
+
+    // ---- Entity-scope viewer (2026-10-14) ----
+    // The Entities/Schematic tabs can show just the built (main) file's
+    // entities, every entity across all project files, or what the imported
+    // libraries publish. The build only parses one file, so the "all files"
+    // scope parses the siblings on demand and merges them.
+    private enum EntityScope { MainFile, AllProjectFiles, Libraries }
+    private EntityScope _entityScope = EntityScope.MainFile;
+    private List<Interpreter.Services.Entity> _scopedEntities = new();
+    private Interpreter.Services.Entity? _schematicEntity;
+
+    /// <summary>
+    /// Recomputes <see cref="_scopedEntities"/> for the active scope and keeps
+    /// the schematic's selected entity valid. MainFile mirrors the build's
+    /// parser output; AllProjectFiles parses every project .vhd (now reliably
+    /// on disk after <c>MaterializeToDiskAsync</c>) and merges by entity name.
+    /// </summary>
+    private void RecomputeScopedEntities()
+    {
+        var merged = new List<Interpreter.Services.Entity>();
+        if (_entityScope == EntityScope.AllProjectFiles)
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var f in _projectFiles)
+            {
+                var name = f.FileName ?? string.Empty;
+                if (!name.EndsWith(".vhd", StringComparison.OrdinalIgnoreCase) &&
+                    !name.EndsWith(".vhdl", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                try
+                {
+                    var path = DiskPathFor(f);
+                    if (path == null) continue;
+                    var p = new Debugger.Repositories.Parser(path);
+                    p.ParseFile();
+                    foreach (var e in p.Entities)
+                    {
+                        if (e?.Name == null) continue;
+                        // Keep the first definition; prefer one that has an
+                        // architecture if a later file supplies it.
+                        if (seen.Add(e.Name)) merged.Add(e);
+                        else if (e.Architecture != null)
+                        {
+                            var idx = merged.FindIndex(x =>
+                                string.Equals(x.Name, e.Name, StringComparison.OrdinalIgnoreCase));
+                            if (idx >= 0 && merged[idx].Architecture == null) merged[idx] = e;
+                        }
+                    }
+                }
+                catch { /* skip files that don't parse; show what we can */ }
+            }
+        }
+        else // MainFile (Libraries renders its own list, not entities)
+        {
+            if (Builder.Parser?.Entities != null) merged.AddRange(Builder.Parser.Entities);
+        }
+
+        _scopedEntities = merged;
+
+        // Keep the schematic selection valid: preserve it if still present,
+        // else fall back to the first entity that has an architecture.
+        if (_schematicEntity == null ||
+            !_scopedEntities.Any(e => string.Equals(e.Name, _schematicEntity.Name, StringComparison.OrdinalIgnoreCase)))
+        {
+            _schematicEntity = _scopedEntities.FirstOrDefault(e => e.Architecture != null);
+        }
+    }
+
+    /// <summary>Absolute on-disk path for a project file, or null if unknown.</summary>
+    private string? DiskPathFor(ProjectFile f)
+    {
+        if (_project == null || string.IsNullOrEmpty(_project.BasePath) || string.IsNullOrEmpty(f.FileName))
+            return null;
+        var parts = new List<string> { _project.BasePath };
+        if (!string.IsNullOrEmpty(f.DirectoryPath))
+            parts.AddRange(f.DirectoryPath.Split('/', StringSplitOptions.RemoveEmptyEntries));
+        parts.Add(f.FileName);
+        return System.IO.Path.Combine(parts.ToArray());
+    }
+
+    /// <summary>Scope dropdown change handler.</summary>
+    private void OnEntityScopeChanged(ChangeEventArgs e)
+    {
+        if (System.Enum.TryParse<EntityScope>(e.Value?.ToString(), out var scope))
+        {
+            _entityScope = scope;
+            RecomputeScopedEntities();
+        }
+    }
+
+    /// <summary>Schematic entity-picker change handler.</summary>
+    private void OnSchematicEntityChanged(ChangeEventArgs e)
+    {
+        var name = e.Value?.ToString();
+        if (!string.IsNullOrEmpty(name))
+            _schematicEntity = _scopedEntities.FirstOrDefault(x =>
+                string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase));
+    }
 
     /// <summary>Snapshot count for the Runs tab badge.</summary>
     private int _runsCount;
@@ -1149,6 +1319,16 @@
         _projectFiles  = allFiles.Where(f => !IsBvhdlSidecar(f)).ToList();
         _sidecarFiles  = allFiles.Where(IsBvhdlSidecar).ToList();
 
+        // WASM FS gap (2026-10-14): the editor shows every file via the DB
+        // fallback in ReadFileContentAsync even when MEMFS is missing them
+        // (e.g. after a reload). The simulation paths read the design from
+        // disk, so a structural design whose sub-entities aren't on the FS
+        // elaborates to nothing and the waveform is all zeros. Rematerialize
+        // the DB-backed content to disk on open so SourceElaborator sees the
+        // complete design. Best-effort — never blocks the open.
+        try { await ProjectFiles.MaterializeToDiskAsync(_project, _projectFiles); }
+        catch { /* non-fatal: the per-run safety net re-tries before simulating */ }
+
         // Restore the per-project Workbench selection: if a testbench marker
         // exists (and the file is still present), switch to testbench stimulus
         // mode with that file. Otherwise default to the port-moment timeline.
@@ -1664,6 +1844,8 @@
             {
                 Sim.SetState(SimState.BuiltOk);
                 Log.Success(Traductor.T("SIM_LOG_BUILD_OK"));
+                // Refresh the entity-scope viewer against the fresh parse.
+                RecomputeScopedEntities();
                 DockState.SetActive(EditorTab.Entities);
             }
             else
@@ -1917,6 +2099,17 @@
                 await DbContext.ClearProjectTestbenchAsync(_projectId);
         }
         catch { /* non-fatal */ }
+
+        // Ensure every design file is physically on the FS before we simulate.
+        // The testbench/elaboration paths read the sources from disk; on the
+        // WASM head the FS can lag the DB (see MaterializeToDiskAsync), which
+        // would silently drop structural sub-entities and zero the waveform.
+        try
+        {
+            if (_project != null)
+                await ProjectFiles.MaterializeToDiskAsync(_project, _projectFiles);
+        }
+        catch { /* non-fatal: best-effort disk sync */ }
 
         if (!workbenchRun)
         {

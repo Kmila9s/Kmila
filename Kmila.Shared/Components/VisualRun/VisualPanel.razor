@@ -1660,7 +1660,13 @@
                     try { System.IO.File.Delete(tmp); } catch { }
                 }
             }
-            catch { /* fall back to the raw (un-inlined) top entity */ }
+            catch (Exception elabEx)
+            {
+                // Fall back to the raw (un-inlined) top entity, but surface the
+                // failure: a structural design that can't elaborate here would
+                // otherwise silently drive nothing (every widget stays dark).
+                Console.Error.WriteLine($"[Visual] elaboration failed for '{_entity?.Name}': {elabEx.GetType().Name}: {elabEx.Message}");
+            }
         }
         catch (Exception ex)
         {

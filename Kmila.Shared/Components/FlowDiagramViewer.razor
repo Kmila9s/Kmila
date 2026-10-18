@@ -940,36 +940,39 @@
 
     /// <summary>
     /// Escapes a label for safe interpolation into Mermaid source while
-    /// preserving the original VHDL glyphs in the rendered SVG. Mermaid's
-    /// shape delimiters ([], {}, (), {{}}) and the HTML-parse step on quoted
-    /// labels collide with raw &lt;, &gt;, parens, brackets, braces, pipes and
-    /// double-quotes when they appear in user content.
+    /// preserving the original VHDL glyphs in the rendered SVG. Every call site
+    /// wraps the result in a double-quoted Mermaid label ("..."), which protects
+    /// the shape delimiters ([], {}, (), {{}}) and most special characters.
     ///
-    /// Earlier versions mapped these to Unicode lookalikes (`‹`, `❨`, …),
-    /// which kept the diagram alive but rendered VHDL like
-    /// <c>q0 ‹= '0'</c> in the exported SVG — visually mangled. Mermaid
-    /// supports an HTML-entity-like sentinel form (<c>#lt;</c>, <c>#40;</c>,
-    /// …) that the parser swallows whole and the renderer turns back into
-    /// the real character at draw time, so we get faithful VHDL like
-    /// <c>q0 &lt;= '0'</c> in both inline diagrams and SVG/PNG exports.
+    /// Mermaid renders with htmlLabels:FALSE (so labels are native SVG &lt;text&gt;
+    /// and survive the PNG/SVG export sanitiser, which strips &lt;foreignObject&gt;).
+    /// In that mode two earlier approaches fail:
+    ///   • Unicode lookalikes (`‹`, `❨`, …) mangle VHDL (<c>q0 ‹= '0'</c>).
+    ///   • The HTML-entity sentinel form (<c>#lt;</c>, <c>#40;</c>, <c>#quot;</c>)
+    ///     is NOT HTML-decoded for SVG text; worse, the <c>#\w+;</c> pattern
+    ///     triggers Mermaid's encodeEntities roundtrip, which double-escapes the
+    ///     '&amp;' in a neighbouring <c>&amp;quot;</c> — so quotes export as the
+    ///     literal text <c>&amp;quot;</c>.
+    /// So emit the characters RAW: inside a quoted label Mermaid renders (), [],
+    /// {}, |, &lt; and &gt; faithfully as native SVG text. Only two need escaping,
+    /// and only via '&amp;' entities (never '#' sentinels, which would re-trigger
+    /// the roundtrip): '&amp;' → &amp;amp; (a raw '&amp;' can swallow following
+    /// text as a stray entity) and '"' → &amp;quot; (a raw '"' would close the
+    /// quoted label). Both then render as real glyphs. Verified in-browser against
+    /// the bundled Mermaid build across VHDL assignments, concatenation and
+    /// std_logic_vector literals.
     /// </summary>
     private static string Esc(string s)
     {
         if (string.IsNullOrEmpty(s)) return "";
-        // Trim first so we don't accidentally chop the `;` off an entity
-        // sentinel introduced below (e.g. `q0 #lt;= '0'`).
+        // Trim the original trailing ';' first (before the entities below add
+        // their own), so a VHDL statement terminator doesn't clutter the label.
         s = s.Replace("\r", "").Replace("\n", " ").TrimEnd(';');
+        // Order matters: escape '&' before introducing '&quot;' so the latter's
+        // ampersand is not re-escaped into '&amp;quot;'.
         return s
-            .Replace("\"", "#quot;")
-            .Replace("|", "#124;")
-            .Replace("<", "#lt;")
-            .Replace(">", "#gt;")
-            .Replace("(", "#40;")
-            .Replace(")", "#41;")
-            .Replace("[", "#91;")
-            .Replace("]", "#93;")
-            .Replace("{", "#123;")
-            .Replace("}", "#125;");
+            .Replace("&", "&amp;")
+            .Replace("\"", "&quot;");
     }
 
     /// <summary>Mutable counter used to generate unique node ids per render pass.</summary>

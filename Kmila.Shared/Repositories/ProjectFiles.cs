@@ -167,6 +167,56 @@ public class ProjectFiles : IRepository<ProjectFile>
         };
     }
 
+    /// <summary>
+    /// Writes every supplied file's in-memory <see cref="ProjectFile.Content"/> back to
+    /// its location under <paramref name="project"/>.BasePath, creating directories as
+    /// needed. Idempotent and best-effort per file (a single failure never aborts the rest).
+    ///
+    /// Why this exists: on the Blazor WASM head the project tree lives in an in-memory
+    /// (MEMFS) filesystem mirrored to OPFS. After a reload — or any time the mirror is
+    /// incomplete — the editor still shows every file because
+    /// <see cref="ReadFileContentAsync"/> falls back to the DB-stored Content, but the
+    /// files are NOT physically on the FS. The simulation paths that read the design from
+    /// disk (<c>SourceElaborator.ScanProject</c>, <c>ProgramBuilder.RunTestbenchAsync</c>)
+    /// then only see whatever happens to be present, so a structural design whose
+    /// sub-entities are missing elaborates to nothing and the waveform is all zeros.
+    /// Rematerializing the DB-backed content to disk before a run closes that gap.
+    /// </summary>
+    public async Task MaterializeToDiskAsync(Project project, IEnumerable<ProjectFile> files)
+    {
+        await _initTask;
+        if (project is null || string.IsNullOrEmpty(project.BasePath) || files is null)
+            return;
+        try
+        {
+            if (!Directory.Exists(project.BasePath))
+                Directory.CreateDirectory(project.BasePath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[ProjectFiles] MaterializeToDisk: could not ensure BasePath '{BasePath}'", project.BasePath);
+            return;
+        }
+
+        foreach (var file in files)
+        {
+            if (file is null || string.IsNullOrEmpty(file.FileName)) continue;
+            try
+            {
+                var dirOnDisk = GetDiskDirectory(project.BasePath, file.DirectoryPath ?? string.Empty);
+                if (!Directory.Exists(dirOnDisk))
+                    Directory.CreateDirectory(dirOnDisk);
+                var path = GetDiskPath(project.BasePath, file);
+                await File.WriteAllTextAsync(path, file.Content ?? string.Empty, _cts.Token);
+            }
+            catch (Exception ex)
+            {
+                // Best-effort: one unwritable file must not stop the rest from landing.
+                _logger.LogWarning(ex, "[ProjectFiles] MaterializeToDisk: failed for '{File}'", file.FileName);
+            }
+        }
+    }
+
     /// <summary>Not supported for project files; always throws.</summary>
     /// <param name="id">Ignored.</param>
     /// <returns>Never returns; throws <see cref="NotImplementedException"/>.</returns>

@@ -78,6 +78,13 @@ public class ProgramBuilder : IDisposable
     /// </summary>
     public Debugger.Repositories.Parser Parser { get; private set; } = default!;
     /// <summary>
+    /// The libraries compiled for the most recent build/run (packages and the
+    /// functions/types they publish). Surfaced so the Editor's entity-scope
+    /// viewer can list what the imported libraries expose. Empty until a build
+    /// that resolves at least one `use` clause runs.
+    /// </summary>
+    public IReadOnlyList<CompiledLibrary> CompiledLibraries { get; private set; } = System.Array.Empty<CompiledLibrary>();
+    /// <summary>
     /// Gets whether a build is currently in progress.
     /// </summary>
     public bool IsBuilding { get; private set; }
@@ -573,8 +580,17 @@ public class ProgramBuilder : IDisposable
                 await File.WriteAllTextAsync(tmp, flat).ConfigureAwait(false);
                 parsePath = tmp;
             }
+            // A null/empty flat result is normal for a genuine single-file
+            // testbench (nothing to inline) — keep the raw source silently.
         }
-        catch { /* fall back to the raw testbench source */ }
+        catch (Exception elabEx)
+        {
+            // Elaboration THREW — don't let it masquerade as a zero waveform.
+            // We still fall back to the raw source so a single-file design runs,
+            // but surface the failure so a multi-file design that can't resolve
+            // its DUT is diagnosable instead of silently producing all zeros.
+            Console.Error.WriteLine($"[Sim.TB] elaboration failed for '{tbName}': {elabEx.GetType().Name}: {elabEx.Message}");
+        }
 
         Parser = new Debugger.Repositories.Parser(parsePath);
         Parser.ParseFile();
@@ -802,6 +818,9 @@ public class ProgramBuilder : IDisposable
         var compiled = await _libraryCompiler
             .CompileAsync(requestedPackages, BuildExecutionMode.Linear, ct)
             .ConfigureAwait(false);
+
+        // Cache for the entity-scope viewer's "Libraries" scope.
+        CompiledLibraries = compiled;
 
         // Wipe the type registry before re-seeding from this build's libraries.
         // Without this, a previous project's type names leak into the current
