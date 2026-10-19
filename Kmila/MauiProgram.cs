@@ -201,6 +201,24 @@ public static class MauiProgram
         // the hydrated cache but a cold start still reads from SQLite.
         builder.Services.AddScoped<LessonProgressStore>();
 
+        // Bibliography catalog — reads Data/sources.json from the app package,
+        // same loader as LessonCatalog. Shipped via the MauiAsset glob for
+        // wwwroot/Data in Kmila.csproj.
+        builder.Services.AddSingleton<SourceCatalogService>(provider =>
+            new SourceCatalogService(
+                async path =>
+                {
+                    try
+                    {
+                        return await FileSystem.OpenAppPackageFileAsync(path);
+                    }
+                    catch (FileNotFoundException)
+                    {
+                        throw new FileNotFoundException($"Source asset not found: {path}");
+                    }
+                },
+                provider.GetRequiredService<ILoggerFactory>().CreateLogger<SourceCatalogService>()));
+
         // Concepts catalog — execution-models mini-curriculum. Reads its
         // manifest + per-language markdown + timeline JSON from the bundled
         // app package via FileSystem.OpenAppPackageFileAsync — same pattern

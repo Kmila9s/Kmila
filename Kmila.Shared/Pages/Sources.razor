@@ -1,0 +1,96 @@
+@page "/sources"
+@using Kmila.Shared.Models
+@using Kmila.Shared.Services
+@inject SourceCatalogService SourceCatalog
+@implements IDisposable
+<PageTitle>@Traductor.T("SOURCES_TITLE")</PageTitle>
+
+@*
+    Sources — the app-wide bibliography ("Data source"), the in-app analogue of
+    the TT thesis's final "Referencias". Lists every entry in Data/sources.json
+    as a numbered IEEE-style list via the shared SourcesList component. A simple
+    All / Preferred filter mirrors the catalog-filters pattern used on Learn.
+*@
+
+<section class="learn-page">
+    <header class="learn-hero" aria-labelledby="sources-hero-title">
+        <div class="learn-hero__copy">
+            <span class="home-section__eyebrow">@Traductor.T("SOURCES_EYEBROW")</span>
+            <h1 id="sources-hero-title" class="learn-hero__title">@Traductor.T("SOURCES_TITLE")</h1>
+            <span class="visually-hidden">. </span>
+            <p class="learn-hero__subtitle">@Traductor.T("SOURCES_SUBTITLE")</p>
+        </div>
+    </header>
+
+    <div class="catalog-filters" role="group" aria-label="@Traductor.T("CATALOG_FILTERS_LABEL")">
+        <div class="catalog-filters__row">
+            <span class="catalog-filters__label">@Traductor.T("SOURCES_FILTER_LABEL")</span>
+            <div class="kmila-slot-segmented">
+                <button type="button"
+                        class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm filter-chip @(_preferredOnly ? "" : "filter-chip--active is-active")"
+                        @onclick="() => SetPreferred(false)">
+                    @Traductor.T("CATALOG_FILTER_ALL")
+                </button>
+                <button type="button"
+                        class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm filter-chip @(_preferredOnly ? "filter-chip--active is-active" : "")"
+                        @onclick="() => SetPreferred(true)">
+                    @Traductor.T("SOURCES_FILTER_PREFERRED")
+                </button>
+            </div>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="learn-empty">
+            <Spinner Type="SpinnerType.Border" Color="SpinnerColor.Primary" />
+        </div>
+    }
+    else if (_visible.Count == 0)
+    {
+        <div class="learn-empty">
+            <div class="learn-empty__icon"><Icon Name="IconName.JournalBookmarkFill" /></div>
+            <h2>@Traductor.T("SOURCES_EMPTY_TITLE")</h2>
+            <p>@Traductor.T("SOURCES_EMPTY_BODY")</p>
+        </div>
+    }
+    else
+    {
+        <SourcesList Entries="_visible" />
+    }
+</section>
+
+@code {
+    private List<SourceEntry> _all = new();
+    private List<SourceEntry> _visible = new();
+    private bool _loading = true;
+    private bool _preferredOnly;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Traductor.StaticOnLangChanged += OnLangChanged;
+        var catalog = await SourceCatalog.GetCatalogAsync();
+        // Preferred (course-endorsed) first, then by type, then title — a stable,
+        // scannable order for a reference page.
+        _all = catalog.Sources
+            .OrderByDescending(s => s.Preferred)
+            .ThenBy(s => (int)s.Type)
+            .ThenBy(s => s.Title, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        ApplyFilter();
+        _loading = false;
+    }
+
+    private void SetPreferred(bool only)
+    {
+        _preferredOnly = only;
+        ApplyFilter();
+    }
+
+    private void ApplyFilter()
+        => _visible = _preferredOnly ? _all.Where(s => s.Preferred).ToList() : _all;
+
+    private void OnLangChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Traductor.StaticOnLangChanged -= OnLangChanged;
+}

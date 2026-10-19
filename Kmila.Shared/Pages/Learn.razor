@@ -82,30 +82,54 @@
         </div>
     </header>
 
-    @* Quick filters — same pattern as Practice. Tapping the active chip
-       again clears the filter. *@
-    @* slot/segmented-control — chips wrapped in a pill background so the filter
-       reads as one segmented control, not 6 free-floating buttons. *@
-    <div class="catalog-filters" role="group" aria-label="@Traductor.T("CATALOG_FILTERS_LABEL")">
+    @* Grouping toggle — "By difficulty" (the original level tracks) vs
+       "By asignatura" (ESCOM ISC-2020 subjects, sub-grouped by bimestre). *@
+    <div class="catalog-filters" role="group" aria-label="@Traductor.T("LEARN_GROUPBY_LABEL")">
         <div class="catalog-filters__row">
-            <span class="catalog-filters__label">@Traductor.T("LEARN_FILTER_LEVEL")</span>
+            <span class="catalog-filters__label">@Traductor.T("LEARN_GROUPBY_LABEL")</span>
             <div class="kmila-slot-segmented">
                 <button type="button"
-                        class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm filter-chip @(_levelFilter == null ? "filter-chip--active is-active" : "")"
-                        @onclick="() => SetLevel(null)">
-                    @Traductor.T("CATALOG_FILTER_ALL")
+                        class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm filter-chip @(_groupMode == GroupMode.Difficulty ? "filter-chip--active is-active" : "")"
+                        @onclick="() => SetGroupMode(GroupMode.Difficulty)">
+                    @Traductor.T("LEARN_GROUPBY_DIFFICULTY")
                 </button>
-                @foreach (var lvl in _allLevels)
-                {
-                    <button type="button"
-                            class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm filter-chip filter-chip--@LevelClass(lvl) @(_levelFilter == lvl ? "filter-chip--active is-active" : "")"
-                            @onclick="() => SetLevel(lvl)">
-                        @LevelLabel(lvl)
-                    </button>
-                }
+                <button type="button"
+                        class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm filter-chip @(_groupMode == GroupMode.Asignatura ? "filter-chip--active is-active" : "")"
+                        @onclick="() => SetGroupMode(GroupMode.Asignatura)">
+                    @Traductor.T("LEARN_GROUPBY_ASIGNATURA")
+                </button>
             </div>
         </div>
     </div>
+
+    @* Difficulty filter — only meaningful when grouping BY difficulty. In
+       "By asignatura" mode the level dimension is hidden entirely (the level
+       filter is also ignored in ApplyFilter so nothing is silently filtered). *@
+    @* slot/segmented-control — chips wrapped in a pill background so the filter
+       reads as one segmented control, not 6 free-floating buttons. *@
+    @if (_groupMode == GroupMode.Difficulty)
+    {
+        <div class="catalog-filters" role="group" aria-label="@Traductor.T("CATALOG_FILTERS_LABEL")">
+            <div class="catalog-filters__row">
+                <span class="catalog-filters__label">@Traductor.T("LEARN_FILTER_LEVEL")</span>
+                <div class="kmila-slot-segmented">
+                    <button type="button"
+                            class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm filter-chip @(_levelFilter == null ? "filter-chip--active is-active" : "")"
+                            @onclick="() => SetLevel(null)">
+                        @Traductor.T("CATALOG_FILTER_ALL")
+                    </button>
+                    @foreach (var lvl in _allLevels)
+                    {
+                        <button type="button"
+                                class="kmila-btn-tab kmila-btn-tab--accent kmila-btn-tab--sm filter-chip filter-chip--@LevelClass(lvl) @(_levelFilter == lvl ? "filter-chip--active is-active" : "")"
+                                @onclick="() => SetLevel(lvl)">
+                            @LevelLabel(lvl)
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    }
 
     @if (_loading)
     {
@@ -121,7 +145,7 @@
             <p>@Traductor.T("LEARN_EMPTY_BODY")</p>
         </div>
     }
-    else if (!_grouped.Any() && !string.IsNullOrEmpty(_filter))
+    else if (!_tracks.Any() && !string.IsNullOrEmpty(_filter))
     {
         <div class="learn-empty">
             <div class="learn-empty__icon"><Icon Name="IconName.Search" /></div>
@@ -131,53 +155,66 @@
     }
     else
     {
-        @foreach (var group in _grouped)
+        @foreach (var track in _tracks)
         {
-            <section class="learn-track" aria-labelledby="@($"track-{group.Level}")">
+            <section class="learn-track" aria-labelledby="@($"track-{track.Key}")">
                 <header class="learn-track__header">
-                    <span class="home-section__eyebrow">@FormatTrackOrdinal(group.Level) &middot; @LevelLabel(group.Level)</span>
-                    <h2 id="@($"track-{group.Level}")">@TrackTitle(group.Level)</h2>
-                    <p>@TrackBlurb(group.Level)</p>
+                    <span class="home-section__eyebrow">@track.Eyebrow</span>
+                    <h2 id="@($"track-{track.Key}")">@track.Title</h2>
+                    @if (!string.IsNullOrEmpty(track.Blurb))
+                    {
+                        <p>@track.Blurb</p>
+                    }
                 </header>
 
-                <div class="learn-grid">
-                    @foreach (var module in group.Modules)
+                @foreach (var sub in track.SubGroups)
+                {
+                    @if (!string.IsNullOrEmpty(sub.Label))
                     {
-                        var title    = LessonCatalog.Localize(module.Titles, _lang, module.Id);
-                        var summary  = LessonCatalog.Localize(module.Summaries, _lang, string.Empty);
-                        var total    = module.Lessons.Count;
-                        var done     = _moduleCompletion.TryGetValue(module.Id, out var d) ? d : 0;
-                        var firstId  = module.Lessons.FirstOrDefault()?.Id;
-                        var href     = firstId == null ? "/learn" : $"/learn/{module.Id}/{firstId}";
-                        var pct      = total == 0 ? 0 : (int)Math.Round(100.0 * done / total);
-
-                        <a class="learn-card" href="@href" data-testid="@($"learn-card-{module.Id}")">
-                            <div class="learn-card__icon learn-card__icon--@IconVariant(module.Level)">
-                                <Icon Name="@ResolveIcon(module.Icon)" />
-                            </div>
-                            <div class="learn-card__body">
-                                <h3 class="learn-card__title">@title</h3>
-                                <p class="learn-card__summary">@summary</p>
-                                <div class="learn-card__meta">
-                                    <span class="learn-card__chip learn-card__chip--@LevelClass(module.Level)">@LevelLabel(module.Level)</span>
-                                    <span class="learn-card__count">
-                                        <Icon Name="IconName.Book" />
-                                        @total @Traductor.T(total == 1 ? "LEARN_LESSONS_ONE" : "LEARN_LESSONS_MANY")
-                                    </span>
-                                    @if (done > 0)
-                                    {
-                                        <span class="learn-card__progress-chip">
-                                            <Icon Name="IconName.CheckCircleFill" /> @done / @total
-                                        </span>
-                                    }
-                                </div>
-                            </div>
-                            <div class="learn-card__bar" role="presentation">
-                                <div class="learn-card__bar-fill" style="width: @(pct)%"></div>
-                            </div>
-                        </a>
+                        <h3 class="learn-subtrack__header">@sub.Label</h3>
                     }
-                </div>
+                    <div class="learn-grid">
+                        @foreach (var module in sub.Modules)
+                        {
+                            var title    = LessonCatalog.Localize(module.Titles, _lang, module.Id);
+                            var summary  = LessonCatalog.Localize(module.Summaries, _lang, string.Empty);
+                            var total    = module.Lessons.Count;
+                            var done     = _moduleCompletion.TryGetValue(module.Id, out var d) ? d : 0;
+                            var firstId  = module.Lessons.FirstOrDefault()?.Id;
+                            var href     = firstId == null ? "/learn" : $"/learn/{module.Id}/{firstId}";
+                            var pct      = total == 0 ? 0 : (int)Math.Round(100.0 * done / total);
+
+                            <a class="learn-card" href="@href" data-testid="@($"learn-card-{module.Id}")">
+                                <div class="learn-card__icon learn-card__icon--@CardVariant(module)">
+                                    <Icon Name="@ResolveIcon(module.Icon)" />
+                                </div>
+                                <div class="learn-card__body">
+                                    <h3 class="learn-card__title">@title</h3>
+                                    <p class="learn-card__summary">@summary</p>
+                                    <div class="learn-card__meta">
+                                        @if (_groupMode == GroupMode.Difficulty)
+                                        {
+                                            <span class="learn-card__chip learn-card__chip--@LevelClass(module.Level)">@LevelLabel(module.Level)</span>
+                                        }
+                                        <span class="learn-card__count">
+                                            <Icon Name="IconName.Book" />
+                                            @total @Traductor.T(total == 1 ? "LEARN_LESSONS_ONE" : "LEARN_LESSONS_MANY")
+                                        </span>
+                                        @if (done > 0)
+                                        {
+                                            <span class="learn-card__progress-chip">
+                                                <Icon Name="IconName.CheckCircleFill" /> @done / @total
+                                            </span>
+                                        }
+                                    </div>
+                                </div>
+                                <div class="learn-card__bar" role="presentation">
+                                    <div class="learn-card__bar-fill" style="width: @(pct)%"></div>
+                                </div>
+                            </a>
+                        }
+                    </div>
+                }
             </section>
         }
     }
@@ -190,7 +227,29 @@
     private int _totalLessons;
     private int _totalDone;
     private Dictionary<string, int> _moduleCompletion = new();
-    private List<(LessonLevel Level, List<LessonModule> Modules)> _grouped = new();
+    private List<TrackVM> _tracks = new();
+
+    /// <summary>How the catalog groups modules into tracks.</summary>
+    private enum GroupMode { Difficulty, Asignatura }
+    private GroupMode _groupMode = GroupMode.Difficulty;
+
+    /// <summary>One rendered track (a difficulty level or an asignatura).</summary>
+    private sealed class TrackVM
+    {
+        public string Key = "";
+        public string Eyebrow = "";
+        public string Title = "";
+        public string Blurb = "";
+        public List<SubGroup> SubGroups = new();
+    }
+
+    /// <summary>A card grid within a track; <see cref="Label"/> is the bimestre
+    /// sub-header (null in difficulty mode, which has a single unlabeled grid).</summary>
+    private sealed class SubGroup
+    {
+        public string? Label;
+        public List<LessonModule> Modules = new();
+    }
 
     /// <summary>(module, lesson) to resume, null when nothing's been opened.</summary>
     private (string ModuleId, string LessonId)? _continueTarget;
@@ -219,6 +278,13 @@
     private void SetLevel(LessonLevel? l)
     {
         _levelFilter = (_levelFilter == l) ? null : l;
+        ApplyFilter();
+    }
+
+    private void SetGroupMode(GroupMode mode)
+    {
+        if (_groupMode == mode) return;
+        _groupMode = mode;
         ApplyFilter();
     }
 
@@ -321,15 +387,64 @@
                 Match(LessonCatalog.Localize(l.Summaries, _lang, string.Empty)));
         }
 
-        _grouped = _manifest.Modules
-            .Where(m => !_levelFilter.HasValue || m.Level == _levelFilter.Value)
+        // Difficulty filter applies only in difficulty mode. In asignatura mode
+        // the level dimension is hidden, so its filter is ignored (the stored
+        // value is kept, so switching back to difficulty restores the filter).
+        var applyLevel = _groupMode == GroupMode.Difficulty && _levelFilter.HasValue;
+        var modules = _manifest.Modules
+            .Where(m => !applyLevel || m.Level == _levelFilter!.Value)
             .Where(ModuleMatches)
+            .ToList();
+
+        _tracks = _groupMode == GroupMode.Asignatura
+            ? BuildAsignaturaTracks(modules)
+            : BuildDifficultyTracks(modules);
+    }
+
+    /// <summary>Original grouping: one track per difficulty level, Beginner→Expert.</summary>
+    private List<TrackVM> BuildDifficultyTracks(List<LessonModule> modules) =>
+        modules
             .OrderBy(m => (int)m.Level)
             .ThenBy(m => m.Order)
             .GroupBy(m => m.Level)
-            .Select(g => (g.Key, g.OrderBy(m => m.Order).ToList()))
+            .Select(g => new TrackVM
+            {
+                Key = g.Key.ToString(),
+                Eyebrow = $"{FormatTrackOrdinal(g.Key)} · {LevelLabel(g.Key)}",
+                Title = TrackTitle(g.Key),
+                Blurb = TrackBlurb(g.Key),
+                SubGroups = new() { new SubGroup { Modules = g.OrderBy(m => m.Order).ToList() } }
+            })
             .ToList();
-    }
+
+    /// <summary>
+    /// ESCOM grouping: one track per asignatura (curriculum order), each
+    /// sub-grouped by bimestre. Modules with no asignatura fall into a
+    /// catch-all track at the end.
+    /// </summary>
+    private List<TrackVM> BuildAsignaturaTracks(List<LessonModule> modules) =>
+        modules
+            .GroupBy(m => m.Asignatura ?? string.Empty)
+            .OrderBy(g => Curriculum.OrderOf(g.Key))
+            .Select((g, i) => new TrackVM
+            {
+                Key = string.IsNullOrEmpty(g.Key) ? "other" : g.Key,
+                Eyebrow = $"{(i + 1):D2} · {AsignaturaLabel(g.Key)}",
+                Title = AsignaturaLabel(g.Key),
+                Blurb = string.Empty,
+                SubGroups = g
+                    .GroupBy(m => m.Bimestre)
+                    .OrderBy(bg => bg.Key)
+                    .Select(bg => new SubGroup
+                    {
+                        Label = bg.Key > 0
+                            ? string.Format(Traductor.T("LEARN_BIMESTRE_LABEL"), bg.Key)
+                            : null,
+                        Modules = bg.OrderBy(m => m.Order).ToList()
+                    })
+                    .ToList()
+            })
+            .ToList();
 
     /// <summary>Maps a manifest icon name to a concrete <see cref="IconName"/>.</summary>
     private IconName ResolveIcon(string name)
@@ -359,6 +474,13 @@
         LessonLevel.Expert       => "danger",
         _                        => "primary"
     };
+
+    private string AsignaturaLabel(string asignatura) => Traductor.T(Curriculum.LabelKey(asignatura));
+
+    /// <summary>Card icon color: by difficulty level, or by asignatura in that mode.</summary>
+    private string CardVariant(LessonModule m) => _groupMode == GroupMode.Asignatura
+        ? Curriculum.ColorVariant(m.Asignatura)
+        : IconVariant(m.Level);
 
     private string FormatTrackOrdinal(LessonLevel l) => ((int)l + 1).ToString("D2");
 
