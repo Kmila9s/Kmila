@@ -17,8 +17,9 @@ reuse the same `Kmila.Shared` RCL and engine, unchanged.
 - **Persistence**: the writable tree lives under `/kmila` in the in-memory
   (MEMFS) filesystem; `BrowserFsSync` + `wwwroot/js/kmila-wasm-fs.js` mirror it to
   IndexedDB so projects survive reloads.
-- **Assets** (Dictionaries, Learn/Practice/Concepts, FPGA devices) load over HTTP
-  from `_content/Kmila.Shared/...` instead of the server filesystem.
+- **Assets** (Dictionaries, Learn/Practice/Concepts, the Data/ bibliography
+  `sources.json`, FPGA devices) load over HTTP from `_content/Kmila.Shared/...`
+  instead of the server filesystem.
 
 ## Shared-code changes (all additive & gated — other heads unaffected)
 

@@ -6,11 +6,12 @@
 **Email:** dulricht1700@alumno.ipn.mx
 **Email 2:** danielulrichtamayo@gmail.com
 **Version:** 1.48.0
-**Last Updated:** October 11, 2026
+**Last Updated:** October 18, 2026
 
 > **Note:** the in-app version string (`APP_VERSION`) currently reads `v1.25.0`; this README tracks `1.27.0`. Pre-existing mismatch — reconcile when convenient.
 
 > **Recent changelog highlights** (full details in [`Documentacion/`](../../Documentacion/)):
+> - **2026-10-18 Data Sources (citations) + ESCOM asignatura grouping + multilingual re-sourcing (v1.51.0)** — additive; simulation core untouched. (1) **Data Sources / bibliography** — every lesson now cites its sources: a per-lesson **"Fuentes"** block (`Components/SourcesList.razor` + `.css`) at the foot of `LessonView` and a global **`/sources`** page (`Pages/Sources.razor`), backed by new `Models/Source.cs` + `Services/SourceCatalogService.cs` reading `wwwroot/Data/sources.json` (citation keys mirror the TT `references.bib`); a new **Fuentes** `NavMenu` entry. Books/standards link to **Google Books**, online sources to their canonical URL, and ESCOM-syllabus "preferred" reading is badged. DI registered in all three heads (`Kmila.Web`/`Kmila.Wasm`/`MauiProgram`) + a MAUI asset glob for `wwwroot/Data/**` in `Kmila.csproj`. (2) **Learn grouping toggle** — `Pages/Learn.razor` groups the 14 modules **By difficulty** (as before) or **By asignatura** — the 5 ESCOM ISC-2020 subjects (Matemáticas Discretas · Fundamentos de Diseño Digital · Diseño de Sistemas Digitales · Arquitectura de Computadoras · Sistemas en Chip) → *Unidad* sub-tracks, via new `Services/Curriculum.cs`; the level filter + per-card level chips hide in asignatura mode. New `LessonModule.Asignatura/Bimestre` + `Lesson.Sources` manifest keys. (3) **Content** — all 31 Learn lessons deep-extended, fact-verified, and cited against the ESCOM preferred bibliography, then re-translated across all 7 languages (Japanese in plain 常体). New `SOURCES_*` / `LEARN_GROUPBY_*` / `LEARN_ASIGNATURA_*` / `LEARN_BIMESTRE_LABEL` i18n keys in every dictionary. (4) **Docs (this batch)** — README (§3, §10.1 pages/components/services/models, file tree, `fig_5_3_c4_componentes` + `fig_5_13_1_app_learn_subsystem` diagrams), `Kmila.Wasm/README.md`, and the `Learn.razor` header comment synced; the rendered presentation PNGs still need regeneration from the updated mermaid.
 > - **2026-10-11 Split-editor move semantics + empty-pane collapse (v1.48.0)** — display/UI only; simulation core untouched. Finalizes the two-pane **Split Editor** (`Pages/Editor.razor`, `Components/EditorTabStrip.razor`, `Models/EditorPaneState.cs`) and reverses the earlier shared-buffer design per user request. Three UX fixes: (1) **Splitting now MOVES** the focused pane's active file into the new pane instead of mirroring it — `ToggleSplitAsync` removes the active tab from pane A, re-points pane A to a surviving tab via `ActivateTabAsync`, and focuses pane B, so the file lands in the new pane **only** (no duplicate, no shared `TextModel`). (2) **Split toggle is disabled with <2 open files** (`disabled="@(!IsSplit && _pane.Tabs.Count < 2)"` + `.editor-split-toggle:disabled` dim in `pages.css`) — with one file there'd be nothing left to split off. (3) **Emptying a pane collapses the split** to a single full-width pane (reclaiming the dead half-width band): new `CollapseEmptyPaneAsync` removes a pane whose last tab was **closed** (`CloseTabAsync`) **or dragged out** (`HandleTabMoveAsync`), keeping the "pane 0 survives, index 1 removed" invariant that the markup `@key` + `.editor-pane { flex:1 1 0 }` rely on. Unsplit-merge now dedups by `File.Id`. Tab drag-and-drop is PointerEvents-based (`app.js kmilaSetupTabDrag` + `@onpointerup`), and `kmilaRelayoutMonacoSoon` force-relayouts Monaco with explicit dims after any pane-count change (a no-arg `layout()` reuses Monaco's stale cached size, leaving a white band). Also fixes a FilesCard **double-open** (row `<li>` + inner name/Open buttons both fired `OpenFileAsync` — added `@onclick:stopPropagation`). Verified live on the web host via Chrome MCP. Cache-bust `pages.css?v=50` + `app.js?v=20261011b` in all 3 hosts; `APP_VERSION v1.48.0`.
 > - **2026-10-10 Editor-dock resize fix (v1.47.0)** — display/UI only; simulation core untouched. The bottom **EditorDock** grabber highlighted on hover but never resized the dock (collapse worked). Root cause was host-specific: on the **web/Blazor-Server** head every `pointermove` did a full SignalR round-trip (`OnGrabberMove`→`SetHeight`→`OnChange`→`PersistAsync`'s 3 `localStorage` writes + a re-render), flooding the circuit until the dock looked frozen; on the **MAUI macOS/iOS (WKWebView)** head the drag listened on `window` and relied on implicit pointer capture, which WKWebView withholds for trackpad/mouse (its pan recogniser fires `pointercancel`), so the drag never tracked. Fixed in `wwwroot/js/kmila-shared-head.js` (`kmilaDockDragStart`): the grabber now takes **explicit `setPointerCapture`** (passing `e.PointerId` from `EditorDock.razor`), listens for move/up/cancel/`lostpointercapture` **on the grabber** (window fallback), updates `--kmila-dock-height` **directly on the DOM** during the drag, and commits to C# **once** on pointer-up (persist + sync `DockState.Height`); JS clamp aligned to C#'s 200–1200. The previously silent `catch {}` around the interop now logs to the console. Cache-bust `kmila-shared-head.js?v=19` in all 3 hosts.
 > - **2026-10-10 Flow-diagram polish (v1.46.0)** — display/UI only; simulation core untouched. The **Flujo (control-flow)** tab (`Components/FlowDiagramViewer.razor` + `Services/PlantUmlFlowEmitter.cs`) overhauled. (1) **Decision-tree rendering** — `if/elsif/else` and `case` now draw as chained diamonds via the "no" edge (`sí`/`no` labels), dropping the redundant `then`/`elsif`/`else`/`when #n` label boxes (the "3× if" bug). (2) **Real selector & `when` values** — case labels read from the AST (`CaseStructure.SelectorName`, `CaseWhenBranch.Choices`/`IsOthers`), fixing the `switch("?")` / `when #1` export placeholders. (3) **Zoom toolbar** (in/out/fit/reset) over the shared pan-zoom lib, attaching only on render-key change so toolbar clicks no longer reset the zoom. (4) **Large diagrams** — Mermaid config in all 3 hosts sets `flowchart.useMaxWidth:false`, `maxEdges:2000`, `maxTextSize:200000`; CSS lets the SVG render at natural size (pan-zoom handles navigation) so wide diagrams no longer clip. (5) **Reliable PNG/SVG export** — PNG now rasterises at a ladder of pixel ratios (crisp 2× first, stepping down) and keeps the first that yields bytes, working around `canvas.toBlob` returning null on large canvases (the misleading "diagram not ready" toast); SVG is always lossless. New i18n keys `FLOW_YES/NO/ZOOM_FIT/PNG_TOO_LARGE/PNG_FAILED` across all 7 dictionaries.
@@ -60,7 +61,8 @@ Kmila-9s is a free, open-source, multiplatform academic platform focused on the 
 *   **Per-project source control (GitHub-backed):** A **Source Control** dock tab links each project to a GitHub repository and provides a VSCode-like flow — changes list (added/modified/deleted vs. a local snapshot), per-file unified diffs, commit → push, pull (fast-forward), history, and an opt-in per-project auto-commit-on-save. Built as our own version-control logic in pure C# over GitHub's Git Data API (no native git / no external libs); the token stays inside `GitHubAuth`. Requested OAuth scope is configurable (`public_repo` → `repo` for private repos) from Settings. Works on the MAUI and Blazor-Server heads; hidden in the WASM demo (GitHub is CORS-blocked there).
 *   **Schematic dock tab:** A new dock tab renders the synthesised netlist for the selected entity (`SchematicViewer.razor`, backed by `Interpreter.Synthesis.Synthesizer` and the `LayeredLayout` placement pass). Lets students cross-reference behavioural VHDL against its inferred structural form.
 *   **Runs history dock tab:** The **Runs** tab lists past simulation runs persisted via `SimulationSnapshotStore`, so students can compare results between code edits without re-running every time.
-*   **Lesson mode:** Two pages — `Learn.razor` (catalog) and `LessonView.razor` (per-lesson reader) — render the bundled lessons sourced from `LessonCatalog`, with progress saved by `LessonProgressStore`.
+*   **Lesson mode:** Two pages — `Learn.razor` (catalog) and `LessonView.razor` (per-lesson reader) — render the bundled lessons sourced from `LessonCatalog`, with progress saved by `LessonProgressStore`. The catalog has a **grouping toggle** — "By difficulty" (Beginner → Expert tracks) or **"By asignatura"** (the ESCOM ISC-2020 subjects — Matemáticas Discretas · Fundamentos de Diseño Digital · Diseño de Sistemas Digitales · Arquitectura de Computadoras · Sistemas en Chip — each split into *Unidad* sub-tracks via the `Curriculum` service); the difficulty filter + level chips hide in asignatura mode.
+*   **Data Sources (citations / bibliography):** Every lesson cites where its content comes from. A per-lesson **"Fuentes"** block (`SourcesList` component) at the foot of `LessonView` lists that lesson's sources, and a global **`/sources`** page (`Sources.razor`) renders the whole app bibliography (the in-app analogue of the thesis's *Referencias*). Sources live in `wwwroot/Data/sources.json` and are resolved by `SourceCatalogService`; lessons reference them by citation key (`Lesson.Sources`, mirroring `\cite{}`). Books/standards link to **Google Books**, online sources to their canonical URL, and ESCOM-syllabus "preferred" reading is badged. Reachable from the **Fuentes** sidebar entry.
 *   **Concepts track:** An interactive concepts curriculum (`Concepts.razor` catalog, `ConceptView.razor` reader, `ConceptExerciseView.razor` block-exercise runner) sourced from `ConceptCatalog` and the `wwwroot/Concepts/` bundle (7-language content + block exercises), with progress in `ConceptProgressStore`. Exercises run in the block editor and animate via `ExecutionPlayer`.
 *   **Practice mode (auto-graded exercises):** `Practice.razor` (catalog) + `PracticeView.razor` (workspace) present exercises in three modalities — **m1 from-zero**, **m2 fix-a-bug**, **m3 fill-a-gap** — sourced from `PracticeCatalog` and the `wwwroot/Practice/` bundle. The in-process grader (`Services/Practice/PracticeEvaluator`) builds the candidate VHDL, runs it against reference test cases, and returns a verdict (BuildError > RuntimeError > WrongAnswer > Solved); attempts persist through `PracticeAttemptStore` and a whole session can be exported (`PracticeSessionExportService`). Note the sibling `PracticeValidator` tool is a *separate* offline authoring/validation utility — the shipping grader is in-process.
 *   **Block Editor with VHDL round-trip:** `BlockEditor.razor` (backed by the in-house `wwwroot/js/kmila-blocks.js` DOM engine, not Blockly) offers a Blocks view-tab in the editor. `VhdlBlockBuilder` parses VHDL → blocks and `VhdlBlockEmitter` emits blocks → VHDL, so students can move between text and blocks losslessly.
@@ -502,8 +504,9 @@ The `Kmila.Shared` project contains the core logic, UI components, and data mode
 *   **ProjectsView.razor** — Project list as responsive card grid (auto-fill at 280px track). Header with live search, count pill, primary **Create new** CTA, ghost **Try a sample** CTA, and **Examples** gallery button that opens a modal showing the pre-wired catalog (Demo Board · Counter Clock · Traffic Light FSM · 8-bit Shift Register). Each catalog entry creates the project with its `.kviz` sidecar and jumps straight onto the Visual tab. Empty / no-match states. Per-project hover reveal of Open + Delete kebab (Rename inline). `/projects/create` route auto-opens the create modal.
 *   **Editor.razor** — Workbench: Monaco at top with **four view-tabs** (Code · Blocks · Step replay · Visual — the 4th is the visual-runtime canvas, see `Components/VisualRun/`), **RunBar** (build / run state machine + time + scale + FPGA chip), **EditorDock** (7 tabs: Entities · Schematic · Ports · Waveforms · Runs · Files · Output), **StatusBar**. Handles per-project reload via `OnParametersSetAsync`, marshals `ProgramBuilder` events into `SimulationParameters` + `BuildLog`, auto-switches the active dock tab on build/run transitions. The Visual view-tab is lazy-mounted on first visit (`_visualVisited` latch) — it parses + holds a `VisualRunCoordinator`, so it's heavier than the other tabs. Subscribes to `Traductor.StaticOnLangChanged` (2026-07-19) so the four view-tab labels + the sibling inline `Traductor.T(...)` strings owned directly by this page (unsaved-hint, empty states, Ln/Col abbreviations, split toggle, MD preview/source labels, waveform empty state, `PageTitle`) retranslate immediately on language change — before this the tab labels stayed frozen because none of them were routed through a self-subscribing child component.
 *   **Visual.razor** — Thin route wrapper for `/visual/{ProjectId}` direct URL access. Renders `<VisualPanel EmbeddedMode="false">` with a full header (back-button + project title) — same component the Editor's Visual view-tab uses with `EmbeddedMode="true"` to suppress the header. Useful for share-links + Playwright tests.
-*   **Learn.razor** — Lesson catalog. Reads from `LessonCatalog`, paints lesson cards with progress badges sourced from `LessonProgressStore`. Entry point for the in-app teaching path that complements the interactive editor.
-*   **LessonView.razor** — Per-lesson reader. Renders Markdown content via `MarkdownRenderer`, marks completion in `LessonProgressStore`, and links back to a sample editor session when a lesson has an associated VHDL exercise.
+*   **Learn.razor** — Lesson catalog. Reads from `LessonCatalog`, paints lesson cards with progress badges sourced from `LessonProgressStore`. Entry point for the in-app teaching path that complements the interactive editor. Offers a **"Group by"** toggle — *Difficulty* (level tracks) or *Asignatura* (ESCOM subjects → *Unidad* sub-tracks, via the `Curriculum` service); the level filter chips + per-card level chip render only in difficulty mode.
+*   **LessonView.razor** — Per-lesson reader. Renders Markdown content via `MarkdownRenderer`, marks completion in `LessonProgressStore`, and links back to a sample editor session when a lesson has an associated VHDL exercise. Shows asignatura/Unidad chips and, when the lesson has citation keys (`Lesson.Sources`), a **"Fuentes"** block (`SourcesList`) resolving them against `SourceCatalogService`.
+*   **Sources.razor** — Global **Data Sources** page (`/sources`). Renders the whole `sources.json` bibliography via `SourcesList` as an IEEE-style numbered list, with an *All / Bibliografía del plan* (preferred-only) filter. The in-app analogue of the thesis's *Referencias*; linked from the **Fuentes** nav entry.
 *   **Concepts.razor** — Concepts-track catalog. Reads from `ConceptCatalog` (`wwwroot/Concepts/` bundle, 7 languages) and paints concept cards with progress from `ConceptProgressStore`.
 *   **ConceptView.razor** — Per-concept reader with theory content and links into the block-based exercises.
 *   **ConceptExerciseView.razor** — Block-exercise runner for a concept. Hosts the block editor and the `ExecutionPlayer` step-through so students build + watch a design execute inline.
@@ -542,6 +545,7 @@ The `Kmila.Shared` project contains the core logic, UI components, and data mode
 *   **FsmAnimator.razor** — Animates a finite-state-machine view (`FsmAnimation` model) — highlights the active state and transitions as a live sim advances.
 *   **GateAnimator.razor** — Animates gate-level activity (`GateAnimation` model) over the synthesised netlist, pulsing gates as their inputs change.
 *   **QuizletPanel.razor** — Inline quiz widget used by the Concepts / Learn tracks to check understanding between content sections.
+*   **SourcesList.razor** (+ `.razor.css`) — Shared bibliography renderer. Given a list of `SourceEntry`, draws an IEEE-style numbered list (title + muted author/publisher/edition/year/access-date meta, a type chip, and a "Recomendada" badge for ESCOM-preferred sources). Used by both `LessonView`'s per-lesson "Fuentes" block and the global `Sources` page. Book/standard/report titles link to Google Books; online sources link to their URL.
 *   **KmilaTooltip.razor** — Shared CSS-only hover/focus tooltip wrapper (RTL-aware, self-retranslating on `Traductor.StaticOnLangChanged`) used app-wide on icon buttons.
 *   **KmilaToastHost.razor** / **KmilaToastService** — App-level toast host + service for transient success/error notifications.
 *   **KmilaTextSizeSwitcher.razor** — Text-size (accessibility) picker, sibling to the theme + language switchers.
@@ -565,7 +569,7 @@ The `Kmila.Shared` project contains the core logic, UI components, and data mode
 
 #### Layout
 *   **MainLayout.razor** — Shell: mounts `NavMenu` + `TopBar` + content article. Applies `.content--wide` when the current route is `/editor/…` so the workbench fills the full viewport (ordinary pages keep the 1440 px reading cap). Subscribes to `NavigationManager.LocationChanged` so the class flips immediately on navigation.
-*   **NavMenu.razor** — Custom-built sidebar (no BB `Sidebar2`). Logo lockup + version chip, three sections: **Workspace** (Projects / New), **Your projects** (live list with counts, auto-refreshes on `Projects.OnListChanged`), and **System** (Settings · Logs). Collapsible to an icons-only rail on desktop; off-canvas drawer on mobile via `SidebarState` service.
+*   **NavMenu.razor** — Custom-built sidebar (no BB `Sidebar2`). Logo lockup + version chip, then sections: **Project** (Projects / Create), **Learning** (Learn · Practice · Concepts · **Fuentes** — the Data Sources / bibliography page at `/sources`), **Recent projects** (live list with counts, auto-refreshes on `Projects.OnListChanged`), and **System** (Settings · Logs · Privacy). Learn/Practice/Concepts carry done/total progress badges. Collapsible to an icons-only rail on desktop; off-canvas drawer on mobile via `SidebarState` service.
 *   **TopBar.razor** — Hamburger (mobile) · breadcrumbs · Configurations pill · FPGA picker · language · theme. All `<details>` popovers auto-close on outside-click / Escape via a global handler in the inline `<head>` script.
 
 #### Modals
@@ -689,6 +693,8 @@ classDiagram
 *   **MarkdownRenderer.cs** — Markdown → HTML rendering for `LessonView` and `MarkdownModal`. Sanitised; respects the active language so code-fence labels translate.
 *   **LessonCatalog.cs** — In-memory catalog of bundled lessons. Read on app start; consumed by `Learn.razor`.
 *   **LessonProgressStore.cs** — Per-user lesson progress flags persisted in SQLite. Used by Learn / LessonView for badges and the "Continue where you left off" CTA on Home.
+*   **SourceCatalogService.cs** — Loads the app-wide bibliography from `wwwroot/Data/sources.json` (cached, same stream-delegate pattern as `LessonCatalog`), and resolves a lesson's citation keys to `SourceEntry` records (`ResolveAsync`). Consumed by `LessonView`'s "Fuentes" block and the `Sources` page. Registered as a singleton in all three heads (`Kmila.Web`/`Kmila.Wasm`/`MauiProgram`).
+*   **Curriculum.cs** — Static ESCOM ISC-2020 metadata for the Learn catalog's "By asignatura" grouping: the fixed asignatura order, the `Traductor` label keys, and the colour variants. Keeps `Learn.razor` and `LessonView.razor` consistent; the per-module `asignatura`/`bimestre` values live in `Learn/manifest.json`.
 *   **AutoErrorReporter.cs** — Hooks into `AppDomain.CurrentDomain.UnhandledException` and Blazor circuit error events; routes serialised reports through `FeedbackHelper`.
 *   **FeedbackHelper.cs** — Glue for the user-feedback flow: opens GitHub issue templates pre-filled with environment + recent log lines from `AppLogStore`.
 *   **GitHubAuth.cs** — Optional sign-in helper for the feedback path; used to attach an authenticated identity to issue submissions when the user opts in.
@@ -762,7 +768,8 @@ classDiagram
 *   **SimulationSnapshot.cs**: A persisted past run (project · entity · port count · duration · inline `WaveformData` JSON) backing the Runs tab + Compare
 *   **ExecutionTimeline.cs**: Frame-based timeline (`ExecutionTimelineDoc`) that `ReplayBuilder` emits and `ExecutionPlayer` / `StepReplayPanel` animate
 *   **Concept.cs / ConceptExercise.cs**: Concepts-track content model + its block-based exercise definition
-*   **Lesson.cs**: Learn-track lesson model (Markdown body, optional `inlinePlayer` timeline, sample VHDL)
+*   **Lesson.cs**: Learn-track lesson model (Markdown body, optional `inlinePlayer` timeline, sample VHDL). `Lesson` carries `Sources` (citation keys → `sources.json`); `LessonModule` carries `Asignatura` + `Bimestre` (ESCOM grouping, see `Curriculum`)
+*   **Source.cs**: Bibliography model for the Data Sources feature — `SourceEntry` (key · type · title · author · url · year · edition · `preferred`), `SourceCatalog` (root of `wwwroot/Data/sources.json`), and the `SourceType` enum (book / online / standard / article / paper / report). Keys mirror the TT thesis `references.bib`
 *   **FsmAnimation.cs / GateAnimation.cs**: Animation models driving `FsmAnimator` / `GateAnimator`
 *   **EditorSession.cs / EditorPaneState.cs**: Persisted per-project editor session + split-pane layout (backing `EditorSessionStore`)
 *   **Schematic/GateDocumentation.cs**: Per-gate documentation metadata for the schematic viewer (glyphs in `Components/Schematic/GateGlyphs.cs`)
@@ -1223,6 +1230,7 @@ sudo systemctl daemon-reload && sudo systemctl enable --now kmila
 │   ├── RunBar.razor
 │   ├── RunsPanel.razor
 │   ├── SchematicViewer.razor
+│   ├── SourcesList.razor         (+ SourcesList.razor.css)
 │   ├── StatusBar.razor
 │   ├── StepReplayPanel.razor
 │   ├── WaveformViewer.razor
@@ -1265,6 +1273,7 @@ sudo systemctl daemon-reload && sudo systemctl enable --now kmila
 │   ├── SchematicExportRequest.cs
 │   ├── SelectedFPGA.cs
 │   ├── SimulationSnapshot.cs
+│   ├── Source.cs
 │   ├── TimeScale.cs
 │   ├── ToastMessages.cs
 │   ├── WaveformData.cs
@@ -1289,6 +1298,7 @@ sudo systemctl daemon-reload && sudo systemctl enable --now kmila
 │   ├── Privacy.razor
 │   ├── ProjectsView.razor  (+ ProjectsView.CapstoneCalc.cs)
 │   ├── Settings.razor
+│   ├── Sources.razor
 │   └── Visual.razor
 ├── Repositories/
 │   ├── Projects.cs
@@ -1303,6 +1313,7 @@ sudo systemctl daemon-reload && sudo systemctl enable --now kmila
 │   ├── ConceptProgressStore.cs
 │   ├── ConfigurationService.cs
 │   ├── ConsoleToLoggerWriter.cs
+│   ├── Curriculum.cs
 │   ├── EditorDockState.cs
 │   ├── EditorSessionStore.cs
 │   ├── FeedbackHelper.cs
@@ -1328,6 +1339,7 @@ sudo systemctl daemon-reload && sudo systemctl enable --now kmila
 │   ├── SimulationCoordinator.cs
 │   ├── SimulationParameters.cs
 │   ├── SimulationSnapshotStore.cs
+│   ├── SourceCatalogService.cs
 │   ├── StimulusBuilder.cs
 │   ├── TimelineRunner.cs
 │   ├── TourCatalog.cs
@@ -1386,6 +1398,7 @@ sudo systemctl daemon-reload && sudo systemctl enable --now kmila
     │   └── vhdl-data/            (per-language keyword/IEEE docs, 7 files)
     ├── Concepts/                 (concept content: en/es/fr/de/ch/jp/ar + exercises + manifest.json)
     ├── Learn/                    (lesson content per language + manifest.json)
+    ├── Data/                     (sources.json — Data Sources / bibliography)
     ├── Practice/                 (m1-from-zero / m2-fix-bug / m3-fill-gap + manifest.json)
     ├── Templates/                (academic · counter · empty · fsm · library + manifest.json)
     ├── Devices/                  (34 FPGA device JSON specs)
@@ -2100,9 +2113,9 @@ graph TB
     classDef layerRepo fill:#438DD5,color:#fff
     classDef external fill:#999,color:#fff
 
-    paginas["<b>9 Paginas Razor</b><br/>Home · ProjectsView · Editor ·<br/>Learn · LessonView ·<br/>Practice · PracticeView ·<br/>Settings · Logs"]:::layerPage
+    paginas["<b>12+ Paginas Razor</b><br/>Home · ProjectsView · Editor ·<br/>Learn · LessonView · Concepts · Sources ·<br/>Practice · PracticeView ·<br/>Settings · Logs"]:::layerPage
     componentes["<b>25+ Componentes UI</b><br/>RunBar · EditorDock ·<br/>WaveformViewer · SchematicViewer ·<br/>EntityResourceUsage · 8 modales"]:::layerPage
-    servicios["<b>25+ Servicios</b><br/>ProgramBuilder · StimulusBuilder ·<br/>SimulationParameters · ConfigurationService ·<br/>EditorSessionStore · EditorDockState ·<br/>SignalCursorBus · BuildLog · Traductor ·<br/>LessonCatalog · LessonProgressStore ·<br/>PracticeCatalog · PracticeEvaluator · PracticeAttemptStore ·<br/>SimulationSnapshotStore · ProjectBundleService ·<br/>UserAssetStore · JSONFileReader · SelectedFPGA ·<br/>SchematicExporter · WaveformExporter ·<br/>AppLogStore · AutoErrorReporter"]:::layerService
+    servicios["<b>25+ Servicios</b><br/>ProgramBuilder · StimulusBuilder ·<br/>SimulationParameters · ConfigurationService ·<br/>EditorSessionStore · EditorDockState ·<br/>SignalCursorBus · BuildLog · Traductor ·<br/>LessonCatalog · LessonProgressStore ·<br/>SourceCatalogService · Curriculum ·<br/>PracticeCatalog · PracticeEvaluator · PracticeAttemptStore ·<br/>SimulationSnapshotStore · ProjectBundleService ·<br/>UserAssetStore · JSONFileReader · SelectedFPGA ·<br/>SchematicExporter · WaveformExporter ·<br/>AppLogStore · AutoErrorReporter"]:::layerService
     repos["<b>3 Repositorios</b><br/>Projects · ProjectFiles · JSONFileReader"]:::layerRepo
     db[("<b>ApplicationDbContext</b><br/>Projects, ProjectFiles, AppSettings,<br/>SimulationSnapshot;<br/>LessonProgress y PracticeAttempts<br/>via claves prefijadas")]:::layerService
 
@@ -2197,7 +2210,8 @@ flowchart TD
     C --> D[Leer manifest.json desde<br/>wwwroot/Learn/&lt;lang&gt;/manifest.json]
     D --> E[UserAssetStore.ListUserLessonPaths]
     E --> F[Merge: user packs override bundled]
-    F --> G[Mostrar grid de modulos y lecciones]
+    F --> GA{Group by:<br/>Dificultad / Asignatura}
+    GA --> G[Mostrar grid: por nivel, o por<br/>asignatura/Unidad via Curriculum]
     G --> H[LessonProgressStore.GetProgressAsync]
     H --> I[Pintar badges completado / pendiente]
 
@@ -2215,6 +2229,11 @@ flowchart TD
     O --> T{Click 'Try in Editor' en Sample}
     T --> U[Crear proyecto temporal con Sample.Vhdl]
     U --> V([Navega a /editor/&lt;tempId&gt;])
+
+    L --> FA[SourcesList: bloque 'Fuentes' de la leccion]
+    FA --> FB[SourceCatalogService.ResolveAsync<br/>lee wwwroot/Data/sources.json]
+    A2([Estudiante navega a /sources]) --> FC[Sources.razor: bibliografia completa]
+    FC --> FB
 ```
 
 ### `fig_5_13_2_app_practice_grading` — Practice grading flow (new)
