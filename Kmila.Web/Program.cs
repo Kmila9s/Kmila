@@ -259,6 +259,39 @@ public sealed class Program
             }, logger);
         });
 
+        // Bibliography catalog — Data/sources.json. Same path-probing loader as
+        // LessonCatalog so it resolves in dev and production Web deployments.
+        builder.Services.AddSingleton<SourceCatalogService>(provider =>
+        {
+            var env = provider.GetRequiredService<IWebHostEnvironment>();
+            var logger = provider.GetRequiredService<ILoggerFactory>()
+                                 .CreateLogger<SourceCatalogService>();
+            return new SourceCatalogService(async path =>
+            {
+                await Task.CompletedTask;
+                var pathsToTry = new List<string>
+                {
+                    Path.Combine(env.ContentRootPath, "..", "Kmila.Shared", "wwwroot", path),
+                    Path.Combine(Directory.GetCurrentDirectory(), "..", "Kmila.Shared", "wwwroot", path)
+                };
+                if (!string.IsNullOrEmpty(env.WebRootPath) && Directory.Exists(env.WebRootPath))
+                {
+                    pathsToTry.Add(Path.Combine(env.WebRootPath, "_content", "Kmila.Shared", path));
+                    pathsToTry.Add(Path.Combine(env.WebRootPath, path));
+                }
+                foreach (var candidate in pathsToTry)
+                {
+                    try
+                    {
+                        var normalized = Path.GetFullPath(candidate);
+                        if (File.Exists(normalized)) return File.OpenRead(normalized);
+                    }
+                    catch { /* try next */ }
+                }
+                throw new FileNotFoundException($"Source asset not found: {path}");
+            }, logger);
+        });
+
         // Progress tracker for lessons — scoped so each circuit gets its own
         // in-memory cache layered over the shared AppSettings table.
         builder.Services.AddScoped<LessonProgressStore>();

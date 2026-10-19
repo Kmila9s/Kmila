@@ -4,6 +4,7 @@
 @using Kmila.Shared.Repositories
 @using Microsoft.Extensions.DependencyInjection
 @inject LessonCatalog Catalog
+@inject SourceCatalogService SourceCatalog
 @inject LessonProgressStore Progress
 @inject Projects Projects
 @inject ProjectFiles ProjectFiles
@@ -32,6 +33,19 @@
         {
             <div class="lesson-chip-row">
                 <span class="learn-card__chip learn-card__chip--@LevelClass(_lesson.Level)">@LevelLabel(_lesson.Level)</span>
+                @if (!string.IsNullOrEmpty(_module.Asignatura))
+                {
+                    <span class="lesson-chip lesson-chip--asignatura">
+                        <Icon Name="IconName.MortarboardFill" />
+                        @AsignaturaLabel(_module.Asignatura)
+                    </span>
+                    @if (_module.Bimestre > 0)
+                    {
+                        <span class="lesson-chip lesson-chip--bimestre">
+                            @string.Format(Traductor.T("LEARN_BIMESTRE_LABEL"), _module.Bimestre)
+                        </span>
+                    }
+                }
                 <span class="lesson-chip lesson-chip--kind">
                     <Icon Name="@KindIcon(_lesson.Kind)" />
                     @KindLabel(_lesson.Kind)
@@ -177,6 +191,16 @@
                     </KmilaTooltip>
                 </aside>
             }
+
+            @if (_sources is { Count: > 0 })
+            {
+                @* "Fuentes" — where this lesson's content comes from. Keys on
+                   Lesson.Sources resolve against Data/sources.json; the same
+                   entries appear in the global /sources bibliography. *@
+                <section class="lesson-sources">
+                    <SourcesList Entries="_sources" Heading="@Traductor.T("LESSON_SOURCES_HEADING")" />
+                </section>
+            }
         </article>
 
         <footer class="lesson-footer">
@@ -236,6 +260,7 @@
     private ExecutionTimelineDoc? _timeline;
     private GateAnimationDoc? _gates;
     private FsmAnimationDoc? _fsm;
+    private List<SourceEntry> _sources = new();
     private bool _completed;
     private bool _loading = true;
     private bool _openingSample;
@@ -320,6 +345,12 @@
         _fsm = _lesson.FsmAnimation
             ? await Catalog.GetFsmAnimationAsync(_module.Id, _lesson.Id, _lang)
             : null;
+
+        // Resolve the lesson's citation keys to bibliography entries for the
+        // "Fuentes" block. Unknown keys are dropped silently by the service.
+        _sources = _lesson.Sources.Count > 0
+            ? await SourceCatalog.ResolveAsync(_lesson.Sources)
+            : new();
 
         // Record this as "last opened" so the catalog's Continue banner can
         // resume from here next time — fire-and-forget on purpose, the page
@@ -505,6 +536,8 @@
         _                        => l.ToString()
     };
     private string LevelClass(LessonLevel l) => l.ToString().ToLowerInvariant();
+
+    private string AsignaturaLabel(string asignatura) => Traductor.T(Curriculum.LabelKey(asignatura));
 
     private IconName KindIcon(LessonKind k) => k switch
     {

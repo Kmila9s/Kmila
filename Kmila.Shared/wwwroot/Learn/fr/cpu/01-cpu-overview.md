@@ -29,6 +29,28 @@ Les mêmes cinq tâches peuvent être arrangées de trois façons dans le silici
 
 **Pipeliné.** Cinq instructions en vol simultanément, chacune dans un étage différent. Pour : une nouvelle instruction sort à chaque cycle, donc débit ≈ monocycle avec une horloge bien plus rapide. Contre : aléas (données, contrôle, structurels) auxquels le reste d'un cours d'architecture est consacré. Cœurs RISC-V, ARM Cortex-M, AMD Zen — tous pipelinés.
 
+## RISC, CISC, et pourquoi les étages sont si nets
+
+Ces cinq étages bien propres ne sont pas un hasard — c'est ce qu'on obtient quand le jeu d'instructions est conçu pour être régulier. C'est toute la philosophie **RISC** (Reduced Instruction Set Computer) autour de laquelle le cursus ESCOM est construit :
+
+- **Instructions à largeur fixe** (chaque instruction fait le même nombre de bits), donc fetch et decode deviennent triviaux.
+- **Architecture load/store** — seules des instructions dédiées de load et de store touchent la mémoire ; l'arithmétique travaille de registre à registre. C'est pour ça que MEM est un étage séparé bien net.
+- **Beaucoup de registres généraux**, pour que les compilateurs gardent les valeurs dans le register file au lieu de les déverser en mémoire.
+
+Le **CISC** (Complex Instruction Set Computer, par exemple x86) fait le pari inverse : instructions à longueur variable, opérations qui lisent la mémoire *et* calculent en une seule instruction, et des centaines de modes d'adressage. Puissant par instruction, mais bien plus dur à pipeliner proprement. Les puces x86 modernes décomposent d'ailleurs en interne chaque instruction complexe en micro-opérations façon RISC.
+
+Une dernière distinction à nommer : les machines **Von Neumann** gardent programme et données dans une seule mémoire (un bus, simple, mais le code et les données se la disputent) ; les machines **Harvard** utilisent des mémoires d'instructions et de données séparées, ce qui est exactement ce qui permet à un cœur monocycle ou pipeliné de récupérer une instruction *et* d'accéder aux données dans le même tick. Le CPU que vous allez construire est de fait une Harvard — une ROM pour le code, un chemin séparé pour les données.
+
+## Formats d'instruction
+
+Le decode n'est facile que parce que les champs de chaque instruction sont à des positions fixes. Le RISC classique (façon MIPS, le modèle qu'utilise l'ESCOM) a trois formats :
+
+- **Type R** — opérations ALU registre-à-registre : `opcode | rs | rt | rd | shamt | funct`. Deux registres sources, un de destination, une quantité de décalage, et un sélecteur de fonction.
+- **Type I** — immédiat / load / store / branchement : `opcode | rs | rt | immediate`. L'immédiat de 16 bits est une constante ou un offset d'adresse.
+- **Type J** — sauts : `opcode | address`. Un grand champ d'adresse pour atteindre des cibles lointaines.
+
+Le petit ISA jouet ci-dessous est un cousin à deux champs de cette idée : un opcode de 4 bits et un immédiat de 4 bits. Même principe, en plus petit.
+
 ## Le projet CPU de ce cursus
 
 Votre premier CPU sera **monocycle** pour rester maniable. Tout se passe en combinatoire dans une période d'horloge :
@@ -69,3 +91,19 @@ Une fois le squelette qui marche, vous avez une **machine programmable**. Change
 - Pipeliner le tout.
 
 Le chemin de cette machine 4-instructions à un cœur RV32I RISC-V complet est long, mais chaque étape n'est que plus du même motif que vous vous apprêtez à construire.
+
+## Qui pilote tout ça : l'unité de contrôle
+
+Le chemin de données (PC, ROM, register file, ALU, mémoire) est la tuyauterie ; l'**unité de contrôle** est ce qui ouvre les bonnes vannes à chaque cycle. Elle lit l'opcode et pilote les signaux de contrôle : quelle opération ALU, si le register file écrit ce cycle-ci, si la mémoire lit ou écrit, d'où vient le prochain PC. Deux façons de la construire :
+
+- **Contrôle câblé** — l'opcode alimente de la logique combinatoire (ou une petite machine à états) qui produit directement les signaux. Rapide, et le choix naturel pour un RISC propre. C'est ce que fait votre squelette avec son `case` sur l'opcode.
+- **Contrôle microprogrammé** — chaque instruction est un petit programme de *microinstructions* stocké dans une ROM de microcode, qui déroule les signaux de contrôle. Flexible, et historiquement la façon dont les machines CISC ont dompté leur complexité, au prix de la vitesse. Le programme ESCOM nomme les deux (microinstrucciones, memorias de microcódigo) pour que vous sachiez les distinguer.
+
+À côté se trouve le **registre d'état** — les flags produits par votre ALU (zéro, retenue, débordement, négatif). Les branchements conditionnels ne sont que l'unité de contrôle qui teste un de ces flags pour décider du prochain PC.
+
+## À retenir
+
+- Tout CPU, grand ou petit, fait tourner la même boucle : fetch, decode, execute, memory, writeback.
+- Ces étages peuvent être monocycle (simple, horloge lente), multicycle (horloge plus rapide, plusieurs cycles chacun), ou pipelinés (recouverts, débit maximal).
+- Le RISC garde des instructions à largeur fixe et load/store pour que decode et pipeline restent propres ; le CISC troque ça contre de la puissance par instruction.
+- Le chemin de données déplace les données ; l'unité de contrôle — câblée ou microprogrammée — décide de ce qui va où, à partir de l'opcode et des flags d'état.

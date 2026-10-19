@@ -29,6 +29,28 @@ The same five jobs can be arranged three different ways in silicon:
 
 **Pipelined.** Five instructions in flight at once, each in a different stage. Pros: one new instruction retires every clock, so throughput ≈ single-cycle at a much faster clock. Cons: hazards (data, control, structural) that the rest of a Computer Architecture course is dedicated to. RISC-V cores, ARM Cortex-M, AMD Zen — all pipelined.
 
+## RISC, CISC, and why the stages are so clean
+
+Those five neat stages aren't an accident — they're what you get when the instruction set is designed to be regular. That's the **RISC** (Reduced Instruction Set Computer) philosophy the ESCOM course is built around:
+
+- **Fixed-width instructions** (every instruction is the same number of bits), so fetch and decode are trivial.
+- **Load/store architecture** — only dedicated load and store instructions touch memory; arithmetic works register-to-register. That's why MEM is a clean separate stage.
+- **Many general-purpose registers**, so compilers keep values in the register file instead of spilling to memory.
+
+**CISC** (Complex Instruction Set Computer, e.g. x86) takes the opposite bet: variable-length instructions, operations that read memory *and* compute in one instruction, and hundreds of addressing modes. Powerful per instruction, but much harder to pipeline cleanly. Modern x86 chips actually crack each complex instruction into RISC-like micro-ops internally.
+
+One more split worth naming: **Von Neumann** machines keep program and data in one memory (one bus, simple, but code and data contend for it); **Harvard** machines use separate instruction and data memories, which is exactly what lets a single-cycle or pipelined core fetch an instruction *and* access data in the same tick. The CPU you're about to build is effectively Harvard — a ROM for code, a separate path for data.
+
+## Instruction formats
+
+Decode is only easy because each instruction's fields sit in fixed positions. Classic RISC (MIPS-style, the model ESCOM uses) has three formats:
+
+- **R-type** — register-to-register ALU ops: `opcode | rs | rt | rd | shamt | funct`. Two source registers, one destination, a shift amount, and a function selector.
+- **I-type** — immediate / load / store / branch: `opcode | rs | rt | immediate`. The 16-bit immediate is a constant or an address offset.
+- **J-type** — jumps: `opcode | address`. A large address field for reaching far targets.
+
+The toy ISA below is a two-field cousin of this idea: a 4-bit opcode and a 4-bit immediate. Same principle, smaller.
+
 ## The CPU project in this curriculum
 
 Your first CPU will be **single-cycle** to keep it tractable. Everything happens combinationally inside one clock period:
@@ -69,3 +91,19 @@ From here you can grow:
 - Pipeline the whole thing.
 
 The path from this 4-instruction machine to a full RV32I RISC-V core is long, but every step is just more of the same pattern you're about to build.
+
+## Who steers all this: the control unit
+
+The datapath (PC, ROM, register file, ALU, memory) is the plumbing; the **control unit** is what opens the right valves each cycle. It reads the opcode and drives the control signals: which ALU operation, whether the register file writes this cycle, whether memory reads or writes, where the next PC comes from. Two ways to build it:
+
+- **Hardwired control** — the opcode feeds combinational logic (or a tiny state machine) that produces the signals directly. Fast, and the natural choice for a clean RISC. This is what your scaffold does with its `case` on the opcode.
+- **Microcoded control** — each instruction is a short program of *microinstructions* stored in a microcode ROM, which steps out the control signals. Flexible and historically how CISC machines tamed their complexity, at the cost of speed. The ESCOM syllabus names both (microinstrucciones, memorias de microcódigo) so you can tell them apart.
+
+Alongside sits the **status register** — the flags your ALU produced (zero, carry, overflow, negative). Conditional branches are just the control unit testing one of those flags to decide the next PC.
+
+## What to remember
+
+- Every CPU, big or small, runs the same loop: fetch, decode, execute, memory, writeback.
+- Those stages can be single-cycle (simple, slow clock), multi-cycle (faster clock, several cycles each), or pipelined (overlapped, highest throughput).
+- RISC keeps instructions fixed-width and load/store so decode and pipelining stay clean; CISC trades that away for power per instruction.
+- The datapath moves the data; the control unit — hardwired or microcoded — decides what moves where, using the opcode and the status flags.

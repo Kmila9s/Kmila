@@ -136,6 +136,11 @@ public static class Program
                 sp.GetRequiredService<ILoggerFactory>().CreateLogger<ConceptCatalog>()));
         builder.Services.AddScoped<ConceptProgressStore>();
 
+        // Bibliography catalog — Data/sources.json, same HTTP loader.
+        builder.Services.AddSingleton<SourceCatalogService>(sp =>
+            new SourceCatalogService(AssetLoader(http),
+                sp.GetRequiredService<ILoggerFactory>().CreateLogger<SourceCatalogService>()));
+
         builder.Services.AddSingleton<BlockProgram>();
         builder.Services.AddScoped<ReplayState>();
 

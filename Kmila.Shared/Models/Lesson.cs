@@ -74,6 +74,23 @@ public class LessonModule
     [JsonPropertyName("order")]
     public int Order { get; set; }
 
+    /// <summary>
+    /// ESCOM ISC-2020 asignatura this module belongs to, as a URL-safe id
+    /// (e.g. <c>fundamentos-diseno-digital</c>). Used by the Learn catalog's
+    /// "By asignatura" grouping mode. Empty when unmapped — such modules fall
+    /// into a catch-all track in that mode. Independent of <see cref="Level"/>,
+    /// which still drives the "By difficulty" grouping.
+    /// </summary>
+    [JsonPropertyName("asignatura")]
+    public string Asignatura { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Period within the asignatura (bimestre), 1-based. Sub-groups modules
+    /// under their asignatura track in "By asignatura" mode. 0 = unassigned.
+    /// </summary>
+    [JsonPropertyName("bimestre")]
+    public int Bimestre { get; set; }
+
     /// <summary>Localized titles keyed by language code (en, es, fr, …).</summary>
     [JsonPropertyName("titles")]
     public Dictionary<string, string> Titles { get; set; } = new();
@@ -158,6 +175,16 @@ public class Lesson
     /// </summary>
     [JsonPropertyName("fsmAnimation")]
     public bool FsmAnimation { get; set; } = false;
+
+    /// <summary>
+    /// Citation keys for the sources this lesson's content draws on — the
+    /// in-app analogue of <c>\cite{key}</c>. Keys resolve against
+    /// <c>wwwroot/Data/sources.json</c> via <c>SourceCatalogService</c> and
+    /// render as a "Fuentes" block at the bottom of the lesson. Empty = no
+    /// block shown.
+    /// </summary>
+    [JsonPropertyName("sources")]
+    public List<string> Sources { get; set; } = new();
 }
 
 /// <summary>

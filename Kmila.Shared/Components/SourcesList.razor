@@ -1,0 +1,130 @@
+@using Kmila.Shared.Models
+@using Kmila.Shared.Services
+
+@*
+    SourcesList — renders a bibliography as a numbered IEEE-style list.
+
+    Reused in two places (plan Part A):
+      • LessonView — the "Fuentes" block at the bottom of a lesson, fed the
+        entries resolved from that lesson's citation keys.
+      • Sources page (/sources) — the whole app bibliography, the in-app
+        analogue of the TT thesis's final "Referencias".
+
+    Each row mirrors the SourceControlPanel idiom: a title line (an external
+    anchor when a URL is present) over a muted meta line. All labels go through
+    Traductor so the surrounding chrome localizes with the rest of the app;
+    the bibliographic data itself (titles, authors) is language-neutral.
+*@
+
+@if (Entries is { Count: > 0 })
+{
+    @if (!string.IsNullOrEmpty(Heading))
+    {
+        <h2 class="sources-list__heading">
+            <Icon Name="IconName.JournalBookmarkFill" />
+            <span>@Heading</span>
+        </h2>
+    }
+    <ol class="sources-list">
+        @foreach (var s in Entries)
+        {
+            <li class="sources-list__item">
+                <div class="sources-list__main">
+                    @{
+                        var href = EffectiveHref(s);
+                        var isSearch = href != null && string.IsNullOrEmpty(s.Url);
+                    }
+                    @if (href != null)
+                    {
+                        <a class="sources-list__title" href="@href" target="_blank" rel="noopener noreferrer"
+                           title="@(isSearch ? Traductor.T("SOURCES_SEARCH_TIP") : s.Url)">
+                            <span>@s.Title</span>
+                            <Icon Name="@(isSearch ? IconName.Search : IconName.BoxArrowUpRight)" Class="sources-list__ext" />
+                        </a>
+                    }
+                    else
+                    {
+                        <span class="sources-list__title sources-list__title--plain">@s.Title</span>
+                    }
+
+                    <div class="sources-list__meta">
+                        <span class="sources-list__type sources-list__type--@TypeClass(s.Type)">@TypeLabel(s.Type)</span>
+                        @if (s.Preferred)
+                        {
+                            <span class="sources-list__badge">
+                                <Icon Name="IconName.StarFill" />
+                                @Traductor.T("SOURCES_PREFERRED_BADGE")
+                            </span>
+                        }
+                        <span class="sources-list__meta-text">@MetaLine(s)</span>
+                    </div>
+
+                    @{ var note = LessonCatalog.Localize(s.Note, _lang, string.Empty); }
+                    @if (!string.IsNullOrEmpty(note))
+                    {
+                        <p class="sources-list__note">@note</p>
+                    }
+                </div>
+            </li>
+        }
+    </ol>
+}
+
+@code {
+    /// <summary>The entries to render, in display order. Null/empty renders nothing.</summary>
+    [Parameter] public List<SourceEntry>? Entries { get; set; }
+
+    /// <summary>Optional heading shown above the list. Omit to render just the list.</summary>
+    [Parameter] public string? Heading { get; set; }
+
+    private string _lang => Traductor.Lang ?? "en";
+
+    /// <summary>
+    /// Link target for an entry's title. Online sources use their real
+    /// <see cref="SourceEntry.Url"/>; print sources (books, standards, reports,
+    /// articles, papers) have no URL, so we point the title at a web search for
+    /// the exact work — which lands on the publisher page, an ebook/preview,
+    /// a store listing, or a library copy. Returns null only when there's
+    /// nothing to link (no URL and no title).
+    /// </summary>
+    private string? EffectiveHref(SourceEntry s)
+    {
+        if (!string.IsNullOrEmpty(s.Url)) return s.Url;
+        if (string.IsNullOrEmpty(s.Title)) return null;
+        var terms = string.IsNullOrEmpty(s.Author) ? $"\"{s.Title}\"" : $"\"{s.Title}\" {s.Author}";
+        // Google Books: lands on the work with preview + ebook/buy/borrow links.
+        return $"https://books.google.com/books?q={Uri.EscapeDataString(terms)}";
+    }
+
+    /// <summary>Author · publisher/edition · year · access-date, skipping blanks.</summary>
+    private string MetaLine(SourceEntry s)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrEmpty(s.Author)) parts.Add(s.Author);
+        if (!string.IsNullOrEmpty(s.Publisher)) parts.Add(s.Publisher);
+        if (!string.IsNullOrEmpty(s.Edition))
+        {
+            // Books get "3rd ed." style; standards carry their number as Edition.
+            parts.Add(s.Type == SourceType.Book
+                ? string.Format(Traductor.T("SOURCES_EDITION_FMT"), s.Edition)
+                : s.Edition);
+        }
+        if (!string.IsNullOrEmpty(s.Year)) parts.Add(s.Year);
+        if (!string.IsNullOrEmpty(s.UrlDate))
+            parts.Add($"{Traductor.T("SOURCES_ACCESSED")} {s.UrlDate}");
+        return string.Join(" · ", parts);
+    }
+
+    private string TypeClass(SourceType t) => t.ToString().ToLowerInvariant();
+
+    private string TypeLabel(SourceType t) => t switch
+    {
+        SourceType.Book     => Traductor.T("SOURCES_TYPE_BOOK"),
+        SourceType.Online   => Traductor.T("SOURCES_TYPE_ONLINE"),
+        SourceType.Standard => Traductor.T("SOURCES_TYPE_STANDARD"),
+        SourceType.Article  => Traductor.T("SOURCES_TYPE_ARTICLE"),
+        SourceType.Paper    => Traductor.T("SOURCES_TYPE_PAPER"),
+        SourceType.Report   => Traductor.T("SOURCES_TYPE_REPORT"),
+        _                   => Traductor.T("SOURCES_TYPE_OTHER")
+    };
+}
