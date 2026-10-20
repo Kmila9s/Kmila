@@ -159,6 +159,8 @@ public sealed class KmilaSimulationService
             catch (Exception ex) { log.Add($"[scan] {Path.GetFileName(f)}: {ex.Message}"); }
             try { PackageSubtypeScanner.ScanFile(f); }
             catch (Exception ex) { log.Add($"[subscan] {Path.GetFileName(f)}: {ex.Message}"); }
+            // v1.17.0 (P3): record declared names for the undeclared-identifier check.
+            try { PackageRegistry.Instance.RegisterDeclaredNamesFromSource(File.ReadAllText(f)); } catch { /* best-effort */ }
         }
         if (vhdlPath == null)
             throw new InvalidOperationException("no .vhdl/.vhd source found.");

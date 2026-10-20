@@ -75,6 +75,7 @@ public static class DesignLoader
                     vhdlPath = f;
                 try { EntityRegistry.Instance.ScanFile(f); } catch { }
                 try { PackageSubtypeScanner.ScanFile(f); } catch { }
+                try { PackageRegistry.Instance.RegisterDeclaredNamesFromSource(File.ReadAllText(f)); } catch { }
             }
             if (vhdlPath == null) throw new InvalidOperationException("no .vhdl/.vhd source found.");
 

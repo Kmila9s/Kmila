@@ -113,6 +113,8 @@ public sealed class HeadlessSimulator
                 Phase($"subscan-begin:{f}");
                 try { Interpreter.Services.PackageSubtypeScanner.ScanFile(fullPath); }
                 catch (Exception ex) { log.Add($"[subscan] {f}: {ex.Message}"); }
+                // v1.17.0 (P3): record declared names for the undeclared-identifier check.
+                try { Interpreter.Services.PackageRegistry.Instance.RegisterDeclaredNamesFromSource(System.IO.File.ReadAllText(fullPath)); } catch { /* best-effort */ }
                 Phase($"subscan-end:{f}");
             }
         }

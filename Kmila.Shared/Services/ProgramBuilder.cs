@@ -550,6 +550,11 @@ public class ProgramBuilder : IDisposable
                 continue;
             try { EntityRegistry.Instance.ScanFile(f); } catch { /* keep scanning */ }
             try { PackageSubtypeScanner.ScanFile(f); } catch { /* keep scanning */ }
+            // v1.17.0 (P3): record declared identifier names so the undeclared-
+            // identifier check rejects only names that appear in no declaration
+            // (never a local constant/function the scope-builder failed to
+            // evaluate). Harmless here since this path fully elaborates scope.
+            try { PackageRegistry.Instance.RegisterDeclaredNamesFromSource(File.ReadAllText(f)); } catch { /* keep scanning */ }
         }
 
         // Resolve library `use` clauses across the project (same as a build).
