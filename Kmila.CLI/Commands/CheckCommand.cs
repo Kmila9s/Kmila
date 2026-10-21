@@ -40,6 +40,34 @@ public static class CheckCommand
         bool quiet = p.Has("quiet", "q");
         bool warnAsError = p.Has("warnings-as-errors");
 
+        // v1.17.0 (P3): populate the entity/package/function registries from
+        // every input file before parsing, mirroring the sim/DesignLoader path.
+        // Without this, `check` synthesises with empty registries so package
+        // constants and cross-file references collapse to stubs — which the
+        // stricter undeclared-identifier check would then reject. Single-file
+        // input still only sees its own packages, matching GHDL analysing one
+        // file in isolation. ScanFile writes synthesis chatter to stdout, so
+        // capture it to keep diagnostics (on stderr) clean.
+        {
+            var popOut = Console.Out;
+            Console.SetOut(new StringWriter());
+            try
+            {
+                Interpreter.Services.EntityRegistry.Instance.Clear();
+                Interpreter.Services.PackageRegistry.Instance.Clear();
+                Interpreter.Services.FunctionRegistry.Instance.Clear();
+                foreach (var f in files)
+                {
+                    if (!File.Exists(f)) continue;
+                    try { Interpreter.Services.EntityRegistry.Instance.ScanFile(f); } catch { }
+                    try { Interpreter.Services.PackageSubtypeScanner.ScanFile(f); } catch { }
+                    try { Interpreter.Services.PackageRegistry.Instance.RegisterDeclaredNamesFromSource(File.ReadAllText(f)); } catch { }
+                }
+            }
+            catch { /* best-effort population; parsing still runs below */ }
+            finally { Console.SetOut(popOut); }
+        }
+
         int errors = 0, warnings = 0, infos = 0;
         foreach (var file in files)
         {
