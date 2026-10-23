@@ -149,13 +149,32 @@
             if (pct > max) max = pct;
         }
 
-        var entities = Builder.Parser.Entities.Where(e => e.ResourceUsage != null).ToList();
+        // Sum only design *roots* (entities nothing else instantiates), using
+        // each root's effective usage — the hierarchical whole-subtree total when
+        // it's a structural parent, else its self estimate. Summing every parsed
+        // entity would double-count, because a structural top's hierarchical total
+        // already includes the children that also appear in the list.
+        var instantiated = new HashSet<string>(
+            Interpreter.Services.EntityRegistry.Instance.ComponentInstances
+                .SelectMany(kv => kv.Value)
+                .Select(ci => ci.EntityName),
+            StringComparer.OrdinalIgnoreCase);
 
-        Check(entities.Sum(e => e.ResourceUsage.FlipFlops),  fpga.Resources?.RegistersFlipFlops);
-        Check(entities.Sum(e => e.ResourceUsage.LUTs),       fpga.Resources?.LogicUnits);
-        Check(entities.Sum(e => e.ResourceUsage.DSPSlices),  fpga.Resources?.DspSlices);
-        Check(entities.Sum(e => e.ResourceUsage.BRAMBlocks), fpga.Resources?.MemoryBlocks);
-        Check(entities.Sum(e => (double)e.ResourceUsage.IOPins), fpga.IO?.MaxUserIO);
+        var roots = Builder.Parser.Entities
+            .Where(e => e.ResourceUsage != null && !instantiated.Contains(e.Name))
+            .Select(e => e.HierarchicalResourceUsage ?? e.ResourceUsage)
+            .ToList();
+        // Fallback: if the hierarchy data left nothing (e.g. every entity is
+        // instantiated by another in a cyclic/odd parse), keep the old behavior.
+        if (roots.Count == 0)
+            roots = Builder.Parser.Entities.Where(e => e.ResourceUsage != null)
+                .Select(e => e.ResourceUsage).ToList();
+
+        Check(roots.Sum(r => r.FlipFlops),       fpga.Resources?.RegistersFlipFlops);
+        Check(roots.Sum(r => r.LUTs),            fpga.Resources?.LogicUnits);
+        Check(roots.Sum(r => r.DSPSlices),       fpga.Resources?.DspSlices);
+        Check(roots.Sum(r => r.BRAMBlocks),      fpga.Resources?.MemoryBlocks);
+        Check(roots.Sum(r => (double)r.IOPins),  fpga.IO?.MaxUserIO);
 
         return gotAny ? max : null;
     }

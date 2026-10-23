@@ -324,4 +324,38 @@ public class ApplicationDbContext : SQLiteAsyncConnection
         => DeleteSettingAsync(TestbenchKey(projectId));
 
     #endregion
+
+    #region Project Run Target
+
+    /// <summary>
+    /// Settings key prefix for the per-project Run-target mode. The full key is
+    /// <c>KMILA_PROJECT_RUN_TARGET_MODE_{projectId}</c>; the value is a
+    /// <see cref="RunTargetMode"/> token ("entry" / "active"). Controls whether
+    /// <strong>Run</strong> simulates the designated entry point or the active
+    /// editor tab. Build always validates the active tab regardless. Stored as a
+    /// settings row (mirrors the entry-point marker) so no schema migration is
+    /// needed. Default when unset is <see cref="RunTargetMode.EntryPoint"/>.
+    /// </summary>
+    private const string RUN_TARGET_MODE_KEY_PREFIX = "KMILA_PROJECT_RUN_TARGET_MODE_";
+
+    private static string RunTargetModeKey(int projectId) => $"{RUN_TARGET_MODE_KEY_PREFIX}{projectId}";
+
+    /// <summary>Reads the project's Run-target mode, defaulting to
+    /// <see cref="RunTargetMode.EntryPoint"/> when unset.</summary>
+    public async Task<RunTargetMode> GetProjectRunTargetModeAsync(int projectId)
+    {
+        if (projectId <= 0) return RunTargetMode.EntryPoint;
+        var token = await GetSettingAsync(RunTargetModeKey(projectId));
+        return RunTargetModeExtensions.ParseToken(token);
+    }
+
+    /// <summary>Persists the project's Run-target mode.</summary>
+    public Task SetProjectRunTargetModeAsync(int projectId, RunTargetMode mode)
+        => SetSettingAsync(RunTargetModeKey(projectId), mode.ToToken());
+
+    /// <summary>Clears the project's Run-target mode (reverts to the default).</summary>
+    public Task ClearProjectRunTargetModeAsync(int projectId)
+        => DeleteSettingAsync(RunTargetModeKey(projectId));
+
+    #endregion
 }

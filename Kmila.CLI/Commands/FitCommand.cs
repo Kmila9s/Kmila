@@ -60,8 +60,20 @@ public static class FitCommand
         Console.SetOut(sink);
         try
         {
-            res = new Resources(loaded.Top);
-            res.Calculate();
+            // Aggregate the whole design: a structural top (all logic delegated to
+            // port-mapped children) would otherwise report only its own I/O. Parse
+            // every design file fresh so each child carries a self estimate, and
+            // let ComputeHierarchical sum the port-mapped subtree. Flat / single-
+            // entity designs fall through to the same self-only numbers.
+            var entryName = p.Get("entity", "top");
+            if (string.IsNullOrWhiteSpace(entryName))
+                entryName = Path.GetFileNameWithoutExtension(top);
+            var files = new List<string> { top };
+            files.AddRange(extras);
+            var byName = Kmila.Shared.Services.HierarchyLoader.ParseDesign(
+                files, entryName, out var topEntity, out var specialize);
+            var rootEntity = topEntity ?? loaded.Top;
+            res = Resources.ComputeHierarchical(rootEntity, byName, specialize);
         }
         catch (Exception ex) { Console.SetOut(originalOut); Console.Error.WriteLine($"kmila fit: {ex.Message}"); return Task.FromResult(1); }
         finally { Console.SetOut(originalOut); }

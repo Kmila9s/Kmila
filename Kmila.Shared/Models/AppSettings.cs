@@ -232,6 +232,41 @@ public static class EditorSyncModeExtensions
 }
 
 /// <summary>
+/// Which file a project's <strong>Run</strong> targets. Build always validates
+/// the active editor tab (per-file syntax check); Run instead simulates either
+/// the designated entry point or whatever file is active, per this setting.
+/// Persisted per project as a string token so older databases stay readable.
+/// </summary>
+public enum RunTargetMode
+{
+    /// <summary>Run simulates the project's designated entry point (default;
+    /// falls back to the active tab when no entry point is set).</summary>
+    EntryPoint,
+    /// <summary>Run simulates whatever file is currently active in the editor.</summary>
+    ActiveFile
+}
+
+/// <summary>
+/// Persistence helpers for <see cref="RunTargetMode"/>.
+/// </summary>
+public static class RunTargetModeExtensions
+{
+    /// <summary>Serializes a run-target mode to its persisted token.</summary>
+    public static string ToToken(this RunTargetMode mode) => mode switch
+    {
+        RunTargetMode.ActiveFile => "active",
+        _                        => "entry"
+    };
+
+    /// <summary>Parses a persisted token, defaulting to <see cref="RunTargetMode.EntryPoint"/>.</summary>
+    public static RunTargetMode ParseToken(string? token) => (token ?? string.Empty).Trim().ToLowerInvariant() switch
+    {
+        "active" => RunTargetMode.ActiveFile,
+        _        => RunTargetMode.EntryPoint
+    };
+}
+
+/// <summary>
 /// How the simulator's ns-per-tick is chosen for a given run.
 /// Persisted as a string through <see cref="AppSettings.KEY_TICK_RESOLUTION_MODE"/>
 /// so future additions don't break older databases.

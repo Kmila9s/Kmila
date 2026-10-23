@@ -16,6 +16,15 @@
             <h3 class="resource-usage__title">
                 <Icon Name="IconName.CpuFill" />
                 <span>@Traductor.T("RESOURCE_USAGE_TITLE")</span>
+                @if (Aggregated)
+                {
+                    <KmilaTooltip TextKey="RESOURCE_INCL_SUBCOMPONENTS_TIP">
+                        <span class="resource-usage__agg-badge">
+                            <Icon Name="IconName.Diagram3Fill" />
+                            @Traductor.T("RESOURCE_INCL_SUBCOMPONENTS")
+                        </span>
+                    </KmilaTooltip>
+                }
             </h3>
         </header>
 
@@ -86,4 +95,12 @@
 @code {
     [Parameter]
     public Resources? ResourceUsage { get; set; }
+
+    /// <summary>
+    /// When true, these figures include port-mapped sub-components (the
+    /// whole-subtree total), so a badge distinguishes them from a leaf
+    /// entity's independent self-usage.
+    /// </summary>
+    [Parameter]
+    public bool Aggregated { get; set; }
 }
