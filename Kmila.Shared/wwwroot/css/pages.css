@@ -1516,6 +1516,15 @@
         opacity: 1;
         pointer-events: auto;
     }
+    /* Mobile audit 2026-10-23: the open/delete card actions were a fixed 32x32px,
+       under the app's own 44px tap-target standard, and the destructive delete
+       sat right next to open. On touch, size them to the tap target and add a
+       little breathing room between them to cut mis-taps. */
+    .project-card__action {
+        width: var(--tap-target);
+        height: var(--tap-target);
+    }
+    .project-card__actions { gap: var(--space-1); }
 }
 
 .project-card__action {
@@ -11005,6 +11014,27 @@ button.waveform-value-readout:focus-visible {
     .waveform-viewer__actions .kmila-btn--sm {
         padding-inline: var(--space-2);
     }
+
+    /* Flow toolbar had NO phone treatment (unlike schematic/waveform/visual),
+       so at <=640px its single nowrap flex row overflowed and the dock panel's
+       overflow:hidden clipped the SVG/PNG/UML export labels to "SV"/"PN"/"UN"
+       and squeezed the title to three lines (mobile audit 2026-10-23).
+       Match the sibling viewer headers: wrap controls to a second row and never
+       shrink a control below its content, so export labels stay intact (no a11y
+       regression — labels are the accessible names here) and nothing clips.
+       The title alone may shrink to an ellipsis instead of wrapping. */
+    .flow-diagram__head {
+        flex-wrap: wrap;
+        row-gap: var(--space-1);
+    }
+    .flow-diagram__head > * { flex-shrink: 0; }
+    .flow-diagram__head > span:first-child {
+        min-width: 0;
+        flex-shrink: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
 }
 
 
@@ -14931,6 +14961,12 @@ body:has(.visual-page.is-fullscreen) .status-bar {
         width: auto !important;
         max-width: calc(100vw - 24px);
     }
+    /* Mobile audit 2026-10-23: the action row (opt-out link / Saltar / Siguiente)
+       is a single nowrap flex row, so on a ~355px-wide card the labels broke
+       mid-phrase ("Saltar"/"tour" on two lines, the opt-out link wrapping).
+       Let the row wrap as WHOLE buttons and keep each label on one line. */
+    .kmila-tour__actions { flex-wrap: wrap; row-gap: var(--space-2); }
+    .kmila-tour__btn { white-space: nowrap; }
 }
 
 /* ---- Project templates gallery (TemplateGalleryModal) ---- */
