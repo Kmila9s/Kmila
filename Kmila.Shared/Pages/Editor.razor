@@ -274,7 +274,11 @@
                 OnSaveClickedCallback="OnSaveFile"
                 OnNewFileClickedCallback="ShowCreateFileModalAsync"
                 OnFpgaChipClickedCallback="OpenFpgaPickerAsync"
-                ManualSyncMode="@(_editorSyncMode == EditorSyncMode.Manual)" />
+                ManualSyncMode="@(_editorSyncMode == EditorSyncMode.Manual)"
+                EntryPointFileName="@_entryPointName"
+                ActiveFileName="@_openedFile?.FileName"
+                CurrentRunTarget="@_runTargetMode"
+                OnRunTargetSelected="OnRunTargetSelectedAsync" />
 
         @* ---------- Editor Dock: Entities · Ports · Waveforms · Runs · Files · Output ---------- *@
         <EditorDock EntitiesCount="@(Builder.Parser?.Entities.Count() ?? 0)"
@@ -476,6 +480,7 @@
                     OnProjectFileClicked="OnProjectFileOpened"
                     OnProjectFileRemoved="OnFileRemoved"
                     OnNewFileRequested="ShowCreateFileInAsync"
+                    OnEntryPointChanged="OnEntryPointChangedAsync"
                     Project="_project" />
             </FilesContent>
 
@@ -1349,6 +1354,11 @@
         }
         catch { /* non-fatal: default to port-moment mode */ }
 
+        // Run-target picker state: the entry-point file name (for the dropdown
+        // label) and the saved run-target mode. Best-effort — the resolvers
+        // re-read authoritative values at build/run time regardless.
+        await RefreshRunTargetStateAsync();
+
         // Record the open for the sidebar MRU so the top-10 reflects actual usage.
         _ = Recent.TouchAsync(_projectId);
 
@@ -1724,16 +1734,98 @@
     /// focuses the appropriate dock tab.
     /// </summary>
     /// <summary>
-    /// Resolves the file to compile when Build is clicked. Project's saved
-    /// entry-point wins; the active editor file is the fallback. Returns
-    /// null only when neither exists (empty project + no active file).
+    /// The file that is currently compiled (last successful build). Since Build
+    /// validates the active tab and Run may target a different entry-point, Run
+    /// compares the resolved run target against this to decide whether the
+    /// in-memory build still matches what it is about to simulate.
+    /// </summary>
+    private ProjectFile? _lastBuiltFile;
+
+    /// <summary>Entry-point file name for the Run-target picker label (null when
+    /// the project has no designated entry point). Display only.</summary>
+    private string? _entryPointName;
+
+    /// <summary>The project's Run-target mode, mirrored for the RunBar picker.</summary>
+    private RunTargetMode _runTargetMode = RunTargetMode.EntryPoint;
+
+    /// <summary>Reloads the Run-target picker state (entry-point name + mode)
+    /// from the DB. Cheap; called on project open and entry-point change.</summary>
+    private async Task RefreshRunTargetStateAsync()
+    {
+        if (_projectId <= 0)
+        {
+            _entryPointName = null;
+            _runTargetMode = RunTargetMode.EntryPoint;
+            return;
+        }
+        try
+        {
+            var marker = await DbContext.GetProjectMainFileAsync(_projectId);
+            _entryPointName = ResolveEntryName(marker);
+            _runTargetMode = await DbContext.GetProjectRunTargetModeAsync(_projectId);
+        }
+        catch { /* non-fatal: picker just shows defaults */ }
+    }
+
+    /// <summary>Resolves a stored entry-point marker (RelativePath) to a display
+    /// file name via the loaded project files.</summary>
+    private string? ResolveEntryName(string? marker)
+    {
+        if (string.IsNullOrEmpty(marker)) return null;
+        var f = _projectFiles.FirstOrDefault(x => string.Equals(x.RelativePath, marker, StringComparison.Ordinal))
+             ?? _projectFiles.FirstOrDefault(x => string.Equals(x.FileName, marker, StringComparison.Ordinal));
+        return f?.FileName ?? marker;
+    }
+
+    /// <summary>FilesCard raised an entry-point set/clear — refresh the picker.</summary>
+    private async Task OnEntryPointChangedAsync(string? _)
+    {
+        await RefreshRunTargetStateAsync();
+        StateHasChanged();
+    }
+
+    /// <summary>User picked a Run target from the RunBar caret menu: persist it
+    /// as the project default and start a run against it.</summary>
+    private async Task OnRunTargetSelectedAsync(RunTargetMode mode)
+    {
+        if (_projectId > 0)
+        {
+            try { await DbContext.SetProjectRunTargetModeAsync(_projectId, mode); }
+            catch { /* non-fatal: run still honors the in-memory choice below */ }
+        }
+        _runTargetMode = mode;
+        await OnRunRequested();
+    }
+
+    /// <summary>
+    /// Resolves the file to validate when <strong>Build</strong> is clicked:
+    /// always the currently active editor tab. Build is a per-file syntax check,
+    /// so it targets whatever file the user is looking at — independent of the
+    /// project's entry-point designation. Returns null only when no file is open.
+    /// </summary>
+    private Task<ProjectFile?> ResolveValidateTargetAsync() => Task.FromResult(_openedFile);
+
+    /// <summary>
+    /// Resolves the file to simulate when <strong>Run</strong> is clicked. When
+    /// the project's <see cref="RunTargetMode"/> is <c>ActiveFile</c>, the active
+    /// editor tab is used. Otherwise (default <c>EntryPoint</c>) the project's
+    /// saved entry-point wins, with the active editor file as the fallback.
+    /// Returns null only when neither exists (empty project + no active file).
     /// Also surfaces a soft warning to the Output log when the project has
     /// multiple VHDL files but no entry-point — that's the configuration
     /// most likely to silently miss dependencies, so we nudge the user
-    /// towards the FilesCard kebab without blocking the build.
+    /// towards the FilesCard kebab without blocking the run.
     /// </summary>
-    private async Task<ProjectFile?> ResolveBuildTargetAsync()
+    private async Task<ProjectFile?> ResolveRunTargetAsync()
     {
+        // ActiveFile mode: Run follows the active tab, same as Build.
+        if (_projectId > 0)
+        {
+            var mode = await DbContext.GetProjectRunTargetModeAsync(_projectId);
+            if (mode == RunTargetMode.ActiveFile)
+                return _openedFile;
+        }
+
         ProjectFile? entry = null;
         if (_projectId > 0)
         {
@@ -1772,7 +1864,7 @@
         return _openedFile;
     }
 
-    private async Task<bool> RunBuildAsync()
+    private async Task<bool> RunBuildAsync(ProjectFile? buildTarget)
     {
         if (_openedFile == null && _projectFiles.Count == 0)
         {
@@ -1793,7 +1885,6 @@
             return false;
         }
 
-        var buildTarget = await ResolveBuildTargetAsync();
         if (buildTarget == null)
         {
             Log.Warn(Traductor.T("SIM_LOG_NO_ENTRY"));
@@ -1842,6 +1933,12 @@
 
             if (ok)
             {
+                // Remember which file is actually compiled right now. Because
+                // Build validates the active tab while Run may target a different
+                // entry-point, "BuiltOk" alone no longer guarantees the run
+                // target is the built design — OnRunRequested compares against
+                // this to decide whether a rebuild is needed.
+                _lastBuiltFile = buildTarget;
                 Sim.SetState(SimState.BuiltOk);
                 Log.Success(Traductor.T("SIM_LOG_BUILD_OK"));
                 // Refresh the entity-scope viewer against the fresh parse.
@@ -2061,14 +2158,16 @@
         }
     }
 
-    /// <summary>Explicit Build button click — just runs the build and stops.</summary>
+    /// <summary>Explicit Build button click — validates the active file and stops.
+    /// Build is a per-file syntax check, so it always targets the active tab,
+    /// regardless of the project's entry-point or Run-target mode.</summary>
     private async Task OnBuildRequested()
     {
         if (_editorCardTab == EditorCardTab.Blocks)
         {
             await SyncBlocksToCodeAsync();
         }
-        await RunBuildAsync();
+        await RunBuildAsync(await ResolveValidateTargetAsync());
     }
 
     /// <summary>
@@ -2113,6 +2212,12 @@
 
         if (!workbenchRun)
         {
+            // Run targets the project's chosen file — entry-point by default, or
+            // the active tab when the project is set to ActiveFile mode. Build
+            // (above) always validates the active tab; Run may compile a
+            // different top. Resolve once and reuse across the rebuild branches.
+            var runTarget = await ResolveRunTargetAsync();
+
             // Blocks-mode Run always rebuilds: the user edited blocks since
             // the last build but Sim.State may still say BuiltOk because
             // Monaco's content hasn't changed yet. Sync to Monaco then force
@@ -2120,19 +2225,30 @@
             if (_editorCardTab == EditorCardTab.Blocks)
             {
                 await SyncBlocksToCodeAsync();
-                var rebuilt = await RunBuildAsync();
+                var rebuilt = await RunBuildAsync(runTarget);
                 if (!rebuilt) return;
             }
-            // Auto-build when stale
+            // Auto-build when stale, OR when the current build is of a different
+            // file than the run target (e.g. the user just hit Build on a
+            // sub-component tab, then Run with the project set to entry-point).
             else if (Sim.State != SimState.BuiltOk && Sim.State != SimState.Complete && Sim.State != SimState.BuildError)
             {
-                var ok = await RunBuildAsync();
+                var ok = await RunBuildAsync(runTarget);
                 if (!ok) return;
             }
             else if (Sim.State == SimState.BuildError)
             {
                 // Try building once more — maybe the user fixed the code since
-                var ok = await RunBuildAsync();
+                var ok = await RunBuildAsync(runTarget);
+                if (!ok) return;
+            }
+            else if (runTarget != null && !ReferenceEquals(runTarget, _lastBuiltFile)
+                     && (_lastBuiltFile == null
+                         || !string.Equals(runTarget.RelativePath, _lastBuiltFile.RelativePath, StringComparison.Ordinal)))
+            {
+                // State is BuiltOk/Complete but for a different file — rebuild the
+                // actual run target so we don't simulate the wrong design.
+                var ok = await RunBuildAsync(runTarget);
                 if (!ok) return;
             }
         }

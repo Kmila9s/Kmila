@@ -280,6 +280,12 @@ public class ProgramBuilder : IDisposable
             if (Parser.Entities.Count == 0)
                 throw new InvalidOperationException("File not valid");
 
+            // Aggregate hierarchical resource usage so a structural top (logic
+            // delegated to port-mapped children) reports the whole subtree's
+            // FF/LUT/DSP/BRAM, not just its own I/O. Best-effort — never fail a
+            // build over a resource estimate.
+            try { ApplyHierarchicalResources(file); } catch { /* estimate is non-fatal */ }
+
             return true;
         }
         catch (OperationCanceledException)
@@ -293,6 +299,52 @@ public class ProgramBuilder : IDisposable
             throw;
         }
     }
+    /// <summary>
+    /// Populates <see cref="Entity.HierarchicalResourceUsage"/> on each just-parsed
+    /// top-file entity that instantiates sub-components, so the Entities view and
+    /// the utilization gauge show whole-subtree usage instead of I/O only.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Debugger.Repositories.Parser.ParseFile()"/> only parses the one
+    /// built file, so children defined in sibling files carry no self estimate yet.
+    /// We re-parse every project <c>.vhd</c> through <see cref="HierarchyLoader"/>
+    /// (which resets the registry so port-map edges are fresh, not doubled) to
+    /// build the name→entity map that <see cref="Resources.ComputeHierarchical"/>
+    /// walks. Flat / single-entity designs get no edges and keep self-usage.
+    /// </remarks>
+    private void ApplyHierarchicalResources(ProjectFile file)
+    {
+        var basePath = file.Project?.BasePath;
+        if (string.IsNullOrEmpty(basePath) || !Directory.Exists(basePath))
+            return;
+
+        var files = new List<string>();
+        foreach (var f in Directory.EnumerateFiles(basePath, "*.*", SearchOption.AllDirectories))
+        {
+            var ext = Path.GetExtension(f);
+            if (!ext.Equals(".vhd", StringComparison.OrdinalIgnoreCase) &&
+                !ext.Equals(".vhdl", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (Path.GetFileName(f).StartsWith("_elaborated_", StringComparison.OrdinalIgnoreCase))
+                continue;
+            files.Add(f);
+        }
+        if (files.Count == 0) return;
+
+        var byName = HierarchyLoader.ParseDesign(files, entryName: null, out _, out var specialize);
+
+        // Set the aggregate only on entities that actually instantiate something;
+        // leaf entities keep HierarchicalResourceUsage == null so consumers fall
+        // back to their independent self-usage.
+        foreach (var e in Parser.Entities)
+        {
+            if (e?.Name == null) continue;
+            if (EntityRegistry.Instance.GetComponentInstances(e.Name).Count == 0)
+                continue;
+            e.HierarchicalResourceUsage = Resources.ComputeHierarchical(e, byName, specialize);
+        }
+    }
+
     /// <summary>
     /// Runs a full simulation using SimulationRunner (bypasses TimeMachine for speed).
     /// </summary>

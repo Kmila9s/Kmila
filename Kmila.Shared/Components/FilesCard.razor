@@ -348,6 +348,11 @@
     /// </summary>
     [Parameter] public EventCallback<string> OnNewFileRequested { get; set; }
 
+    /// <summary>Fires when the entry-point marker is set or cleared. Payload is
+    /// the new entry file's RelativePath, or null when cleared. Lets the editor
+    /// keep the Run-target picker label in sync.</summary>
+    [Parameter] public EventCallback<string?> OnEntryPointChanged { get; set; }
+
     private List<ProjectFile> _projectFiles { get; set; } = new();
     private List<string> _directories { get; set; } = new();
     private ConfirmDialog _removeFileDialog = new();
@@ -699,6 +704,9 @@
                 ToastService.Notify(Message(Traductor.T("COMMON_MESSAGE"),
                     string.Format(Traductor.T("FILES_ENTRY_SET"), file.FileName), ToastType.Success));
             }
+            // Let the editor refresh the Run-target picker (which shows the entry
+            // point's name) without re-querying on every render.
+            await OnEntryPointChanged.InvokeAsync(_entryFileName);
             StateHasChanged();
         }
         catch (Exception ex)

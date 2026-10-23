@@ -210,7 +210,12 @@
         </button>
         </KmilaTooltip>
 
-        @* Run button (primary, state-machine). *@
+        @* Run button (primary, state-machine) + a target-picker caret. The caret
+           lets the user choose whether Run simulates the project's entry point or
+           the currently active file; the choice persists as the project default
+           (handled by the parent). Shown only when an entry point exists — with
+           none, Run always uses the active file and there's nothing to pick. *@
+        <div class="run-bar__run-split">
         <KmilaTooltip TextKey="@(NoFpga ? "RUNBAR_FPGA_REQUIRED" : "SIM_RUN")">
         <button type="button"
                 class="kmila-btn kmila-btn--accent run-bar__run"
@@ -245,6 +250,50 @@
             }
         </button>
         </KmilaTooltip>
+
+        @if (ShowRunTargetMenu)
+        {
+            <KmilaTooltip TextKey="RUNBAR_RUN_TARGET_MENU">
+                <button type="button"
+                        class="kmila-btn kmila-btn--accent run-bar__run-caret @(_runTargetMenuOpen ? "is-open" : "")"
+                        disabled="@RunDisabled"
+                        aria-haspopup="menu"
+                        aria-expanded="@_runTargetMenuOpen"
+                        @onclick="ToggleRunTargetMenu"
+                        aria-label="@Traductor.T("RUNBAR_RUN_TARGET_MENU")">
+                    <Icon Name="IconName.ChevronDown" />
+                </button>
+            </KmilaTooltip>
+            @if (_runTargetMenuOpen)
+            {
+                <div class="run-bar__run-target-backdrop" @onclick="CloseRunTargetMenu" aria-hidden="true"></div>
+                <div class="run-bar__run-target-panel" role="menu">
+                    <button type="button" role="menuitemradio"
+                            aria-checked="@(CurrentRunTarget == RunTargetMode.EntryPoint)"
+                            class="run-bar__run-target-item @(CurrentRunTarget == RunTargetMode.EntryPoint ? "is-active" : "")"
+                            @onclick="() => SelectRunTargetAsync(RunTargetMode.EntryPoint)">
+                        <Icon Name="IconName.StarFill" />
+                        <span class="run-bar__run-target-text">
+                            <span class="run-bar__run-target-label">@Traductor.T("RUNBAR_RUN_ENTRY_POINT")</span>
+                            <span class="run-bar__run-target-file">@(string.IsNullOrEmpty(EntryPointFileName) ? Traductor.T("RUNBAR_RUN_NO_ENTRY") : EntryPointFileName)</span>
+                        </span>
+                        @if (CurrentRunTarget == RunTargetMode.EntryPoint) { <Icon Name="IconName.CheckLg" /> }
+                    </button>
+                    <button type="button" role="menuitemradio"
+                            aria-checked="@(CurrentRunTarget == RunTargetMode.ActiveFile)"
+                            class="run-bar__run-target-item @(CurrentRunTarget == RunTargetMode.ActiveFile ? "is-active" : "")"
+                            @onclick="() => SelectRunTargetAsync(RunTargetMode.ActiveFile)">
+                        <Icon Name="IconName.FileEarmarkCode" />
+                        <span class="run-bar__run-target-text">
+                            <span class="run-bar__run-target-label">@Traductor.T("RUNBAR_RUN_ACTIVE_FILE")</span>
+                            <span class="run-bar__run-target-file">@(string.IsNullOrEmpty(ActiveFileName) ? "—" : ActiveFileName)</span>
+                        </span>
+                        @if (CurrentRunTarget == RunTargetMode.ActiveFile) { <Icon Name="IconName.CheckLg" /> }
+                    </button>
+                </div>
+            }
+        }
+        </div>
 
         @* Stop button — visible only during Running/Paused *@
         @if (Sim.State == SimState.Running || Sim.State == SimState.Paused)
@@ -377,6 +426,21 @@
     /// </summary>
     [Parameter] public EventCallback OnFpgaChipClickedCallback { get; set; }
 
+    /// <summary>File name of the project's designated entry point (null/empty when
+    /// none is set). Shown in the Run-target picker.</summary>
+    [Parameter] public string? EntryPointFileName { get; set; }
+
+    /// <summary>File name of the currently active editor tab. Shown in the
+    /// Run-target picker so the user sees exactly what "active file" means.</summary>
+    [Parameter] public string? ActiveFileName { get; set; }
+
+    /// <summary>The project's current Run-target default (entry point vs active file).</summary>
+    [Parameter] public RunTargetMode CurrentRunTarget { get; set; } = RunTargetMode.EntryPoint;
+
+    /// <summary>Fires when the user picks a Run target from the caret menu. The
+    /// parent persists it as the project default and starts a run.</summary>
+    [Parameter] public EventCallback<RunTargetMode> OnRunTargetSelected { get; set; }
+
     /// <summary>
     /// True when this component triggered the current build as part of Run,
     /// vs. the user clicking Build directly. Controls which button shows the
@@ -431,6 +495,19 @@
     private bool _configOpen;
     private void ToggleConfig() => _configOpen = !_configOpen;
     private void CloseConfig() => _configOpen = false;
+
+    // Run-target picker (entry point vs active file). Shown only when an entry
+    // point exists — otherwise Run always uses the active file.
+    private bool _runTargetMenuOpen;
+    private void ToggleRunTargetMenu() => _runTargetMenuOpen = !_runTargetMenuOpen;
+    private void CloseRunTargetMenu() => _runTargetMenuOpen = false;
+    private bool ShowRunTargetMenu => !string.IsNullOrEmpty(EntryPointFileName);
+
+    private async Task SelectRunTargetAsync(RunTargetMode mode)
+    {
+        CloseRunTargetMenu();
+        await OnRunTargetSelected.InvokeAsync(mode);
+    }
 
     private async Task OnBuildFromMenuAsync()
     {
