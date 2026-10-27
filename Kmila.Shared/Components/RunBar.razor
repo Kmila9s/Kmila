@@ -191,6 +191,13 @@
             </KmilaTooltip>
         }
 
+        @* Simulation actions — Build + Run (+target caret) + Stop. Fused into
+           one connected segment (shared hairline seams, only the group's outer
+           corners rounded); the file cluster is a second fused segment, the two
+           separated by the actions-row gap (user choice 2026-10-27: "Option C —
+           fused segments", equal-height buttons, rounded corners). *@
+        <div class="run-bar__sim-group">
+
         @* Build button (secondary). Shows spinner when explicitly building. *@
         <KmilaTooltip TextKey="@(NoFpga ? "RUNBAR_FPGA_REQUIRED" : "SIM_BUILD")">
         <button type="button"
@@ -218,7 +225,7 @@
         <div class="run-bar__run-split">
         <KmilaTooltip TextKey="@(NoFpga ? "RUNBAR_FPGA_REQUIRED" : "SIM_RUN")">
         <button type="button"
-                class="kmila-btn kmila-btn--accent run-bar__run"
+                class="kmila-btn kmila-btn--accent run-bar__run @((!ShowRunTargetMenu && Sim.State != SimState.Running && Sim.State != SimState.Paused) ? "run-bar__seg-end" : "")"
                 disabled="@RunDisabled"
                 @onclick="OnRunClickAsync">
             @if (ShowAutoBuildingChip)
@@ -255,7 +262,7 @@
         {
             <KmilaTooltip TextKey="RUNBAR_RUN_TARGET_MENU">
                 <button type="button"
-                        class="kmila-btn kmila-btn--accent run-bar__run-caret @(_runTargetMenuOpen ? "is-open" : "")"
+                        class="kmila-btn kmila-btn--accent run-bar__run-caret @(_runTargetMenuOpen ? "is-open" : "") @((Sim.State != SimState.Running && Sim.State != SimState.Paused) ? "run-bar__seg-end" : "")"
                         disabled="@RunDisabled"
                         aria-haspopup="menu"
                         aria-expanded="@_runTargetMenuOpen"
@@ -300,7 +307,7 @@
         {
             <KmilaTooltip TextKey="SIM_STOP">
                 <button type="button"
-                        class="kmila-btn kmila-btn--ghost kmila-btn--primary run-bar__stop"
+                        class="kmila-btn kmila-btn--ghost kmila-btn--primary run-bar__stop run-bar__seg-end"
                         @onclick="OnStopClickAsync"
                         aria-label="@Traductor.T("SIM_STOP")">
                     <Icon Name="IconName.StopFill" />
@@ -308,15 +315,16 @@
             </KmilaTooltip>
         }
 
-        @* Visible file actions — Save and New file. Styled as outline ghost
-           buttons (matching the Build/Run trio) instead of the previous
-           muted-text variant which felt visually disconnected from the rest
-           of the bar. Hidden on mobile (≤768px); see the overflow burger
-           below, which surfaces Build / Save / New File in a dropdown so
-           the bar doesn't wrap onto three rows on phones. *@
+        </div>@* end .run-bar__sim-group *@
+
+        @* File actions — Save and New file, as one cluster. Same height and
+           weight as the Build/Run buttons (ghost-primary, no size modifier).
+           Hidden on narrow bars; the overflow burger below surfaces Build /
+           Save / New File in a dropdown so the bar doesn't wrap on phones. *@
+        <div class="run-bar__file-group">
         <KmilaTooltip TextKey="@(ManualSyncMode ? "EDITOR_SAVE_AND_SYNC" : "EDITOR_SAVE_FILE")">
             <button type="button"
-                    class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm run-bar__file-btn run-bar__file-btn--save"
+                    class="kmila-btn kmila-btn--ghost kmila-btn--primary run-bar__file-btn run-bar__file-btn--save"
                     @onclick="() => OnSaveClickedCallback.InvokeAsync()"
                     aria-label="@Traductor.T(ManualSyncMode ? "EDITOR_SAVE_AND_SYNC" : "EDITOR_SAVE_FILE")">
                 <Icon Name="IconName.Floppy2" />
@@ -325,13 +333,14 @@
         </KmilaTooltip>
         <KmilaTooltip TextKey="EDITOR_NEW_FILE">
             <button type="button"
-                    class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm run-bar__file-btn run-bar__file-btn--new"
+                    class="kmila-btn kmila-btn--ghost kmila-btn--primary run-bar__file-btn run-bar__file-btn--new"
                     @onclick="() => OnNewFileClickedCallback.InvokeAsync()"
                     aria-label="@Traductor.T("EDITOR_NEW_FILE")">
                 <Icon Name="IconName.FilePlus" />
                 <span class="run-bar__file-btn-label">@Traductor.T("EDITOR_NEW_FILE")</span>
             </button>
         </KmilaTooltip>
+        </div>@* end .run-bar__file-group *@
 
         @* Mobile-only burger overflow — surfaces Build + Save + New File so
            the bar doesn't wrap on small screens. CSS keeps Run (primary CTA)

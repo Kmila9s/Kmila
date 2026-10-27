@@ -86,18 +86,45 @@ else
                 }
             </div>
             <div class="schematic-viewer__actions">
-                <label class="schematic-style-select" data-render-mode="@_renderMode"
-                       title="@Traductor.T("SCHEMATIC_STYLE_TITLE")">
-                    <Icon Name="IconName.Diagram2" />
-                    <select class="schematic-style-select__input"
-                            aria-label="@Traductor.T("SCHEMATIC_STYLE_TITLE")"
-                            @onchange="OnStyleChanged">
-                        <option value="Grouped" selected="@(_renderMode == SchematicRenderMode.Grouped)">@Traductor.T("SCHEMATIC_STYLE_GROUPED")</option>
-                        <option value="Rtl" selected="@(_renderMode == SchematicRenderMode.Rtl)">@Traductor.T("SCHEMATIC_STYLE_RTL")</option>
-                        <option value="Nodes" selected="@(_renderMode == SchematicRenderMode.Nodes)">@Traductor.T("SCHEMATIC_STYLE_NODES")</option>
-                        <option value="Raw" selected="@(_renderMode == SchematicRenderMode.Raw)">@Traductor.T("SCHEMATIC_MODE_RAW")</option>
-                    </select>
-                </label>
+                @* Render-style picker. A Blazor-controlled button+backdrop
+                   dropdown (not a native <select>): the schematic re-renders on
+                   every sim cursor / live-step event, and those re-renders
+                   collapsed the native popup mid-open — the user saw the picker
+                   "stop working". This pattern (mirrors RunBar's run-target menu
+                   and BlockEditor's export menu) is immune to re-renders. *@
+                <div class="schematic-style-select @(_styleMenuOpen ? "is-open" : "")" data-render-mode="@_renderMode">
+                    <KmilaTooltip TextKey="SCHEMATIC_STYLE_TITLE" Placement="Bottom">
+                        <button type="button"
+                                class="schematic-style-select__toggle"
+                                aria-haspopup="menu"
+                                aria-expanded="@_styleMenuOpen"
+                                @onclick="ToggleStyleMenu"
+                                aria-label="@Traductor.T("SCHEMATIC_STYLE_TITLE")">
+                            <Icon Name="IconName.Diagram2" />
+                            <span class="schematic-style-select__value">@Traductor.T(CurrentStyleLabelKey)</span>
+                            <Icon Name="IconName.ChevronDown" />
+                        </button>
+                    </KmilaTooltip>
+                    @if (_styleMenuOpen)
+                    {
+                        <div class="schematic-style-select__backdrop" @onclick="CloseStyleMenu" aria-hidden="true"></div>
+                        <div class="schematic-style-select__menu" role="menu">
+                            @foreach (var opt in _styleOptions)
+                            {
+                                <button type="button" role="menuitemradio"
+                                        aria-checked="@(_renderMode == opt.Mode)"
+                                        class="schematic-style-select__item @(_renderMode == opt.Mode ? "is-active" : "")"
+                                        @onclick="() => SelectStyleAsync(opt.Mode)">
+                                    <span>@Traductor.T(opt.LabelKey)</span>
+                                    @if (_renderMode == opt.Mode)
+                                    {
+                                        <Icon Name="IconName.CheckLg" />
+                                    }
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
                 @if (_mode == ViewMode.Debug)
                 {
                     <KmilaTooltip TextKey="SCHEMATIC_DEBUG_FOCUS_HINT">
@@ -685,26 +712,48 @@ else
     private SchematicRenderMode _renderMode = SchematicRenderMode.Grouped;
     private const string RenderModeStorageKey = "kmila.schematic.style";
 
-    private async Task OnStyleChanged(ChangeEventArgs e)
+    // Render-style dropdown (Blazor-controlled; see the toolbar markup for why
+    // it is not a native <select>).
+    private bool _styleMenuOpen;
+    private static readonly (SchematicRenderMode Mode, string LabelKey)[] _styleOptions =
     {
-        if (Enum.TryParse<SchematicRenderMode>(e.Value?.ToString(), out var m))
-            await SetRenderMode(m);
+        (SchematicRenderMode.Grouped, "SCHEMATIC_STYLE_GROUPED"),
+        (SchematicRenderMode.Rtl,     "SCHEMATIC_STYLE_RTL"),
+        (SchematicRenderMode.Nodes,   "SCHEMATIC_STYLE_NODES"),
+        (SchematicRenderMode.Raw,     "SCHEMATIC_MODE_RAW"),
+    };
+    private string CurrentStyleLabelKey =>
+        _styleOptions.FirstOrDefault(o => o.Mode == _renderMode).LabelKey ?? "SCHEMATIC_STYLE_GROUPED";
+
+    private void ToggleStyleMenu() => _styleMenuOpen = !_styleMenuOpen;
+    private void CloseStyleMenu() => _styleMenuOpen = false;
+
+    private async Task SelectStyleAsync(SchematicRenderMode mode)
+    {
+        _styleMenuOpen = false;
+        await SetRenderMode(mode);
     }
 
     private async Task SetRenderMode(SchematicRenderMode mode)
     {
         if (_renderMode == mode) return;
-        // Gate-level (Raw/Grouped) and block-level (Rtl/Nodes) are different
-        // pipelines: crossing that line swaps the netlist + layout, so rebuild.
-        // Staying on the same side (Raw↔Grouped, Rtl↔Nodes) only re-skins the
-        // identical geometry, so a re-render is enough.
-        bool pipelineChanges = _renderMode.IsBlock() != mode.IsBlock();
+        // Each of Raw, Grouped and the block pair has its own geometry: Raw uses
+        // the literal legacy routing, Grouped uses obstacle-aware routing, and
+        // Rtl/Nodes share one block layout (they only re-skin each other). So we
+        // rebuild the layout unless both the old and new style are block styles.
+        bool layoutChanges = !(_renderMode.IsBlock() && mode.IsBlock());
+        // Only crossing the gate/block line swaps the underlying netlist (and
+        // therefore the cell ids), which is what invalidates colours + selection.
+        bool netlistSwaps = _renderMode.IsBlock() != mode.IsBlock();
         _renderMode = mode;
-        if (pipelineChanges && _rawNetlist != null)
+        if (layoutChanges && _rawNetlist != null)
         {
             RebuildDisplayLayout();
-            RegenerateColours(reseed: false);
-            ClearSelection(); // cell ids differ between the gate and block netlists
+            if (netlistSwaps)
+            {
+                RegenerateColours(reseed: false);
+                ClearSelection(); // cell ids differ between the gate and block netlists
+            }
         }
         await PersistRenderModeAsync();
         StateHasChanged();
@@ -752,6 +801,11 @@ else
     /// can carry the same palette without duplicating the type.</summary>
     private Dictionary<string, SchematicCellColours> _cellColours = new();
     private Dictionary<string, string> _portColours = new();
+    // Wire stroke colour per net id. Keyed on the net's DRIVER (producer cell)
+    // and spaced around the hue wheel so adjacent signals never share a colour,
+    // while every fan-out branch of one net keeps the single driver hue. This
+    // is what stops whole regions of one gate kind drawing in a single colour.
+    private Dictionary<string, string> _wireColours = new();
 
     protected override void OnInitialized()
     {
@@ -1070,10 +1124,22 @@ else
             var display = _mode == ViewMode.Naive
                 ? _rawNetlist
                 : SchematicSimplifier.SimplifyNetlist(_rawNetlist);
-            _layout = LayeredLayout.Layout(display);
+            _layout = LayoutGateLevel(display, _renderMode);
         }
         BuildLookups();
     }
+
+    /// <summary>Lays out a gate-level netlist for the Raw or Grouped style.
+    /// Grouped keeps the swimlane bands (so the group tints stay compact) but
+    /// routes every wire through the obstacle-aware <see cref="OrthogonalRouter"/>
+    /// — the same router RTL/Nodes use — with extra crossing sweeps and wider
+    /// corridors, so paths and components no longer overlap (user feedback
+    /// 2026-10-27). Raw keeps the literal legacy midpoint routing, unchanged.</summary>
+    private static LaidOutNetlist LayoutGateLevel(Netlist display, SchematicRenderMode mode)
+        => mode == SchematicRenderMode.Grouped
+            ? LayeredLayout.Layout(display, groupAware: true, obstacleRouting: true,
+                                   crossingSweeps: 4, colGap: 260, rowGap: 120)
+            : LayeredLayout.Layout(display);
 
     /// <summary>Builds a layout for an arbitrary render style from the cached
     /// raw netlist, without mutating viewer state. Used by the export flow so
@@ -1089,7 +1155,7 @@ else
         var display = _mode == ViewMode.Naive
             ? _rawNetlist
             : SchematicSimplifier.SimplifyNetlist(_rawNetlist);
-        return LayeredLayout.Layout(display);
+        return LayoutGateLevel(display, mode);
     }
 
     private void BuildLookups()
@@ -1279,6 +1345,30 @@ else
             double hue = (outBase + i * (360.0 / Math.Max(1, outputs.Count))) % 360;
             _portColours[outputs[i].NetId] = FormatHsl(hue, 0.65, 0.62);
         }
+
+        // Wire colours — one hue per DRIVER (the cell that produces the net),
+        // spaced by the golden angle so neighbouring signals land far apart on
+        // the wheel instead of sharing their gate kind's single hue. A net and
+        // all its branches share the driver's colour (the fan-out still reads
+        // as one coloured tree), but two different drivers are always visibly
+        // distinct — the fix for "many sections, the paths all have the same
+        // colour". Driver order is sorted so the mapping is stable across
+        // renders until the user hits Shuffle (which reseeds `wireStart`).
+        _wireColours = new();
+        var producerOfNet = new Dictionary<string, string>();
+        foreach (var c in _layout.Netlist.Cells)
+            foreach (var pin in c.Outputs)
+                producerOfNet[pin.NetId] = c.Id;
+        const double goldenAngle = 137.50776405003785;
+#pragma warning disable CA5394
+        double wireStart = rng.NextDouble() * 360;
+#pragma warning restore CA5394
+        var drivers = producerOfNet.Values.Distinct().OrderBy(id => id, StringComparer.Ordinal).ToList();
+        var hueByDriver = new Dictionary<string, double>(drivers.Count);
+        for (int i = 0; i < drivers.Count; i++)
+            hueByDriver[drivers[i]] = (wireStart + i * goldenAngle) % 360;
+        foreach (var (netId, driverId) in producerOfNet)
+            _wireColours[netId] = FormatHsl(hueByDriver[driverId], 0.68, 0.55);
     }
 
     private void ShuffleColours()
@@ -2055,6 +2145,9 @@ else
                 return "#f59e0b";
             }
         }
+        // Per-driver wire hue first (spaced on the wheel so sibling signals
+        // stay distinct); fall back to the producer gate's stroke, then ports.
+        if (_wireColours.TryGetValue(net.Id, out var wc)) return wc;
         if (_producerOfNet.TryGetValue(net.Id, out var cid)
             && _cellColours.TryGetValue(cid, out var col)) return col.Stroke;
         if (_portColours.TryGetValue(net.Id, out var pc)) return pc;
@@ -2399,6 +2492,7 @@ else
             {
                 Cells = new Dictionary<string, SchematicCellColours>(_cellColours),
                 Ports = new Dictionary<string, string>(_portColours),
+                Wires = new Dictionary<string, string>(_wireColours),
             };
             svg = SchematicExporter.BuildSvg(filtered, req, title, palette, _annotations);
         }

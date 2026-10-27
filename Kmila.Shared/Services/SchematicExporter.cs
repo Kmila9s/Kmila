@@ -190,11 +190,13 @@ public static class SchematicExporter
             string stroke = wireDefault;
             if (useColor && palette != null)
             {
-                // Wire colour priority: producer cell's stroke (so a
-                // fan-out tree shares one hue), then the input port's
-                // hue when the source is an entity port, then the
-                // monochrome default.
-                if (wire.FromCellId != null
+                // Wire colour priority: the per-net wire hue (spaced per driver
+                // so sibling signals stay distinct), then the producer cell's
+                // stroke as a fallback, then the input port's hue when the
+                // source is an entity port, then the monochrome default.
+                if (palette.Wires.TryGetValue(wire.NetId, out var wireCol))
+                    stroke = wireCol;
+                else if (wire.FromCellId != null
                     && palette.Cells.TryGetValue(wire.FromCellId, out var producerCol))
                     stroke = producerCol.Stroke;
                 else if (palette.Ports.TryGetValue(wire.NetId, out var portCol))
