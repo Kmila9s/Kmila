@@ -4602,6 +4602,17 @@
     min-height: 0;
     overflow: auto;
     padding: var(--space-3);
+    /* Mirror .schematic-viewer__body's containment. position:relative makes
+       this body the containing block for the absolutely-positioned mermaid
+       <svg> below (the fix that keeps Fit/Reset centred on a phone — see that
+       rule). width/max-width/min-width/contain keep the body from being
+       stretched by the (max-width:none) svg, exactly like the schematic, so the
+       body stays the true sized viewport the pan-zoom measures against. */
+    position: relative;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    contain: inline-size;
 }
 
 .flow-diagram__body pre.mermaid {
@@ -4617,6 +4628,21 @@
 .flow-diagram__body pre.mermaid svg {
     max-width: none !important;
     height: auto;
+    /* Pin the diagram to the body's top-left and take it out of flow. The
+       pan-zoom centres with tx = (rootW - contentW)/2 - target.offsetLeft, i.e.
+       it assumes the svg's own layout position is 0. That holds on desktop
+       (the body is wider than the diagram, so no overflow) but NOT on a phone:
+       there the mermaid svg is wider than the body, and the Android WebView
+       lays the overflowing svg out centred — a large negative layout-left that
+       offsetLeft (0 for an SVGElement) can't report — so Fit/Reset jammed the
+       diagram off to the left and the view felt "locked". Absolute at 0,0 makes
+       the layout position deterministically 0 regardless of the svg's width, so
+       the centring maths is correct on every surface. The body is position:
+       relative (above), so this positions against it; the pan-zoom transform
+       and scroll still work because the body stays the sized viewport. */
+    position: absolute;
+    top: 0;
+    left: 0;
 }
 
 .flow-diagram__empty {
