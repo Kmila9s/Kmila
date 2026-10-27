@@ -11010,6 +11010,31 @@ button.waveform-value-readout:focus-visible {
     .schematic-viewer__modes { margin-left: 0; flex-wrap: wrap; }
     .schematic-mode { padding: 0.4rem 0.6rem; }
     .schematic-mode span { display: none; } /* icons-only on phones */
+    /* Schematic actions cluster had NO phone treatment (unlike its sibling
+       modes group above), so its non-wrapping inline-flex row overflowed and
+       the viewer's overflow:hidden clipped the trailing Zoom−/Reset/Fullscreen
+       buttons off the right edge — they were unreachable on phones (mobile
+       audit 2026-10-26). Match the waveform/flow fix: wrap the cluster, right-
+       align it, and collapse the one text label (Export) to icon-only. */
+    .schematic-viewer__actions {
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 0.25rem;
+    }
+    /* Export is the only labelled button here; collapse its text to icon-only.
+       Exclude the select-mode count badge so the selection count stays visible. */
+    .schematic-viewer__actions .kmila-btn--sm > span:not(.spinner-border):not(.schematic-toolbar__count) {
+        display: none;
+    }
+    .schematic-viewer__actions .kmila-btn--sm { padding-inline: var(--space-2); }
+    /* Defensive: these dock toolbars never got a mobile branch either. They fit
+       today with few buttons, but wrap keeps them from clipping when populated. */
+    .runs-panel__toolbar,
+    .output-panel__toolbar,
+    .files-list__toolbar {
+        flex-wrap: wrap;
+        row-gap: var(--space-1);
+    }
     /* Phones: stack the toolbar deterministically — title row on top, action
        row on the bottom — instead of relying on flex-wrap. The wrap layout
        was placing the action row's buttons over the first signal row because
