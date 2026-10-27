@@ -3915,10 +3915,17 @@
     outline-offset: 2px;
 }
 
-/* Schematic render-style dropdown. Replaces the old Human/Raw pill — a
-   compact native <select> fronted by an icon so it stays legible when the
-   toolbar is crowded and scales as styles are added. */
+/* Schematic render-style dropdown. A Blazor-controlled button + backdrop +
+   popup menu (not a native <select>): the schematic re-renders on every sim
+   cursor / live-step event, and those re-renders collapsed the native popup
+   mid-open, so the picker intermittently "stopped working". This button/menu
+   pattern mirrors RunBar's run-target menu and is immune to re-renders. */
 .schematic-style-select {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+.schematic-style-select__toggle {
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
@@ -3928,40 +3935,74 @@
     background: var(--surface-1);
     color: var(--text-muted);
     cursor: pointer;
-    transition: border-color var(--duration-fast) var(--ease-standard);
+    transition: border-color var(--duration-fast) var(--ease-standard),
+                color var(--duration-fast) var(--ease-standard);
 }
-.schematic-style-select:hover,
-.schematic-style-select:focus-within {
+.schematic-style-select__toggle:hover,
+.schematic-style-select.is-open .schematic-style-select__toggle {
     border-color: var(--brand-accent);
     color: var(--text-strong);
 }
-.schematic-style-select__input {
-    appearance: none;
-    -webkit-appearance: none;
-    border: none;
-    background: transparent;
-    color: var(--text-strong);
-    font: inherit;
-    font-size: var(--fs-xs);
-    font-weight: 600;
-    padding-right: 14px;
-    cursor: pointer;
-    /* caret chevron */
-    background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
-                      linear-gradient(135deg, currentColor 50%, transparent 50%);
-    background-position: right 4px top 55%, right 0 top 55%;
-    background-size: 5px 5px, 5px 5px;
-    background-repeat: no-repeat;
-}
-.schematic-style-select__input:focus-visible {
+.schematic-style-select__toggle:focus-visible {
     outline: 2px solid var(--brand-accent);
     outline-offset: 2px;
-    border-radius: 4px;
 }
-.schematic-style-select__input option {
+.schematic-style-select__value {
     color: var(--text-strong);
-    background: var(--surface-1);
+    font-size: var(--fs-xs);
+    font-weight: 600;
 }
+/* Caret rotates when the menu is open — the usual affordance. */
+.schematic-style-select__toggle > .bi:last-child {
+    font-size: 0.7em;
+    transition: transform var(--duration-fast) var(--ease-standard);
+}
+.schematic-style-select.is-open .schematic-style-select__toggle > .bi:last-child {
+    transform: rotate(180deg);
+}
+
+.schematic-style-select__backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--z-dropdown) - 1);
+    background: transparent;
+}
+.schematic-style-select__menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: auto;
+    z-index: var(--z-dropdown);
+    min-width: 160px;
+    padding: var(--space-1);
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-3);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    animation: kmilaPop var(--duration-fast) var(--ease-standard);
+}
+[dir="rtl"] .schematic-style-select__menu { left: auto; right: 0; }
+.schematic-style-select__item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    background: none;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-default);
+    font-size: var(--fs-sm);
+    text-align: left;
+    cursor: pointer;
+    transition: background-color var(--duration-fast) var(--ease-standard);
+}
+.schematic-style-select__item:hover { background-color: var(--surface-3); color: var(--text-strong); }
+.schematic-style-select__item.is-active { background-color: var(--surface-3); color: var(--text-strong); }
+.schematic-style-select__item .bi { color: var(--brand-accent); }
 
 /* Checkbox cards — same visual idiom as the scope cards but with
    a checkbox instead of a radio. Inline children stack on mobile. */
@@ -5185,6 +5226,53 @@
     .run-bar__actions::before { display: none; }
 }
 
+/* Option C — fused segments (user choice 2026-10-27). The simulation cluster
+   (Build · Run · caret · Stop) and the file cluster (Save · New) each read as
+   ONE connected control: members sit flush with their 1.5px borders overlapped
+   into a single hairline seam, and only the two outer corners of each group are
+   rounded. The two segments are separated by the `.run-bar__actions` row gap.
+   Logical radius props (border-*-*-radius) mirror automatically under RTL. */
+.run-bar__sim-group,
+.run-bar__file-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+    flex: 0 0 auto;
+}
+
+/* Overlap each member onto the previous so two borders collapse to one seam. */
+.run-bar__sim-group > .run-bar__run-split,
+.run-bar__sim-group > .run-bar__stop,
+.run-bar__file-group > .run-bar__file-btn--new {
+    margin-inline-start: -1.5px;
+}
+
+/* Every fused member is square by default; the inner fill mask follows. */
+.run-bar__sim-group .kmila-btn,
+.run-bar__file-group .kmila-btn {
+    border-radius: 0;
+}
+.run-bar__sim-group .kmila-btn::after,
+.run-bar__file-group .kmila-btn::after {
+    border-radius: inherit;
+}
+
+/* Round the two LEADING corners of each group's first member… */
+.run-bar__sim-group .run-bar__build,
+.run-bar__file-group .run-bar__file-btn--save {
+    border-start-start-radius: var(--radius-md);
+    border-end-start-radius: var(--radius-md);
+}
+
+/* …and the two TRAILING corners of each group's last member. The sim group's
+   last member shifts with state (Run → caret → Stop), so it carries the
+   `run-bar__seg-end` hook; the file group always ends on New file. */
+.run-bar__seg-end,
+.run-bar__file-group .run-bar__file-btn--new {
+    border-start-end-radius: var(--radius-md);
+    border-end-end-radius: var(--radius-md);
+}
+
 
 /* FPGA reference chip */
 .run-bar__fpga {
@@ -5302,6 +5390,11 @@
     gap: var(--space-2);
     white-space: nowrap;
     flex-shrink: 0;
+    /* Match Run's width so the two primary simulation buttons read as an
+       equal-size pair (user feedback 2026-10-27). Reset to 0 at ≤860px below,
+       where Build sheds its label and becomes icon-only. */
+    min-width: 120px;
+    justify-content: center;
 }
 
 /* Run button (primary) */
@@ -5407,31 +5500,20 @@
 
 .run-bar__overflow-item > span:first-of-type { flex: 1 1 auto; }
 
-/* Run split button: the Run CTA + a caret that opens the target picker. */
+/* Run split button: the Run CTA + a caret that opens the target picker. The
+   corner flattening is handled by the fused-segment rules above (the caret is a
+   member of `.run-bar__sim-group`); here we only keep the split's positioning
+   context for the target-menu popover, the caret's slim padding, and the seam
+   overlap that merges the caret border into Run's. */
 .run-bar__run-split {
     position: relative;
     display: inline-flex;
     align-items: stretch;
 }
 
-/* Fuse the caret to the Run button: flatten the touching corners. */
-.run-bar__run-split .run-bar__run {
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
-}
-
 .run-bar__run-caret {
     padding-inline: var(--space-2);
-    border-top-left-radius: 0;
-    border-bottom-left-radius: 0;
-    margin-inline-start: 1px;
-}
-
-[dir="rtl"] .run-bar__run-split .run-bar__run {
-    border-radius: 0 var(--radius-md) var(--radius-md) 0;
-}
-[dir="rtl"] .run-bar__run-caret {
-    border-radius: var(--radius-md) 0 0 var(--radius-md);
+    margin-inline-start: -1.5px;
 }
 
 .run-bar__run-caret.is-open { filter: brightness(0.92); }
@@ -5594,7 +5676,17 @@
 @container runbar (max-width: 640px) {
     .run-bar .run-bar__build,
     .run-bar .run-bar__file-btn { display: none; }
+    /* Fold the whole file cluster away with the buttons so the collapsed bar
+       doesn't keep an empty gap where the group used to be. */
+    .run-bar__file-group { display: none; }
     .run-bar__overflow { display: inline-flex; }
+    /* Build is the fused sim-segment's start; with it hidden, Run inherits the
+       leading rounded corners and drops the seam overlap it had against Build. */
+    .run-bar__sim-group > .run-bar__run-split { margin-inline-start: 0; }
+    .run-bar__sim-group .run-bar__run {
+        border-start-start-radius: var(--radius-md);
+        border-end-start-radius: var(--radius-md);
+    }
 }
 
 /* Collapse FPGA + duration + clock into a single popover behind a chip on
@@ -7670,18 +7762,13 @@
 /* Run-bar: always-visible Save / New-file actions next to the overflow dots.
    Hidden on narrow viewports to keep Build + Run reachable — users still have
    the overflow menu and the Ctrl+S / Cmd+S shortcut. */
+/* Save / New-file buttons inherit the full `.kmila-btn --ghost --primary` box
+   (height, padding, colour) so they match the Build/Run pair exactly. The old
+   `padding:0` + muted-text override made them shorter and visually
+   disconnected (user feedback 2026-10-27); only the nowrap hint and label
+   weight are kept here. */
 .run-bar__file-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: 0 var(--space-3);
-    color: var(--text-muted);
     white-space: nowrap;
-}
-
-.run-bar__file-btn:hover {
-    color: var(--text-strong);
-    background-color: var(--surface-2);
 }
 
 .run-bar__file-btn-label {
@@ -7689,14 +7776,11 @@
     font-weight: var(--fw-medium);
 }
 
-@media (max-width: 900px) {
-    .run-bar__file-btn-label { display: none; }
-}
-
-@media (max-width: 640px) {
-    /* Keep only Build + Run visible; rely on overflow for Save / New-file. */
-    .run-bar__file-btn { display: none; }
-}
+/* Responsive label-drop / fold for the file buttons is handled by the
+   `@container runbar` ladder above (≤860px sheds labels, ≤640px folds into the
+   burger) — the same breakpoints as Build/Run. The old standalone viewport
+   media queries here were redundant and fired at a different width, so they
+   were removed (user feedback 2026-10-27). */
 
 
 /* Make the FPGA chip behave like a button — pointer cursor + hover surface

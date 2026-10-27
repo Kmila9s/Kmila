@@ -58,7 +58,22 @@ public static class SynthCommand
         {
             var netlist = Synthesizer.Synthesize(loaded.Top);
             cells = netlist.Cells.Count; nets = netlist.Nets.Count;
-            var layout = LayeredLayout.Layout(netlist);
+            // Lay out exactly like the GUI (SchematicViewer) does per style so the
+            // terminal figure matches the app: Raw keeps the literal gate netlist +
+            // legacy routing; Grouped simplifies + routes through the obstacle-aware
+            // router (crossing sweeps, wide corridors) so paths/components don't
+            // overlap; Rtl/Nodes collapse to functional blocks first.
+            var display = mode == SchematicRenderMode.Raw
+                ? netlist
+                : SchematicSimplifier.SimplifyNetlist(netlist);
+            LaidOutNetlist layout = mode.IsBlock()
+                ? LayeredLayout.Layout(BlockGraphBuilder.Build(display), groupAware: false,
+                                       sizeOf: BlockGraphBuilder.BlockSize, colGap: 260, rowGap: 120,
+                                       crossingSweeps: 4, obstacleRouting: true)
+                : mode == SchematicRenderMode.Grouped
+                    ? LayeredLayout.Layout(display, groupAware: true, obstacleRouting: true,
+                                           crossingSweeps: 4, colGap: 260, rowGap: 120)
+                    : LayeredLayout.Layout(display);
             var filtered = SelectionFilter.Full(layout);
             var req = new SchematicExportRequest
             {
