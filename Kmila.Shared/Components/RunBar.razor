@@ -220,8 +220,9 @@
         @* Run button (primary, state-machine) + a target-picker caret. The caret
            lets the user choose whether Run simulates the project's entry point or
            the currently active file; the choice persists as the project default
-           (handled by the parent). Shown only when an entry point exists — with
-           none, Run always uses the active file and there's nothing to pick. *@
+           (handled by the parent). Always shown when a run is meaningful — when no
+           entry point is set yet, the Entry-point row opens an inline picker so the
+           user can promote any VHDL file without leaving the bar. *@
         <div class="run-bar__run-split">
         <KmilaTooltip TextKey="@(NoFpga ? "RUNBAR_FPGA_REQUIRED" : "SIM_RUN")">
         <button type="button"
@@ -275,27 +276,69 @@
             {
                 <div class="run-bar__run-target-backdrop" @onclick="CloseRunTargetMenu" aria-hidden="true"></div>
                 <div class="run-bar__run-target-panel" role="menu">
+                    @* Entry point. When one is set it's a plain radio choice; when
+                       none is set the row expands an inline list of VHDL files so
+                       the user can promote one to entry point right here. *@
+                    @if (HasEntryPoint)
+                    {
+                        <button type="button" role="menuitemradio"
+                                aria-checked="@EntryRowActive"
+                                class="run-bar__run-target-item @(EntryRowActive ? "is-active" : "")"
+                                @onclick="() => SelectRunTargetAsync(RunTargetMode.EntryPoint)">
+                            <Icon Name="IconName.StarFill" />
+                            <span class="run-bar__run-target-text">
+                                <span class="run-bar__run-target-label">@Traductor.T("RUNBAR_RUN_ENTRY_POINT")</span>
+                                <span class="run-bar__run-target-file">@EntryPointFileName</span>
+                            </span>
+                            @if (EntryRowActive) { <Icon Name="IconName.CheckLg" /> }
+                        </button>
+                    }
+                    else
+                    {
+                        <button type="button" role="menuitem"
+                                class="run-bar__run-target-item @(_entryPickerOpen ? "is-active" : "")"
+                                aria-haspopup="menu"
+                                aria-expanded="@_entryPickerOpen"
+                                @onclick="ToggleEntryPicker">
+                            <Icon Name="IconName.Star" />
+                            <span class="run-bar__run-target-text">
+                                <span class="run-bar__run-target-label">@Traductor.T("RUNBAR_RUN_ENTRY_POINT")</span>
+                                <span class="run-bar__run-target-file">@Traductor.T("RUNBAR_RUN_ENTRY_CHOOSE")</span>
+                            </span>
+                            <Icon Name="@(_entryPickerOpen ? IconName.ChevronDown : IconName.ChevronRight)" />
+                        </button>
+                        @if (_entryPickerOpen)
+                        {
+                            <div class="run-bar__entry-picker" role="menu" aria-label="@Traductor.T("RUNBAR_RUN_PICK_ENTRY_TIP")">
+                                @if (SelectableFiles is { Count: > 0 })
+                                {
+                                    @foreach (var f in SelectableFiles)
+                                    {
+                                        <button type="button" role="menuitem"
+                                                class="run-bar__entry-picker-item"
+                                                @onclick="() => ChooseEntryPointAsync(f)">
+                                            <Icon Name="IconName.FileEarmarkCode" />
+                                            <span class="run-bar__run-target-file">@f.FileName</span>
+                                        </button>
+                                    }
+                                }
+                                else
+                                {
+                                    <div class="run-bar__entry-picker-empty">@Traductor.T("RUNBAR_RUN_NO_VHDL")</div>
+                                }
+                            </div>
+                        }
+                    }
                     <button type="button" role="menuitemradio"
-                            aria-checked="@(CurrentRunTarget == RunTargetMode.EntryPoint)"
-                            class="run-bar__run-target-item @(CurrentRunTarget == RunTargetMode.EntryPoint ? "is-active" : "")"
-                            @onclick="() => SelectRunTargetAsync(RunTargetMode.EntryPoint)">
-                        <Icon Name="IconName.StarFill" />
-                        <span class="run-bar__run-target-text">
-                            <span class="run-bar__run-target-label">@Traductor.T("RUNBAR_RUN_ENTRY_POINT")</span>
-                            <span class="run-bar__run-target-file">@(string.IsNullOrEmpty(EntryPointFileName) ? Traductor.T("RUNBAR_RUN_NO_ENTRY") : EntryPointFileName)</span>
-                        </span>
-                        @if (CurrentRunTarget == RunTargetMode.EntryPoint) { <Icon Name="IconName.CheckLg" /> }
-                    </button>
-                    <button type="button" role="menuitemradio"
-                            aria-checked="@(CurrentRunTarget == RunTargetMode.ActiveFile)"
-                            class="run-bar__run-target-item @(CurrentRunTarget == RunTargetMode.ActiveFile ? "is-active" : "")"
+                            aria-checked="@ActiveRowActive"
+                            class="run-bar__run-target-item @(ActiveRowActive ? "is-active" : "")"
                             @onclick="() => SelectRunTargetAsync(RunTargetMode.ActiveFile)">
                         <Icon Name="IconName.FileEarmarkCode" />
                         <span class="run-bar__run-target-text">
                             <span class="run-bar__run-target-label">@Traductor.T("RUNBAR_RUN_ACTIVE_FILE")</span>
                             <span class="run-bar__run-target-file">@(string.IsNullOrEmpty(ActiveFileName) ? "—" : ActiveFileName)</span>
                         </span>
-                        @if (CurrentRunTarget == RunTargetMode.ActiveFile) { <Icon Name="IconName.CheckLg" /> }
+                        @if (ActiveRowActive) { <Icon Name="IconName.CheckLg" /> }
                     </button>
                 </div>
             }
@@ -450,6 +493,16 @@
     /// parent persists it as the project default and starts a run.</summary>
     [Parameter] public EventCallback<RunTargetMode> OnRunTargetSelected { get; set; }
 
+    /// <summary>VHDL files the user can promote to entry point from the caret
+    /// menu when none is set yet. Empty hides the inline picker (e.g. an unsaved
+    /// project whose entry point can't persist). Populated by the parent.</summary>
+    [Parameter] public IReadOnlyList<ProjectFile>? SelectableFiles { get; set; }
+
+    /// <summary>Fires when the user picks a file to become the entry point from
+    /// the inline picker. The parent saves it as the project's entry point and
+    /// starts a run against it.</summary>
+    [Parameter] public EventCallback<ProjectFile> OnEntryPointChosen { get; set; }
+
     /// <summary>
     /// True when this component triggered the current build as part of Run,
     /// vs. the user clicking Build directly. Controls which button shows the
@@ -505,17 +558,45 @@
     private void ToggleConfig() => _configOpen = !_configOpen;
     private void CloseConfig() => _configOpen = false;
 
-    // Run-target picker (entry point vs active file). Shown only when an entry
-    // point exists — otherwise Run always uses the active file.
+    // Run-target picker (entry point vs active file). Always shown when a run is
+    // meaningful so the choice is discoverable: with no entry point yet, the
+    // Entry-point row expands an inline file picker so the user can promote any
+    // VHDL file without hunting through the Files-panel kebab.
     private bool _runTargetMenuOpen;
-    private void ToggleRunTargetMenu() => _runTargetMenuOpen = !_runTargetMenuOpen;
-    private void CloseRunTargetMenu() => _runTargetMenuOpen = false;
-    private bool ShowRunTargetMenu => !string.IsNullOrEmpty(EntryPointFileName);
+    private bool _entryPickerOpen;
+    private void ToggleRunTargetMenu()
+    {
+        _runTargetMenuOpen = !_runTargetMenuOpen;
+        if (!_runTargetMenuOpen) _entryPickerOpen = false;
+    }
+    private void CloseRunTargetMenu()
+    {
+        _runTargetMenuOpen = false;
+        _entryPickerOpen = false;
+    }
+    private void ToggleEntryPicker() => _entryPickerOpen = !_entryPickerOpen;
+
+    private bool ShowRunTargetMenu =>
+        !string.IsNullOrEmpty(ActiveFileName)
+        || !string.IsNullOrEmpty(EntryPointFileName)
+        || (SelectableFiles?.Count > 0);
+
+    // Display helpers. With no entry point set, Run falls back to the active
+    // file, so the Active-file row reads as the current selection.
+    private bool HasEntryPoint => !string.IsNullOrEmpty(EntryPointFileName);
+    private bool EntryRowActive => HasEntryPoint && CurrentRunTarget == RunTargetMode.EntryPoint;
+    private bool ActiveRowActive => !HasEntryPoint || CurrentRunTarget == RunTargetMode.ActiveFile;
 
     private async Task SelectRunTargetAsync(RunTargetMode mode)
     {
         CloseRunTargetMenu();
         await OnRunTargetSelected.InvokeAsync(mode);
+    }
+
+    private async Task ChooseEntryPointAsync(ProjectFile file)
+    {
+        CloseRunTargetMenu();
+        await OnEntryPointChosen.InvokeAsync(file);
     }
 
     private async Task OnBuildFromMenuAsync()
