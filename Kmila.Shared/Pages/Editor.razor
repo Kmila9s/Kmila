@@ -278,6 +278,8 @@
                 EntryPointFileName="@_entryPointName"
                 ActiveFileName="@_openedFile?.FileName"
                 CurrentRunTarget="@_runTargetMode"
+                SelectableFiles="@EntryPointCandidates"
+                OnEntryPointChosen="OnEntryPointChosenAsync"
                 OnRunTargetSelected="OnRunTargetSelectedAsync" />
 
         @* ---------- Editor Dock: Entities · Ports · Waveforms · Runs · Files · Output ---------- *@
@@ -1782,6 +1784,36 @@
     {
         await RefreshRunTargetStateAsync();
         StateHasChanged();
+    }
+
+    /// <summary>VHDL files offered in the RunBar's inline entry-point picker
+    /// (shown when no entry point is set yet). Empty for an unsaved/transient
+    /// project, whose entry-point marker can't persist — there the picker is
+    /// hidden and Run just uses the active file.</summary>
+    private IReadOnlyList<ProjectFile> EntryPointCandidates =>
+        _projectId <= 0
+            ? System.Array.Empty<ProjectFile>()
+            : _projectFiles.Where(f =>
+                  f.FileName.EndsWith(".vhd", StringComparison.OrdinalIgnoreCase) ||
+                  f.FileName.EndsWith(".vhdl", StringComparison.OrdinalIgnoreCase)).ToList();
+
+    /// <summary>User promoted a file to entry point from the RunBar inline picker:
+    /// persist it as the project's entry point (same marker the Files-panel ★ uses,
+    /// so both stay in sync), switch the run target to the entry point, and run.</summary>
+    private async Task OnEntryPointChosenAsync(ProjectFile file)
+    {
+        if (_projectId > 0 && file is not null)
+        {
+            try
+            {
+                await DbContext.SetProjectMainFileAsync(_projectId, file.RelativePath);
+                await DbContext.SetProjectRunTargetModeAsync(_projectId, RunTargetMode.EntryPoint);
+            }
+            catch { /* non-fatal: run still honors the in-memory choice below */ }
+        }
+        _runTargetMode = RunTargetMode.EntryPoint;
+        await RefreshRunTargetStateAsync();   // refresh the entry-point label
+        await OnRunRequested();               // run against the just-set entry point
     }
 
     /// <summary>User picked a Run target from the RunBar caret menu: persist it
