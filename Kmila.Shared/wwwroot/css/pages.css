@@ -5520,11 +5520,18 @@
 
 .run-bar__run-target-panel {
     position: absolute;
-    top: calc(100% + 4px);
+    /* Open UPWARD: the run bar sits low in the layout, so a downward panel
+       (especially with the entry-point file picker expanded) clipped off the
+       bottom of the viewport. The tall editor above always has room. */
+    bottom: calc(100% + 4px);
     right: 0;
     left: auto;
     z-index: var(--z-dropdown);
     min-width: 240px;
+    /* Safety net so a long file list can never exceed the viewport; the inner
+       picker also caps itself, so this rarely engages. */
+    max-height: min(70vh, 460px);
+    overflow-y: auto;
     padding: var(--space-1);
     background-color: var(--surface-2);
     border: 1px solid var(--border-subtle);
