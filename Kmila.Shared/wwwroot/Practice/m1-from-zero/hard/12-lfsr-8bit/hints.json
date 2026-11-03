@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "A shift register seeded to all-ones that shuffles its bits by feeding back the XOR of a few tap positions — never let it reach all zeros or it locks up.",
+        "es": "Un registro de desplazamiento sembrado a todo unos que baraja sus bits realimentando el XOR de unas pocas posiciones de tap — nunca dejes que llegue a todo ceros o se queda bloqueado."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "In a clocked process compute a `variable fb` as the XOR of bits 7, 5, 4 and 3, then shift left bringing `fb` into the low bit; reset reseeds to `\"11111111\"` and you drive `q <= r;`.",
+        "es": "En un proceso con reloj calcula una `variable fb` como el XOR de los bits 7, 5, 4 y 3, y luego desplaza a la izquierda metiendo `fb` en el bit bajo; el reset vuelve a sembrar `\"11111111\"` y asignas `q <= r;`."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "The whole trick is two lines inside `rising_edge(clk)`.\n```vhdl\nfb := r(7) xor r(5) xor r(4) xor r(3);\nr  <= r(6 downto 0) & fb;\n```",
+        "es": "Toda la magia son dos líneas dentro de `rising_edge(clk)`.\n```vhdl\nfb := r(7) xor r(5) xor r(4) xor r(3);\nr  <= r(6 downto 0) & fb;\n```"
+      }
+    }
+  ]
+}

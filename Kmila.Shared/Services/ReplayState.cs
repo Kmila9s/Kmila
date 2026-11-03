@@ -25,6 +25,19 @@ namespace Kmila.Shared.Services;
 /// </remarks>
 public class ReplayState
 {
+    /// <summary>
+    /// Shared cursor bus. The schematic post-hoc replay (see the
+    /// "Schematic replay playback" region) advances this on every step so the
+    /// schematic's wire colouring / value chips and the waveform viewer follow
+    /// the replay without any extra wiring in those consumers.
+    /// </summary>
+    private readonly SignalCursorBus _cursor;
+
+    public ReplayState(SignalCursorBus cursor)
+    {
+        _cursor = cursor;
+    }
+
     /// <summary>The active replay document, or null when no simulation has run yet.</summary>
     public ExecutionTimelineDoc? Current { get; private set; }
 
@@ -81,10 +94,33 @@ public class ReplayState
         MaxFrames = max;
         if (_cachedWaveform != null)
         {
+            // Remember roughly where the schematic replay was so a detail
+            // change doesn't yank the student back to t=0.
+            double frac = 0;
+            if (IsReplayActive)
+            {
+                int oldCount = _replayRunner.Document.Steps.Count;
+                if (oldCount > 1) frac = (double)_replayRunner.CurrentIndex / (oldCount - 1);
+            }
+
             Current = ReplayBuilder.Build(_cachedWaveform, _cachedSource, MaxFrames);
             OnChange?.Invoke();
+
+            // Re-seat the schematic replay runner on the rebuilt doc at the
+            // equivalent position; code-side players reload via OnChange above.
+            if (IsReplayActive && Current != null)
+            {
+                _replayRunner.Load(Current);
+                _replayRunner.SeekTo((int)Math.Round(frac * Math.Max(0, Current.Steps.Count - 1)));
+            }
         }
     }
+
+    /// <summary>"Maximum" detail level for the schematic replay — one frame per
+    /// distinct transition time, capped like <see cref="LiveDocFrameCap"/> so a
+    /// pathological run can't flood the tape. Finer than the 1000-frame "Fine"
+    /// preset the code replay offers.</summary>
+    public const int MaxFramesMaximum = 5000;
 
     // ─── Phase B: live-mode wiring ───────────────────────────────────────
 
@@ -264,6 +300,7 @@ public class ReplayState
     /// </summary>
     public event Action? OnLiveRunFrame;
     private DateTime _lastRunFrame = DateTime.MinValue;
+    private DateTime _lastLiveCursorNudge = DateTime.MinValue;
 
     /// <summary>
     /// True when the given 1-based line carries a signal/variable assignment
@@ -571,6 +608,13 @@ public class ReplayState
         // boundary through that path.
         if (TrackActiveLines && LiveEngine?.IsPaused == true)
         {
+            // Move the shared cursor to the engine's current tick so the
+            // schematic's Debug value chips + wire colouring (and the waveform
+            // viewer's cursor) track the stepped engine. Without this they stay
+            // frozen at wherever the user last scrubbed, so a live step looked
+            // like it changed nothing. Only on the paused/step boundary — never
+            // per-delta during a free run (would churn the waveform).
+            _cursor.SetCursorTick(args.Tick);
             _lastStepNudge = DateTime.UtcNow;
             OnLiveStepChanged?.Invoke();
         }
@@ -584,6 +628,17 @@ public class ReplayState
             {
                 _lastRunFrame = now;
                 OnLiveRunFrame?.Invoke();
+            }
+            // Advance the shared cursor at a gentler rate so the Debug value
+            // chips + wire colouring refresh DURING a free run — they read the
+            // waveform at the cursor, so without this they freeze at the pre-run
+            // position (the user's "values don't update during live play").
+            // ~5 Hz keeps the Blazor/SignalR re-render cost bounded; the glow
+            // stays on the faster JS path above.
+            if ((now - _lastLiveCursorNudge).TotalMilliseconds >= 180)
+            {
+                _lastLiveCursorNudge = now;
+                _cursor.SetCursorTick(args.Tick);
             }
         }
 
@@ -790,5 +845,167 @@ public class ReplayState
             // state the user observed.
             OnLiveChanged?.Invoke();
         }
+    }
+
+    // ─── Schematic replay playback (post-hoc) ────────────────────────────
+    //
+    // The live branch above forward-steps a running engine. This branch plays
+    // the *captured* timeline (`Current`) back through the SAME consumer events
+    // the schematic + editor already listen to — `OnLiveStepChanged` for the
+    // active-cell glow and Monaco line highlight, and the shared `_cursor` for
+    // wire-value colouring and the waveform cursor — so a finished run can be
+    // re-watched forwards AND backwards, scrubbed, sped up, and looped, with no
+    // engine attached. Reuses `TimelineRunner`, the exact state machine behind
+    // the code-side `ExecutionPlayer`.
+
+    private readonly TimelineRunner _replayRunner = new();
+    private bool _replayWired;
+    private int[] _replayActiveLines = Array.Empty<int>();
+    private string[] _replayActiveSignals = Array.Empty<string>();
+
+    /// <summary>True while the schematic replay is driving the shared cursor
+    /// and active sets (no live engine attached). Consumers gate their
+    /// executing-cell glow on <see cref="IsLiveActive"/> OR this.</summary>
+    public bool IsReplayActive { get; private set; }
+
+    /// <summary>When true, autoplay restarts from the top instead of stopping
+    /// at the last step.</summary>
+    public bool ReplayLoop { get; set; }
+
+    /// <summary>1-based source lines responsible for the current replay step —
+    /// the post-hoc analogue of <see cref="LiveActiveLines"/>.</summary>
+    public IReadOnlyList<int> ReplayActiveLines => _replayActiveLines;
+
+    /// <summary>Signal names changed at the current replay step.</summary>
+    public IReadOnlyList<string> ReplayActiveSignals => _replayActiveSignals;
+
+    /// <summary>True while the replay tape is auto-advancing.</summary>
+    public bool ReplayIsPlaying => _replayRunner.IsPlaying;
+
+    /// <summary>0-based index of the current replay step.</summary>
+    public int ReplayIndex => _replayRunner.CurrentIndex;
+
+    /// <summary>Total steps in the loaded replay timeline.</summary>
+    public int ReplayCount => _replayRunner.Document.Steps.Count;
+
+    /// <summary>Current playback speed multiplier (0.25…4).</summary>
+    public double ReplaySpeed => _replayRunner.Speed;
+
+    /// <summary>Enter replay mode over the captured <see cref="Current"/> doc.
+    /// No-op when nothing has been captured yet.</summary>
+    public void ReplayEnter()
+    {
+        if (Current == null || Current.Steps.Count == 0) return;
+        if (!_replayWired)
+        {
+            _replayWired = true;
+            _replayRunner.OnTick += OnReplayTick;
+            _replayRunner.OnComplete += OnReplayComplete;
+        }
+        _replayRunner.Load(Current);   // resets to step 0, fires OnTick → publish
+        IsReplayActive = true;
+        PublishReplayStep();
+        OnLiveChanged?.Invoke();        // toolbar swap + editor tab badge
+        OnLiveStepChanged?.Invoke();    // schematic glow + line highlight
+    }
+
+    /// <summary>Leave replay mode and clear the active sets. Does not touch the
+    /// cursor (the student may want to keep inspecting the last position).</summary>
+    public void ReplayExit()
+    {
+        _replayRunner.Pause();
+        IsReplayActive = false;
+        _replayActiveLines = Array.Empty<int>();
+        _replayActiveSignals = Array.Empty<string>();
+        OnLiveChanged?.Invoke();
+        OnLiveStepChanged?.Invoke();
+    }
+
+    public void ReplayPlayPause()
+    {
+        if (_replayRunner.IsPlaying) _replayRunner.Pause();
+        else _replayRunner.Play();
+        OnLiveChanged?.Invoke();
+    }
+
+    public void ReplayPause() { _replayRunner.Pause(); OnLiveChanged?.Invoke(); }
+    public void ReplayStepForward() => _replayRunner.StepForward();
+    public void ReplayStepBack() => _replayRunner.StepBack();
+    public void ReplayRestart() => _replayRunner.Restart();
+    public void ReplaySeekTo(int index) => _replayRunner.SeekTo(index);
+
+    public void SetReplaySpeed(double speed)
+    {
+        _replayRunner.Speed = Math.Clamp(speed, 0.1, 8.0);
+        OnLiveChanged?.Invoke();
+    }
+
+    public void SetReplayLoop(bool loop)
+    {
+        ReplayLoop = loop;
+        // If we flipped loop on while parked at the end, kick playback again so
+        // the toggle feels immediate.
+        if (loop && IsReplayActive && !_replayRunner.IsPlaying
+            && _replayRunner.CurrentIndex >= _replayRunner.Document.Steps.Count - 1)
+        {
+            _replayRunner.Restart();
+            _replayRunner.Play();
+        }
+        OnLiveChanged?.Invoke();
+    }
+
+    private void OnReplayTick()
+    {
+        PublishReplayStep();
+        OnLiveStepChanged?.Invoke();
+    }
+
+    private void OnReplayComplete()
+    {
+        if (ReplayLoop)
+        {
+            _replayRunner.Restart();
+            _replayRunner.Play();
+        }
+        else
+        {
+            OnLiveChanged?.Invoke(); // play button flips back to ▶
+        }
+    }
+
+    private void PublishReplayStep()
+    {
+        var step = _replayRunner.CurrentStep;
+        _replayActiveLines = step.HighlightLines?.ToArray() ?? Array.Empty<int>();
+
+        // Active signals = the ones that actually CHANGED at this step, not the
+        // whole snapshot — otherwise every wire glows on every frame. Diff the
+        // current step's values against the PREVIOUS step in the timeline
+        // (deterministic for scrub/seek as well as play), mirroring the live
+        // mode's "signals that changed this delta" semantics.
+        var steps = _replayRunner.Document.Steps;
+        int i = _replayRunner.CurrentIndex;
+        if (i > 0 && i < steps.Count && step.Signals != null)
+        {
+            var prev = steps[i - 1].Signals;
+            var changed = new List<string>();
+            foreach (var kv in step.Signals)
+                if (prev == null || !prev.TryGetValue(kv.Key, out var pv) || pv != kv.Value)
+                    changed.Add(kv.Key);
+            _replayActiveSignals = changed.ToArray();
+        }
+        else
+        {
+            // First frame (or empty): nothing has "changed" yet — show the
+            // circuit at rest rather than lighting everything up.
+            _replayActiveSignals = Array.Empty<string>();
+        }
+
+        // step.T is a time in ns (ReplayBuilder emits distinct transition
+        // times); the shared cursor is in ticks. Convert via the captured
+        // waveform's timescale so wire-value colouring + the waveform cursor
+        // land on the right column.
+        int scale = Math.Max(1, _cachedWaveform?.TimescaleNs ?? 10);
+        _cursor.SetCursorTick((ulong)Math.Max(0, step.T / scale));
     }
 }

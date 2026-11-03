@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "Grant to exactly one requester, and to be fair start looking just after whoever won last time, wrapping around the four channels.",
+        "es": "Concede el permiso a exactamente un solicitante, y para ser justo empieza a mirar justo después de quien ganó la última vez, dando la vuelta entre los cuatro canales."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "In a clocked process keep a 2-bit `last` index; scan the four `req` bits starting at `last+1` with a `for` loop and a `found` guard variable so only the first hit wins, indexing the vector with `to_integer(idx)`. If nobody requests, output all zeros and leave `last` unchanged.",
+        "es": "En un proceso con reloj guarda un índice `last` de 2 bits; recorre los cuatro bits de `req` empezando en `last+1` con un bucle `for` y una variable de guardia `found` para que sólo gane el primer acierto, indexando el vector con `to_integer(idx)`. Si nadie pide, saca todo ceros y deja `last` igual."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Use variables (`idx`, `found`, `next_g`) and let the 2-bit `unsigned` index wrap on its own.\n```vhdl\nidx := last + 1; found := false; next_g := (others => '0');\nfor i in 0 to 3 loop\n    if not found then\n        if req(to_integer(idx)) = '1' then\n            next_g(to_integer(idx)) := '1'; last <= idx; found := true;\n        end if;\n        idx := idx + 1;\n    end if;\nend loop;\ng <= next_g;\n```",
+        "es": "Usa variables (`idx`, `found`, `next_g`) y deja que el índice `unsigned` de 2 bits dé la vuelta solo.\n```vhdl\nidx := last + 1; found := false; next_g := (others => '0');\nfor i in 0 to 3 loop\n    if not found then\n        if req(to_integer(idx)) = '1' then\n            next_g(to_integer(idx)) := '1'; last <= idx; found := true;\n        end if;\n        idx := idx + 1;\n    end if;\nend loop;\ng <= next_g;\n```"
+      }
+    }
+  ]
+}

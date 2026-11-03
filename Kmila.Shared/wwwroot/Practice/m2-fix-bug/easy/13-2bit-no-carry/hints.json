@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "The low bit of the sum is fine, but the result goes wrong whenever bit 0 should carry into bit 1.",
+        "es": "El bit bajo de la suma está bien, pero el resultado falla cada vez que el bit 0 debería arrastrar un acarreo al bit 1."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "Each output bit is computed as an independent half-adder, so the carry generated at bit 0 is never fed into bit 1 (and `cin` never reaches it either). The bits need to be chained.",
+        "es": "Cada bit de salida se calcula como un medio sumador independiente, así que el acarreo del bit 0 nunca entra al bit 1 (y `cin` tampoco llega hasta allí). Hay que encadenar los bits."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "The simplest fix is to add the whole vectors at once. Add `use IEEE.NUMERIC_STD.ALL;`, then compute `tmp <= (\"0\" & unsigned(a)) + (\"0\" & unsigned(b)) + (\"00\" & cin);` and drive `sum <= STD_LOGIC_VECTOR(tmp(1 downto 0));` with `cout <= tmp(2);`.",
+        "es": "Lo más sencillo es sumar los vectores completos de una vez. Añade `use IEEE.NUMERIC_STD.ALL;`, calcula `tmp <= (\"0\" & unsigned(a)) + (\"0\" & unsigned(b)) + (\"00\" & cin);` y asigna `sum <= STD_LOGIC_VECTOR(tmp(1 downto 0));` con `cout <= tmp(2);`."
+      }
+    }
+  ]
+}

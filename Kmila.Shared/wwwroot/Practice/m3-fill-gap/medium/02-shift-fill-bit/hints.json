@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "The missing piece decides which bit gets shifted in on the right: either the incoming data bit or a plain zero, depending on the mode switch.",
+        "es": "La parte que falta decide qué bit entra por la derecha al desplazar: o el bit de datos entrante o un simple cero, según el interruptor de modo."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "A single concurrent `when … else` assignment to `feed` is enough: pick `din` when `mode` is `'1'`, and `'0'` otherwise.",
+        "es": "Basta una asignación concurrente con `when … else` sobre `feed`: elige `din` cuando `mode` es `'1'` y `'0'` en caso contrario."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Replace the stub with a conditional signal assignment:\n```vhdl\nfeed <= din when mode = '1' else '0';\n```\nThis drives `feed` continuously, so the shift process always reads the right fill bit.",
+        "es": "Sustituye el stub por una asignación condicional:\n```vhdl\nfeed <= din when mode = '1' else '0';\n```\nAsí `feed` se mantiene actualizado y el proceso de desplazamiento siempre lee el bit de relleno correcto."
+      }
+    }
+  ]
+}

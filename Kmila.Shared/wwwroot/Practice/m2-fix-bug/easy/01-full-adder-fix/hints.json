@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "The sum bit is fine, but the carry-out comes out wrong for at least one input combination — look at when a and b differ.",
+        "es": "El bit de suma está bien, pero el acarreo de salida sale mal en al menos una combinación de entradas — fíjate en cuando `a` y `b` son distintas."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "Inspect the `cout` assignment. The second term of the OR only looks at `a xor b` and never considers `cin`, so a carry can be generated when it shouldn't be.",
+        "es": "Revisa la asignación de `cout`. El segundo término del OR sólo mira `a xor b` y nunca tiene en cuenta `cin`, así que se genera un acarreo cuando no debería."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Change `cout <= (a and b) or (a xor b);` to `cout <= (a and b) or (cin and (a xor b));`. The `a xor b` term must be gated by `cin`.",
+        "es": "Cambia `cout <= (a and b) or (a xor b);` por `cout <= (a and b) or (cin and (a xor b));`. El término `a xor b` debe ir condicionado por `cin`."
+      }
+    }
+  ]
+}

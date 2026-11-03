@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "The master is latching `miso` at the wrong moment of the `sclk` cycle, so the sampled value is unreliable.",
+        "es": "El maestro está capturando `miso` en el momento equivocado del ciclo de `sclk`, así que el valor muestreado no es fiable."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "The `sample_int <= miso;` assignment happens on every tick instead of only at the falling edge of `sclk`. In SPI mode 0 the master must sample on the falling edge (divider = 7), not the rising one (divider = 3).",
+        "es": "La asignación `sample_int <= miso;` ocurre en cada tick en lugar de solo en el flanco de bajada de `sclk`. En SPI modo 0 el maestro debe muestrear en el flanco de bajada (divider = 7), no en el de subida (divider = 3)."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Default `sample_int <= '0';` each cycle, and move `sample_int <= miso;` out of the `divider = 3` branch into the `divider = 7` (falling-edge) branch so it pulses for exactly one cycle.",
+        "es": "Pon `sample_int <= '0';` por defecto en cada ciclo, y mueve `sample_int <= miso;` de la rama `divider = 3` a la rama `divider = 7` (flanco de bajada) para que pulse exactamente un ciclo."
+      }
+    }
+  ]
+}

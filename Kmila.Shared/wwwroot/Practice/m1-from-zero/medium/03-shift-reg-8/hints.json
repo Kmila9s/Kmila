@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "On every clock tick the stored bits all march one place to the left while a fresh bit enters at the bottom; reset empties the whole register at once.",
+        "es": "En cada flanco de reloj los bits guardados avanzan una posición a la izquierda mientras entra un bit nuevo por abajo; el reset vacía todo el registro de golpe."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "Keep the state in an internal signal and update it inside a `process(clk, reset)`: handle the asynchronous `reset` first, then `elsif rising_edge(clk)`. The shift itself is just a concatenation of a slice with `din`.",
+        "es": "Guarda el estado en una señal interna y actualízalo dentro de un `process(clk, reset)`: trata primero el `reset` asíncrono y luego `elsif rising_edge(clk)`. El desplazamiento en sí es una concatenación de una rebanada con `din`."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Drop the low bit, shift the rest up, and append `din`:\n\n```vhdl\nif reset = '1' then\n    r <= (others => '0');\nelsif rising_edge(clk) then\n    r <= r(6 downto 0) & din;\nend if;\n-- q <= r; concurrently\n```",
+        "es": "Descarta el bit alto, sube el resto y añade `din` al final:\n\n```vhdl\nif reset = '1' then\n    r <= (others => '0');\nelsif rising_edge(clk) then\n    r <= r(6 downto 0) & din;\nend if;\n-- q <= r; de forma concurrente\n```"
+      }
+    }
+  ]
+}

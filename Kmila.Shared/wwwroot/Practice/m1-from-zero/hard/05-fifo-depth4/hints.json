@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "Track how many items are stored (0 to 4): a push adds one, a pop removes one, and two flags report when it's empty or completely full.",
+        "es": "Lleva la cuenta de cuántos elementos hay guardados (de 0 a 4): un push añade uno, un pop quita uno, y dos banderas avisan cuando está vacío o completamente lleno."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "Keep a 3-bit `unsigned` count in a clocked process; increment only when `push` alone is asserted and you're still below 4, decrement only when `pop` alone is asserted and you're above 0, otherwise hold. Derive both flags combinationally.",
+        "es": "Mantén una cuenta `unsigned` de 3 bits en un proceso con reloj; incrementa sólo cuando `push` está solo y aún estás por debajo de 4, decrementa sólo cuando `pop` está solo y estás por encima de 0, y en otro caso mantén. Deriva las dos banderas de forma combinacional."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Use `to_unsigned(4, 3)` for the top and guard both ends; then the flags are one-line compares.\n```vhdl\nif push='1' and pop='0' and cnt < to_unsigned(4,3) then cnt <= cnt + 1;\nelsif pop='1' and push='0' and cnt > 0 then cnt <= cnt - 1; end if;\n-- ...\nfull  <= '1' when cnt = to_unsigned(4,3) else '0';\nempty <= '1' when cnt = 0 else '0';\n```",
+        "es": "Usa `to_unsigned(4, 3)` para el tope y protege ambos extremos; luego las banderas son comparaciones de una línea.\n```vhdl\nif push='1' and pop='0' and cnt < to_unsigned(4,3) then cnt <= cnt + 1;\nelsif pop='1' and push='0' and cnt > 0 then cnt <= cnt - 1; end if;\n-- ...\nfull  <= '1' when cnt = to_unsigned(4,3) else '0';\nempty <= '1' when cnt = 0 else '0';\n```"
+      }
+    }
+  ]
+}

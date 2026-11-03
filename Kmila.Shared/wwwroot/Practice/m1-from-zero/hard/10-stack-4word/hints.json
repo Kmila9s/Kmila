@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "Count how many words are on the stack (0 to 4): push adds one, pop removes one, and the two flags say when it's empty or full.",
+        "es": "Cuenta cuántas palabras hay en la pila (de 0 a 4): el push añade una, el pop quita una, y las dos banderas dicen cuándo está vacía o llena."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "The control is identical to a depth-4 FIFO: a 3-bit `unsigned` count in a clocked process, increment on push-only below 4, decrement on pop-only above 0, and hold otherwise (including push and pop together).",
+        "es": "El control es idéntico al de un FIFO de profundidad 4: una cuenta `unsigned` de 3 bits en un proceso con reloj, incrementa con push solo por debajo de 4, decrementa con pop solo por encima de 0, y mantén en cualquier otro caso (incluido push y pop a la vez)."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Use `to_unsigned(4, 3)` as the cap; when both signals are high neither branch fires, so the count holds.\n```vhdl\nif push='1' and pop='0' and cnt < to_unsigned(4,3) then cnt <= cnt + 1;\nelsif pop='1' and push='0' and cnt > 0 then cnt <= cnt - 1; end if;\n-- ...\nfull  <= '1' when cnt = to_unsigned(4,3) else '0';\nempty <= '1' when cnt = 0 else '0';\n```",
+        "es": "Usa `to_unsigned(4, 3)` como tope; cuando ambas señales están altas, ninguna rama aplica, así que la cuenta se mantiene.\n```vhdl\nif push='1' and pop='0' and cnt < to_unsigned(4,3) then cnt <= cnt + 1;\nelsif pop='1' and push='0' and cnt > 0 then cnt <= cnt - 1; end if;\n-- ...\nfull  <= '1' when cnt = to_unsigned(4,3) else '0';\nempty <= '1' when cnt = 0 else '0';\n```"
+      }
+    }
+  ]
+}

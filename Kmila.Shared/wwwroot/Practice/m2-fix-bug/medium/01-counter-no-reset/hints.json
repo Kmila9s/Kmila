@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "hints": [
+    { "level": 1, "text": {
+      "en": "Check what value the counter holds right after you assert reset — it isn't starting where the spec says it should.",
+      "es": "Fíjate en qué valor toma el contador justo después de activar el reset: no arranca donde debería según la especificación."
+    } },
+    { "level": 2, "text": {
+      "en": "Look at the assignment inside the reset branch of the process. The reset does clear `count`, but to the wrong value — compare it against `\"0000\"`.",
+      "es": "Mira la asignación dentro de la rama de reset del proceso. El reset sí limpia `count`, pero al valor equivocado; compáralo con `\"0000\"`."
+    } },
+    { "level": 3, "text": {
+      "en": "The reset line reads `count <= (others => '1');`, which forces every bit to 1 (i.e. 15). Change it to `count <= (others => '0');` so reset clears the counter to zero.",
+      "es": "La línea de reset dice `count <= (others => '1');`, que pone todos los bits a 1 (o sea, 15). Cámbiala por `count <= (others => '0');` para que el reset deje el contador a cero."
+    } }
+  ]
+}

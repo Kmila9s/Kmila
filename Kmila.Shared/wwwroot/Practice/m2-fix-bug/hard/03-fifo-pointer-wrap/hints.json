@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "The FIFO loses track of how many items it's holding, especially right after a pop or when a push and a pop land in the same cycle.",
+        "es": "La FIFO pierde la cuenta de cuántos elementos tiene guardados, sobre todo justo después de un pop o cuando un push y un pop caen en el mismo ciclo."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "Trace how `count` changes in the push and pop branches: a pop should *reduce* the count, not raise it, and when a push and a pop happen together the count shouldn't move at all.",
+        "es": "Sigue cómo cambia `count` en las ramas de push y de pop: un pop debería *reducir* la cuenta, no subirla, y cuando un push y un pop ocurren a la vez la cuenta no debería moverse en absoluto."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "In the pop branch change `count <= count + 1;` to `count <= count - 1;`, and guard both branches so a simultaneous push+pop is a no-op — e.g. only increment `if pop = '0' or count = 0` and only decrement `if push = '0' or count = DEPTH`.",
+        "es": "En la rama del pop cambia `count <= count + 1;` por `count <= count - 1;`, y protege ambas ramas para que un push+pop simultáneo no haga nada; por ejemplo, incrementa solo `if pop = '0' or count = 0` y decrementa solo `if push = '0' or count = DEPTH`."
+      }
+    }
+  ]
+}

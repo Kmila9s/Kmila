@@ -185,6 +185,11 @@ public class PracticeCatalog
                 if (!string.IsNullOrEmpty(body)) statements[lang] = body;
             }
 
+            // Tiered hints — optional. Missing/invalid file → no hints (the UI
+            // hides the hint section entirely).
+            var hintsRaw = await ReadJsonAsync<HintsJson>($"Practice/{folder}/hints.json");
+            var hints = ConvertHints(hintsRaw);
+
             return new PracticeExercise(
                 Id: e.Id!,
                 Modality: modality,
@@ -198,7 +203,8 @@ public class PracticeCatalog
                 OutputPortsToCompare: e.OutputPorts ?? new(),
                 SampleTimesNs: e.SampleTimesNs ?? new(),
                 TestCases: tests,
-                RequiresEngine: string.IsNullOrEmpty(e.RequiresEngine) ? null : e.RequiresEngine);
+                RequiresEngine: string.IsNullOrEmpty(e.RequiresEngine) ? null : e.RequiresEngine,
+                Hints: hints);
         }
         catch (Exception ex)
         {
@@ -251,6 +257,23 @@ public class PracticeCatalog
                 SystemClockMhz: t.SystemClockMhz > 0 ? t.SystemClockMhz : 50));
         }
         return result;
+    }
+
+    /// <summary>
+    /// Projects the raw hints.json into the public model, sorted by level and
+    /// dropping entries with no text. Returns an empty list when the file was
+    /// absent or malformed.
+    /// </summary>
+    private static List<PracticeHint> ConvertHints(HintsJson? doc)
+    {
+        var result = new List<PracticeHint>();
+        if (doc?.Hints == null) return result;
+        foreach (var h in doc.Hints)
+        {
+            if (h.Text == null || h.Text.Count == 0) continue;
+            result.Add(new PracticeHint(h.Level, h.Text));
+        }
+        return result.OrderBy(h => h.Level).ToList();
     }
 
     private async Task<string?> ReadTextAsync(string path)
@@ -316,6 +339,24 @@ public class PracticeCatalog
         public Dictionary<string, string>? Summaries { get; set; }
         /// <summary>Optional engine-feature gate. See PracticeExerciseMeta.RequiresEngine.</summary>
         public string? RequiresEngine { get; set; }
+    }
+
+    /// <summary>Root document shape of an exercise's <c>hints.json</c> file.</summary>
+    private sealed class HintsJson
+    {
+        /// <summary>Hint schema version number; bumped when the on-disk shape changes.</summary>
+        public int Version { get; set; }
+        /// <summary>Tiered hints declared by the file.</summary>
+        public List<HintJsonItem>? Hints { get; set; }
+    }
+
+    /// <summary>One tiered hint inside <see cref="HintsJson.Hints"/>: escalation level + localized Markdown bodies.</summary>
+    private sealed class HintJsonItem
+    {
+        /// <summary>Escalation level, 1 (general) … 3 (specific).</summary>
+        public int Level { get; set; }
+        /// <summary>Localized Markdown bodies keyed by language code (en/es authored).</summary>
+        public Dictionary<string, string>? Text { get; set; }
     }
 
     /// <summary>Root document shape of an exercise's <c>tests.json</c> file.</summary>

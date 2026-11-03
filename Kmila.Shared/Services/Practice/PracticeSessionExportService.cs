@@ -64,12 +64,13 @@ public sealed class PracticeSessionExportService
         }
 
         var progress = await _attempts.GetProgressAsync(exercise.Id);
+        var hintReveals = await _attempts.GetHintRevealsAsync(exercise.Id);
 
         var stamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
         var safeId = SanitizeFileName(exercise.Id);
         var baseName = $"practice-{safeId}-session-{stamp}";
 
-        var markdown = BuildMarkdown(exercise, lang, attempts, perResults, progress, request);
+        var markdown = BuildMarkdown(exercise, lang, attempts, perResults, progress, hintReveals, request);
 
         if (request.Format == PracticeSessionExportFormat.Markdown)
         {
@@ -80,7 +81,7 @@ public sealed class PracticeSessionExportService
                 BinaryContent: null);
         }
 
-        var bytes = BuildZip(exercise, lang, attempts, perResults, progress, markdown, request);
+        var bytes = BuildZip(exercise, lang, attempts, perResults, progress, hintReveals, markdown, request);
         return new PracticeSessionExportPayload(
             FileName: $"{baseName}.zip",
             MimeType: "application/zip",
@@ -96,6 +97,7 @@ public sealed class PracticeSessionExportService
         List<PracticeAttempt> attempts,
         Dictionary<int, List<PracticeAttemptTestResult>> perResults,
         PracticeProgress? progress,
+        List<PracticeHintReveal> hintReveals,
         PracticeSessionExportRequest req)
     {
         var sb = new StringBuilder();
@@ -119,9 +121,29 @@ public sealed class PracticeSessionExportService
             {
                 sb.Append("- **Mejor tiempo total:** ").Append(progress.BestSolveTimeMs).Append(" ms\n");
             }
+            if (progress.MaxHintLevelUsed > 0)
+            {
+                sb.Append("- **Pistas usadas:** hasta el nivel ").Append(progress.MaxHintLevelUsed).Append(" de 3\n");
+            }
         }
 
         sb.Append('\n');
+
+        // Hint reveals — records that the student required help.
+        if (hintReveals.Count > 0)
+        {
+            sb.Append("## Pistas reveladas\n\n");
+            sb.Append("| Nivel | Revelada | Intentos fallidos | Forzada |\n");
+            sb.Append("| :---: | --- | ---: | :---: |\n");
+            foreach (var h in hintReveals.OrderBy(h => h.Level))
+            {
+                sb.Append("| ").Append(h.Level).Append(" | ")
+                  .Append(h.RevealedAt.ToString("u", CultureInfo.InvariantCulture)).Append(" | ")
+                  .Append(h.FailedAttemptsAtReveal).Append(" | ")
+                  .Append(h.Forced ? "✓" : "·").Append(" |\n");
+            }
+            sb.Append('\n');
+        }
 
         // Statement
         var statement = PickLang(ex.Statements, lang);
@@ -255,6 +277,7 @@ public sealed class PracticeSessionExportService
         List<PracticeAttempt> attempts,
         Dictionary<int, List<PracticeAttemptTestResult>> perResults,
         PracticeProgress? progress,
+        List<PracticeHintReveal> hintReveals,
         string markdownReport,
         PracticeSessionExportRequest req)
     {
@@ -296,7 +319,15 @@ public sealed class PracticeSessionExportService
                     attemptCount = progress.AttemptCount,
                     bestSolveTimeMs = progress.BestSolveTimeMs,
                     lastAttemptAt = progress.LastAttemptAt.ToString("u", CultureInfo.InvariantCulture),
+                    maxHintLevelUsed = progress.MaxHintLevelUsed,
                 },
+                hintReveals = hintReveals.OrderBy(h => h.Level).Select(h => new
+                {
+                    level = h.Level,
+                    revealedAtUtc = h.RevealedAt.ToString("u", CultureInfo.InvariantCulture),
+                    failedAttemptsAtReveal = h.FailedAttemptsAtReveal,
+                    forced = h.Forced,
+                }).ToList(),
                 attempts = attempts.Select((a, i) => new
                 {
                     ordinal = i + 1,

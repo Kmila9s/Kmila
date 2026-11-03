@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "One CORDIC step either adds the y value to x or subtracts it, and which one happens is chosen by the direction bit.",
+        "es": "Un paso CORDIC o suma el valor de y a x o lo resta, y cuál de las dos ocurre lo decide el bit de dirección."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "Use a conditional `… when dir = '1' else …` assignment; do the add and the subtract in signed arithmetic (`signed(x_in) ± signed(y_in)`) and cast each result back to `std_logic_vector`.",
+        "es": "Usa una asignación condicional `… when dir = '1' else …`; haz la suma y la resta en aritmética con signo (`signed(x_in) ± signed(y_in)`) y convierte cada resultado de vuelta a `std_logic_vector`."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Pick between the two with the direction bit.\n```vhdl\nx_out <= std_logic_vector(signed(x_in) + signed(y_in)) when dir = '1'\n    else std_logic_vector(signed(x_in) - signed(y_in));\n```",
+        "es": "Elige entre las dos con el bit de dirección.\n```vhdl\nx_out <= std_logic_vector(signed(x_in) + signed(y_in)) when dir = '1'\n    else std_logic_vector(signed(x_in) - signed(y_in));\n```"
+      }
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "A counter runs 0..15 over and over, and the output is high only while the counter is below the requested `duty` value — bigger duty, longer pulse.",
+        "es": "Un contador recorre 0..15 una y otra vez, y la salida está alta sólo mientras el contador es menor que el valor de `duty` pedido — a mayor `duty`, pulso más largo."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "Let a 4-bit `unsigned` counter free-run in a clocked process (reset clears it to zero) and compare it to `duty` combinationally with a concurrent `when ... else` assignment.",
+        "es": "Deja que un contador `unsigned` de 4 bits corra libre en un proceso con reloj (el reset lo pone a cero) y compáralo con `duty` de forma combinacional usando una asignación concurrente `when ... else`."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "The counter just does `cnt <= cnt + 1;` on each edge, and the output is a one-line compare (note: cast `duty` to `unsigned`).\n```vhdl\npwm_out <= '1' when cnt < unsigned(duty) else '0';\n```",
+        "es": "El contador sólo hace `cnt <= cnt + 1;` en cada flanco, y la salida es una comparación de una línea (ojo: convierte `duty` a `unsigned`).\n```vhdl\npwm_out <= '1' when cnt < unsigned(duty) else '0';\n```"
+      }
+    }
+  ]
+}

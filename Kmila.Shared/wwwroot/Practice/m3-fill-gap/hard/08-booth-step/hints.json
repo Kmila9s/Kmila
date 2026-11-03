@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "Each step looks at the last two Booth bits and decides whether to add the multiplicand to the accumulator, subtract it, or leave it alone.",
+        "es": "Cada paso mira los dos últimos bits de Booth y decide si suma el multiplicando al acumulador, lo resta o lo deja igual."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "Switch on `lsb_pair` with a `case`: `\"01\"` adds `m_ext`, `\"10\"` subtracts it, and `when others` (`\"00\"`/`\"11\"`) keeps `acc` unchanged.",
+        "es": "Usa un `case` sobre `lsb_pair`: `\"01\"` suma `m_ext`, `\"10\"` lo resta y `when others` (`\"00\"`/`\"11\"`) deja `acc` igual."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Fill in the two active branches alongside the no-op.\n```vhdl\ncase lsb_pair is\n    when \"01\"   => acc <= acc + m_ext;\n    when \"10\"   => acc <= acc - m_ext;\n    when others => acc <= acc;\nend case;\n```",
+        "es": "Completa las dos ramas activas junto a la de no-operación.\n```vhdl\ncase lsb_pair is\n    when \"01\"   => acc <= acc + m_ext;\n    when \"10\"   => acc <= acc - m_ext;\n    when others => acc <= acc;\nend case;\n```"
+      }
+    }
+  ]
+}

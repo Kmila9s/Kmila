@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "You add two 4-bit numbers plus a carry-in; the result can need a fifth bit, and that extra bit is your carry-out.",
+        "es": "Sumas dos números de 4 bits más un acarreo de entrada; el resultado puede necesitar un quinto bit, y ese bit extra es tu acarreo de salida."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "Add `use IEEE.NUMERIC_STD.ALL;` and work with `unsigned`. Zero-extend each operand to 5 bits before adding so the top bit catches the overflow, then split the result into `sum` (bits 3..0) and `cout` (bit 4).",
+        "es": "Añade `use IEEE.NUMERIC_STD.ALL;` y trabaja con `unsigned`. Extiende cada operando a 5 bits con un `0` delante antes de sumar, para que el bit superior capture el desbordamiento; luego separa el resultado en `sum` (bits 3..0) y `cout` (bit 4)."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Use one 5-bit `unsigned` temporary and slice it afterwards:\n\n```vhdl\nsignal s : unsigned(4 downto 0);\n...\ns    <= ('0' & unsigned(a)) + ('0' & unsigned(b)) + (\"0000\" & cin);\nsum  <= std_logic_vector(s(3 downto 0));\ncout <= s(4);\n```",
+        "es": "Usa una señal `unsigned` temporal de 5 bits y luego trocea el resultado:\n\n```vhdl\nsignal s : unsigned(4 downto 0);\n...\ns    <= ('0' & unsigned(a)) + ('0' & unsigned(b)) + (\"0000\" & cin);\nsum  <= std_logic_vector(s(3 downto 0));\ncout <= s(4);\n```"
+      }
+    }
+  ]
+}

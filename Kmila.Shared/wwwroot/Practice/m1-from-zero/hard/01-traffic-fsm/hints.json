@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "Think of it as a loop of three states: red, green, yellow, then back to red, advancing one step per clock, and reset always sends it back to red.",
+        "es": "Piensa en el circuito como un bucle de tres estados: rojo, verde, amarillo y de vuelta a rojo, avanzando un paso por reloj, y el reset siempre lo devuelve a rojo."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "Hold the state in an internal `unsigned(1 downto 0)` signal inside a clocked process with `rising_edge(clk)`, handling `reset` first, and pick the next value with an `if/elsif` chain. Then expose it by casting to the `state` output.",
+        "es": "Guarda el estado en una señal interna `unsigned(1 downto 0)` dentro de un proceso con `rising_edge(clk)`, atendiendo primero al `reset`, y elige el siguiente valor con una cadena `if/elsif`. Luego expón el estado convirtiéndolo a la salida `state`."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Inside the clocked branch map each state to the next one, and drive `state <= std_logic_vector(s);` concurrently outside the process.\n```vhdl\nif s = \"00\" then s <= \"01\";\nelsif s = \"01\" then s <= \"10\";\nelse s <= \"00\";\nend if;\n```",
+        "es": "Dentro de la rama del reloj mapea cada estado al siguiente y asigna `state <= std_logic_vector(s);` de forma concurrente fuera del proceso.\n```vhdl\nif s = \"00\" then s <= \"01\";\nelsif s = \"01\" then s <= \"10\";\nelse s <= \"00\";\nend if;\n```"
+      }
+    }
+  ]
+}

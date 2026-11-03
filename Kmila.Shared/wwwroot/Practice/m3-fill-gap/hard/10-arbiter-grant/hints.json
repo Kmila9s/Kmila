@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "Starting just after whoever was served last, scan the requesters in a circle and grant the bus to the first one that is asking; if nobody asks, grant nothing.",
+        "es": "Empezando justo después de quien se atendió por última vez, recorre a los solicitantes en círculo y concede el bus al primero que lo pide; si nadie pide, no concedes nada."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "Default `nxt_grant` to all zeros, then `case last_grant is` with one branch per index; in each branch use a priority `if/elsif` chain that checks `req` in cyclic order starting from the next index, setting the matching one-hot grant.",
+        "es": "Pon `nxt_grant` a todo ceros por defecto y luego un `case last_grant is` con una rama por índice; en cada rama usa una cadena de prioridad `if/elsif` que revise `req` en orden cíclico empezando por el índice siguiente, activando el grant one-hot correspondiente."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Rotate the priority order per branch (the default `nxt_grant <= (others => '0');` line stays above the case).\n```vhdl\ncase last_grant is\n    when \"00\" =>\n        if    req(1) = '1' then nxt_grant <= \"0010\";\n        elsif req(2) = '1' then nxt_grant <= \"0100\";\n        elsif req(3) = '1' then nxt_grant <= \"1000\";\n        elsif req(0) = '1' then nxt_grant <= \"0001\";\n        end if;\n    when \"01\" =>\n        if    req(2) = '1' then nxt_grant <= \"0100\";\n        elsif req(3) = '1' then nxt_grant <= \"1000\";\n        elsif req(0) = '1' then nxt_grant <= \"0001\";\n        elsif req(1) = '1' then nxt_grant <= \"0010\";\n        end if;\n    when \"10\" =>\n        if    req(3) = '1' then nxt_grant <= \"1000\";\n        elsif req(0) = '1' then nxt_grant <= \"0001\";\n        elsif req(1) = '1' then nxt_grant <= \"0010\";\n        elsif req(2) = '1' then nxt_grant <= \"0100\";\n        end if;\n    when others =>\n        if    req(0) = '1' then nxt_grant <= \"0001\";\n        elsif req(1) = '1' then nxt_grant <= \"0010\";\n        elsif req(2) = '1' then nxt_grant <= \"0100\";\n        elsif req(3) = '1' then nxt_grant <= \"1000\";\n        end if;\nend case;\n```",
+        "es": "Rota el orden de prioridad en cada rama (la línea por defecto `nxt_grant <= (others => '0');` se queda encima del case).\n```vhdl\ncase last_grant is\n    when \"00\" =>\n        if    req(1) = '1' then nxt_grant <= \"0010\";\n        elsif req(2) = '1' then nxt_grant <= \"0100\";\n        elsif req(3) = '1' then nxt_grant <= \"1000\";\n        elsif req(0) = '1' then nxt_grant <= \"0001\";\n        end if;\n    when \"01\" =>\n        if    req(2) = '1' then nxt_grant <= \"0100\";\n        elsif req(3) = '1' then nxt_grant <= \"1000\";\n        elsif req(0) = '1' then nxt_grant <= \"0001\";\n        elsif req(1) = '1' then nxt_grant <= \"0010\";\n        end if;\n    when \"10\" =>\n        if    req(3) = '1' then nxt_grant <= \"1000\";\n        elsif req(0) = '1' then nxt_grant <= \"0001\";\n        elsif req(1) = '1' then nxt_grant <= \"0010\";\n        elsif req(2) = '1' then nxt_grant <= \"0100\";\n        end if;\n    when others =>\n        if    req(0) = '1' then nxt_grant <= \"0001\";\n        elsif req(1) = '1' then nxt_grant <= \"0010\";\n        elsif req(2) = '1' then nxt_grant <= \"0100\";\n        elsif req(3) = '1' then nxt_grant <= \"1000\";\n        end if;\nend case;\n```"
+      }
+    }
+  ]
+}

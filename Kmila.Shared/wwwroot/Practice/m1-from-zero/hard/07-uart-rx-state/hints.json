@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "It's a four-step cycle — Idle, Start, Data, Stop — where you only leave Idle when the line drops to 0, and the other three advance on their own, wrapping back to Idle.",
+        "es": "Es un ciclo de cuatro pasos — Idle, Start, Data, Stop — donde sólo sales de Idle cuando la línea baja a 0, y los otros tres avanzan solos hasta volver a Idle."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "Hold the state in a `STD_LOGIC_VECTOR(1 downto 0)` and drive it from a `case` inside the clocked process: in \"00\" (Idle) go to \"01\" only if `rx='0'`, and in the others step straight to the next code, with \"11\" returning to \"00\".",
+        "es": "Guarda el estado en un `STD_LOGIC_VECTOR(1 downto 0)` y gobiérnalo con un `case` dentro del proceso con reloj: en \"00\" (Idle) pasa a \"01\" sólo si `rx='0'`, y en los demás avanza directo al siguiente código, con \"11\" volviendo a \"00\"."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Only Idle has a condition; the rest are unconditional transitions.\n```vhdl\ncase s is\n    when \"00\" => if rx = '0' then s <= \"01\"; end if;\n    when \"01\" => s <= \"10\";\n    when \"10\" => s <= \"11\";\n    when others => s <= \"00\";\nend case;\n```",
+        "es": "Sólo Idle tiene condición; el resto son transiciones incondicionales.\n```vhdl\ncase s is\n    when \"00\" => if rx = '0' then s <= \"01\"; end if;\n    when \"01\" => s <= \"10\";\n    when \"10\" => s <= \"11\";\n    when others => s <= \"00\";\nend case;\n```"
+      }
+    }
+  ]
+}

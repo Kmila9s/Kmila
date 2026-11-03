@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "The gap has to make the counter step up by one each clock, but roll back to zero once it has reached its highest value instead of overflowing.",
+        "es": "El hueco debe hacer que el contador suba de uno en uno en cada reloj, pero que vuelva a cero al llegar a su valor máximo en vez de desbordarse."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "Use an `if`/`else` inside the `rising_edge` branch: test whether `count` already equals 7, and pick between clearing it and `count + 1`.",
+        "es": "Usa un `if`/`else` dentro de la rama `rising_edge`: comprueba si `count` ya vale 7 y elige entre ponerlo a cero y `count + 1`."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Compare against `to_unsigned(7, 3)` (or `\"111\"`) and reset with `(others => '0')`:\n```vhdl\nif count = to_unsigned(7, 3) then\n    count <= (others => '0');\nelse\n    count <= count + 1;\nend if;\n```",
+        "es": "Compara con `to_unsigned(7, 3)` (o `\"111\"`) y reinicia con `(others => '0')`:\n```vhdl\nif count = to_unsigned(7, 3) then\n    count <= (others => '0');\nelse\n    count <= count + 1;\nend if;\n```"
+      }
+    }
+  ]
+}

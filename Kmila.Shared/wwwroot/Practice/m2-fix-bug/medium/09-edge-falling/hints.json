@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "hints": [
+    { "level": 1, "text": {
+      "en": "The detector pulses on the wrong transition of `d` — it fires when the input drops instead of when it climbs.",
+      "es": "El detector da el pulso en la transición equivocada de `d`: se dispara cuando la entrada baja en vez de cuando sube."
+    } },
+    { "level": 2, "text": {
+      "en": "Look at the conditional expression for `pulse`. The two equality tests (current `d` and `d_prev`) are swapped, so it catches a falling edge.",
+      "es": "Mira la expresión condicional de `pulse`. Las dos comparaciones (`d` actual y `d_prev`) están intercambiadas, así que detecta un flanco de bajada."
+    } },
+    { "level": 3, "text": {
+      "en": "Change the condition to `pulse <= '1' when (d = '1' and d_prev = '0') else '0';` so `pulse` fires on the rising edge.",
+      "es": "Cambia la condición a `pulse <= '1' when (d = '1' and d_prev = '0') else '0';` para que `pulse` se dispare en el flanco de subida."
+    } }
+  ]
+}

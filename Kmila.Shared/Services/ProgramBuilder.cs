@@ -286,6 +286,17 @@ public class ProgramBuilder : IDisposable
             // build over a resource estimate.
             try { ApplyHierarchicalResources(file); } catch { /* estimate is non-fatal */ }
 
+            // Make every sibling entity resolvable for the schematic. BuildAsync
+            // parses only the active file, and ApplyHierarchicalResources keeps its
+            // children in a throwaway map (and clears the registry), so without this
+            // the schematic synthesizer can't resolve a component defined in another
+            // file: its output pins stay unknown, nothing drives the shared nets, and
+            // a structural (black-box) design renders as disconnected boxes. Scanning
+            // every project .vhd registers the child entity declarations (ScanFile is
+            // append-only and leaves the port-map edges other views read intact), so
+            // cross-file instances wire up the same way `kmila synth --file` does.
+            try { RegisterProjectEntities(file.Project?.BasePath); } catch { /* resolution is best-effort */ }
+
             return true;
         }
         catch (OperationCanceledException)
@@ -342,6 +353,41 @@ public class ProgramBuilder : IDisposable
             if (EntityRegistry.Instance.GetComponentInstances(e.Name).Count == 0)
                 continue;
             e.HierarchicalResourceUsage = Resources.ComputeHierarchical(e, byName, specialize);
+        }
+    }
+
+    /// <summary>
+    /// Registers every project entity declaration into <see cref="EntityRegistry"/>
+    /// so the schematic synthesizer can resolve component instances whose entity
+    /// lives in a sibling file (direct <c>entity work.X</c> instantiation carries no
+    /// local port directions — they must come from the child's own declaration).
+    /// </summary>
+    /// <remarks>
+    /// <see cref="EntityRegistry.ScanFile"/> only adds entity declarations and is
+    /// guarded against re-scanning, so this is additive: it does not disturb the
+    /// component-instance (port-map) edges that <see cref="ApplyHierarchicalResources"/>
+    /// registered and that the status bar / resource gauge read live. Mirrors the
+    /// whole-project scan the simulation (<see cref="RunTestbenchAsync"/>) and the
+    /// CLI loader already perform. Best-effort — a file that fails to tokenize is
+    /// skipped so the build still succeeds.
+    /// </remarks>
+    private static void RegisterProjectEntities(string? basePath)
+    {
+        if (string.IsNullOrEmpty(basePath) || !Directory.Exists(basePath))
+            return;
+
+        foreach (var f in Directory.EnumerateFiles(basePath, "*.*", SearchOption.AllDirectories))
+        {
+            var ext = Path.GetExtension(f);
+            if (!ext.Equals(".vhd", StringComparison.OrdinalIgnoreCase) &&
+                !ext.Equals(".vhdl", StringComparison.OrdinalIgnoreCase))
+                continue;
+            // Skip transient elaboration output so a stale flattened dump can't
+            // shadow the real sources.
+            if (Path.GetFileName(f).StartsWith("_elaborated_", StringComparison.OrdinalIgnoreCase))
+                continue;
+            try { EntityRegistry.Instance.ScanFile(f); } catch { /* keep scanning */ }
+            try { PackageSubtypeScanner.ScanFile(f); } catch { /* keep scanning */ }
         }
     }
 

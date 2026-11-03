@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "This flip-flop flips its output on a clock edge only when the toggle input says so, and otherwise leaves it alone.",
+        "es": "Este biestable invierte su salida en el flanco de reloj solo cuando la entrada de conmutación lo indica; en caso contrario la deja igual."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "You can't read an `out` port inside a process, so keep the state in an internal `qi` and drive `q <= qi;` concurrently. In the clocked branch, `if t = '1'` invert `qi` with `not`.",
+        "es": "No puedes leer un puerto `out` dentro de un proceso, así que guarda el estado en una señal interna `qi` y asigna `q <= qi;` de forma concurrente. En la rama del reloj, `if t = '1'` invierte `qi` con `not`."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "The toggle lives inside the `rising_edge` branch:\n\n```vhdl\nelsif rising_edge(clk) then\n    if t = '1' then\n        qi <= not qi;\n    end if;\nend if;\n```",
+        "es": "La conmutación vive dentro de la rama `rising_edge`:\n\n```vhdl\nelsif rising_edge(clk) then\n    if t = '1' then\n        qi <= not qi;\n    end if;\nend if;\n```"
+      }
+    }
+  ]
+}

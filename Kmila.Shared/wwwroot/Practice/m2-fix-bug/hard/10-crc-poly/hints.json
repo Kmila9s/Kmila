@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "The computed checksums never match the expected ones, because the wrong polynomial is wired into the shift register.",
+        "es": "Los checksums calculados no coinciden nunca con los esperados, porque está cableado el polinomio equivocado en el registro de desplazamiento."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "The XOR feedback taps land in the wrong bit positions — they match `0x07` instead of the intended `0x1D`. Look at which `reg` bits get `xor fb` applied.",
+        "es": "Las tomas XOR de realimentación caen en las posiciones de bit equivocadas: corresponden a `0x07` en vez del `0x1D` previsto. Fíjate en qué bits de `reg` reciben el `xor fb`."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "For `0x1D` the taps belong at bits 2, 3 and 4: make `reg(1) <= reg(0);` (no XOR), keep `reg(2) <= reg(1) xor fb;`, and set `reg(3) <= reg(2) xor fb;` and `reg(4) <= reg(3) xor fb;`.",
+        "es": "Para `0x1D` las tomas van en los bits 2, 3 y 4: pon `reg(1) <= reg(0);` (sin XOR), conserva `reg(2) <= reg(1) xor fb;`, y pon `reg(3) <= reg(2) xor fb;` y `reg(4) <= reg(3) xor fb;`."
+      }
+    }
+  ]
+}

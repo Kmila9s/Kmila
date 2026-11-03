@@ -122,4 +122,41 @@ public class PracticeProgress
 
     /// <summary>UTC timestamp of the most recent attempt.</summary>
     public DateTime LastAttemptAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Highest tiered-hint level the student has revealed for this exercise
+    /// (0 = none, 1..3). Lets the exercise view restore revealed hints after a
+    /// refresh and the export flag "solved/attempted with help". sqlite-net
+    /// auto-adds this column to pre-existing tables (defaults to 0).
+    /// </summary>
+    public int MaxHintLevelUsed { get; set; }
+}
+
+/// <summary>
+/// One row per tiered hint reveal. Written the first time a student reveals a
+/// given level for a given exercise, so we can tell the student required help
+/// (and surface it in the session export). Mirrors the logging conventions of
+/// <see cref="PracticeAttempt"/>.
+/// </summary>
+public class PracticeHintReveal
+{
+    /// <summary>Auto-incrementing primary key.</summary>
+    [PrimaryKey, AutoIncrement]
+    public int Id { get; set; }
+
+    /// <summary>Stable exercise id from the manifest (e.g. <c>m1-half-adder</c>).</summary>
+    [Indexed]
+    public string ExerciseId { get; set; } = string.Empty;
+
+    /// <summary>Escalation level revealed, 1 (general) … 3 (specific).</summary>
+    public int Level { get; set; }
+
+    /// <summary>UTC timestamp when the hint level was revealed.</summary>
+    public DateTime RevealedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>How many failed attempts the student had made when they revealed this level.</summary>
+    public int FailedAttemptsAtReveal { get; set; }
+
+    /// <summary>True when the student force-revealed the level before reaching its fail threshold.</summary>
+    public bool Forced { get; set; }
 }

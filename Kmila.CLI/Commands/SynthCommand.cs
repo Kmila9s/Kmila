@@ -2,6 +2,7 @@ using Interpreter.Synthesis;
 using Interpreter.Synthesis.Layout;
 using Kmila.CLI.Cli;
 using Kmila.CLI.Simulation;
+using Kmila.Shared.Components.Schematic;
 using Kmila.Shared.Models;
 using Kmila.Shared.Services;
 
@@ -18,7 +19,7 @@ public static class SynthCommand
     /// <summary>Synthesizes the design and writes an SVG (or prints it to stdout).</summary>
     public static Task<int> RunAsync(string[] args)
     {
-        var p = new ArgParser(args, "quiet", "q", "mono", "no-title", "help", "h");
+        var p = new ArgParser(args, "quiet", "q", "mono", "no-title", "help", "h", "no-elaborate", "structural");
         if (p.Has("help", "h"))
         {
             Console.WriteLine(HelpText.Synth());
@@ -32,7 +33,10 @@ public static class SynthCommand
         }
 
         DesignLoader.Loaded loaded;
-        try { loaded = DesignLoader.Load(top, extras, p.Get("entity", "top")); }
+        // The schematic keeps component instances as black boxes, so skip
+        // elaboration by default (matches the GUI); --elaborate would flatten.
+        bool elaborate = !(p.Has("no-elaborate") || p.Has("structural"));
+        try { loaded = DesignLoader.Load(top, extras, p.Get("entity", "top"), elaborate); }
         catch (Exception ex) { Console.Error.WriteLine($"kmila synth: {ex.Message}"); return Task.FromResult(1); }
 
         SchematicRenderMode mode = (p.Get("mode") ?? "grouped").Trim().ToLowerInvariant() switch
@@ -68,12 +72,14 @@ public static class SynthCommand
                 : SchematicSimplifier.SimplifyNetlist(netlist);
             LaidOutNetlist layout = mode.IsBlock()
                 ? LayeredLayout.Layout(BlockGraphBuilder.Build(display), groupAware: false,
-                                       sizeOf: BlockGraphBuilder.BlockSize, colGap: 260, rowGap: 120,
+                                       sizeOf: SchematicCellSizing.Block, colGap: 260, rowGap: 120,
                                        crossingSweeps: 4, obstacleRouting: true)
                 : mode == SchematicRenderMode.Grouped
                     ? LayeredLayout.Layout(display, groupAware: true, obstacleRouting: true,
-                                           crossingSweeps: 4, colGap: 260, rowGap: 120)
-                    : LayeredLayout.Layout(display);
+                                           crossingSweeps: 4, colGap: 260, rowGap: 120,
+                                           sizeOf: SchematicCellSizing.GateLevel)
+                    : LayeredLayout.Layout(display, obstacleRouting: true,
+                                           sizeOf: SchematicCellSizing.GateLevel);
             var filtered = SelectionFilter.Full(layout);
             var req = new SchematicExportRequest
             {

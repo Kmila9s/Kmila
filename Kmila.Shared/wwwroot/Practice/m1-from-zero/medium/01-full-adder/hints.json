@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "Three single-bit inputs go in and you must produce one sum bit plus a carry out — think about how adding three bits in binary behaves.",
+        "es": "Entran tres bits sueltos y debes producir un bit de suma y un acarreo de salida: piensa en cómo se comportan tres bits al sumarse en binario."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "Both outputs are pure combinational logic, one concurrent assignment each. `sum` is the XOR of all three inputs, and `cout` goes high when at least two inputs are `1` — build it from `and`/`or`/`xor`.",
+        "es": "Las dos salidas son lógica combinacional pura, una asignación concurrente para cada una. `sum` es el XOR de las tres entradas y `cout` se pone a `1` cuando al menos dos entradas valen `1`: constrúyelo con `and`/`or`/`xor`."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Two concurrent assignments do it. The carry is generated when `a` and `b` agree, or when `cin` rides along with the half-sum:\n\n```vhdl\nsum  <= a xor b xor cin;\ncout <= (a and b) or (cin and (a xor b));\n```",
+        "es": "Con dos asignaciones concurrentes basta. El acarreo se genera cuando `a` y `b` coinciden, o cuando `cin` acompaña a la media suma:\n\n```vhdl\nsum  <= a xor b xor cin;\ncout <= (a and b) or (cin and (a xor b));\n```"
+      }
+    }
+  ]
+}
