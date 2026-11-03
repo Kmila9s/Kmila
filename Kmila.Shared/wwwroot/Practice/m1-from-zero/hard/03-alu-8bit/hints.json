@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "It's a purely combinational block that, depending on a 2-bit selector, outputs the sum, difference, bitwise AND or OR of the two bytes — no clock involved.",
+        "es": "Es un bloque puramente combinacional que, según un selector de 2 bits, entrega la suma, la resta, el AND o el OR bit a bit de los dos bytes — sin reloj de por medio."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "Use `IEEE.NUMERIC_STD`, cast `a` and `b` to `unsigned`, and select with a `case op is ... when others =>` inside a process sensitive to `a, b, op`; cast the result back to `std_logic_vector` for `y`.",
+        "es": "Usa `IEEE.NUMERIC_STD`, convierte `a` y `b` a `unsigned` y selecciona con un `case op is ... when others =>` dentro de un proceso sensible a `a, b, op`; devuelve el resultado a `std_logic_vector` para `y`."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Four arms cover the table; let `when others` catch the `\"11\"` (OR) case, and outside the process drive `y <= std_logic_vector(r);`.\n```vhdl\ncase op is\n    when \"00\"   => r <= unsigned(a) + unsigned(b);\n    when \"01\"   => r <= unsigned(a) - unsigned(b);\n    when \"10\"   => r <= unsigned(a) and unsigned(b);\n    when others => r <= unsigned(a) or  unsigned(b);\nend case;\n```",
+        "es": "Las cuatro ramas cubren la tabla; deja que `when others` recoja el caso `\"11\"` (OR), y fuera del proceso asigna `y <= std_logic_vector(r);`.\n```vhdl\ncase op is\n    when \"00\"   => r <= unsigned(a) + unsigned(b);\n    when \"01\"   => r <= unsigned(a) - unsigned(b);\n    when \"10\"   => r <= unsigned(a) and unsigned(b);\n    when others => r <= unsigned(a) or  unsigned(b);\nend case;\n```"
+      }
+    }
+  ]
+}

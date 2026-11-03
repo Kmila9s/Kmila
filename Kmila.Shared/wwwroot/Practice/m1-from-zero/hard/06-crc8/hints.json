@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "Each clock feeds one bit into an 8-bit register that shifts left, and whenever the bit leaving the top disagrees with the incoming bit you mix in the polynomial.",
+        "es": "Cada reloj mete un bit en un registro de 8 bits que se desplaza a la izquierda, y cuando el bit que sale por arriba no coincide con el bit entrante, mezclas el polinomio."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "In a clocked process use a `variable fb` = top bit XOR `din`, shift the register left filling with '0', and XOR the shifted value with the constant polynomial `\"00000111\"` only when `fb='1'`. Reset clears the register and you drive `crc <= r;`.",
+        "es": "En un proceso con reloj usa una `variable fb` = bit más alto XOR `din`, desplaza el registro a la izquierda rellenando con '0', y haz XOR del resultado con el polinomio constante `\"00000111\"` sólo cuando `fb='1'`. El reset limpia el registro y asignas `crc <= r;`."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Compute the feedback before shifting and gate the polynomial XOR on `fb`.\n```vhdl\nfb := r(7) xor din;\nshifted := r(6 downto 0) & '0';\nif fb = '1' then r <= shifted xor POLY;\nelse            r <= shifted; end if;\n```",
+        "es": "Calcula la realimentación antes de desplazar y condiciona el XOR del polinomio a `fb`.\n```vhdl\nfb := r(7) xor din;\nshifted := r(6 downto 0) & '0';\nif fb = '1' then r <= shifted xor POLY;\nelse            r <= shifted; end if;\n```"
+      }
+    }
+  ]
+}

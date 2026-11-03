@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "The missing line decides when the PWM output is on: it should be high as long as the counter has not yet reached the duty value, and low after that.",
+        "es": "La línea que falta decide cuándo la salida PWM está encendida: debe estar alta mientras el contador aún no alcanza el valor de `duty`, y baja a partir de ahí."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "Use one conditional concurrent assignment (`'1' when … else '0'`) that compares `count` against `duty`, converting the port with `unsigned(duty)` so both sides are the same type.",
+        "es": "Usa una asignación concurrente condicional (`'1' when … else '0'`) que compare `count` con `duty`, convirtiendo el puerto con `unsigned(duty)` para que ambos lados sean del mismo tipo."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Compare the counter against the duty value directly.\n```vhdl\npwm_out <= '1' when count < unsigned(duty) else '0';\n```",
+        "es": "Compara el contador con el valor de `duty` directamente.\n```vhdl\npwm_out <= '1' when count < unsigned(duty) else '0';\n```"
+      }
+    }
+  ]
+}

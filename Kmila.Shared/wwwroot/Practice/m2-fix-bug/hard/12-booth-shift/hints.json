@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "The accumulated product grows without bound — each iteration never divides the running total by two the way Booth's algorithm requires.",
+        "es": "El producto acumulado crece sin límite: en cada iteración nunca se divide el total entre dos como exige el algoritmo de Booth."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "Each Booth step must apply an arithmetic right-shift to `acc` so the sign bit propagates. Right now the shift is missing from both the add/subtract branch and the no-op branch.",
+        "es": "Cada paso de Booth debe aplicar un desplazamiento aritmético a la derecha sobre `acc` para que el bit de signo se propague. Ahora mismo falta el desplazamiento tanto en la rama de suma/resta como en la de no-operación."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Wrap each accumulator update in `shift_right(..., 1)`, e.g. `acc <= shift_right(acc + signed(resize(signed(a), 16)), 1);` and `acc <= shift_right(acc, 1);`. Using `shift_right` on a `signed` value keeps the arithmetic (sign-extending) shift.",
+        "es": "Envuelve cada actualización del acumulador en `shift_right(..., 1)`, por ejemplo `acc <= shift_right(acc + signed(resize(signed(a), 16)), 1);` y `acc <= shift_right(acc, 1);`. Usar `shift_right` sobre un valor `signed` mantiene el desplazamiento aritmético (con extensión de signo)."
+      }
+    }
+  ]
+}

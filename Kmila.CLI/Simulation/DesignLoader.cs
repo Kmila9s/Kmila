@@ -32,7 +32,8 @@ public static class DesignLoader
     /// <param name="topFile">Primary VHDL file (absolute path).</param>
     /// <param name="extraFiles">Additional sources.</param>
     /// <param name="entry">Preferred top entity name (defaults to the top file stem).</param>
-    public static Loaded Load(string topFile, IReadOnlyList<string> extraFiles, string? entry)
+    public static Loaded Load(string topFile, IReadOnlyList<string> extraFiles, string? entry,
+        bool elaborate = true)
     {
         if (!File.Exists(topFile))
             throw new FileNotFoundException($"top file not found: {topFile}");
@@ -79,10 +80,13 @@ public static class DesignLoader
             }
             if (vhdlPath == null) throw new InvalidOperationException("no .vhdl/.vhd source found.");
 
-            // Elaborate (inline components) when possible.
+            // Elaborate (inline components) when possible. The schematic view
+            // deliberately skips this (elaborate:false) so it synthesises the
+            // top entity's own architecture with component instances kept as
+            // black boxes — matching what the GUI schematic shows.
             try
             {
-                var flat = SourceElaborator.ElaborateOrNull(dir, entryName);
+                var flat = elaborate ? SourceElaborator.ElaborateOrNull(dir, entryName) : null;
                 if (flat != null)
                 {
                     var elaborated = Path.Combine(dir, $"_elaborated_{entryName}.vhd");

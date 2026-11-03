@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "It's just like a toggle flip-flop: flip the output on each clock edge while the enable is on, and hold it steady when the enable is off.",
+        "es": "Es igual que un biestable de conmutación: invierte la salida en cada flanco de reloj mientras el habilitador está activo, y mantenla fija cuando está apagado."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "Hold the state in an internal `qi` (outputs can't be read in a process) and drive `q <= qi;`. The enable `en` is the toggle gate: `if en = '1' then qi <= not qi;`.",
+        "es": "Guarda el estado en una señal interna `qi` (los puertos de salida no se pueden leer en un proceso) y asigna `q <= qi;`. El habilitador `en` es la compuerta de conmutación: `if en = '1' then qi <= not qi;`."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "The enabled toggle sits in the clocked branch:\n\n```vhdl\nelsif rising_edge(clk) then\n    if en = '1' then\n        qi <= not qi;\n    end if;\nend if;\n```",
+        "es": "La conmutación habilitada va en la rama con reloj:\n\n```vhdl\nelsif rising_edge(clk) then\n    if en = '1' then\n        qi <= not qi;\n    end if;\nend if;\n```"
+      }
+    }
+  ]
+}

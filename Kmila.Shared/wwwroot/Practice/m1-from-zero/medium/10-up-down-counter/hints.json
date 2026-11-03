@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "A counter that climbs or descends depending on a direction switch, and wraps around when it runs off either end.",
+        "es": "Un contador que sube o baja según un conmutador de dirección, y da la vuelta cuando se sale por cualquiera de los dos extremos."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "Add `use IEEE.NUMERIC_STD.ALL;` and keep the count in an internal `unsigned(3 downto 0)`. Inside the `rising_edge` branch, pick `count + 1` or `count - 1` based on `dir`; the type wraps modulo 16 for you.",
+        "es": "Añade `use IEEE.NUMERIC_STD.ALL;` y guarda la cuenta en una señal interna `unsigned(3 downto 0)`. Dentro de la rama `rising_edge`, elige `count + 1` o `count - 1` según `dir`; el tipo da la vuelta módulo 16 por ti."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "One `if` on `dir` picks the direction:\n\n```vhdl\nelsif rising_edge(clk) then\n    if dir = '1' then\n        count <= count + 1;\n    else\n        count <= count - 1;\n    end if;\nend if;\n```",
+        "es": "Un `if` sobre `dir` elige la dirección:\n\n```vhdl\nelsif rising_edge(clk) then\n    if dir = '1' then\n        count <= count + 1;\n    else\n        count <= count - 1;\n    end if;\nend if;\n```"
+      }
+    }
+  ]
+}

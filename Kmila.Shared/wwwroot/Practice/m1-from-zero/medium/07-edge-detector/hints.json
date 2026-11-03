@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "Emit a short one-clock pulse exactly at the moment the input rises from 0 to 1 — to spot that, you have to remember what the input was last cycle.",
+        "es": "Emite un pulso corto de un reloj justo en el instante en que la entrada sube de 0 a 1; para detectarlo, tienes que recordar qué valía la entrada en el ciclo anterior."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "In a clocked process, sample `d` into a `d_prev` register every rising edge. Then the pulse is a combinational `when`-`else`: high only when `d` is `1` now and `d_prev` was `0`.",
+        "es": "En un proceso con reloj, guarda `d` en un registro `d_prev` en cada flanco ascendente. Entonces el pulso es un `when`-`else` combinacional: alto solo cuando `d` vale `1` ahora y `d_prev` valía `0`."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Register the history, then compare now-vs-then:\n\n```vhdl\nelsif rising_edge(clk) then\n    d_prev <= d;\nend if;\n-- pulse <= '1' when (d = '1' and d_prev = '0') else '0';\n```",
+        "es": "Registra el historial y compara ahora frente a antes:\n\n```vhdl\nelsif rising_edge(clk) then\n    d_prev <= d;\nend if;\n-- pulse <= '1' when (d = '1' and d_prev = '0') else '0';\n```"
+      }
+    }
+  ]
+}

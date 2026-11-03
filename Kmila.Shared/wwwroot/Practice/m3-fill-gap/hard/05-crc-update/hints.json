@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "On each clock tick the register has to fold in one new input bit the CRC-8 way: shift everything along and, depending on the bit that falls off the top, mix in the polynomial.",
+        "es": "En cada flanco el registro debe incorporar un bit de entrada al estilo CRC-8: desplaza todo y, según el bit que se cae por arriba, mezcla el polinomio."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "First compute the feedback bit `fb := r(7) xor din;`, then branch on it: if it is `'1'` shift `r` left (new LSB `'0'`) and XOR with `POLY`, otherwise just shift left.",
+        "es": "Primero calcula el bit de realimentación `fb := r(7) xor din;` y luego decide según él: si es `'1'`, desplaza `r` a la izquierda (nuevo LSB `'0'`) y haz XOR con `POLY`; si no, sólo desplaza a la izquierda."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Use the variable, then the conditional shift.\n```vhdl\nfb := r(7) xor din;\nif fb = '1' then\n    r <= (r(6 downto 0) & '0') xor POLY;\nelse\n    r <= r(6 downto 0) & '0';\nend if;\n```",
+        "es": "Usa la variable y luego el desplazamiento condicional.\n```vhdl\nfb := r(7) xor din;\nif fb = '1' then\n    r <= (r(6 downto 0) & '0') xor POLY;\nelse\n    r <= r(6 downto 0) & '0';\nend if;\n```"
+      }
+    }
+  ]
+}

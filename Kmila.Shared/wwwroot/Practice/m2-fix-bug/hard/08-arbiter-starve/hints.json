@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "One requester can hog the grant forever while the others never get a turn. The arbiter isn't being fair.",
+        "es": "Un solicitante puede acaparar el grant para siempre mientras los demás no reciben nunca su turno. El árbitro no está siendo justo."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "The grant logic is a fixed-priority chain where bit 0 always wins. To avoid starvation it has to remember who was served last and rotate the priority around.",
+        "es": "La lógica de grant es una cadena de prioridad fija en la que el bit 0 siempre gana. Para evitar la inanición tiene que recordar a quién se atendió por última vez y rotar la prioridad."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Add a `last_grant` pointer and replace the if/elsif chain with a scan: `for k in 1 to 4 loop` compute `scan := (to_integer(last_grant) + k) mod 4`, and grant the first active `req(scan)`, updating `last_grant` to that index. That's round-robin.",
+        "es": "Añade un puntero `last_grant` y reemplaza la cadena if/elsif por un barrido: `for k in 1 to 4 loop` calcula `scan := (to_integer(last_grant) + k) mod 4`, y concede el primer `req(scan)` activo, actualizando `last_grant` a ese índice. Eso es round-robin."
+      }
+    }
+  ]
+}

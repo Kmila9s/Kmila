@@ -192,6 +192,121 @@ public class PracticeAttemptStore
     }
 
     // ────────────────────────────────────────────────────────────────────
+    // Tiered hints
+    // ────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Records that the student revealed a tiered hint. Idempotent per
+    /// (exercise, level): a second reveal of the same level is a no-op row-wise
+    /// but still keeps the progress rollup in sync. Also bumps
+    /// <see cref="PracticeProgress.MaxHintLevelUsed"/>, creating the progress
+    /// row if the student asked for a hint before ever submitting.
+    /// </summary>
+    public async Task LogHintRevealAsync(string exerciseId, int level, int failedAttempts, bool forced)
+    {
+        if (string.IsNullOrEmpty(exerciseId) || level < 1) return;
+        try
+        {
+            await _db.InitDBAsync();
+
+            var already = await _db.PracticeHintReveals
+                .Where(h => h.ExerciseId == exerciseId && h.Level == level)
+                .FirstOrDefaultAsync();
+
+            if (already == null)
+            {
+                await _db.InsertAsync(new PracticeHintReveal
+                {
+                    ExerciseId             = exerciseId,
+                    Level                  = level,
+                    RevealedAt             = DateTime.UtcNow,
+                    FailedAttemptsAtReveal = failedAttempts,
+                    Forced                 = forced
+                });
+            }
+
+            await BumpMaxHintLevelAsync(exerciseId, level);
+
+            OnChange?.Invoke(exerciseId);
+            _logger.LogInformation(
+                "[PracticeAttemptStore] Hint L{Level} revealed for {Ex} (fails={Fails}, forced={Forced})",
+                level, exerciseId, failedAttempts, forced);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[PracticeAttemptStore] LogHintReveal failed for {Ex}", exerciseId);
+        }
+    }
+
+    /// <summary>Highest hint level the student has ever revealed for the exercise (0 = none). Used to restore reveal state.</summary>
+    public async Task<int> GetMaxHintLevelAsync(string exerciseId)
+    {
+        try
+        {
+            await _db.InitDBAsync();
+            var progress = await _db.PracticeProgress
+                .Where(p => p.ExerciseId == exerciseId)
+                .FirstOrDefaultAsync();
+            if (progress != null && progress.MaxHintLevelUsed > 0) return progress.MaxHintLevelUsed;
+
+            // Fallback: progress row may predate the hint feature — derive from the reveal log.
+            var reveals = await _db.PracticeHintReveals
+                .Where(h => h.ExerciseId == exerciseId)
+                .ToListAsync();
+            return reveals.Count == 0 ? 0 : reveals.Max(h => h.Level);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[PracticeAttemptStore] GetMaxHintLevel failed for {Ex}", exerciseId);
+            return 0;
+        }
+    }
+
+    /// <summary>All hint-reveal rows for the exercise, oldest first — for the session export.</summary>
+    public async Task<List<PracticeHintReveal>> GetHintRevealsAsync(string exerciseId)
+    {
+        try
+        {
+            await _db.InitDBAsync();
+            return await _db.PracticeHintReveals
+                .Where(h => h.ExerciseId == exerciseId)
+                .OrderBy(h => h.Level)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[PracticeAttemptStore] GetHintReveals failed for {Ex}", exerciseId);
+            return new();
+        }
+    }
+
+    private async Task BumpMaxHintLevelAsync(string exerciseId, int level)
+    {
+        var existing = await _db.PracticeProgress
+            .Where(p => p.ExerciseId == exerciseId)
+            .FirstOrDefaultAsync();
+
+        if (existing == null)
+        {
+            await _db.InsertAsync(new PracticeProgress
+            {
+                ExerciseId       = exerciseId,
+                Status           = PracticeStatus.InProgress,
+                AttemptCount     = 0,
+                LastAttemptAt    = DateTime.UtcNow,
+                MaxHintLevelUsed = level
+            });
+            return;
+        }
+
+        if (level > existing.MaxHintLevelUsed)
+        {
+            existing.MaxHintLevelUsed = level;
+            await _db.UpdateAsync(existing);
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
     // internals
     // ────────────────────────────────────────────────────────────────────
 

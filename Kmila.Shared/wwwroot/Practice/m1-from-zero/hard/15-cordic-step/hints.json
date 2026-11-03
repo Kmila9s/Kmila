@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "It's a single rotation step: depending on the direction bit, you add or subtract the two signed vectors to get the new x and new y.",
+        "es": "Es un solo paso de rotación: según el bit de dirección, sumas o restas los dos vectores con signo para obtener la nueva x y la nueva y."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "It's purely combinational with `signed` arithmetic: cast `x_in`/`y_in` to `signed`, choose add vs subtract with a `when dir='1' else` conditional, and cast each result back to `std_logic_vector`.",
+        "es": "Es puramente combinacional con aritmética `signed`: convierte `x_in`/`y_in` a `signed`, elige sumar o restar con un condicional `when dir='1' else`, y devuelve cada resultado a `std_logic_vector`."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Note that x and y use the opposite operator for the same direction.\n```vhdl\nx_out <= std_logic_vector(signed(x_in) - signed(y_in)) when dir = '1'\n    else std_logic_vector(signed(x_in) + signed(y_in));\ny_out <= std_logic_vector(signed(y_in) + signed(x_in)) when dir = '1'\n    else std_logic_vector(signed(y_in) - signed(x_in));\n```",
+        "es": "Fíjate en que x e y usan el operador opuesto para la misma dirección.\n```vhdl\nx_out <= std_logic_vector(signed(x_in) - signed(y_in)) when dir = '1'\n    else std_logic_vector(signed(x_in) + signed(y_in));\ny_out <= std_logic_vector(signed(y_in) + signed(x_in)) when dir = '1'\n    else std_logic_vector(signed(y_in) - signed(x_in));\n```"
+      }
+    }
+  ]
+}

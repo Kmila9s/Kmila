@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "The register should grab the new data only when the load control is active; otherwise it must simply keep whatever it already held.",
+        "es": "El registro debe tomar el dato nuevo solo cuando el control de carga está activo; si no, simplemente debe conservar lo que ya tenía."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "Inside the `rising_edge` branch, a single `if load = '1' then qi <= d; end if;` is enough — with no `else`, VHDL keeps `qi` unchanged automatically.",
+        "es": "Dentro de la rama `rising_edge`, basta un `if load = '1' then qi <= d; end if;` — sin `else`, VHDL mantiene `qi` sin cambios automáticamente."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Replace the inverted stub with the load branch:\n```vhdl\nif load = '1' then\n    qi <= d;\nend if;\n```\nLeaving out the `else` branch is what makes the register hold.",
+        "es": "Sustituye el stub invertido por la rama de carga:\n```vhdl\nif load = '1' then\n    qi <= d;\nend if;\n```\nOmitir el `else` es lo que hace que el registro mantenga su valor."
+      }
+    }
+  ]
+}

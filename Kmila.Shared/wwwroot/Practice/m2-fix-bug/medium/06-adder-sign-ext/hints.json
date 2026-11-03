@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "hints": [
+    { "level": 1, "text": {
+      "en": "The adder works for positive `a` but gives the wrong sum when `a` is negative — the trouble is in how `a` is widened to 8 bits.",
+      "es": "El sumador funciona con `a` positivo, pero da un resultado erróneo cuando `a` es negativo: el problema está en cómo se amplía `a` a 8 bits."
+    } },
+    { "level": 2, "text": {
+      "en": "Look at how `a_ext` is built. Prepending `\"0000\"` is zero-extension; a signed value needs its sign bit replicated into the upper bits instead.",
+      "es": "Mira cómo se construye `a_ext`. Anteponer `\"0000\"` es extensión con ceros; un valor con signo necesita que su bit de signo se replique en los bits altos."
+    } },
+    { "level": 3, "text": {
+      "en": "Replace `a_ext <= signed(\"0000\" & a);` with `a_ext <= resize(signed(a), 8);`, which sign-extends automatically.",
+      "es": "Sustituye `a_ext <= signed(\"0000\" & a);` por `a_ext <= resize(signed(a), 8);`, que extiende el signo automáticamente."
+    } }
+  ]
+}

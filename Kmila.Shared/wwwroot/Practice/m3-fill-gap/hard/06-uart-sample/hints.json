@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "The strobe must fire exactly once per bit, right at the middle of the oversampling window, which is when the count reaches 8.",
+        "es": "El pulso debe dispararse una sola vez por bit, justo en el centro de la ventana de sobremuestreo, que es cuando la cuenta llega a 8."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "Inside the clocked branch, test `bit_count` against 8 and set `sample_now` to `'1'` on a match and `'0'` otherwise; compare as a number with `unsigned(bit_count)`.",
+        "es": "Dentro de la rama de reloj, compara `bit_count` con 8 y pon `sample_now` a `'1'` si coincide y a `'0'` en caso contrario; compáralo como número con `unsigned(bit_count)`."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "A small `if/else` does it.\n```vhdl\nif unsigned(bit_count) = \"1000\" then\n    sample_now <= '1';\nelse\n    sample_now <= '0';\nend if;\n```",
+        "es": "Un pequeño `if/else` lo resuelve.\n```vhdl\nif unsigned(bit_count) = \"1000\" then\n    sample_now <= '1';\nelse\n    sample_now <= '0';\nend if;\n```"
+      }
+    }
+  ]
+}

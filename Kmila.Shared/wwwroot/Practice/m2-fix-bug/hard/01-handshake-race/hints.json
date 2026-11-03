@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "`ack` reacts to `req` the instant it changes, so a one-cycle glitch sneaks straight through. Think about what \"stable for a full clock cycle\" really demands before you trust a request.",
+        "es": "`ack` responde a `req` en cuanto cambia, así que un pulso de un solo ciclo se cuela directo. Piensa en qué significa de verdad \"estable durante un ciclo completo\" antes de fiarte de la petición."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "Look at how `ack` is driven — it's a plain combinational copy of `req`, with no register in between. To demand that `req` stays high for a whole cycle you need to pass it through flip-flops first (one stage isn't enough).",
+        "es": "Fíjate en cómo se genera `ack`: es una copia puramente combinacional de `req`, sin ningún registro de por medio. Para exigir que `req` se mantenga alto durante un ciclo entero tienes que pasarlo antes por biestables (con una sola etapa no basta)."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Replace `ack <= req;` with a two-stage synchroniser: register `req` into `req_q1`, then `req_q1` into `req_q2` on each `rising_edge(clk)`, and drive `ack <= req_q1 and req_q2;`. Now `ack` only rises after `req` has been stable high for a full cycle.",
+        "es": "Sustituye `ack <= req;` por un sincronizador de dos etapas: registra `req` en `req_q1`, y luego `req_q1` en `req_q2` en cada `rising_edge(clk)`, y pon `ack <= req_q1 and req_q2;`. Así `ack` solo sube cuando `req` ha estado estable en alto durante un ciclo completo."
+      }
+    }
+  ]
+}

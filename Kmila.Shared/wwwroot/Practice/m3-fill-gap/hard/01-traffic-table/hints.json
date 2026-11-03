@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "The blank spot holds the logic that decides which light pattern comes next, walking the cycle `00 → 01 → 10` and then back to `00`.",
+        "es": "El hueco necesita la lógica que decide qué patrón de luz toca después, recorriendo el ciclo `00 → 01 → 10` y de vuelta a `00`."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "Fill the `case cur is` with one `when` branch per state that sets `nxt` to the following value, and keep a `when others` that returns to `\"00\"`. It is purely combinational, so no clock edge here.",
+        "es": "Rellena el `case cur is` con una rama `when` por estado que ponga `nxt` en el valor siguiente, y deja un `when others` que vuelva a `\"00\"`. Es puramente combinacional, así que aquí no va ningún flanco de reloj."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Add the three explicit branches before the fallback, each mapping a state to the next one.\n```vhdl\nwhen \"00\"   => nxt <= \"01\";\nwhen \"01\"   => nxt <= \"10\";\nwhen \"10\"   => nxt <= \"00\";\nwhen others => nxt <= \"00\";\n```",
+        "es": "Añade las tres ramas explícitas antes del comodín, cada una llevando un estado al siguiente.\n```vhdl\nwhen \"00\"   => nxt <= \"01\";\nwhen \"01\"   => nxt <= \"10\";\nwhen \"10\"   => nxt <= \"00\";\nwhen others => nxt <= \"00\";\n```"
+      }
+    }
+  ]
+}

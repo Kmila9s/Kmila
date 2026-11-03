@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "Every PWM pulse comes out one tick too short — the duty cycle is consistently a hair under what was requested.",
+        "es": "Cada pulso del PWM sale un tick demasiado corto: el ciclo de trabajo queda siempre un pelín por debajo de lo pedido."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "Look at the comparison that drives `pwm_out`. It's subtracting one from `duty`, when it should compare the counter against `duty` directly.",
+        "es": "Mira la comparación que genera `pwm_out`. Le está restando uno a `duty`, cuando debería comparar el contador con `duty` directamente."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Remove the `- 1`: `pwm_out <= '1' when count < unsigned(duty) else '0';`.",
+        "es": "Quita el `- 1`: `pwm_out <= '1' when count < unsigned(duty) else '0';`."
+      }
+    }
+  ]
+}

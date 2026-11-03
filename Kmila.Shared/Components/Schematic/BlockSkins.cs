@@ -120,17 +120,66 @@ public static class BlockSkins
         }
     }
 
-    /// <summary>Titled, translucent container box for the Grouped style.</summary>
+    // Title geometry for the Grouped container: font size, left/right inset of
+    // the title from the box edges, and an estimated advance per character at
+    // that size for the display/sans title font (weight 600). Kept slightly
+    // generous so the box never ends up a hair too narrow for its title.
+    private const double GroupTitleFont = 11;
+    private const double GroupTitleInset = 12;
+    private const double GroupTitleCharW = 6.6;
+
+    /// <summary>Minimum box width that fits <paramref name="title"/> at the group
+    /// title's font, so a narrow statement box still holds its whole label
+    /// instead of letting the text spill past the right edge. There is no DOM to
+    /// measure against here (the SVG is built as a string, shared by the viewer
+    /// and the exporter), so this estimates the advance width.</summary>
+    public static double GroupTitleMinWidth(string title)
+        => string.IsNullOrEmpty(title)
+            ? 0
+            : title.Length * GroupTitleCharW + GroupTitleInset * 2;
+
+    /// <summary>Titled, translucent container box for the Grouped style. The box
+    /// grows to at least the title's width so the statement label stays inside
+    /// it (narrow single-gate groups used to let a long line overflow the box
+    /// and become unreadable).</summary>
     public static string GroupContainer(double x, double y, double w, double h,
         string title, string fill, string stroke, string textColor)
     {
+        double drawW = Math.Max(w, GroupTitleMinWidth(title));
         var sb = new StringBuilder();
-        sb.Append($"<rect x=\"{F(x)}\" y=\"{F(y)}\" width=\"{F(w)}\" height=\"{F(h)}\" rx=\"12\" ")
+        sb.Append($"<rect x=\"{F(x)}\" y=\"{F(y)}\" width=\"{F(drawW)}\" height=\"{F(h)}\" rx=\"12\" ")
           .Append($"fill=\"{fill}\" stroke=\"{stroke}\" stroke-width=\"1.5\" />");
         if (!string.IsNullOrEmpty(title))
-            sb.Append($"<text x=\"{F(x + 12)}\" y=\"{F(y + 16)}\" font-size=\"11\" font-weight=\"600\" ")
+            sb.Append($"<text x=\"{F(x + GroupTitleInset)}\" y=\"{F(y + 16)}\" font-size=\"{F(GroupTitleFont)}\" font-weight=\"600\" ")
               .Append("font-family=\"var(--kmila-font-display, 'Archivo', system-ui, sans-serif)\" ")
               .Append($"fill=\"{textColor}\">").Append(Esc(title)).Append("</text>");
+        return sb.ToString();
+    }
+
+    /// <summary>Estimated rendered width of <paramref name="s"/> at the given
+    /// font size, for the mono/sans label fonts used across the schematic. The
+    /// SVG is built as a string with no DOM to measure against, so callers that
+    /// must size a box to its text (group containers, component boxes) use this.
+    /// Kept slightly generous so a box never ends up a hair too narrow.</summary>
+    public static double EstimateTextWidth(string s, double fontSize)
+        => string.IsNullOrEmpty(s) ? 0 : s.Length * fontSize * 0.62;
+
+    /// <summary>Solid, label-fit box for a component / black-box instance in the
+    /// gate-level styles (Grouped/Raw). Replaces the fixed 70×50 gate glyph so
+    /// the instance name fits inside its own box instead of spilling out both
+    /// sides. The layout sizes the box (<paramref name="w"/>×<paramref name="h"/>,
+    /// via SchematicCellSizing) so wires still meet it exactly at its edges.</summary>
+    public static string ComponentBox(double w, double h, string label, string tag,
+        string fill, string stroke, string labelColor)
+    {
+        var sb = new StringBuilder();
+        sb.Append($"<rect x=\"0\" y=\"0\" width=\"{F(w)}\" height=\"{F(h)}\" rx=\"8\" ")
+          .Append($"fill=\"{fill}\" stroke=\"{stroke}\" stroke-width=\"1.5\" />");
+        if (!string.IsNullOrEmpty(tag))
+            sb.Append(Text(7, 13, tag, 9, 600, labelColor, "start",
+                "var(--kmila-font-display, 'Archivo', system-ui, sans-serif)"));
+        if (!string.IsNullOrEmpty(label))
+            sb.Append(Text(w / 2, h / 2 + 4, label, 11, 600, labelColor, "middle"));
         return sb.ToString();
     }
 

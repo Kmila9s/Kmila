@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "The read pointer should only move forward when the host actually asks to read and there is something to read, never when the queue is empty.",
+        "es": "El puntero de lectura sólo debe avanzar cuando el host pide leer y hay algo que leer; nunca cuando la cola está vacía."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "Wrap the `rd_ptr <= rd_ptr + 1;` increment in an `if` that requires both `pop = '1'` and the FIFO not being empty (`is_empty = '0'`), so pops against an empty queue are silently dropped.",
+        "es": "Envuelve el incremento `rd_ptr <= rd_ptr + 1;` en un `if` que exija a la vez `pop = '1'` y que la FIFO no esté vacía (`is_empty = '0'`), para que los pops contra una cola vacía se ignoren sin más."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Add the empty-guard that the stub is missing.\n```vhdl\nif pop = '1' and is_empty = '0' then\n    rd_ptr <= rd_ptr + 1;\nend if;\n```",
+        "es": "Añade la guarda de vacío que al esqueleto le falta.\n```vhdl\nif pop = '1' and is_empty = '0' then\n    rd_ptr <= rd_ptr + 1;\nend if;\n```"
+      }
+    }
+  ]
+}

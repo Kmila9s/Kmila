@@ -181,6 +181,75 @@
                     </div>
                 }
 
+                @{
+                    var hints = _exercise.Hints ?? new List<PracticeHint>();
+                }
+                @if (hints.Count > 0)
+                {
+                    <h3 class="practice-section-title">
+                        <Icon Name="IconName.LightbulbFill" /> @Traductor.T("PRACTICE_HINTS_TITLE")
+                        @if (_hintRevealed > 0)
+                        {
+                            <span class="practice-hints__used">
+                                <Icon Name="IconName.InfoCircle" /> @Traductor.T("PRACTICE_HINT_USED_NOTE")
+                            </span>
+                        }
+                    </h3>
+                    <div class="practice-hints">
+                        @* Revealed levels — rendered open, newest escalation last. *@
+                        @foreach (var h in hints.Where(x => x.Level <= _hintRevealed).OrderBy(x => x.Level))
+                        {
+                            <details class="practice-hint practice-hint--l@(h.Level)" open>
+                                <summary>
+                                    <span class="practice-hint__badge">@HintLevelLabel(h.Level)</span>
+                                    <span class="practice-hint__count">
+                                        @string.Format(Traductor.T("PRACTICE_HINT_LEVEL_FMT"), h.Level, hints.Count)
+                                    </span>
+                                </summary>
+                                <div class="practice-hint__body lesson-markdown">
+                                    @MarkdownRenderer.Render(PracticeCatalog.Localize(h.Text, _lang, string.Empty))
+                                </div>
+                            </details>
+                        }
+
+                        @* Next-level control — hidden once the exercise is solved. *@
+                        @if (!_solved && _hintRevealed < hints.Count)
+                        {
+                            var nextLevel = _hintRevealed + 1;
+                            var eligible = FailedRevisions >= HintFailThreshold(nextLevel);
+                            <div class="practice-hints__action">
+                                @if (eligible)
+                                {
+                                    <button type="button"
+                                            class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                                            @onclick="() => RevealNextHintAsync(false)">
+                                        <Icon Name="IconName.Unlock" />
+                                        <span>
+                                            @(_hintRevealed == 0
+                                                ? Traductor.T("PRACTICE_HINT_REVEAL")
+                                                : Traductor.T("PRACTICE_HINT_REVEAL_NEXT"))
+                                        </span>
+                                    </button>
+                                }
+                                else
+                                {
+                                    <p class="practice-hints__locked">
+                                        <Icon Name="IconName.LockFill" />
+                                        @string.Format(Traductor.T("PRACTICE_HINT_LOCKED_FMT"),
+                                                       Math.Max(0, HintFailThreshold(nextLevel) - FailedRevisions))
+                                    </p>
+                                    <button type="button"
+                                            class="kmila-btn kmila-btn--ghost kmila-btn--sm practice-hints__force"
+                                            @onclick="() => RevealNextHintAsync(true)">
+                                        <Icon Name="IconName.EmojiFrown" />
+                                        <span>@Traductor.T("PRACTICE_HINT_STUCK")</span>
+                                    </button>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+
                 @if (_pastAttempts.Count > 0)
                 {
                     <h3 class="practice-section-title">
@@ -319,6 +388,52 @@
     private PracticeAttemptVerdict? _verdict;
     private List<PracticeAttempt> _pastAttempts = new();
 
+    /// <summary>
+    /// Highest tiered-hint level currently revealed for this exercise (0 = none).
+    /// Restored from the store on navigation so a refresh keeps revealed hints open.
+    /// </summary>
+    private int _hintRevealed;
+
+    /// <summary>Number of failed (non-Solved) attempts in the loaded history — kept for telemetry on reveal.</summary>
+    private int FailedAttempts => _pastAttempts.Count(a => a.Verdict != PracticeVerdictKind.Solved);
+
+    /// <summary>
+    /// Number of <em>distinct</em> failed code versions the student has actually
+    /// submitted — i.e. failed attempts whose code differs from one another.
+    /// This, not the raw fail count, drives hint escalation: re-submitting the
+    /// very same broken code over and over must NOT unlock hints (per user
+    /// request 2026-11-02). The student has to genuinely change the code and
+    /// fail for the gate to advance.
+    /// </summary>
+    private int FailedRevisions => _pastAttempts
+        .Where(a => a.Verdict != PracticeVerdictKind.Solved)
+        .Select(a => NormalizeCode(a.CodeSnapshot))
+        .Where(c => c.Length > 0)
+        .Distinct()
+        .Count();
+
+    /// <summary>
+    /// Normalizes a code snapshot for change-detection: unifies line endings and
+    /// trims surrounding whitespace so trivial formatting noise doesn't register
+    /// as a distinct revision (and, conversely, so a genuine edit does).
+    /// </summary>
+    private static string NormalizeCode(string? code) =>
+        (code ?? string.Empty).Replace("\r\n", "\n").Replace("\r", "\n").Trim();
+
+    /// <summary>
+    /// Distinct-failed-revision count required before a given hint level becomes
+    /// eligible. Level 1 after 2 changed-and-failed tries, level 2 after 3,
+    /// level 3 after 4. Tunable here. A stuck student can always force-reveal
+    /// past the threshold.
+    /// </summary>
+    private static int HintFailThreshold(int level) => level switch
+    {
+        1 => 2,
+        2 => 3,
+        3 => 4,
+        _ => int.MaxValue
+    };
+
     private Modal _exportModal = new();
 
     /// <summary>
@@ -364,6 +479,7 @@
             _verdict = null;
             _solved = false;
             await ReloadHistoryAsync();
+            await RestoreHintStateAsync();
         }
 
         // If Monaco was already initialised on a previous exercise, swap the
@@ -513,6 +629,43 @@
         if (_exercise == null) { _pastAttempts = new(); return; }
         _pastAttempts = await Attempts.GetAttemptsAsync(_exercise.Id, limit: 25);
     }
+
+    /// <summary>
+    /// Restores how many hint levels the student had already revealed so a
+    /// refresh/navigation doesn't re-lock them. Capped to the number of hints
+    /// actually authored for the exercise.
+    /// </summary>
+    private async Task RestoreHintStateAsync()
+    {
+        if (_exercise == null || (_exercise.Hints?.Count ?? 0) == 0) { _hintRevealed = 0; return; }
+        var max = await Attempts.GetMaxHintLevelAsync(_exercise.Id);
+        _hintRevealed = Math.Clamp(max, 0, _exercise.Hints!.Count);
+    }
+
+    /// <summary>
+    /// Reveals the next tiered hint and records it. <paramref name="forced"/> is
+    /// true when the student clicked "I'm stuck" before reaching the fail
+    /// threshold. Reveals always proceed in order (L1 → L2 → L3).
+    /// </summary>
+    private async Task RevealNextHintAsync(bool forced)
+    {
+        var hints = _exercise?.Hints;
+        if (_exercise == null || hints == null || _hintRevealed >= hints.Count) return;
+
+        var next = _hintRevealed + 1;
+        _hintRevealed = next;
+        try { await Attempts.LogHintRevealAsync(_exercise.Id, next, FailedAttempts, forced); }
+        catch { /* logged inside the store — never block the reveal */ }
+        StateHasChanged();
+    }
+
+    private string HintLevelLabel(int level) => level switch
+    {
+        1 => Traductor.T("PRACTICE_HINT_L1_LABEL"),
+        2 => Traductor.T("PRACTICE_HINT_L2_LABEL"),
+        3 => Traductor.T("PRACTICE_HINT_L3_LABEL"),
+        _ => $"L{level}"
+    };
 
     private async Task LoadAttemptAsync(PracticeAttempt a)
     {

@@ -12585,6 +12585,43 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     color: var(--text-2, #64748b);
 }
 
+/* Post-hoc replay transport (extends .schematic-debug-bar). */
+.schematic-replay-bar__scrub {
+    flex: 1 1 8rem;
+    min-width: 6rem;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+.schematic-replay-bar__counter {
+    font-variant-numeric: tabular-nums;
+    color: var(--text-2, #64748b);
+    min-width: 3.5rem;
+    text-align: center;
+}
+.schematic-replay-bar__field {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    white-space: nowrap;
+    color: var(--text-2, #64748b);
+}
+.schematic-replay-bar__field select {
+    font-size: var(--fs-sm);
+    padding: .1rem .3rem;
+    border-radius: var(--radius-sm, 6px);
+    border: 1px solid var(--border-subtle);
+    background: var(--surface-1, #fff);
+    color: var(--text-1, inherit);
+}
+
+/* Phone: let the transport wrap cleanly and the scrubber take a full row. */
+@media (max-width: 640.98px) {
+    .schematic-replay-bar__scrub { flex-basis: 100%; order: 10; }
+    .schematic-replay-bar__counter { order: 11; }
+    .schematic-replay-bar .kmila-btn span,
+    .schematic-replay-bar__field span { display: none; }
+}
+
 .schematic-basket {
     position: absolute;
     bottom: 1rem;
@@ -18047,4 +18084,118 @@ html[data-kmila-kbd="open"] #blazor-error-ui {
     letter-spacing: 0.04em;
     color: var(--brand-accent);
     margin-right: 4px;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Practice — tiered (escalating) hints
+   Progressive-disclosure cards in the exercise brief pane. Levels reveal one
+   at a time as failed attempts accumulate; level 3 reads warning-toned so
+   students self-regulate before revealing the near-answer.
+   ════════════════════════════════════════════════════════════════════════ */
+.practice-hints {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.practice-hints__used {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin-left: var(--space-2);
+    font-size: var(--fs-2xs);
+    font-weight: var(--fw-regular);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-wide);
+    color: var(--text-muted);
+}
+
+.practice-hint {
+    border: 1px solid var(--border-subtle);
+    border-left: 3px solid var(--kmila-accent);
+    border-radius: var(--radius-md);
+    background-color: var(--surface-1);
+    overflow: hidden;
+}
+
+.practice-hint--l1 { border-left-color: var(--success); }
+.practice-hint--l2 { border-left-color: var(--kmila-accent); }
+.practice-hint--l3 { border-left-color: var(--warning); }
+
+.practice-hint > summary {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+}
+.practice-hint > summary::-webkit-details-marker { display: none; }
+.practice-hint > summary::marker                 { display: none; content: ""; }
+
+.practice-hint__badge {
+    font-size: var(--fs-2xs);
+    font-weight: var(--fw-semibold);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-wide);
+    padding: 2px var(--space-2);
+    border-radius: var(--radius-pill, 999px);
+    background-color: var(--surface-2);
+    color: var(--text-strong);
+}
+
+.practice-hint--l3 .practice-hint__badge {
+    background-color: color-mix(in srgb, var(--warning) 18%, transparent);
+    color: var(--warning);
+}
+
+.practice-hint__count {
+    font-size: var(--fs-2xs);
+    color: var(--text-muted);
+}
+
+.practice-hint__body {
+    padding: 0 var(--space-3) var(--space-3) var(--space-3);
+    color: var(--text-default);
+}
+.practice-hint__body > :first-child { margin-top: 0; }
+.practice-hint__body > :last-child  { margin-bottom: 0; }
+
+.practice-hints__action {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.practice-hints__locked {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin: 0;
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
+}
+
+.practice-hints__force {
+    opacity: 0.85;
+}
+
+@media (max-width: 640.98px) {
+    .practice-hint > summary {
+        flex-wrap: wrap;
+        padding: var(--space-2);
+    }
+    .practice-hint__body {
+        padding: 0 var(--space-2) var(--space-2) var(--space-2);
+    }
+    .practice-hints__action {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .practice-hints__action .kmila-btn {
+        width: 100%;
+        justify-content: center;
+    }
 }

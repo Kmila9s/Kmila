@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "On `start` you load a byte and clock it out one bit at a time, MSB first, while generating a serial clock; when idle both outputs sit at 0.",
+        "es": "Al recibir `start` cargas un byte y lo sacas bit a bit, el más significativo primero, mientras generas un reloj serie; en reposo ambas salidas quedan en 0."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "Keep an `active` flag, a 4-bit `phase` counter and an 8-bit shift register in a clocked process. When idle, `start` loads `din` and goes active; when active, increment `phase` each clock and shift the register left whenever `phase(0)='1'`. Gate `sclk <= phase(0)` and `mosi <= shreg(7)` behind `active`.",
+        "es": "Mantén un flag `active`, un contador `phase` de 4 bits y un registro de desplazamiento de 8 bits en un proceso con reloj. En reposo, `start` carga `din` y activa; activo, incrementa `phase` cada reloj y desplaza el registro a la izquierda cuando `phase(0)='1'`. Protege `sclk <= phase(0)` y `mosi <= shreg(7)` tras `active`."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "The shift depends on the low bit of `phase`, and the outputs are masked by `active`.\n```vhdl\nif active = '0' then\n    if start = '1' then shreg <= din; phase <= (others=>'0'); active <= '1'; end if;\nelse\n    if phase(0) = '1' then shreg <= shreg(6 downto 0) & '0'; end if;\n    phase <= phase + 1;\nend if;\n-- ...\nsclk <= phase(0) when active='1' else '0';\nmosi <= shreg(7) when active='1' else '0';\n```",
+        "es": "El desplazamiento depende del bit bajo de `phase`, y las salidas se enmascaran con `active`.\n```vhdl\nif active = '0' then\n    if start = '1' then shreg <= din; phase <= (others=>'0'); active <= '1'; end if;\nelse\n    if phase(0) = '1' then shreg <= shreg(6 downto 0) & '0'; end if;\n    phase <= phase + 1;\nend if;\n-- ...\nsclk <= phase(0) when active='1' else '0';\nmosi <= shreg(7) when active='1' else '0';\n```"
+      }
+    }
+  ]
+}

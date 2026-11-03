@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "Each clock the register shifts along by one place, and the new bit coming in is built by XOR-ing together a handful of chosen tap positions.",
+        "es": "En cada flanco el registro se desplaza una posición, y el bit nuevo que entra se forma haciendo XOR de unas cuantas posiciones de tap elegidas."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "Compute the feedback into `fb` as the XOR of the taps (bits 8,6,5,4 → indices `r(7)`, `r(5)`, `r(4)`, `r(3)`), then shift left and feed `fb` into the empty LSB with `r <= r(6 downto 0) & fb;`.",
+        "es": "Calcula la realimentación en `fb` como el XOR de los taps (bits 8,6,5,4 → índices `r(7)`, `r(5)`, `r(4)`, `r(3)`), luego desplaza a la izquierda y mete `fb` en el LSB libre con `r <= r(6 downto 0) & fb;`."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Two lines: feedback then shift.\n```vhdl\nfb := r(7) xor r(5) xor r(4) xor r(3);\nr <= r(6 downto 0) & fb;\n```",
+        "es": "Dos líneas: realimentación y luego desplazamiento.\n```vhdl\nfb := r(7) xor r(5) xor r(4) xor r(3);\nr <= r(6 downto 0) & fb;\n```"
+      }
+    }
+  ]
+}

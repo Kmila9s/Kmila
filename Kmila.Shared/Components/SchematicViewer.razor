@@ -137,6 +137,21 @@ else
                         </button>
                     </KmilaTooltip>
                 }
+                @* Replay entry: appears once a run has been captured and no live
+                   engine is attached. Plays that execution back through the
+                   diagram step by step (see the replay transport bar below). *@
+                @if (Replay.Current != null && !Replay.IsLiveActive && !Replay.IsReplayActive)
+                {
+                    <KmilaTooltip TextKey="SCHEMATIC_REPLAY_HINT">
+                        <button type="button"
+                                class="kmila-btn kmila-btn--ghost kmila-btn--accent kmila-btn--sm"
+                                @onclick="EnterReplay"
+                                aria-label="@Traductor.T("SCHEMATIC_REPLAY")">
+                            <Icon Name="IconName.PlayCircle" />
+                            <span>@Traductor.T("SCHEMATIC_REPLAY")</span>
+                        </button>
+                    </KmilaTooltip>
+                }
                 <KmilaTooltip TextKey="SCHEMATIC_SELECT_MODE">
                     <button type="button"
                             class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm @(_selectMode ? "is-active" : "")"
@@ -245,6 +260,121 @@ else
             </div>
         }
 
+        @* Post-hoc replay transport. Plays the captured execution back through
+           the diagram: Restart / Step± / Play-Pause / scrubber, with speed,
+           detail (number of stops), loop, focus-path, and auto-replay-on-run.
+           Keyboard: Space = play/pause, ←/→ = step, R = restart. *@
+        @if (Replay.IsReplayActive)
+        {
+            <div class="schematic-debug-bar schematic-replay-bar" role="group"
+                 tabindex="0" @onkeydown="OnReplayKeyDown"
+                 aria-label="@Traductor.T("SCHEMATIC_REPLAY")">
+                <span class="schematic-debug-bar__status">
+                    <Icon Name="IconName.PlayCircle" />
+                    @Traductor.T("SCHEMATIC_REPLAY")
+                </span>
+
+                <KmilaTooltip TextKey="CONCEPTS_PLAYER_RESTART">
+                    <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
+                            @onclick="() => Replay.ReplayRestart()"
+                            aria-label="@Traductor.T("CONCEPTS_PLAYER_RESTART")">
+                        <Icon Name="IconName.ArrowCounterclockwise" />
+                    </button>
+                </KmilaTooltip>
+                <KmilaTooltip TextKey="CONCEPTS_PLAYER_STEP_BACK">
+                    <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
+                            @onclick="() => Replay.ReplayStepBack()"
+                            aria-label="@Traductor.T("CONCEPTS_PLAYER_STEP_BACK")">
+                        <Icon Name="IconName.SkipStart" />
+                    </button>
+                </KmilaTooltip>
+                <KmilaTooltip TextKey="@(Replay.ReplayIsPlaying ? "CONCEPTS_PLAYER_PAUSE" : "CONCEPTS_PLAYER_PLAY")">
+                    <button type="button" class="kmila-btn kmila-btn--accent kmila-btn--sm"
+                            @onclick="() => Replay.ReplayPlayPause()"
+                            aria-label="@Traductor.T(Replay.ReplayIsPlaying ? "CONCEPTS_PLAYER_PAUSE" : "CONCEPTS_PLAYER_PLAY")">
+                        <Icon Name="@(Replay.ReplayIsPlaying ? IconName.PauseFill : IconName.PlayFill)" />
+                    </button>
+                </KmilaTooltip>
+                <KmilaTooltip TextKey="CONCEPTS_PLAYER_STEP_FORWARD">
+                    <button type="button" class="kmila-btn-icon kmila-btn-icon--ghost kmila-btn-icon--primary kmila-btn-icon--sm"
+                            @onclick="() => Replay.ReplayStepForward()"
+                            aria-label="@Traductor.T("CONCEPTS_PLAYER_STEP_FORWARD")">
+                        <Icon Name="IconName.SkipEnd" />
+                    </button>
+                </KmilaTooltip>
+
+                <input class="schematic-replay-bar__scrub" type="range"
+                       min="0" max="@Math.Max(0, Replay.ReplayCount - 1)" step="1"
+                       value="@Replay.ReplayIndex"
+                       @oninput="OnReplayScrub"
+                       aria-label="@Traductor.T("SCHEMATIC_REPLAY_SCRUB")" />
+                <span class="schematic-replay-bar__counter">@(Replay.ReplayIndex + 1)/@Replay.ReplayCount</span>
+
+                <label class="schematic-replay-bar__field">
+                    <span>@Traductor.T("SCHEMATIC_REPLAY_SPEED")</span>
+                    <select @onchange="OnReplaySpeedChanged">
+                        <option value="0.25" selected="@(Math.Abs(Replay.ReplaySpeed - 0.25) < 0.001)">0.25×</option>
+                        <option value="0.5" selected="@(Math.Abs(Replay.ReplaySpeed - 0.5) < 0.001)">0.5×</option>
+                        <option value="1" selected="@(Math.Abs(Replay.ReplaySpeed - 1.0) < 0.001)">1×</option>
+                        <option value="2" selected="@(Math.Abs(Replay.ReplaySpeed - 2.0) < 0.001)">2×</option>
+                        <option value="4" selected="@(Math.Abs(Replay.ReplaySpeed - 4.0) < 0.001)">4×</option>
+                    </select>
+                </label>
+
+                <label class="schematic-replay-bar__field">
+                    <span>@Traductor.T("SCHEMATIC_REPLAY_DETAIL")</span>
+                    <select @onchange="OnReplayDetailChanged">
+                        <option value="50" selected="@(Replay.MaxFrames == 50)">@Traductor.T("SCHEMATIC_REPLAY_DETAIL_COARSE")</option>
+                        <option value="200" selected="@(Replay.MaxFrames == 200)">@Traductor.T("SCHEMATIC_REPLAY_DETAIL_NORMAL")</option>
+                        <option value="1000" selected="@(Replay.MaxFrames == 1000)">@Traductor.T("SCHEMATIC_REPLAY_DETAIL_FINE")</option>
+                        <option value="@ReplayState.MaxFramesMaximum" selected="@(Replay.MaxFrames == ReplayState.MaxFramesMaximum)">@Traductor.T("SCHEMATIC_REPLAY_DETAIL_MAX")</option>
+                    </select>
+                </label>
+
+                <KmilaTooltip TextKey="SCHEMATIC_REPLAY_LOOP_HINT">
+                    <button type="button"
+                            class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm @(Replay.ReplayLoop ? "is-active" : "")"
+                            @onclick="ToggleReplayLoop"
+                            aria-pressed="@Replay.ReplayLoop"
+                            aria-label="@Traductor.T("SCHEMATIC_REPLAY_LOOP")">
+                        <Icon Name="IconName.ArrowRepeat" />
+                    </button>
+                </KmilaTooltip>
+
+                @if (_mode == ViewMode.Debug)
+                {
+                    <KmilaTooltip TextKey="SCHEMATIC_DEBUG_FOCUS_HINT">
+                        <button type="button"
+                                class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm @(_debugFocusActive ? "is-active" : "")"
+                                @onclick="ToggleDebugFocus"
+                                aria-pressed="@_debugFocusActive"
+                                aria-label="@Traductor.T("SCHEMATIC_DEBUG_FOCUS")">
+                            <Icon Name="IconName.Activity" />
+                        </button>
+                    </KmilaTooltip>
+                }
+
+                <KmilaTooltip TextKey="SCHEMATIC_REPLAY_AUTOPLAY_HINT">
+                    <button type="button"
+                            class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm @(_autoReplay ? "is-active" : "")"
+                            @onclick="ToggleAutoReplayAsync"
+                            aria-pressed="@_autoReplay"
+                            aria-label="@Traductor.T("SCHEMATIC_REPLAY_AUTOPLAY")">
+                        <Icon Name="IconName.LightningChargeFill" />
+                    </button>
+                </KmilaTooltip>
+
+                <KmilaTooltip TextKey="SCHEMATIC_REPLAY_EXIT">
+                    <button type="button" class="kmila-btn kmila-btn--ghost kmila-btn--primary kmila-btn--sm"
+                            @onclick="ExitReplay"
+                            aria-label="@Traductor.T("SCHEMATIC_REPLAY_EXIT")">
+                        <Icon Name="IconName.XLg" />
+                        <span>@Traductor.T("SCHEMATIC_REPLAY_EXIT")</span>
+                    </button>
+                </KmilaTooltip>
+            </div>
+        }
+
         @if (_layout.Netlist.Diagnostics.Count > 0)
         {
             <ul class="schematic-diagnostics">
@@ -272,13 +402,22 @@ else
 
         <div class="schematic-viewer__body">
             @{
-                double w = _layout.CanvasWidth * _zoom;
-                double h = _layout.CanvasHeight * _zoom;
+                // Build the group containers first: a grouped box may widen to
+                // fit its title, so its extent (tracked in _groupExtentX/Y) can
+                // push past the layout canvas. Stretch the viewBox to cover it so
+                // the widened box — and its label — aren't clipped by the viewport.
+                string groupTints = (_mode == ViewMode.Naive || _renderMode == SchematicRenderMode.Grouped)
+                    ? BuildGroupTints()
+                    : "";
+                double canvasW = Math.Max(_layout.CanvasWidth, _groupExtentX);
+                double canvasH = Math.Max(_layout.CanvasHeight, _groupExtentY);
+                double w = canvasW * _zoom;
+                double h = canvasH * _zoom;
                 bool hasSelection = _selectedCellId != null || _selectedNetId != null;
             }
             <svg class="schematic-svg @(hasSelection ? "has-selection" : "")"
                  xmlns="http://www.w3.org/2000/svg"
-                 viewBox="@($"0 0 {_layout.CanvasWidth.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)} {_layout.CanvasHeight.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}")"
+                 viewBox="@($"0 0 {canvasW.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)} {canvasH.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}")"
                  width="@(w.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))"
                  height="@(h.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))"
                  preserveAspectRatio="xMinYMin meet"
@@ -299,9 +438,9 @@ else
 
                 @* Naive-mode source-line tints / Grouped-style containers sit
                    underneath everything. *@
-                @if (_mode == ViewMode.Naive || _renderMode == SchematicRenderMode.Grouped)
+                @if (!string.IsNullOrEmpty(groupTints))
                 {
-                    @((MarkupString)BuildGroupTints())
+                    @((MarkupString)groupTints)
                 }
 
                 @* Wires. Each one is clickable; clicking traces upstream
@@ -824,13 +963,129 @@ else
         // Live activity animation during a free run (Debug only) — JS-driven.
         Replay.OnLiveRunFrame += OnLiveRunFrame;
         Replay.AnimateDuringRun = _mode == ViewMode.Debug;
+        // Post-hoc replay: a fresh capture (or detail rebuild) arrives via
+        // OnChange — used to kick off auto-replay when the student opted in.
+        Replay.OnChange += OnReplayDocChanged;
     }
 
     /// <summary>Re-render when the live engine steps so the executing cell pulses.</summary>
     private void OnLiveStepChanged()
     {
+        // Covers the auto-replay case where the capture's OnChange arrived
+        // before the engine detached: this handler also runs on OnLiveChanged,
+        // so by the time the engine is gone we get a chance to kick replay.
+        MaybeAutoReplay();
         RefreshActiveStepCache();
         StateHasChangedSafe();
+    }
+
+    // ─── Post-hoc replay transport ───────────────────────────────────────
+    // Plays the captured ExecutionTimelineDoc (ReplayState.Current) back
+    // through the schematic: ReplayState advances the shared cursor + active
+    // sets per step and raises OnLiveStepChanged, which the handler above
+    // already turns into a re-render. These methods are just the control
+    // surface + per-user preference persistence.
+
+    private bool _autoReplay;
+    private ExecutionTimelineDoc? _lastAutoReplayedDoc;
+    private const string AutoReplayKey = "kmila.schematic.autoReplay";
+    private const string ReplaySpeedKey = "kmila.schematic.replaySpeed";
+
+    /// <summary>A fresh capture (or a detail-level rebuild) landed. Re-render so
+    /// the Replay button appears, and auto-start playback if the student opted
+    /// in — once per distinct capture, never while a live engine is attached.</summary>
+    private void OnReplayDocChanged()
+    {
+        MaybeAutoReplay();
+        // Skip the re-render during a live accumulation run (OnChange fires
+        // ~10 Hz then): the Replay entry button only shows post-run, and the
+        // live visuals have their own throttled paths. Avoids a render storm.
+        if (!Replay.IsLiveActive) StateHasChangedSafe();
+    }
+
+    private void MaybeAutoReplay()
+    {
+        if (!_autoReplay || Replay.IsLiveActive || Replay.IsReplayActive) return;
+        var doc = Replay.Current;
+        if (doc == null || doc.Steps.Count == 0) return;
+        if (ReferenceEquals(doc, _lastAutoReplayedDoc)) return;
+        _lastAutoReplayedDoc = doc;
+        EnterReplay();
+        Replay.ReplayPlayPause(); // start playing immediately
+    }
+
+    private void EnterReplay()
+    {
+        _lastAutoReplayedDoc = Replay.Current; // manual entry also counts as handled
+        // Debug mode is where wire values + value chips render, so replay reads
+        // best there. Switch for the student on entry (no-op if already Debug).
+        if (_mode != ViewMode.Debug) SetMode(ViewMode.Debug);
+        Replay.ReplayEnter();
+    }
+
+    private void ExitReplay() => Replay.ReplayExit();
+    private void ToggleReplayLoop() => Replay.SetReplayLoop(!Replay.ReplayLoop);
+
+    private async Task ToggleAutoReplayAsync()
+    {
+        _autoReplay = !_autoReplay;
+        try { await JS.InvokeVoidAsync("localStorage.setItem", AutoReplayKey, _autoReplay ? "1" : "0"); }
+        catch { /* storage blocked — the toggle still works for this session */ }
+    }
+
+    private async Task OnReplaySpeedChanged(Microsoft.AspNetCore.Components.ChangeEventArgs e)
+    {
+        if (double.TryParse(e.Value?.ToString(),
+                System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out var sp))
+        {
+            Replay.SetReplaySpeed(sp);
+            try { await JS.InvokeVoidAsync("localStorage.setItem", ReplaySpeedKey,
+                sp.ToString(System.Globalization.CultureInfo.InvariantCulture)); }
+            catch { }
+        }
+    }
+
+    private void OnReplayDetailChanged(Microsoft.AspNetCore.Components.ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var frames)) Replay.SetMaxFrames(frames);
+    }
+
+    private void OnReplayScrub(Microsoft.AspNetCore.Components.ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var idx)) Replay.ReplaySeekTo(idx);
+    }
+
+    private void OnReplayKeyDown(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case " ":
+            case "Spacebar": Replay.ReplayPlayPause(); break;
+            case "ArrowLeft": Replay.ReplayStepBack(); break;
+            case "ArrowRight": Replay.ReplayStepForward(); break;
+            case "r":
+            case "R": Replay.ReplayRestart(); break;
+        }
+    }
+
+    /// <summary>Restore the auto-replay flag + last speed from localStorage.</summary>
+    private async Task LoadReplayPrefsAsync()
+    {
+        try
+        {
+            var auto = await JS.InvokeAsync<string?>("localStorage.getItem", AutoReplayKey);
+            _autoReplay = auto == "1";
+            var spd = await JS.InvokeAsync<string?>("localStorage.getItem", ReplaySpeedKey);
+            if (!string.IsNullOrEmpty(spd) && double.TryParse(spd,
+                    System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture, out var sp))
+            {
+                Replay.SetReplaySpeed(sp);
+            }
+            StateHasChanged();
+        }
+        catch { /* prerender / storage blocked — defaults are fine */ }
     }
 
     // #3: per-render caches of which cells/wires are "executing" this delta,
@@ -851,7 +1106,8 @@ else
     // run the JS live-activity path owns the visuals (OnLiveRunFrame) so we don't
     // re-render the whole SVG per frame.
     private bool IsDebugFocusActive
-        => _mode == ViewMode.Debug && _debugFocusActive && Replay.IsLivePaused
+        => _mode == ViewMode.Debug && _debugFocusActive
+           && (Replay.IsLivePaused || Replay.IsReplayActive)
            && (_focusActiveCells.Count > 0 || _focusActiveNets.Count > 0);
 
     private void ToggleDebugFocus()
@@ -903,6 +1159,12 @@ else
             _activeStep = ActiveStepLines();
             _activeStepSignals = new HashSet<string>(Replay.LiveActiveSignals, StringComparer.OrdinalIgnoreCase);
         }
+        else if (Replay.IsReplayActive)
+        {
+            // Post-hoc replay feeds the same caches from the captured step.
+            _activeStep = new HashSet<int>(Replay.ReplayActiveLines);
+            _activeStepSignals = new HashSet<string>(Replay.ReplayActiveSignals, StringComparer.OrdinalIgnoreCase);
+        }
         else
         {
             _activeStep = new();
@@ -921,11 +1183,11 @@ else
         _focusContextNets = new(StringComparer.Ordinal);
         // Compute whenever Debug + live (regardless of focus toggle) so the JS
         // run path has the active set for the glow even in full-diagram mode.
-        if (_layout == null || _mode != ViewMode.Debug || !Replay.IsLiveActive)
+        if (_layout == null || _mode != ViewMode.Debug || !(Replay.IsLiveActive || Replay.IsReplayActive))
             return;
 
         foreach (var c in _layout.Netlist.Cells)
-            if (IsCellActiveStep(c, _activeStep)) _focusActiveCells.Add(c.Id);
+            if (IsCellActive(c)) _focusActiveCells.Add(c.Id);
         foreach (var n in _layout.Netlist.Nets)
             if (_activeStepSignals.Contains(n.Name)) _focusActiveNets.Add(n.Id);
 
@@ -977,6 +1239,7 @@ else
         {
             _renderModeLoaded = true;
             if (await LoadRenderModeAsync()) StateHasChanged();
+            await LoadReplayPrefsAsync();
         }
 
         if (_layout == null) return;
@@ -1117,7 +1380,7 @@ else
             // The naive literal netlist has no meaning at block level, so block
             // styles always build on the simplified one regardless of the tab.
             var blocks = BlockGraphBuilder.Build(SchematicSimplifier.SimplifyNetlist(_rawNetlist));
-            _layout = LayeredLayout.Layout(blocks, groupAware: false, sizeOf: BlockGraphBuilder.BlockSize, colGap: 260, rowGap: 120, crossingSweeps: 4, obstacleRouting: true);
+            _layout = LayeredLayout.Layout(blocks, groupAware: false, sizeOf: SchematicCellSizing.Block, colGap: 260, rowGap: 120, crossingSweeps: 4, obstacleRouting: true);
         }
         else
         {
@@ -1138,8 +1401,14 @@ else
     private static LaidOutNetlist LayoutGateLevel(Netlist display, SchematicRenderMode mode)
         => mode == SchematicRenderMode.Grouped
             ? LayeredLayout.Layout(display, groupAware: true, obstacleRouting: true,
-                                   crossingSweeps: 4, colGap: 260, rowGap: 120)
-            : LayeredLayout.Layout(display);
+                                   crossingSweeps: 4, colGap: 260, rowGap: 120,
+                                   sizeOf: SchematicCellSizing.GateLevel)
+            // Raw keeps the literal gate netlist + placement, but routes through
+            // the obstacle-aware router so its wires get the same clean per-net
+            // lanes instead of the legacy midpoint elbows that stacked on top of
+            // each other (user feedback 2026-10-30).
+            : LayeredLayout.Layout(display, obstacleRouting: true,
+                                   sizeOf: SchematicCellSizing.GateLevel);
 
     /// <summary>Builds a layout for an arbitrary render style from the cached
     /// raw netlist, without mutating viewer state. Used by the export flow so
@@ -1150,7 +1419,7 @@ else
         if (mode.IsBlock())
         {
             var blocks = BlockGraphBuilder.Build(SchematicSimplifier.SimplifyNetlist(_rawNetlist));
-            return LayeredLayout.Layout(blocks, groupAware: false, sizeOf: BlockGraphBuilder.BlockSize, colGap: 260, rowGap: 120, crossingSweeps: 4, obstacleRouting: true);
+            return LayeredLayout.Layout(blocks, groupAware: false, sizeOf: SchematicCellSizing.Block, colGap: 260, rowGap: 120, crossingSweeps: 4, obstacleRouting: true);
         }
         var display = _mode == ViewMode.Naive
             ? _rawNetlist
@@ -1237,6 +1506,30 @@ else
            && c.SourceLine != null
            && int.TryParse(c.SourceLine, out var ln)
            && active.Contains(ln);
+
+    /// <summary>
+    /// True when this cell DROVE a changed signal this step — i.e. one of its
+    /// OUTPUT pins' nets is in the active set ("this gate / block just produced
+    /// a new value"). Deliberately NOT input pins: lighting every cell that
+    /// merely consumes a changed input turns whole fan-out regions on at once
+    /// and makes the active path impossible to follow. Output-only keeps the
+    /// glow to the gates that actually fired, so a propagation reads as a wave.
+    /// Complements the source-line match (<see cref="IsCellActiveStep"/>), which
+    /// never fires for structural blocks (adders, muxes, sub-entity instances)
+    /// since they have no changing source line of their own.
+    /// </summary>
+    private bool IsCellActiveByNet(Cell c)
+    {
+        if (_activeStepSignals.Count == 0) return false;
+        foreach (var pin in c.Outputs)
+            if (_netById.TryGetValue(pin.NetId, out var n) && _activeStepSignals.Contains(n.Name)) return true;
+        return false;
+    }
+
+    /// <summary>Whether a cell should pulse this step — by its own source line
+    /// OR because it drove a changed output signal.</summary>
+    private bool IsCellActive(Cell c)
+        => IsCellActiveStep(c, _activeStep) || IsCellActiveByNet(c);
 
     private async Task Zoom(double factor)
     {
@@ -2050,9 +2343,21 @@ else
         // Active whenever a live simulation is attached — students reading
         // the schematic in Synthesis or Naive mode shouldn't have to switch
         // to Debug just to see which gate is firing right now.
-        if (Replay.IsLiveActive && IsCellActiveStep(c, _activeStep)) sb.Append(" is-active-step");
+        if (ShowStepGlow && IsCellActive(c)) sb.Append(" is-active-step");
         return sb.ToString();
     }
+
+    /// <summary>
+    /// Whether the Blazor <c>is-active-step</c> glow should be applied this
+    /// render. True for replay and for a PAUSED live engine. False during a
+    /// FREE live run — there the glow comes from the throttled JS path
+    /// (<c>kmilaSchematicActivity</c> → <c>is-live-on</c>) so we don't re-render
+    /// the SVG per delta; keeping the Blazor class stable during a free run also
+    /// means the ~5 Hz value-chip re-render (driven by the moving cursor) can't
+    /// clobber the JS-applied glow classes.
+    /// </summary>
+    private bool ShowStepGlow
+        => Replay.IsReplayActive || (Replay.IsLiveActive && Replay.IsLivePaused);
 
     private string WireCssClasses(Net net, WirePath wire)
     {
@@ -2078,7 +2383,7 @@ else
         if (_selNets.Contains(net.Id)) sb.Append(" is-multi-selected");
         // #3: light the wire carrying a signal that just changed — works
         // across all view modes whenever a live engine is attached.
-        if (Replay.IsLiveActive && _activeStepSignals.Contains(net.Name)) sb.Append(" is-active-step");
+        if (ShowStepGlow && _activeStepSignals.Contains(net.Name)) sb.Append(" is-active-step");
         return sb.ToString();
     }
 
@@ -2190,6 +2495,12 @@ else
         if (_renderMode.IsBlock() && IsBlockCell(c))
             return BuildBlockCellInner(c);
 
+        // Gate-level styles: a component / black-box instance draws as a
+        // label-fit box (sized by SchematicCellSizing) so its name stays inside
+        // the box instead of overflowing the fixed 70×50 gate glyph.
+        if (SchematicCellSizing.IsBoxCell(c))
+            return BuildComponentCellInner(c);
+
         var col = CellColour(c);
         string label = CellLabel(c);
         var ci = System.Globalization.CultureInfo.InvariantCulture;
@@ -2228,6 +2539,17 @@ else
 
     private static bool IsBlockCell(Cell c)
         => c.Attrs != null && c.Attrs.ContainsKey(BlockGraphBuilder.BlockAttr);
+
+    /// <summary>Draws a gate-level component / black-box instance as a label-fit
+    /// box (shared <see cref="BlockSkins.ComponentBox"/>) so screen + export match
+    /// and the instance name never overflows its box.</summary>
+    private string BuildComponentCellInner(Cell c)
+    {
+        if (_layout == null || !_layout.CellBounds.TryGetValue(c.Id, out var b)) return "";
+        var col = CellColour(c);
+        return BlockSkins.ComponentBox(b.Width, b.Height, CellLabel(c),
+            BlockSkins.Glyph(c.Kind), col.Body, col.Stroke, col.Label);
+    }
 
     /// <summary>Draws one functional block (RTL box or Nodos card) via the
     /// shared <see cref="BlockSkins"/> helper so screen + export match.</summary>
@@ -2280,8 +2602,16 @@ else
         return sb.ToString();
     }
 
+    // Right/bottom extent (layout coords) reached by the group containers,
+    // including any box widened to fit its title. Used to stretch the viewBox so
+    // a widened box is never clipped by the SVG viewport. Set by BuildGroupTints.
+    private double _groupExtentX;
+    private double _groupExtentY;
+
     private string BuildGroupTints()
     {
+        _groupExtentX = 0;
+        _groupExtentY = 0;
         if (_layout == null) return "";
         var ci = System.Globalization.CultureInfo.InvariantCulture;
         var sb = new System.Text.StringBuilder();
@@ -2313,7 +2643,12 @@ else
             string text = g.Key.Length > 64 ? g.Key.Substring(0, 61) + "…" : g.Key;
             if (grouped)
             {
-                sb.Append(BlockSkins.GroupContainer(x0, y0, x1 - x0, y1 - y0, text,
+                // A narrow single-gate group widens to fit its statement title
+                // (see BlockSkins.GroupContainer); track that widened extent so
+                // the viewBox below stretches to it and the box isn't clipped.
+                double drawW = Math.Max(x1 - x0, BlockSkins.GroupTitleMinWidth(text));
+                x1 = x0 + drawW;
+                sb.Append(BlockSkins.GroupContainer(x0, y0, drawW, y1 - y0, text,
                     $"rgba({hue},.09)", $"rgba({hue},.55)", "var(--text-strong)"));
             }
             else
@@ -2327,6 +2662,8 @@ else
                   .Append(System.Net.WebUtility.HtmlEncode(text))
                   .Append("</text>");
             }
+            _groupExtentX = Math.Max(_groupExtentX, x1);
+            _groupExtentY = Math.Max(_groupExtentY, y1);
         }
         return sb.ToString();
     }
@@ -2619,6 +2956,10 @@ else
         Replay.OnLiveStepChanged -= OnLiveStepChanged;
         Replay.OnLiveChanged     -= OnLiveStepChanged;
         Replay.OnLiveRunFrame    -= OnLiveRunFrame;
+        Replay.OnChange          -= OnReplayDocChanged;
+        // Stop autoplay if it was running when the viewer unmounts, so the
+        // cursor/tape don't keep advancing against a hidden schematic.
+        if (Replay.IsReplayActive) Replay.ReplayExit();
         // Stop the per-frame bookkeeping when no schematic is watching.
         Replay.TrackActiveLines = false;
         Replay.AnimateDuringRun = false;

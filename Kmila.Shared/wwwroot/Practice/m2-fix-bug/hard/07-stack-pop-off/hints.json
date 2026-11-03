@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "The `empty` flag is always a beat behind what the stack is actually doing — and right after reset it even reads the wrong way round.",
+        "es": "La bandera `empty` siempre va un paso por detrás de lo que hace de verdad la pila, y justo después del reset incluso aparece al revés."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "`empty` is being computed into a register (`empty_reg`) with inverted if/else logic, so it's both stale by a cycle and backwards. A registered comparison can never reflect `count` in the same cycle.",
+        "es": "`empty` se está calculando en un registro (`empty_reg`) con una lógica if/else invertida, por lo que llega con un ciclo de retraso y además al revés. Una comparación registrada nunca puede reflejar `count` en el mismo ciclo."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Drop `empty_reg` entirely and drive `empty` combinationally: `empty <= '1' when count = 0 else '0';`. Now it tracks `count` with zero latency.",
+        "es": "Elimina `empty_reg` por completo y genera `empty` de forma combinacional: `empty <= '1' when count = 0 else '0';`. Así sigue a `count` sin ningún retraso."
+      }
+    }
+  ]
+}

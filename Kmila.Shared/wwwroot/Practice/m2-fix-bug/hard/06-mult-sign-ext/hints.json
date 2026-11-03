@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "The product is correct for small values but goes wrong as soon as `a` reaches 8 or more. Think about how `a` is being interpreted.",
+        "es": "El producto es correcto para valores pequeños pero se tuerce en cuanto `a` llega a 8 o más. Piensa en cómo se está interpretando `a`."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "One operand is being cast as `signed` (so its top bit becomes a negative sign) while the other stays unsigned. Both `a` and `b` are meant to be plain 4-bit unsigned numbers.",
+        "es": "Uno de los operandos se está convirtiendo a `signed` (de modo que su bit más alto pasa a ser un signo negativo) mientras el otro sigue siendo unsigned. Tanto `a` como `b` deberían ser simples números unsigned de 4 bits."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "Replace the line with `product <= std_logic_vector(unsigned(a) * unsigned(b));` — cast both operands as `unsigned`, and no `resize` is needed since the result already fits in 8 bits.",
+        "es": "Sustituye la línea por `product <= std_logic_vector(unsigned(a) * unsigned(b));`; convierte ambos operandos a `unsigned`, y no hace falta `resize` porque el resultado ya cabe en 8 bits."
+      }
+    }
+  ]
+}

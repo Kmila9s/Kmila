@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "Build a 7-bit codeword from your 4 data bits by computing three parity bits, each over a specific trio of the data bits, then interleave them in the required order.",
+        "es": "Construye una palabra de 7 bits a partir de tus 4 bits de datos calculando tres bits de paridad, cada uno sobre un trío concreto de los datos, y luego intercálalos en el orden pedido."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "It's purely combinational logic: declare three intermediate signals `p1`, `p2`, `p3` from the given XOR equations and concatenate everything into `code` with the `&` operator following the specified layout.",
+        "es": "Es lógica puramente combinacional: declara tres señales intermedias `p1`, `p2`, `p3` con las ecuaciones XOR dadas y concaténalo todo en `code` con el operador `&` siguiendo el layout indicado."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "The three parities and the concatenation come straight from the statement.\n```vhdl\np1 <= d(0) xor d(1) xor d(3);\np2 <= d(0) xor d(2) xor d(3);\np3 <= d(1) xor d(2) xor d(3);\ncode <= p1 & p2 & d(0) & p3 & d(1) & d(2) & d(3);\n```",
+        "es": "Las tres paridades y la concatenación salen directas del enunciado.\n```vhdl\np1 <= d(0) xor d(1) xor d(3);\np2 <= d(0) xor d(2) xor d(3);\np3 <= d(1) xor d(2) xor d(3);\ncode <= p1 & p2 & d(0) & p3 & d(1) & d(2) & d(3);\n```"
+      }
+    }
+  ]
+}

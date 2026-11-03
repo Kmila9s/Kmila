@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "A single bit that flips every clock turns each input bit into a two-step pattern with a guaranteed transition in the middle.",
+        "es": "Un único bit que se invierte en cada reloj convierte cada bit de entrada en un patrón de dos pasos con una transición garantizada en el medio."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "Keep a `phase` flip-flop that toggles on each rising edge (reset leaves it at '0'), and then the output is simply the input XOR'd with that phase, as a concurrent assignment.",
+        "es": "Mantén un flip-flop `phase` que alterna en cada flanco ascendente (el reset lo deja en '0'), y entonces la salida es simplemente la entrada XOR con esa fase, como asignación concurrente."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "One toggle and one XOR is all it takes.\n```vhdl\nphase <= not phase;   -- inside rising_edge(clk)\n-- ...\nm <= din xor phase;\n```",
+        "es": "Un toggle y un XOR es todo.\n```vhdl\nphase <= not phase;   -- dentro de rising_edge(clk)\n-- ...\nm <= din xor phase;\n```"
+      }
+    }
+  ]
+}

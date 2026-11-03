@@ -63,6 +63,19 @@ public record PracticeExerciseMeta(
     string? RequiresEngine = null);
 
 /// <summary>
+/// One tiered hint for a Practice exercise. Hints escalate from general (level 1)
+/// to very specific (level 3); the student reveals them one at a time, and reveals
+/// are recorded so we know the student required help. <see cref="Text"/> is a
+/// language → Markdown-body map (authored en + es; other languages fall back via
+/// <see cref="Services.Practice.PracticeCatalog.Localize"/>).
+/// </summary>
+/// <param name="Level">Escalation level, 1 (most general) … 3 (most specific).</param>
+/// <param name="Text">Localized Markdown bodies keyed by language code.</param>
+public record PracticeHint(
+    int Level,
+    Dictionary<string, string> Text);
+
+/// <summary>
 /// One test case for a Practice exercise: identifier, multi-language descriptions,
 /// visibility flag (hidden tests still grade), the input port-moment script, total
 /// simulated duration, and the system clock frequency in MHz.
@@ -93,7 +106,11 @@ public record PracticeExercise(
     List<string> OutputPortsToCompare,
     List<long> SampleTimesNs,
     List<PracticeTestCase> TestCases,
-    string? RequiresEngine = null);
+    string? RequiresEngine = null,
+    // Tiered hints (level 1 → 3), loaded from the exercise's hints.json.
+    // Null/empty when the exercise has no authored hints yet — the UI hides
+    // the hint section in that case.
+    List<PracticeHint>? Hints = null);
 
 /// <summary>Outcome of grading one <see cref="PracticeTestCase"/> against the student's simulation.</summary>
 /// <param name="TestCaseId">Identifier of the test case this result belongs to.</param>

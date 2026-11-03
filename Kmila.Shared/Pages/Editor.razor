@@ -299,6 +299,7 @@
                     <select value="@_entityScope" @onchange="OnEntityScopeChanged">
                         <option value="@EntityScope.MainFile" selected="@(_entityScope == EntityScope.MainFile)">@Traductor.T("ENTITY_SCOPE_MAIN")</option>
                         <option value="@EntityScope.AllProjectFiles" selected="@(_entityScope == EntityScope.AllProjectFiles)">@Traductor.T("ENTITY_SCOPE_ALL")</option>
+                        <option value="@EntityScope.Flattened" selected="@(_entityScope == EntityScope.Flattened)">@Traductor.T("ENTITY_SCOPE_FLAT")</option>
                         <option value="@EntityScope.Libraries" selected="@(_entityScope == EntityScope.Libraries)">@Traductor.T("ENTITY_SCOPE_LIBS")</option>
                     </select>
                 </label>
@@ -335,7 +336,7 @@
                 }
                 else
                 {
-                    var entities = _entityScope == EntityScope.AllProjectFiles
+                    var entities = _entityScope is EntityScope.AllProjectFiles or EntityScope.Flattened
                         ? _scopedEntities
                         : (Builder.Parser?.Entities?.ToList() ?? new List<Interpreter.Services.Entity>());
                     @if (entities.Count > 0)
@@ -374,7 +375,7 @@
                    whole shell into the "Reload window" state. Containing
                    the failure here keeps the rest of the dock usable. *@
                 @{
-                    var schematicCandidates = (_entityScope == EntityScope.AllProjectFiles
+                    var schematicCandidates = (_entityScope is EntityScope.AllProjectFiles or EntityScope.Flattened
                             ? _scopedEntities
                             : (Builder.Parser?.Entities?.ToList() ?? new List<Interpreter.Services.Entity>()))
                         .Where(e => e.Architecture != null)
@@ -681,7 +682,7 @@
     // entities, every entity across all project files, or what the imported
     // libraries publish. The build only parses one file, so the "all files"
     // scope parses the siblings on demand and merges them.
-    private enum EntityScope { MainFile, AllProjectFiles, Libraries }
+    private enum EntityScope { MainFile, AllProjectFiles, Libraries, Flattened }
     private EntityScope _entityScope = EntityScope.MainFile;
     private List<Interpreter.Services.Entity> _scopedEntities = new();
     private Interpreter.Services.Entity? _schematicEntity;
@@ -727,6 +728,40 @@
                 catch { /* skip files that don't parse; show what we can */ }
             }
         }
+        else if (_entityScope == EntityScope.Flattened)
+        {
+            // Inline the component hierarchy (same pass simulation uses) and
+            // parse the flat source, so a structural design's schematic shows the
+            // full gate-level netlist instead of black-box instances.
+            try
+            {
+                var baseDir = _project?.BasePath;
+                var topName = Builder.Parser?.Entities?.FirstOrDefault(e => e.Architecture != null)?.Name
+                              ?? _schematicEntity?.Name;
+                string? flat = !string.IsNullOrEmpty(baseDir) && !string.IsNullOrEmpty(topName)
+                    ? Interpreter.Services.SourceElaborator.ElaborateOrNull(baseDir!, topName!)
+                    : null;
+                if (flat != null)
+                {
+                    var tmp = System.IO.Path.Combine(
+                        System.IO.Path.GetTempPath(), $"kmila_flat_{System.Guid.NewGuid():N}.vhd");
+                    System.IO.File.WriteAllText(tmp, flat);
+                    try
+                    {
+                        var p = new Debugger.Repositories.Parser(tmp);
+                        p.ParseFile();
+                        merged.AddRange(p.Entities);
+                    }
+                    finally { try { System.IO.File.Delete(tmp); } catch { } }
+                }
+            }
+            catch { /* fall back to the built parser output below */ }
+
+            // No components to inline (or elaboration unavailable) → behave like
+            // MainFile so the scope is never empty.
+            if (merged.Count == 0 && Builder.Parser?.Entities != null)
+                merged.AddRange(Builder.Parser.Entities);
+        }
         else // MainFile (Libraries renders its own list, not entities)
         {
             if (Builder.Parser?.Entities != null) merged.AddRange(Builder.Parser.Entities);
@@ -734,13 +769,16 @@
 
         _scopedEntities = merged;
 
-        // Keep the schematic selection valid: preserve it if still present,
-        // else fall back to the first entity that has an architecture.
-        if (_schematicEntity == null ||
-            !_scopedEntities.Any(e => string.Equals(e.Name, _schematicEntity.Name, StringComparison.OrdinalIgnoreCase)))
-        {
-            _schematicEntity = _scopedEntities.FirstOrDefault(e => e.Architecture != null);
-        }
+        // Keep the schematic selection valid AND bound to the current scope's own
+        // entity object: re-resolve by name within _scopedEntities (so switching
+        // scope, e.g. to Flattened where the top keeps its name but gains a
+        // gate-level architecture, actually swaps to that object), else fall back
+        // to the first entity that has an architecture.
+        _schematicEntity = (_schematicEntity != null
+                ? _scopedEntities.FirstOrDefault(e => e.Architecture != null
+                    && string.Equals(e.Name, _schematicEntity.Name, StringComparison.OrdinalIgnoreCase))
+                : null)
+            ?? _scopedEntities.FirstOrDefault(e => e.Architecture != null);
     }
 
     /// <summary>Absolute on-disk path for a project file, or null if unknown.</summary>
@@ -834,6 +872,9 @@
         Builder.OnEngineReady             += OnEngineReadyForLiveReplay;
         Replay.OnBreakpointsChanged       += OnBreakpointsChangedRepaint;
         Replay.OnLiveChanged              += OnReplayLiveChangedForTabBadge;
+        // Post-hoc schematic replay advances per step via OnLiveStepChanged;
+        // keep the Monaco line highlight in sync with it.
+        Replay.OnLiveStepChanged          += OnReplayStepHighlight;
         Sim.OnChange                      += OnSimParamsChanged;
         Snapshots.OnChange                += OnSnapshotsChanged;
         // Every Kmila component that renders Traductor.T(...) is expected to
@@ -3277,11 +3318,34 @@ end architecture behavioral;",
         InvokeAsync(StateHasChanged);
     }
 
+    /// <summary>
+    /// Per-step hook for the post-hoc schematic replay: repaint the Monaco
+    /// exec-line highlight on each replay tick so the code editor tracks the
+    /// circuit animation. Guarded to replay only — the live-stepping path is
+    /// already driven from <see cref="OnReplayLiveChangedForTabBadge"/> via
+    /// <c>OnLiveChanged</c>, so this must not double-fire during a live run.
+    /// </summary>
+    private void OnReplayStepHighlight()
+    {
+        if (!Replay.IsReplayActive) return;
+        _ = UpdateLiveStepHighlightAsync();
+        InvokeAsync(StateHasChanged);
+    }
+
     private async Task UpdateLiveStepHighlightAsync()
     {
         try
         {
-            if (Replay.IsLiveActive && Replay.IsLivePaused
+            if (Replay.IsReplayActive && Replay.ReplayActiveLines.Count > 0)
+            {
+                // Post-hoc schematic replay: highlight the line responsible for
+                // the current replay step so Code / Schematic / Waveforms stay
+                // in lockstep while the student scrubs or autoplays.
+                await JS.InvokeVoidAsync(
+                    "kmilaEditorHighlightExecLines",
+                    Replay.ReplayActiveLines.ToArray());
+            }
+            else if (Replay.IsLiveActive && Replay.IsLivePaused
                 && Replay.LiveActiveLines.Count > 0)
             {
                 await JS.InvokeVoidAsync(
@@ -4264,6 +4328,7 @@ end architecture behavioral;",
         Builder.OnEngineReady             -= OnEngineReadyForLiveReplay;
         Replay.OnBreakpointsChanged       -= OnBreakpointsChangedRepaint;
         Replay.OnLiveChanged              -= OnReplayLiveChangedForTabBadge;
+        Replay.OnLiveStepChanged          -= OnReplayStepHighlight;
         Replay.DetachLive();
 
         // Phase B+ Deep AST (follow-up): release the gutter-click JS hookup

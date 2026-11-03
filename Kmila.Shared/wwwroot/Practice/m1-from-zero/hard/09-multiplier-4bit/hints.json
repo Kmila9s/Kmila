@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "You just have to multiply the two 4-bit numbers; the result fits naturally in 8 bits and there's no clock at all.",
+        "es": "Sólo tienes que multiplicar los dos números de 4 bits; el resultado cabe de forma natural en 8 bits y no hay reloj en absoluto."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "With `IEEE.NUMERIC_STD`, cast both inputs to `unsigned`, use the overloaded `*` operator, and cast the 8-bit product back to `std_logic_vector` in a single concurrent assignment.",
+        "es": "Con `IEEE.NUMERIC_STD`, convierte ambas entradas a `unsigned`, usa el operador `*` sobrecargado y devuelve el producto de 8 bits a `std_logic_vector` en una sola asignación concurrente."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "No resizing needed: `unsigned(3 downto 0) * unsigned(3 downto 0)` is already exactly 8 bits wide.\n```vhdl\nproduct <= std_logic_vector(unsigned(a) * unsigned(b));\n```",
+        "es": "No hace falta redimensionar: `unsigned(3 downto 0) * unsigned(3 downto 0)` ya da 8 bits exactos.\n```vhdl\nproduct <= std_logic_vector(unsigned(a) * unsigned(b));\n```"
+      }
+    }
+  ]
+}

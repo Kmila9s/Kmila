@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "You need a number that climbs by one on every clock beat and jumps back to zero whenever reset is asserted.",
+        "es": "Necesitas un número que suba de uno en uno en cada pulso de reloj y vuelva a cero cada vez que se active el reset."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "Add `use IEEE.NUMERIC_STD.ALL;` so you can `+ 1` on an internal `unsigned` signal. Update it in a `process(clk, reset)` with the async reset branch first and `rising_edge(clk)` after, then convert back to `std_logic_vector` for `q`.",
+        "es": "Añade `use IEEE.NUMERIC_STD.ALL;` para poder hacer `+ 1` sobre una señal interna `unsigned`. Actualízala en un `process(clk, reset)` con la rama de reset asíncrono primero y `rising_edge(clk)` después, y luego convierte a `std_logic_vector` para `q`."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "The increment and output conversion are the whole trick:\n\n```vhdl\nelsif rising_edge(clk) then\n    count <= count + 1;\nend if;\n-- q <= std_logic_vector(count);\n```",
+        "es": "El incremento y la conversión de salida son todo el truco:\n\n```vhdl\nelsif rising_edge(clk) then\n    count <= count + 1;\nend if;\n-- q <= std_logic_vector(count);\n```"
+      }
+    }
+  ]
+}

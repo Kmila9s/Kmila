@@ -111,6 +111,17 @@ public class ApplicationDbContext : SQLiteAsyncConnection
         }
         try
         {
+            // Practice hint reveals — one row per tiered hint level the student
+            // revealed, so we can tell they required help and surface it in the
+            // session export.
+            var result = await CreateTableAsync<PracticeHintReveal>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogInformation(ex.Message);
+        }
+        try
+        {
             // User-authored samples — projects promoted to reusable gallery
             // entries via "import as sample". Stored here (writable) alongside
             // the built-in examples baked into the app.
@@ -163,6 +174,8 @@ public class ApplicationDbContext : SQLiteAsyncConnection
     public AsyncTableQuery<PracticeAttemptTestResult> PracticeAttemptTestResults => Table<PracticeAttemptTestResult>();
     /// <summary>Gets the aggregate progress per exercise (status + counters).</summary>
     public AsyncTableQuery<PracticeProgress> PracticeProgress => Table<PracticeProgress>();
+    /// <summary>Gets the tiered-hint reveal log (one row per level revealed per exercise).</summary>
+    public AsyncTableQuery<PracticeHintReveal> PracticeHintReveals => Table<PracticeHintReveal>();
     /// <summary>Gets the user-authored samples (imported projects promoted to gallery entries).</summary>
     public AsyncTableQuery<UserSample> UserSamples => Table<UserSample>();
     /// <summary>Gets the per-project version-control repo links.</summary>

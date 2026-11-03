@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hints": [
+    {
+      "level": 1,
+      "text": {
+        "en": "The output should ignore quick flickers and only change once the button has read the same value for four clocks in a row.",
+        "es": "La salida debe ignorar los parpadeos rápidos y cambiar sólo cuando el botón ha leído el mismo valor durante cuatro relojes seguidos."
+      }
+    },
+    {
+      "level": 2,
+      "text": {
+        "en": "In a clocked process keep an `unsigned(1 downto 0)` counter plus a `last` bit: when `raw` matches `last`, count up until it saturates and then latch `raw` into the held output; when `raw` differs, clear the counter and refresh `last`. Reset zeroes everything.",
+        "es": "En un proceso con reloj mantén un contador `unsigned(1 downto 0)` y un bit `last`: si `raw` coincide con `last`, cuenta hacia arriba hasta saturar y entonces engancha `raw` en la salida retenida; si `raw` cambia, pon el contador a cero y actualiza `last`. El reset lo limpia todo."
+      }
+    },
+    {
+      "level": 3,
+      "text": {
+        "en": "The trick is to copy `raw` into `stable` only once the counter reaches `\"11\"`; otherwise keep counting. Then drive `clean <= stable;`.\n```vhdl\nif raw = last then\n    if cnt = \"11\" then stable <= raw;\n    else cnt <= cnt + 1; end if;\nelse\n    cnt <= (others => '0'); last <= raw;\nend if;\n```",
+        "es": "La clave es copiar `raw` a `stable` sólo cuando el contador llega a `\"11\"`; si no, sigue contando. Después asigna `clean <= stable;`.\n```vhdl\nif raw = last then\n    if cnt = \"11\" then stable <= raw;\n    else cnt <= cnt + 1; end if;\nelse\n    cnt <= (others => '0'); last <= raw;\nend if;\n```"
+      }
+    }
+  ]
+}

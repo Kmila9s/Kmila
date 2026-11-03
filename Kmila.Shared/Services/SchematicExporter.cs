@@ -86,6 +86,47 @@ public static class SchematicExporter
                 bounds = new Interpreter.Synthesis.Layout.Rect(x0, y0, x1 - x0, y1 - y0);
             }
         }
+        // Grouped style: compute the titled statement containers up front (in
+        // layout space) so the canvas bounds include them. A narrow single-gate
+        // group widens to fit its title (see BlockSkins.GroupContainer); folding
+        // that widened extent into the bounds here keeps the box — and its label
+        // — from being clipped at the canvas edge. The draw loop below reuses
+        // these exact boxes so on-screen and exported geometry stay identical.
+        string[] groupHues = { "60,130,246", "245,158,11", "16,185,129",
+            "168,85,247", "239,68,68", "6,182,212", "236,72,153" };
+        var groupBoxes = new List<(double X, double Y, double W, double H, string Title, string Hue)>();
+        double groupMaxX = double.NegativeInfinity, groupMaxY = double.NegativeInfinity;
+        if (grouped)
+        {
+            var groups = filtered.Layout.Netlist.Cells
+                .Where(c => filtered.VisibleCellIds.Contains(c.Id) && !string.IsNullOrEmpty(c.SourceLine))
+                .GroupBy(c => c.SourceLine!)
+                .ToList();
+            for (int gi = 0; gi < groups.Count; gi++)
+            {
+                var rects = groups[gi]
+                    .Select(c => filtered.Layout.CellBounds.TryGetValue(c.Id, out var r) ? r : default)
+                    .Where(r => r.Width > 0).ToList();
+                if (rects.Count == 0) continue;
+                double gx0 = rects.Min(r => r.X) - 20;
+                double gy0 = rects.Min(r => r.Y) - 34;
+                double gx1 = rects.Max(r => r.X + r.Width) + 20;
+                double gy1 = rects.Max(r => r.Y + r.Height) + 16;
+                string gkey = groups[gi].Key;
+                string gtext = gkey.Length > 64 ? gkey.Substring(0, 61) + "…" : gkey;
+                double gw = Math.Max(gx1 - gx0, BlockSkins.GroupTitleMinWidth(gtext));
+                double gh = gy1 - gy0;
+                groupBoxes.Add((gx0, gy0, gw, gh, gtext, groupHues[gi % groupHues.Length]));
+                groupMaxX = Math.Max(groupMaxX, gx0 + gw);
+                groupMaxY = Math.Max(groupMaxY, gy0 + gh);
+                double bx0 = Math.Min(bounds.X, gx0);
+                double by0 = Math.Min(bounds.Y, gy0);
+                double bx1 = Math.Max(bounds.X + bounds.Width, gx0 + gw);
+                double by1 = Math.Max(bounds.Y + bounds.Height, gy0 + gh);
+                bounds = new Interpreter.Synthesis.Layout.Rect(bx0, by0, bx1 - bx0, by1 - by0);
+            }
+        }
+
         bool trim = req.TrimToBounds;
         bool useColor = req.ColorMode == SchematicExportColorMode.Color && palette != null;
 
@@ -95,12 +136,17 @@ public static class SchematicExporter
         double offsetX = trim ? -bounds.X + padding : 0;
         double offsetY = trim ? -bounds.Y + padding + (req.IncludeTitle ? TitleHeight : 0) : 0;
 
+        // Non-trim keeps layout coordinates, so the canvas must still stretch to
+        // cover any grouped box that a widened title pushed past the layout's own
+        // extent (otherwise that box clips at the right/bottom edge).
+        double fullW = Math.Max(filtered.Layout.CanvasWidth, groupMaxX);
+        double fullH = Math.Max(filtered.Layout.CanvasHeight, groupMaxY);
         double exportW = trim
             ? bounds.Width + padding * 2
-            : filtered.Layout.CanvasWidth + padding * 2;
+            : fullW + padding * 2;
         double exportH = trim
             ? bounds.Height + padding * 2 + (req.IncludeTitle ? TitleHeight : 0)
-            : filtered.Layout.CanvasHeight + padding * 2 + (req.IncludeTitle ? TitleHeight : 0);
+            : fullH + padding * 2 + (req.IncludeTitle ? TitleHeight : 0);
 
         var sb = new StringBuilder(8192);
         sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
@@ -143,30 +189,15 @@ public static class SchematicExporter
         }
 
         // Grouped style: titled containers behind the gates, one per statement.
+        // Geometry (including the title-fitting width) was computed up front and
+        // folded into the bounds; here we just place each box at the draw offset.
         if (grouped)
         {
-            string[] hues = { "60,130,246", "245,158,11", "16,185,129",
-                "168,85,247", "239,68,68", "6,182,212", "236,72,153" };
             string groupText = darkBg ? "#f1f5f9" : "#1f2937";
-            var groups = filtered.Layout.Netlist.Cells
-                .Where(c => filtered.VisibleCellIds.Contains(c.Id) && !string.IsNullOrEmpty(c.SourceLine))
-                .GroupBy(c => c.SourceLine!)
-                .ToList();
-            for (int gi = 0; gi < groups.Count; gi++)
+            foreach (var gb in groupBoxes)
             {
-                var rects = groups[gi]
-                    .Select(c => filtered.Layout.CellBounds.TryGetValue(c.Id, out var r) ? r : default)
-                    .Where(r => r.Width > 0).ToList();
-                if (rects.Count == 0) continue;
-                double gx0 = rects.Min(r => r.X) - 20 + offsetX;
-                double gy0 = rects.Min(r => r.Y) - 34 + offsetY;
-                double gx1 = rects.Max(r => r.X + r.Width) + 20 + offsetX;
-                double gy1 = rects.Max(r => r.Y + r.Height) + 16 + offsetY;
-                string hue = hues[gi % hues.Length];
-                string gkey = groups[gi].Key;
-                string gtext = gkey.Length > 64 ? gkey.Substring(0, 61) + "…" : gkey;
-                sb.Append(BlockSkins.GroupContainer(gx0, gy0, gx1 - gx0, gy1 - gy0, gtext,
-                    $"rgba({hue},.09)", $"rgba({hue},.55)", groupText)).Append('\n');
+                sb.Append(BlockSkins.GroupContainer(gb.X + offsetX, gb.Y + offsetY, gb.W, gb.H,
+                    gb.Title, $"rgba({gb.Hue},.09)", $"rgba({gb.Hue},.55)", groupText)).Append('\n');
             }
         }
 
@@ -242,6 +273,17 @@ public static class SchematicExporter
                     return n is { Kind: NetKind.Bus };
                 }
                 sb.Append(BlockSkins.Build(c, b.Width, b.Height, req.Mode, bcolors, IsBus));
+                sb.Append("</g>\n");
+                continue;
+            }
+
+            // Gate-level component / black-box instances draw as a label-fit box
+            // (sized by SchematicCellSizing) instead of the fixed 70×50 glyph, so
+            // the instance name sits inside its own box rather than overflowing.
+            if (SchematicCellSizing.IsBoxCell(c))
+            {
+                sb.Append(BlockSkins.ComponentBox(b.Width, b.Height,
+                    SchematicCellSizing.LabelOf(c), BlockSkins.Glyph(c.Kind), body, stroke, lbl));
                 sb.Append("</g>\n");
                 continue;
             }
