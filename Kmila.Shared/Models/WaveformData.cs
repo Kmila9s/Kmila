@@ -55,6 +55,19 @@ public class WaveformData
     /// </summary>
     public int TimescaleNs { get; init; }
 
+    /// <summary>
+    /// Maximum transitions retained per signal in the LIVE incremental merge
+    /// (<see cref="MergeFrom"/>). Bounds memory on long / free-running sims — the
+    /// live waveform becomes a rolling window of the most recent transitions
+    /// (the root-cause fix for the long-running freeze + crash; this was a second
+    /// unbounded copy of the signal history). The one-shot
+    /// <see cref="FromSignalHistory"/> builder and JSON snapshots are unaffected,
+    /// so stored runs still replay in full. 0 / negative = unbounded. Default 5000
+    /// matches the engine's <c>SignalHistory.MaxSamplesPerSignal</c> and the
+    /// replay <c>LiveDocFrameCap</c>.
+    /// </summary>
+    public int MaxLiveTransitionsPerSignal { get; set; } = 5000;
+
     // SourceHistory used to live here as a back-reference to the simulator's
     // SignalHistory for VCD export, but it's never actually read — VCD export
     // goes through Builder.SimulationHistory directly. Holding it kept the
@@ -205,6 +218,20 @@ public class WaveformData
             });
             _liveWatermarks[signal] = newCount;
             if (localAppended) appendedAny = true;
+
+            // Long-run safety cap (2026-11-06): bound the live transition list so a
+            // long / free-running sim keeps bounded memory — the live waveform
+            // becomes a rolling window of the most recent transitions. Batched
+            // front-eviction (amortized O(1)) keeps Transitions contiguous and
+            // ascending, so IndexAtOrBefore / GetWindow stay valid. The watermark
+            // indexes SignalHistory (not this list), so eviction here never
+            // disturbs it. MaxLiveTransitionsPerSignal <= 0 opts into unbounded.
+            if (MaxLiveTransitionsPerSignal > 0 && transitions.Count > MaxLiveTransitionsPerSignal)
+            {
+                int remove = Math.Max(1, MaxLiveTransitionsPerSignal / 8);
+                if (remove > transitions.Count) remove = transitions.Count;
+                transitions.RemoveRange(0, remove);
+            }
         }
 
         // Grow the X-axis to whatever we've now seen.

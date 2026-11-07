@@ -1,5 +1,6 @@
-#if KMILA_MAUI_API && !IOS
+#if KMILA_MAUI_API
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using Kmila.Shared.Services.Api;
@@ -9,16 +10,20 @@ namespace Kmila.Services;
 /// <summary>
 /// Tier 5.2 Phase B — hosts <c>/api/v1</c> inside the MAUI Blazor Hybrid
 /// process so SimulatorBench / curl can be pointed at the running mobile /
-/// Mac Catalyst app.
+/// Mac Catalyst / iOS app.
 ///
-/// Uses <see cref="HttpListener"/> from the BCL rather than Kestrel because
-/// <c>Microsoft.AspNetCore.App</c> has no runtime pack for maccatalyst/ios/
-/// android RIDs. Dispatches requests through <see cref="SimulationApiHandlers"/>
-/// — the same code path Kmila.Web's Minimal-API map uses — so both hosts
-/// return byte-identical JSON.
+/// Transport: <see cref="HttpListener"/> from the BCL on every platform except
+/// iOS, where it throws <c>PlatformNotSupportedException</c> at runtime; iOS uses
+/// a small <see cref="TcpListener"/>-based HTTP/1.1 server instead (B2,
+/// 2026-11-06). Both transports funnel every request through the SAME
+/// transport-neutral <see cref="RouteAsync"/> → <see cref="SimulationApiHandlers"/>
+/// dispatch — the same code path Kmila.Web's Minimal-API map uses — so all hosts
+/// return byte-identical JSON. Kestrel isn't used because
+/// <c>Microsoft.AspNetCore.App</c> has no runtime pack for the mobile RIDs.
 ///
-/// iOS gate: <see cref="IsPlatformSupported"/> is false on iOS, and
-/// <see cref="StartAsync"/> refuses-and-logs there.
+/// iOS has no foreground-service equivalent, so the host runs only while the app
+/// is foregrounded: it is stopped on sleep and restarted on resume (see
+/// <c>App.xaml.cs</c>). Loopback (127.0.0.1) needs no special entitlement.
 /// </summary>
 public sealed class EmbeddedApiHost : ILocalApiHost, IAsyncDisposable
 {
@@ -26,12 +31,22 @@ public sealed class EmbeddedApiHost : ILocalApiHost, IAsyncDisposable
     private readonly LocalApiTokenProvider    _tokens;
 
     private HttpListener?    _listener;
+    private TcpListener?     _tcp;          // iOS transport (HttpListener is unsupported there)
+    private volatile bool    _running;      // transport-neutral running flag
     private CancellationTokenSource? _loopCts;
     private Task?            _loopTask;
     private SandboxProjectStore? _store;
     private HeadlessSimulator?   _sim;
     private SandboxJanitorTimer? _janitor;
     private readonly SemaphoreSlim _gate = new(1, 1);
+
+#if ANDROID
+    // Android only: true when the host was promoted via the foreground service
+    // (LAN binding), false when it was started in-process (loopback default).
+    // StopAsync uses this to tear down the matching path — stopping a service
+    // that was never started would leave an in-process listener running.
+    private bool _startedViaService;
+#endif
 
     // Tier 5.2 Phase B follow-up — cached bytes for the vendored Swagger UI
     // shim + the OpenAPI snapshot. Loaded once in StartAsync from bundled
@@ -51,14 +66,16 @@ public sealed class EmbeddedApiHost : ILocalApiHost, IAsyncDisposable
 
     public Uri? BoundUrl { get; private set; }
 
-    public bool IsRunning => _listener?.IsListening == true;
+    public bool IsRunning => _running;
 
     // NOTE: OperatingSystem.IsIOS() returns true on Mac Catalyst too (Catalyst
     // is derived from iOS) — the correct "iOS specifically" check excludes
     // Mac Catalyst explicitly. Getting this wrong once already refused
     // to start on Mac Catalyst; watch out.
-    public static bool IsPlatformSupported =>
-        !(OperatingSystem.IsIOS() && !OperatingSystem.IsMacCatalyst());
+    // Supported on every MAUI head now: HttpListener elsewhere, a TcpListener
+    // HTTP server on iOS (B2, 2026-11-06). Kept as a property so callers/UI can
+    // still branch on it, but it no longer excludes iOS.
+    public static bool IsPlatformSupported => true;
 
     bool ILocalApiHost.IsPlatformSupported => IsPlatformSupported;
 
@@ -72,8 +89,28 @@ public sealed class EmbeddedApiHost : ILocalApiHost, IAsyncDisposable
     public async Task StartAsync(int port, bool bindLan, CancellationToken ct = default)
     {
 #if ANDROID
-        // Tier 5.2 Phase B follow-up — foreground-service path. Dispatch,
-        // then poll IsRunning so callers observe the same "true when I
+        if (IsRunning) return;
+
+        // Restart-on-enable fix (2026-11-06): the foreground-service path below
+        // (StartForegroundService + its POST_NOTIFICATIONS prompt) was tearing
+        // the activity down and restarting the whole app on some OEMs
+        // (Xiaomi/MIUI), which looked like a crash. The foreground service only
+        // exists to keep the socket alive while the app is BACKGROUNDED. The
+        // loopback default (127.0.0.1 — local use, adb-forward from a dev
+        // machine) is used while the app is foregrounded, so it doesn't need the
+        // service at all: start in-process, no service, no notification prompt,
+        // no restart. LAN binding still uses the foreground service because it
+        // genuinely needs to survive backgrounding.
+        if (!bindLan)
+        {
+            _startedViaService = false;
+            await StartInternalAsync(port, bindLan, ct).ConfigureAwait(false);
+            return;
+        }
+        _startedViaService = true;
+
+        // Tier 5.2 Phase B follow-up — foreground-service path (LAN only now).
+        // Dispatch, then poll IsRunning so callers observe the same "true when I
         // return" semantics as the direct path.
         //
         // API guard (rev 2, 2026-08-01): Context.StartForegroundService was
@@ -83,7 +120,6 @@ public sealed class EmbeddedApiHost : ILocalApiHost, IAsyncDisposable
         // Context.StartService — the service's own StartForeground(id,
         // notif) call in OnStartCommand still promotes the process; the
         // API-26 entry point is only about *how* you kick off the start.
-        if (IsRunning) return;
         var ctx = global::Android.App.Application.Context;
         using var intent = new global::Android.Content.Intent(
             ctx, typeof(Kmila.Platforms.Android.EmbeddedApiForegroundService));
@@ -117,12 +153,6 @@ public sealed class EmbeddedApiHost : ILocalApiHost, IAsyncDisposable
         {
             if (IsRunning) return;
 
-            if (!IsPlatformSupported)
-            {
-                _log.LogWarning("[EmbeddedApiHost] Refusing to start on iOS — feature disabled at runtime.");
-                return;
-            }
-
             // Sandbox root inside AppDataDirectory so bench-created dirs
             // don't leak into the user profile on mobile.
             var sandboxRoot = Path.Combine(FileSystem.AppDataDirectory, "api-sandbox");
@@ -137,6 +167,18 @@ public sealed class EmbeddedApiHost : ILocalApiHost, IAsyncDisposable
             // /api/v1 surface still works.
             await LoadDocsAssetsAsync().ConfigureAwait(false);
 
+            _loopCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            int effectivePort;
+#if IOS
+            // iOS: HttpListener throws PlatformNotSupportedException at runtime,
+            // so serve via a TcpListener-based HTTP/1.1 server instead (B2).
+            var endpoint = new IPEndPoint(bindLan ? IPAddress.Any : IPAddress.Loopback, port);
+            var tcp = new TcpListener(endpoint);
+            tcp.Start();
+            _tcp = tcp;
+            effectivePort = ((IPEndPoint)tcp.LocalEndpoint).Port;
+            _loopTask = Task.Run(() => TcpAcceptLoopAsync(tcp, _loopCts.Token));
+#else
             var host = bindLan ? "+" : "127.0.0.1";
             // HttpListener requires a trailing slash on the prefix, and the
             // "+" host requires admin/root on some platforms; loopback is
@@ -147,16 +189,16 @@ public sealed class EmbeddedApiHost : ILocalApiHost, IAsyncDisposable
             listener.Prefixes.Add(prefix);
             listener.Start();
             _listener = listener;
+            effectivePort = ExtractListeningPort(listener) ?? port;
+            _loopTask = Task.Run(() => AcceptLoopAsync(listener, _loopCts.Token));
+#endif
 
             // Effective URL — advertise 127.0.0.1 (or the machine's LAN IP
             // when bindLan) rather than "+", which is a wildcard binding
             // convention that no HTTP client understands.
             var advertisedHost = bindLan ? GetPrimaryLanIp() : "127.0.0.1";
-            var effectivePort  = ExtractListeningPort(listener) ?? port;
             BoundUrl = new Uri($"http://{advertisedHost}:{effectivePort}/");
-
-            _loopCts  = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            _loopTask = Task.Run(() => AcceptLoopAsync(listener, _loopCts.Token));
+            _running = true;
 
             _log.LogInformation(
                 "[EmbeddedApiHost] Started on {Url} (lan={Lan}, sandbox={Root}).",
@@ -183,6 +225,13 @@ public sealed class EmbeddedApiHost : ILocalApiHost, IAsyncDisposable
     {
 #if ANDROID
         if (!IsRunning) return;
+        // In-process (loopback) start has no service to stop — tear it down
+        // directly. Only the LAN/foreground-service start goes through StopService.
+        if (!_startedViaService)
+        {
+            await StopInternalAsync(ct).ConfigureAwait(false);
+            return;
+        }
         var ctx = global::Android.App.Application.Context;
         using var intent = new global::Android.Content.Intent(
             ctx, typeof(Kmila.Platforms.Android.EmbeddedApiForegroundService));
@@ -222,6 +271,10 @@ public sealed class EmbeddedApiHost : ILocalApiHost, IAsyncDisposable
         try { _listener?.Stop(); }  catch { }
         try { _listener?.Close(); } catch { }
         _listener = null;
+        try { _tcp?.Stop(); } catch { }
+        try { _tcp?.Dispose(); } catch { }
+        _tcp = null;
+        _running = false;
 
         try { _janitor?.Stop(); } catch { }
         _janitor = null;
@@ -248,8 +301,9 @@ public sealed class EmbeddedApiHost : ILocalApiHost, IAsyncDisposable
         _gate.Dispose();
     }
 
-    // ─── Dispatch loop ───────────────────────────────────────────
+    // ─── HttpListener transport (all platforms except iOS) ───────
 
+#if !IOS
     private async Task AcceptLoopAsync(HttpListener listener, CancellationToken ct)
     {
         while (!ct.IsCancellationRequested && listener.IsListening)
@@ -277,11 +331,11 @@ public sealed class EmbeddedApiHost : ILocalApiHost, IAsyncDisposable
                     _log.LogError(ex, "[EmbeddedApiHost] Unhandled request error.");
                     try
                     {
-                        WriteResponse(ctx, ApiResponse.Json(500, new ApiError
+                        WriteResultToCtx(ctx, ToResult(ApiResponse.Json(500, new ApiError
                         {
                             Error  = "internal_error",
                             Detail = ex.Message,
-                        }));
+                        })));
                     }
                     catch { /* connection already gone */ }
                 }
@@ -293,48 +347,68 @@ public sealed class EmbeddedApiHost : ILocalApiHost, IAsyncDisposable
         }
     }
 
+    // Thin adapter: translate an HttpListener request into the neutral router
+    // and write the resolved result back to the context.
     private async Task HandleAsync(HttpListenerContext ctx)
     {
-        var req    = ctx.Request;
-        var method = req.HttpMethod;
-        var path   = req.Url?.AbsolutePath ?? "/";
+        var req = ctx.Request;
+        var result = await RouteAsync(
+            req.HttpMethod,
+            req.Url?.AbsolutePath ?? "/",
+            name => req.Headers[name],
+            () => ReadBodyAsync(req)).ConfigureAwait(false);
+        WriteResultToCtx(ctx, result);
+    }
 
+    private static void WriteResultToCtx(HttpListenerContext ctx, ApiHttpResult result)
+    {
+        var res = ctx.Response;
+        res.StatusCode = result.Status;
+        if (result.Body.Length == 0) { res.ContentLength64 = 0; return; }
+        res.ContentType     = result.ContentType;
+        res.ContentLength64 = result.Body.LongLength;
+        res.OutputStream.Write(result.Body, 0, result.Body.Length);
+    }
+
+    private static async Task<string> ReadBodyAsync(HttpListenerRequest req)
+    {
+        if (!req.HasEntityBody) return string.Empty;
+        using var reader = new StreamReader(req.InputStream, req.ContentEncoding ?? Encoding.UTF8);
+        return await reader.ReadToEndAsync().ConfigureAwait(false);
+    }
+#endif
+
+    // ─── Transport-neutral routing (shared by every transport) ───
+
+    /// <summary>A fully-resolved HTTP response: status, content-type, body
+    /// bytes. An empty <see cref="Body"/> means no entity (e.g. 204).</summary>
+    internal readonly record struct ApiHttpResult(int Status, string ContentType, byte[] Body);
+
+    private async Task<ApiHttpResult> RouteAsync(
+        string method, string path,
+        Func<string, string?> getHeader,
+        Func<Task<string>> readBodyAsync)
+    {
         // Static-file dispatch — Swagger UI shim + OpenAPI snapshot + the
-        // vendored swagger-ui-dist assets. These are all GET-only and safe
-        // to expose even when a bearer token gates /api/v1 (they reveal
-        // the API shape only, not project data).
-        if (method == "GET" && TryServeDocsAsset(ctx, path))
-        {
-            return;
-        }
+        // vendored swagger-ui-dist assets. GET-only; safe even when a bearer
+        // token gates /api/v1 (they reveal the API shape only, not data).
+        if (method == "GET" && TryResolveDocsAsset(path, out var asset))
+            return asset;
 
         if (!path.StartsWith(SimulationApiHandlers.BasePath, StringComparison.Ordinal))
-        {
-            WriteResponse(ctx, ApiResponse.Json(404, new ApiError { Error = "not_found" }));
-            return;
-        }
+            return ToResult(ApiResponse.Json(404, new ApiError { Error = "not_found" }));
 
         var route = path.Substring(SimulationApiHandlers.BasePath.Length);
         if (route.Length == 0) route = "/";
 
         if (_store is null || _sim is null)
-        {
-            WriteResponse(ctx, ApiResponse.Json(503, new ApiError { Error = "not_ready" }));
-            return;
-        }
+            return ToResult(ApiResponse.Json(503, new ApiError { Error = "not_ready" }));
 
-        // Tier 5.2 Phase B follow-up — bearer auth. Same shape as the Web
-        // endpoint filter in SimulationApiEndpoints; /health stays exempt.
+        // Bearer auth — same shape as the Web endpoint filter; /health exempt.
         if (route != "/health")
         {
-            var verdict = SimulationApiHandlers.CheckAuth(
-                _tokens.Current,
-                name => req.Headers[name]);
-            if (verdict is not null)
-            {
-                WriteResponse(ctx, verdict);
-                return;
-            }
+            var verdict = SimulationApiHandlers.CheckAuth(_tokens.Current, getHeader);
+            if (verdict is not null) return ToResult(verdict);
         }
 
         ApiResponse response;
@@ -346,7 +420,7 @@ public sealed class EmbeddedApiHost : ILocalApiHost, IAsyncDisposable
         }
         else if (method == "POST" && route == "/projects")
         {
-            var body = await ReadBodyAsync(req).ConfigureAwait(false);
+            var body = await readBodyAsync().ConfigureAwait(false);
             var dto  = SimulationApiHandlers.Deserialize<CreateProjectRequest>(body);
             response = SimulationApiHandlers.CreateProject(dto, _store);
         }
@@ -356,7 +430,7 @@ public sealed class EmbeddedApiHost : ILocalApiHost, IAsyncDisposable
         }
         else if (method == "POST" && TryMatch(route, "/projects/{id}/files", out var writeParams))
         {
-            var body = await ReadBodyAsync(req).ConfigureAwait(false);
+            var body = await readBodyAsync().ConfigureAwait(false);
             var dto  = SimulationApiHandlers.Deserialize<WriteFileRequest>(body)
                        ?? new WriteFileRequest();
             response = SimulationApiHandlers.WriteFile(writeParams["id"], dto, _store);
@@ -367,12 +441,11 @@ public sealed class EmbeddedApiHost : ILocalApiHost, IAsyncDisposable
         }
         else if (method == "POST" && route == "/simulate")
         {
-            var body = await ReadBodyAsync(req).ConfigureAwait(false);
+            var body = await readBodyAsync().ConfigureAwait(false);
             var dto  = SimulationApiHandlers.Deserialize<SimulateRequest>(body)
                        ?? new SimulateRequest();
-            // _log is already routed through InMemoryLoggerProvider (registered
-            // in MauiProgram.cs), so /simulate errors surface in /logs. The
-            // handler only calls LogError on the passed-in ILogger.
+            // _log is routed through InMemoryLoggerProvider so /simulate errors
+            // surface in /logs. The handler only logs on the passed-in ILogger.
             response = await SimulationApiHandlers.SimulateAsync(dto, _sim, _log).ConfigureAwait(false);
         }
         else
@@ -380,7 +453,14 @@ public sealed class EmbeddedApiHost : ILocalApiHost, IAsyncDisposable
             response = ApiResponse.Json(404, new ApiError { Error = "not_found" });
         }
 
-        WriteResponse(ctx, response);
+        return ToResult(response);
+    }
+
+    private static ApiHttpResult ToResult(ApiResponse r)
+    {
+        if (r.StatusCode == 204 || r.Body.Length == 0)
+            return new ApiHttpResult(r.StatusCode, string.Empty, Array.Empty<byte>());
+        return new ApiHttpResult(r.StatusCode, r.ContentType, Encoding.UTF8.GetBytes(r.Body));
     }
 
     // ─── Docs static-file serving ────────────────────────────────
@@ -423,71 +503,213 @@ public sealed class EmbeddedApiHost : ILocalApiHost, IAsyncDisposable
         }
     }
 
-    private bool TryServeDocsAsset(HttpListenerContext ctx, string path)
+    // Resolve a docs/static asset to bytes (transport-neutral). Returns false
+    // when the path isn't a docs asset or the asset wasn't bundled.
+    private bool TryResolveDocsAsset(string path, out ApiHttpResult result)
     {
-        // /api-docs → serve the HTML shim (both with and without trailing
-        // slash — the shim uses relative URLs which resolve identically
-        // in either case).
+        // /api-docs → the HTML shim (with or without trailing slash).
         if (path is "/api-docs" or "/api-docs/" or "/api-docs/index.html")
         {
-            if (_apiDocsHtml is null) return false;
-            WriteBytes(ctx, 200, "text/html; charset=utf-8", _apiDocsHtml);
-            return true;
-        }
-
-        // /openapi/v1.json → the committed spec snapshot.
-        if (path == "/openapi/v1.json")
-        {
-            if (_openapiJson is null) return false;
-            WriteBytes(ctx, 200, "application/json", _openapiJson);
-            return true;
-        }
-
-        // /lib/swagger-ui/<file> → vendored swagger-ui-dist asset.
-        const string swPrefix = "/lib/swagger-ui/";
-        if (path.StartsWith(swPrefix, StringComparison.Ordinal))
-        {
-            var name = path[swPrefix.Length..];
-            if (_swaggerUiAssets.TryGetValue(name, out var asset))
+            if (_apiDocsHtml is not null)
             {
-                WriteBytes(ctx, 200, asset.Mime, asset.Bytes);
+                result = new ApiHttpResult(200, "text/html; charset=utf-8", _apiDocsHtml);
                 return true;
             }
         }
+        // /openapi/v1.json → the committed spec snapshot.
+        else if (path == "/openapi/v1.json")
+        {
+            if (_openapiJson is not null)
+            {
+                result = new ApiHttpResult(200, "application/json", _openapiJson);
+                return true;
+            }
+        }
+        // /lib/swagger-ui/<file> → vendored swagger-ui-dist asset.
+        else
+        {
+            const string swPrefix = "/lib/swagger-ui/";
+            if (path.StartsWith(swPrefix, StringComparison.Ordinal))
+            {
+                var name = path[swPrefix.Length..];
+                if (_swaggerUiAssets.TryGetValue(name, out var asset))
+                {
+                    result = new ApiHttpResult(200, asset.Mime, asset.Bytes);
+                    return true;
+                }
+            }
+        }
 
+        result = default;
         return false;
     }
 
-    private static void WriteBytes(HttpListenerContext ctx, int status, string contentType, byte[] bytes)
-    {
-        var res = ctx.Response;
-        res.StatusCode      = status;
-        res.ContentType     = contentType;
-        res.ContentLength64 = bytes.LongLength;
-        res.OutputStream.Write(bytes, 0, bytes.Length);
-    }
+#if IOS
+    // ─── iOS transport: minimal TcpListener HTTP/1.1 server ──────
+    // HttpListener is unsupported on iOS, so serve the same RouteAsync dispatch
+    // over raw sockets. One request per connection, Connection: close,
+    // Content-Length framing (no chunked / keep-alive) — enough for the local
+    // API's clients (curl / SimulatorBench), which handle close-delimited
+    // responses.
 
-    private static async Task<string> ReadBodyAsync(HttpListenerRequest req)
+    private async Task TcpAcceptLoopAsync(TcpListener listener, CancellationToken ct)
     {
-        if (!req.HasEntityBody) return string.Empty;
-        using var reader = new StreamReader(req.InputStream, req.ContentEncoding ?? Encoding.UTF8);
-        return await reader.ReadToEndAsync().ConfigureAwait(false);
-    }
-
-    private static void WriteResponse(HttpListenerContext ctx, ApiResponse r)
-    {
-        var res = ctx.Response;
-        res.StatusCode = r.StatusCode;
-        if (r.StatusCode == 204 || r.Body.Length == 0)
+        while (!ct.IsCancellationRequested)
         {
-            res.ContentLength64 = 0;
-            return;
+            TcpClient client;
+            try { client = await listener.AcceptTcpClientAsync(ct).ConfigureAwait(false); }
+            catch (OperationCanceledException) { break; }
+            catch (ObjectDisposedException)    { break; }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                _log.LogDebug(ex, "[EmbeddedApiHost] (iOS) Accept failed.");
+                continue;
+            }
+            _ = Task.Run(() => HandleTcpClientAsync(client, ct));
         }
-        res.ContentType = r.ContentType;
-        var bytes = Encoding.UTF8.GetBytes(r.Body);
-        res.ContentLength64 = bytes.LongLength;
-        res.OutputStream.Write(bytes, 0, bytes.Length);
     }
+
+    private async Task HandleTcpClientAsync(TcpClient client, CancellationToken ct)
+    {
+        using (client)
+        {
+            try
+            {
+                client.NoDelay = true;
+                using var stream = client.GetStream();
+
+                var parsed = await ReadHttpRequestAsync(stream, ct).ConfigureAwait(false);
+                if (parsed is null) return; // malformed / empty
+
+                var (method, target, headers, body) = parsed.Value;
+                var qIdx = target.IndexOf('?');          // routes match the path only
+                var path = qIdx >= 0 ? target[..qIdx] : target;
+
+                ApiHttpResult result;
+                try
+                {
+                    result = await RouteAsync(
+                        method, path,
+                        name => headers.TryGetValue(name.ToLowerInvariant(), out var v) ? v : null,
+                        () => Task.FromResult(body)).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _log.LogError(ex, "[EmbeddedApiHost] (iOS) Unhandled request error.");
+                    result = ToResult(ApiResponse.Json(500, new ApiError
+                    {
+                        Error = "internal_error", Detail = ex.Message,
+                    }));
+                }
+
+                await WriteHttpResponseAsync(stream, result, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _log.LogDebug(ex, "[EmbeddedApiHost] (iOS) Connection error.");
+            }
+        }
+    }
+
+    // Read the request line + headers (until CRLFCRLF), then the Content-Length
+    // body. Returns null on a malformed/empty request.
+    private static async Task<(string Method, string Target, Dictionary<string, string> Headers, string Body)?>
+        ReadHttpRequestAsync(NetworkStream stream, CancellationToken ct)
+    {
+        var buffer = new byte[8192];
+        var acc = new List<byte>(8192);
+        int headerEnd = -1;
+        while (headerEnd < 0)
+        {
+            int n = await stream.ReadAsync(buffer.AsMemory(0, buffer.Length), ct).ConfigureAwait(false);
+            if (n == 0) break;
+            for (int i = 0; i < n; i++) acc.Add(buffer[i]);
+            headerEnd = IndexOfDoubleCrlf(acc);
+            if (acc.Count > 1_048_576) return null; // 1 MB header guard
+        }
+        if (headerEnd < 0) return null;
+
+        var headerText = Encoding.ASCII.GetString(acc.ToArray(), 0, headerEnd);
+        var lines = headerText.Split("\r\n");
+        if (lines.Length == 0 || lines[0].Length == 0) return null;
+        var reqParts = lines[0].Split(' ');
+        if (reqParts.Length < 2) return null;
+        var method = reqParts[0];
+        var target = reqParts[1];
+
+        var headers = new Dictionary<string, string>(StringComparer.Ordinal);
+        for (int i = 1; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            if (line.Length == 0) continue;
+            var c = line.IndexOf(':');
+            if (c <= 0) continue;
+            headers[line[..c].Trim().ToLowerInvariant()] = line[(c + 1)..].Trim();
+        }
+
+        int contentLength = 0;
+        if (headers.TryGetValue("content-length", out var clStr))
+            int.TryParse(clStr, out contentLength);
+
+        string body = string.Empty;
+        if (contentLength > 0)
+        {
+            int bodyStart = headerEnd + 4; // past CRLFCRLF
+            var bodyBytes = new byte[contentLength];
+            int have = Math.Max(0, Math.Min(contentLength, acc.Count - bodyStart));
+            for (int i = 0; i < have; i++) bodyBytes[i] = acc[bodyStart + i];
+            int read = have;
+            while (read < contentLength)
+            {
+                int n = await stream.ReadAsync(bodyBytes.AsMemory(read, contentLength - read), ct).ConfigureAwait(false);
+                if (n == 0) break;
+                read += n;
+            }
+            body = Encoding.UTF8.GetString(bodyBytes, 0, read);
+        }
+
+        return (method, target, headers, body);
+    }
+
+    private static int IndexOfDoubleCrlf(List<byte> b)
+    {
+        for (int i = 0; i + 3 < b.Count; i++)
+            if (b[i] == 13 && b[i + 1] == 10 && b[i + 2] == 13 && b[i + 3] == 10) return i;
+        return -1;
+    }
+
+    private static async Task WriteHttpResponseAsync(NetworkStream stream, ApiHttpResult result, CancellationToken ct)
+    {
+        var sb = new StringBuilder();
+        sb.Append("HTTP/1.1 ").Append(result.Status).Append(' ').Append(ReasonPhrase(result.Status)).Append("\r\n");
+        if (result.Body.Length > 0)
+        {
+            sb.Append("Content-Type: ")
+              .Append(string.IsNullOrEmpty(result.ContentType) ? "application/octet-stream" : result.ContentType)
+              .Append("\r\n");
+            sb.Append("Content-Length: ").Append(result.Body.Length).Append("\r\n");
+        }
+        else
+        {
+            sb.Append("Content-Length: 0\r\n");
+        }
+        sb.Append("Connection: close\r\n\r\n");
+
+        var head = Encoding.ASCII.GetBytes(sb.ToString());
+        await stream.WriteAsync(head.AsMemory(0, head.Length), ct).ConfigureAwait(false);
+        if (result.Body.Length > 0)
+            await stream.WriteAsync(result.Body.AsMemory(0, result.Body.Length), ct).ConfigureAwait(false);
+        await stream.FlushAsync(ct).ConfigureAwait(false);
+    }
+
+    private static string ReasonPhrase(int status) => status switch
+    {
+        200 => "OK", 201 => "Created", 204 => "No Content",
+        400 => "Bad Request", 401 => "Unauthorized", 403 => "Forbidden",
+        404 => "Not Found", 500 => "Internal Server Error", 503 => "Service Unavailable",
+        _   => "Status",
+    };
+#endif
 
     // Simple {placeholder} matcher — literal segments must equal, {name}
     // captures one path segment. Enough for the five /api/v1 routes; a
