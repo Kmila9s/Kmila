@@ -1321,23 +1321,27 @@
                 int port = int.TryParse(_localApiPort, out var p) ? p : 5298;
                 bool lan = _localApiBindLan;
 #if ANDROID
-                // Rev 2 (2026-08-01) — Android 13 (API 33) made
-                // POST_NOTIFICATIONS a runtime permission. Without it, the
-                // foreground service's ongoing notification is silently
-                // suppressed and the user has no visible confirmation the
-                // host is up. Ask before we start; on denial, still start
-                // (service degrades to headless-foreground) but explain in
-                // _localApiError so the Settings card can show why.
-                var permStatus = await Microsoft.Maui.ApplicationModel.Permissions
-                    .CheckStatusAsync<Microsoft.Maui.ApplicationModel.Permissions.PostNotifications>();
-                if (permStatus != Microsoft.Maui.ApplicationModel.PermissionStatus.Granted)
+                // Rev 3 (2026-11-06) — only the LAN path uses the foreground
+                // service (and thus its ongoing notification), so only ask for
+                // POST_NOTIFICATIONS then. The loopback default now starts
+                // in-process with no service and no notification, which also
+                // avoids the permission dialog that was tearing the activity
+                // down + restarting the app on some OEMs (looked like a crash).
+                // On denial, still start (service degrades to headless-
+                // foreground) but explain in _localApiError.
+                if (lan)
                 {
-                    permStatus = await Microsoft.Maui.ApplicationModel.Permissions
-                        .RequestAsync<Microsoft.Maui.ApplicationModel.Permissions.PostNotifications>();
-                }
-                if (permStatus != Microsoft.Maui.ApplicationModel.PermissionStatus.Granted)
-                {
-                    _localApiError = "Notifications permission denied — the local API is still running, but Android won't show the ongoing status notification.";
+                    var permStatus = await Microsoft.Maui.ApplicationModel.Permissions
+                        .CheckStatusAsync<Microsoft.Maui.ApplicationModel.Permissions.PostNotifications>();
+                    if (permStatus != Microsoft.Maui.ApplicationModel.PermissionStatus.Granted)
+                    {
+                        permStatus = await Microsoft.Maui.ApplicationModel.Permissions
+                            .RequestAsync<Microsoft.Maui.ApplicationModel.Permissions.PostNotifications>();
+                    }
+                    if (permStatus != Microsoft.Maui.ApplicationModel.PermissionStatus.Granted)
+                    {
+                        _localApiError = "Notifications permission denied — the local API is still running, but Android won't show the ongoing status notification.";
+                    }
                 }
 #endif
                 await LocalApi.StartAsync(port, lan, CancellationToken.None);

@@ -37,14 +37,14 @@ public partial class App : Application
     /// stop here. The service's <c>OnDestroy</c> / <c>OnTaskRemoved</c> is
     /// the correct teardown hook: quit / swipe-away → OnDestroy → StopInternalAsync.
     ///
-    /// On iOS the whole EmbeddedApiHost code path is compile-time excluded
-    /// (rev 3, 2026-08-02) so the reference here would fail to resolve —
-    /// the guard now excludes iOS explicitly.
+    /// On iOS (B2, 2026-11-06) there is no foreground-service equivalent, so the
+    /// TcpListener host runs only while foregrounded: stop it here on sleep and
+    /// restart it in <see cref="OnResume"/>.
     /// </summary>
     protected override void OnSleep()
     {
         base.OnSleep();
-#if KMILA_MAUI_API && !ANDROID && !IOS
+#if KMILA_MAUI_API && !ANDROID
         try
         {
             var services = IPlatformApplication.Current?.Services;
@@ -65,4 +65,43 @@ public partial class App : Application
         catch { /* best-effort teardown */ }
 #endif
     }
+
+#if KMILA_MAUI_API && IOS
+    /// <summary>
+    /// iOS only (B2): the embedded API host has no background keep-alive, so it
+    /// is stopped on sleep. Restart it here when the app returns to the
+    /// foreground, honouring the persisted enable / port / LAN settings.
+    /// </summary>
+    protected override void OnResume()
+    {
+        base.OnResume();
+        try
+        {
+            var services = IPlatformApplication.Current?.Services;
+            var host     = services?.GetService(typeof(Kmila.Services.EmbeddedApiHost))
+                           as Kmila.Services.EmbeddedApiHost;
+            if (host is null || host.IsRunning) return;
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var db = services?.GetService(typeof(Kmila.Shared.Data.ApplicationDbContext))
+                             as Kmila.Shared.Data.ApplicationDbContext;
+                    if (db is null) return;
+                    var enabled = (await db.GetSettingAsync(Kmila.Shared.Models.AppSettings.KEY_LOCAL_API_ENABLED)) == "true";
+                    if (!enabled) return;
+
+                    var portStr = await db.GetSettingAsync(Kmila.Shared.Models.AppSettings.KEY_LOCAL_API_PORT);
+                    int port    = int.TryParse(portStr, out var p) ? p : 5298;
+                    var lan     = (await db.GetSettingAsync(Kmila.Shared.Models.AppSettings.KEY_LOCAL_API_BIND_LAN)) == "true";
+
+                    await host.StartAsync(port, lan, CancellationToken.None);
+                }
+                catch { /* best-effort restart */ }
+            });
+        }
+        catch { /* best-effort */ }
+    }
+#endif
 }

@@ -405,7 +405,7 @@ public static class MauiProgram
         // (matches the surrounding state-service pattern in this file).
         builder.Services.AddSingleton<KmilaToastService>();
 
-#if KMILA_MAUI_API && !IOS
+#if KMILA_MAUI_API
         // Tier 5.2 Phase B — embedded Kestrel host serving /api/v1 inside the
         // MAUI process. Registered here; opt-in start controlled by the
         // KEY_LOCAL_API_* AppSettings triple. See EmbeddedApiHost.cs.
@@ -460,7 +460,7 @@ public static class MauiProgram
             }
         });
 
-#if KMILA_MAUI_API && !IOS
+#if KMILA_MAUI_API
         // Tier 5.2 Phase B — auto-start the embedded /api/v1 host when the
         // user has opted in via Settings. Fire-and-forget on a thread-pool
         // thread for the same sync-over-async reason as the library-build-mode
@@ -490,10 +490,19 @@ public static class MauiProgram
                 await Task.Delay(TimeSpan.FromSeconds(2));
                 await host.StartAsync(port, lan, CancellationToken.None);
             }
-            catch
+            catch (Exception ex)
             {
                 // First-launch path (AppSettings table not yet created) or
                 // port-in-use — the Settings toggle handler retries on click.
+                // Log it (was silently swallowed) so a genuine start failure is
+                // diagnosable from logcat instead of invisible.
+                try
+                {
+                    app.Services.GetService<ILoggerFactory>()?
+                        .CreateLogger("EmbeddedApiHost")
+                        .LogWarning(ex, "[EmbeddedApiHost] Auto-start on launch failed (will retry on Settings toggle).");
+                }
+                catch { /* logging must never crash startup */ }
             }
         });
 #endif
