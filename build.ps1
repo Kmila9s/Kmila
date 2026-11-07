@@ -5,7 +5,7 @@
 
 .DESCRIPTION
   Kmila's code is split across 6 git repos. This clones them into the correct
-  layout, forces net9.0 (so no MAUI workload is needed), and builds either a
+  layout, forces net10.0 (so no MAUI workload is needed), and builds either a
   native `dotnet publish` or a Docker image — in a self-contained workspace.
 
 .EXAMPLE
@@ -74,8 +74,8 @@ if ($Mode -eq 'native') {
   }
   if (-not ((dotnet --list-sdks) -match '^9\.')) { Write-Host '[build] WARN: no .NET 9 SDK detected; trying anyway.' -ForegroundColor Yellow }
   $Out = Join-Path $WorkDir 'publish'
-  Log "publishing Kmila.Web (net9.0, Release) -> $Out"
-  dotnet publish $WebCsproj -c Release -f net9.0 -p:TargetFrameworks=net9.0 -p:UseAppHost=false -o $Out
+  Log "publishing Kmila.Web (net10.0, Release) -> $Out"
+  dotnet publish $WebCsproj -c Release -f net10.0 -p:TargetFrameworks=net10.0 -p:UseAppHost=false -o $Out
   if ($LASTEXITCODE -ne 0) { Die 'dotnet publish failed.' }
   Log "done. Published to: $Out"
   if ($Run) {
