@@ -10,7 +10,7 @@
 # visitor's browser and persists in their IndexedDB.
 
 # ── build stage ──────────────────────────────────────────────────────────────
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 
 # Blazor WASM relinks a native e_sqlite3 into the wasm (so SQLite runs in the
 # browser); that native step needs the wasm-tools workload. It also produces
@@ -30,8 +30,8 @@ COPY . .
 # the engine graph (it also auto-trips on the browser-wasm RID, but we pass it
 # explicitly). Publish the .csproj, never a .sln, so no MAUI workload is pulled.
 RUN dotnet publish "App/Kmila/Kmila.Wasm/Kmila.Wasm.csproj" \
-        -c Release -o /app/publish -f net9.0 \
-        -p:TargetFrameworks=net9.0 -p:KmilaWasm=true
+        -c Release -o /app/publish -f net10.0 \
+        -p:TargetFrameworks=net10.0 -p:KmilaWasm=true
 
 # ── runtime stage — static file server only ─────────────────────────────────
 FROM nginx:alpine AS runtime

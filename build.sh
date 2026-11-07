@@ -3,7 +3,7 @@
 # build.sh — one-shot builder for the Kmila web app.
 #
 # Kmila's code is split across 6 git repos; this script clones them into the
-# correct layout, applies the net9.0-only "clean build" fix (no MAUI workload
+# correct layout, applies the net10.0-only "clean build" fix (no MAUI workload
 # needed), and builds — either a native `dotnet publish` or a Docker image.
 #
 # Works on macOS / Linux (and Windows via Git Bash or WSL; native Windows users
@@ -104,11 +104,11 @@ if [ "$MODE" = "native" ]; then
     warn "no .NET 9 SDK detected in 'dotnet --list-sdks'; attempting the build anyway."
   fi
   OUT="$WORKDIR/publish"
-  log "publishing Kmila.Web (net9.0, Release) -> $OUT"
-  # Force net9.0 across the multi-targeted graph so no MAUI workload is needed
+  log "publishing Kmila.Web (net10.0, Release) -> $OUT"
+  # Force net10.0 across the multi-targeted graph so no MAUI workload is needed
   # (ios/maccatalyst can't even restore off-Apple). Publish the .csproj, not a .sln.
-  dotnet publish "$WEB_CSPROJ" -c Release -f net9.0 \
-    -p:TargetFrameworks=net9.0 -p:UseAppHost=false \
+  dotnet publish "$WEB_CSPROJ" -c Release -f net10.0 \
+    -p:TargetFrameworks=net10.0 -p:UseAppHost=false \
     -o "$OUT"
   log "done. Published to: $OUT"
   RUN_CMD="ASPNETCORE_URLS=http://+:$PORT dotnet \"$OUT/Kmila.Web.dll\""

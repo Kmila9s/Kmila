@@ -10,12 +10,12 @@
 #   docker build -t kmila-web .
 #   docker run --rm -p 8080:8080 -v kmila-data:/data kmila-web
 #
-# The MAUI workload is NOT required: Kmila.Web is a single net9.0 head and a
-# net9.0 consumer of the multi-targeted Kmila.Shared builds only its net9.0
+# The MAUI workload is NOT required: Kmila.Web is a single net10.0 head and a
+# net10.0 consumer of the multi-targeted Kmila.Shared builds only its net10.0
 # target (UseMaui is false there). Publish the .csproj, never the .sln.
 
 # ─────────────────────────── build stage ───────────────────────────
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 # 1) Restore layer: copy only the .csproj files of the dependency closure
@@ -28,12 +28,12 @@ COPY ["LibraryCompiler/LibraryCompiler.csproj", "LibraryCompiler/"]
 COPY ["Parser/Parser.csproj", "Parser/"]
 COPY ["TimeMachine/TimeMachine.csproj", "TimeMachine/"]
 # Kmila.Shared and the transitive libs multi-target
-# net9.0;net9.0-android;net9.0-ios;net9.0-maccatalyst. The MAUI TFMs need
+# net10.0;net10.0-android;net10.0-ios;net10.0-maccatalyst. The MAUI TFMs need
 # workloads (ios/maccatalyst can't even be installed on Linux), and `restore`
-# would otherwise walk every TFM. Forcing TargetFrameworks=net9.0 as a GLOBAL
-# MSBuild property collapses the whole graph to net9.0 only — no workloads, no
+# would otherwise walk every TFM. Forcing TargetFrameworks=net10.0 as a GLOBAL
+# MSBuild property collapses the whole graph to net10.0 only — no workloads, no
 # csproj edits (global properties override the project-file value).
-RUN dotnet restore "App/Kmila/Kmila.Web/Kmila.Web.csproj" -p:TargetFrameworks=net9.0
+RUN dotnet restore "App/Kmila/Kmila.Web/Kmila.Web.csproj" -p:TargetFrameworks=net10.0
 
 # 2) Copy the sources of just those projects and publish.
 COPY App/Kmila/Kmila.Web/   App/Kmila/Kmila.Web/
@@ -43,16 +43,16 @@ COPY Interpreter/    Interpreter/
 COPY LibraryCompiler/ LibraryCompiler/
 COPY Parser/         Parser/
 COPY TimeMachine/    TimeMachine/
-# -f net9.0 selects the single TFM to publish (the plural <TargetFrameworks>
+# -f net10.0 selects the single TFM to publish (the plural <TargetFrameworks>
 # property makes the project "cross-targeting" even with one value, so publish
-# needs an explicit framework); -p:TargetFrameworks=net9.0 keeps the referenced
+# needs an explicit framework); -p:TargetFrameworks=net10.0 keeps the referenced
 # libs from pulling their MAUI TFMs during the publish build.
 RUN dotnet publish "App/Kmila/Kmila.Web/Kmila.Web.csproj" \
-        -c Release -o /app/publish -f net9.0 \
-        --no-restore -p:TargetFrameworks=net9.0 -p:UseAppHost=false
+        -c Release -o /app/publish -f net10.0 \
+        --no-restore -p:TargetFrameworks=net10.0 -p:UseAppHost=false
 
 # ────────────────────────── runtime stage ──────────────────────────
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 
 # curl is only needed for the container HEALTHCHECK below.
 RUN apt-get update \

@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
-    <TargetFrameworks>net9.0;net9.0-android</TargetFrameworks>
-    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('osx'))">$(TargetFrameworks);net9.0-ios;net9.0-maccatalyst</TargetFrameworks>
+    <TargetFrameworks>net10.0;net10.0-android</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('osx'))">$(TargetFrameworks);net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
@@ -79,20 +79,20 @@
        on for both Kmila.Web and the MAUI-embedded Kestrel host (Phase B).
        Excluded from the KmilaWasm (browser) flavor — the /api/v1 server code
        and the ASP.NET Core shared framework have no browser-wasm runtime. -->
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net9.0' and '$(KmilaWasm)' != 'true'">
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0' and '$(KmilaWasm)' != 'true'">
     <DefineConstants>$(DefineConstants);ASPNETCORE;KMILA_HAS_ASPNETCORE</DefineConstants>
   </PropertyGroup>
 
   <!-- Components.Web is a managed package that works in the browser too, and
        the shared UI compiles against it (see _Imports.razor), so keep it for
        every net9.0 flavor including wasm. -->
-  <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
-    <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="9.0.5" />
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="10.0.14" />
   </ItemGroup>
 
   <!-- The full ASP.NET Core shared framework (Kestrel/MVC/SignalR server) only
        exists for server runtimes — never link it into the browser flavor. -->
-  <ItemGroup Condition="'$(TargetFramework)' == 'net9.0' and '$(KmilaWasm)' != 'true'">
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0' and '$(KmilaWasm)' != 'true'">
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 

@@ -33,7 +33,7 @@ variables:
 # =====================================================================
 web-wasm-build:
     stage: build
-    image: mcr.microsoft.com/dotnet/sdk:9.0
+    image: mcr.microsoft.com/dotnet/sdk:10.0
     variables:
         TMPDIR: "$CI_PROJECT_DIR/.tmp"     # keep temp off the Pi's small /tmp tmpfs
     before_script:
@@ -45,11 +45,11 @@ web-wasm-build:
         - !reference [.setup, before_script]
         - dotnet workload install wasm-tools
     script:
-        # -p:TargetFrameworks=net9.0 collapses the multi-targeted sibling libs to
-        # net9.0 only, so they never pull their net9.0-android TFM (which would need
+        # -p:TargetFrameworks=net10.0 collapses the multi-targeted sibling libs to
+        # net10.0 only, so they never pull their net10.0-android TFM (which would need
         # the android workload and can't build on arm64 anyway).
-        - dotnet build Kmila.Web/Kmila.Web.csproj   -c Release -f net9.0 -p:TargetFrameworks=net9.0
-        - dotnet build Kmila.Wasm/Kmila.Wasm.csproj -c Release -f net9.0 -p:TargetFrameworks=net9.0 -p:KmilaWasm=true
+        - dotnet build Kmila.Web/Kmila.Web.csproj   -c Release -f net10.0 -p:TargetFrameworks=net10.0
+        - dotnet build Kmila.Wasm/Kmila.Wasm.csproj -c Release -f net10.0 -p:TargetFrameworks=net10.0 -p:KmilaWasm=true
 
 # =====================================================================
 # Build the Docker images (Web = Blazor Server, Wasm = static nginx).
