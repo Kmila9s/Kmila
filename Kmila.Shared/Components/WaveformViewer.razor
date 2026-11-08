@@ -609,19 +609,23 @@ else if (Data != null && Data.Signals.Count > 0)
     // those, so without a cache every hover would rebuild every row's SVG on
     // the single-threaded Blazor circuit — re-introducing the freeze. Keyed by
     // signal name; value is the last inputs + rendered string.
-    private readonly Dictionary<string, (long Start, long End, int Width, int Count, string Color, WaveRadix Radix, string Svg)> _traceCache = new();
+    // The archive reference is part of the key: a long run's on-disk history is
+    // attached after the final merge (often with an unchanged transition count),
+    // and the trace must then be rebuilt to include it.
+    private readonly Dictionary<string, (long Start, long End, int Width, int Count, ITransitionArchive? Arch, string Color, WaveRadix Radix, string Svg)> _traceCache = new();
 
     private string TraceSvgCached(WaveformSignal signal, int widthPx, string color, long viewStartNs, long viewEndNs)
     {
         var radix = EffectiveRadix(signal);
         if (_traceCache.TryGetValue(signal.Name, out var e) &&
             e.Start == viewStartNs && e.End == viewEndNs && e.Width == widthPx &&
-            e.Count == signal.Transitions.Count && e.Color == color && e.Radix == radix)
+            e.Count == signal.Transitions.Count && ReferenceEquals(e.Arch, signal.Archive) &&
+            e.Color == color && e.Radix == radix)
         {
             return e.Svg;
         }
         var svg = BuildTraceSvg(signal, widthPx, color, viewStartNs, viewEndNs, radix);
-        _traceCache[signal.Name] = (viewStartNs, viewEndNs, widthPx, signal.Transitions.Count, color, radix, svg);
+        _traceCache[signal.Name] = (viewStartNs, viewEndNs, widthPx, signal.Transitions.Count, signal.Archive, color, radix, svg);
         return svg;
     }
 
@@ -693,11 +697,12 @@ else if (Data != null && Data.Signals.Count > 0)
     // the parent's transition count changes (live append / snapshot reload).
     // Index 0 = the MSB (string is stored MSB-first); the VHDL bit number for
     // display is BitWidth-1-pos (downto convention).
-    private readonly Dictionary<string, (int Count, WaveformSignal[] Bits)> _bitSignalCache = new();
+    private readonly Dictionary<string, (int Count, ITransitionArchive? Arch, WaveformSignal[] Bits)> _bitSignalCache = new();
 
     private WaveformSignal[] BitSignalsFor(WaveformSignal parent)
     {
-        if (_bitSignalCache.TryGetValue(parent.Name, out var e) && e.Count == parent.Transitions.Count)
+        if (_bitSignalCache.TryGetValue(parent.Name, out var e) && e.Count == parent.Transitions.Count &&
+            ReferenceEquals(e.Arch, parent.Archive))
             return e.Bits;
 
         int width = Math.Max(1, parent.BitWidth);
@@ -728,16 +733,18 @@ else if (Data != null && Data.Signals.Count > 0)
                 DataType = "std_logic",
                 BitWidth = 1,
                 PortType = parent.PortType,
-                Transitions = trans
+                Transitions = trans,
+                // Long runs: the bit row pages its history from the bus's archive.
+                Archive = parent.Archive != null ? new BitSliceArchive(parent.Archive, pos) : null,
             };
         }
-        _bitSignalCache[parent.Name] = (parent.Transitions.Count, result);
+        _bitSignalCache[parent.Name] = (parent.Transitions.Count, parent.Archive, result);
         return result;
     }
 
     // Mirrors TraceSvgCached but keyed per (parent, bit) so bit rows never
     // collide in the cache with each other or with the parent bus trace.
-    private readonly Dictionary<string, (long Start, long End, int Width, int Count, string Color, string Svg)> _bitTraceCache = new();
+    private readonly Dictionary<string, (long Start, long End, int Width, int Count, ITransitionArchive? Arch, string Color, string Svg)> _bitTraceCache = new();
 
     private string BitTraceSvgCached(WaveformSignal parent, int pos, int widthPx, string color, long viewStartNs, long viewEndNs)
     {
@@ -745,13 +752,13 @@ else if (Data != null && Data.Signals.Count > 0)
         string key = parent.Name + "#" + pos;
         if (_bitTraceCache.TryGetValue(key, out var e) &&
             e.Start == viewStartNs && e.End == viewEndNs && e.Width == widthPx &&
-            e.Count == bitSig.Transitions.Count && e.Color == color)
+            e.Count == bitSig.Transitions.Count && ReferenceEquals(e.Arch, bitSig.Archive) && e.Color == color)
         {
             return e.Svg;
         }
         // Bit rows are single-bit (std_logic), so the radix is irrelevant.
         var svg = BuildTraceSvg(bitSig, widthPx, color, viewStartNs, viewEndNs, WaveRadix.Hex);
-        _bitTraceCache[key] = (viewStartNs, viewEndNs, widthPx, bitSig.Transitions.Count, color, svg);
+        _bitTraceCache[key] = (viewStartNs, viewEndNs, widthPx, bitSig.Transitions.Count, bitSig.Archive, color, svg);
         return svg;
     }
 
@@ -1489,9 +1496,10 @@ else if (Data != null && Data.Signals.Count > 0)
         var window = signal.GetWindow(viewStartNs, viewEndNs, widthPx);
         var pts = window.Points;
         bool haveEntry = window.HaveEntry;
-        WaveformTransition entry = haveEntry
-            ? window.Entry
-            : (signal.Transitions.Count > 0 ? signal.Transitions[0] : default);
+        // GetWindow already falls back to the signal's first transition when there
+        // is no entry level — via the on-disk archive for long runs (the in-memory
+        // Transitions[0] would then be the start of the recent window, not the run).
+        WaveformTransition entry = window.Entry;
 
         if (signal.DataType == "std_logic")
         {
@@ -1657,9 +1665,9 @@ else if (Data != null && Data.Signals.Count > 0)
             var pts = window.Points;
 
             var d = new System.Text.StringBuilder();
-            double curY = window.HaveEntry
-                ? LevelY(window.Entry.Value)
-                : LevelY(sig.Transitions[0].Value);
+            // window.Entry is the first transition when there is no entry level
+            // (archive-aware for long runs).
+            double curY = LevelY(window.Entry.Value);
             d.Append($"M 0 {curY:0.##} ");
 
             foreach (var t in pts)
@@ -1869,7 +1877,9 @@ else if (Data != null && Data.Signals.Count > 0)
         var stream = new SortedDictionary<long, List<(string Id, double? V, int W)>>();
         foreach (var signal in exported)
         {
-            foreach (var t in signal.Transitions)
+            // AllTransitions: the complete run (on-disk archive) for long runs,
+            // the in-memory list otherwise.
+            foreach (var t in signal.AllTransitions())
             {
                 if (!stream.TryGetValue(t.TimeNs, out var list))
                 {

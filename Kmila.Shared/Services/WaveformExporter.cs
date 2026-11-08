@@ -193,7 +193,20 @@ public static class WaveformExporter
         sb.Append(CultureInfo.InvariantCulture,
             $"<line x1=\"{trackX}\" y1=\"{rowY + ValMid}\" x2=\"{trackX + widthPx}\" y2=\"{rowY + ValMid}\" stroke=\"#e5e7eb\" stroke-dasharray=\"2 4\" />\n");
 
-        if (signal.Transitions.Count == 0) return;
+        // Transitions to draw. Long runs (on-disk archive) whose page starts before
+        // the in-memory window read the page from the archive: the entry level plus
+        // the in-range transitions — full fidelity, bounded by the page's range.
+        IReadOnlyList<WaveformTransition> trs = signal.Transitions;
+        if (signal.Archive != null &&
+            (signal.Transitions.Count == 0 || viewStartNs < signal.Transitions[0].TimeNs))
+        {
+            var page = new List<WaveformTransition>();
+            if (signal.TransitionAtOrBefore(viewStartNs) is { } pageEntry) page.Add(pageEntry);
+            page.AddRange(signal.Archive.ReadRange(viewStartNs + 1, viewEndNs));
+            trs = page;
+        }
+
+        if (trs.Count == 0) return;
 
         // X(ns) → absolute SVG x for this track.
         double X(long ns) => trackX + (double)(ns - viewStartNs) / spanNs * widthPx;
@@ -201,12 +214,12 @@ public static class WaveformExporter
         // Find entry-level transition (last one at or before viewStart) so
         // a partially-clipped signal starts at its real value, not whatever
         // its first stored sample is.
-        int firstInside = signal.Transitions.Count;
-        WaveformTransition entry = signal.Transitions[0];
+        int firstInside = trs.Count;
+        WaveformTransition entry = trs[0];
         bool haveEntry = false;
-        for (int i = 0; i < signal.Transitions.Count; i++)
+        for (int i = 0; i < trs.Count; i++)
         {
-            var t = signal.Transitions[i];
+            var t = trs[i];
             if (t.TimeNs <= viewStartNs)
             {
                 entry = t;
@@ -216,7 +229,7 @@ public static class WaveformExporter
             firstInside = i;
             break;
         }
-        if (!haveEntry) entry = signal.Transitions[0];
+        if (!haveEntry) entry = trs[0];
 
         string color = SignalColor(signal);
 
@@ -240,9 +253,9 @@ public static class WaveformExporter
             // the rendered path from 6.2 MB → ~0.5 MB without changing
             // visual fidelity (consecutive same-level points lie on the
             // same horizontal line anyway).
-            for (int i = firstInside; i < signal.Transitions.Count; i++)
+            for (int i = firstInside; i < trs.Count; i++)
             {
-                var t = signal.Transitions[i];
+                var t = trs[i];
                 if (t.TimeNs > viewEndNs) break;
                 bool nextDashed = !t.Value.HasValue;
                 double nextY    = LevelY(t.Value);
@@ -278,9 +291,9 @@ public static class WaveformExporter
             // Multi-bit bus: mid-row line with diamond markers + value labels.
             var d = new StringBuilder();
             d.Append(CultureInfo.InvariantCulture, $"M {trackX} {rowY + ValMid:0.##} ");
-            for (int i = firstInside; i < signal.Transitions.Count; i++)
+            for (int i = firstInside; i < trs.Count; i++)
             {
-                var t = signal.Transitions[i];
+                var t = trs[i];
                 if (t.TimeNs > viewEndNs) break;
                 double tx = X(t.TimeNs);
                 d.Append(CultureInfo.InvariantCulture, $"L {tx - 3:0.##} {rowY + ValMid:0.##} ");
@@ -295,14 +308,14 @@ public static class WaveformExporter
             // plateau when its transition fell before the window.
             int plateauStart = haveEntry ? firstInside - 1 : firstInside;
             if (plateauStart < 0) plateauStart = 0;
-            for (int i = plateauStart; i < signal.Transitions.Count; i++)
+            for (int i = plateauStart; i < trs.Count; i++)
             {
-                var t = signal.Transitions[i];
+                var t = trs[i];
                 if (t.TimeNs > viewEndNs) break;
                 if (string.IsNullOrEmpty(t.Label)) continue;
                 double tx = i < firstInside ? trackX : X(t.TimeNs);
-                double nextX = i + 1 < signal.Transitions.Count && signal.Transitions[i + 1].TimeNs <= viewEndNs
-                    ? X(signal.Transitions[i + 1].TimeNs)
+                double nextX = i + 1 < trs.Count && trs[i + 1].TimeNs <= viewEndNs
+                    ? X(trs[i + 1].TimeNs)
                     : trackX + widthPx;
                 double midX = (tx + nextX) / 2.0;
                 if (nextX - tx < 24) continue;

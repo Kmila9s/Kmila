@@ -2737,9 +2737,9 @@ else
             // Shared binary-search lookup (last-write-wins). idx < 0 means the
             // signal has no sample at or before the cursor → skip; a sample with
             // a null value still renders "X".
-            int idx = sig.IndexAtOrBefore(cursorNs);
-            if (idx < 0) continue;
-            var t = sig.Transitions[idx];
+            // TransitionAtOrBefore consults the long-run archive when the cursor
+            // precedes the in-memory window.
+            if (sig.TransitionAtOrBefore(cursorNs) is not { } t) continue;
             string val = !string.IsNullOrEmpty(t.Label) ? t.Label!
                 : (t.Value.HasValue ? (t.Value.Value >= 0.5 ? "1" : "0") : "X");
             var mid = wire.Points[wire.Points.Count / 2];

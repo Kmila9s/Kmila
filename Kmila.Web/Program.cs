@@ -99,6 +99,12 @@ public sealed class Program
                 provider.GetRequiredService<UserAssetStore>(),
                 provider.GetService<ILogger<FileSystemBlobStore>>()));
 
+        // Long-run Phase 2: per-run trace files for history the in-memory cap evicts.
+        // A temp directory — never the shared app database (one file for all users).
+        builder.Services.AddSingleton(sp => new Kmila.Shared.Services.Trace.TraceStorage(
+            Path.Combine(Path.GetTempPath(), "kmila-traces"),
+            sp.GetService<ILogger<Kmila.Shared.Services.Trace.TraceStorage>>()));
+
         // ProgramBuilder handles compiling/building FPGA programs from user projects
         builder.Services.AddSingleton<ProgramBuilder>();
 

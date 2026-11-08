@@ -3597,6 +3597,12 @@ end architecture behavioral;",
                 _lastBuiltScale = Sim.Scale;
             }
 
+            // Long-run Phase 2: when the history cap evicted during this run, the
+            // in-memory transitions are only the latest window — attach the trace's
+            // complete on-disk history so scrolling back / zooming out / VCD export
+            // see the whole run. No-op for runs that fit in memory.
+            if (wd != null) Builder.LastTrace?.AttachArchives(wd);
+
             // Snapshot capture lives in SimulationCoordinator now so the
             // run is persisted even when the Editor isn't mounted at the
             // moment the sim ends (long sims, user navigated to /projects).

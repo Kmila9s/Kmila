@@ -115,6 +115,10 @@ public class SimulationCoordinator : IDisposable
             if (projectId <= 0) return;
 
             var wave = WaveformData.FromSignalHistory(history, _builder.LastTickResNs);
+            // Long-run Phase 2: give the cached run its full on-disk history (no-op
+            // for runs that fit in memory). The snapshot below still persists the
+            // in-memory window only — Archive is never serialized.
+            _builder.LastTrace?.AttachArchives(wave);
             _sim.StampCompleted(projectId, wave);
 
             // Persist the snapshot so the Runs tab + the 5-min recovery
