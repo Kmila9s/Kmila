@@ -36,7 +36,7 @@
     <StaticWebAssetBasePath>_content/Kmila.Shared</StaticWebAssetBasePath>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
-    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">15.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">17.0</SupportedOSPlatformVersion>
   </PropertyGroup>
   <ItemGroup>
     <SupportedPlatform Include="browser" />
@@ -181,5 +181,18 @@
       <StaticWebAssetBasePath>_content/Kmila.Shared</StaticWebAssetBasePath>
     </PropertyGroup>
   </Target>
+
+  <!--
+    .NET 10 / MAUI 10: the WebView package's props add a target that registers the
+    framework assets (_framework/blazor.webview.js, _framework/blazor.modules.json)
+    as static web assets in EVERY project that references it. On the mobile TFMs this
+    RCL references WebView.Maui, so it re-exported those assets to the MAUI head,
+    which also registers them itself → "Conflicting assets with the same target path
+    '_framework/blazor.modules#[.{fingerprint}]?.json'". Framework WebView assets
+    belong to the host app only, so this RCL replaces that target with an empty one.
+    (A target defined in the project body overrides the one from the package props.)
+    No effect on net10.0 (Kmila.Web/CLI): the package isn't referenced there.
+  -->
+  <Target Name="_AddBlazorWebViewAssets" />
 
 </Project>
