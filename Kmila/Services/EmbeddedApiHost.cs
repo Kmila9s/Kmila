@@ -547,10 +547,10 @@ public sealed class EmbeddedApiHost : ILocalApiHost, IAsyncDisposable
 #if IOS
     // ─── iOS transport: minimal TcpListener HTTP/1.1 server ──────
     // HttpListener is unsupported on iOS, so serve the same RouteAsync dispatch
-    // over raw sockets. One request per connection, Connection: close,
-    // Content-Length framing (no chunked / keep-alive) — enough for the local
-    // API's clients (curl / SimulatorBench), which handle close-delimited
-    // responses.
+    // over raw sockets. One request per connection, Connection: close (no
+    // keep-alive). Request bodies: Content-Length OR Transfer-Encoding: chunked
+    // (.NET HttpClient's JsonContent — used by SimulatorBench — is chunked), plus
+    // Expect: 100-continue. Responses are Content-Length framed.
 
     private async Task TcpAcceptLoopAsync(TcpListener listener, CancellationToken ct)
     {
@@ -647,28 +647,139 @@ public sealed class EmbeddedApiHost : ILocalApiHost, IAsyncDisposable
             headers[line[..c].Trim().ToLowerInvariant()] = line[(c + 1)..].Trim();
         }
 
-        int contentLength = 0;
-        if (headers.TryGetValue("content-length", out var clStr))
-            int.TryParse(clStr, out contentLength);
+        // Bytes already read past the header block belong to the body.
+        int bodyStart = headerEnd + 4; // past CRLFCRLF
+        var reader = new BodyReader(stream,
+            acc.Count > bodyStart ? acc.GetRange(bodyStart, acc.Count - bodyStart).ToArray() : Array.Empty<byte>());
+
+        // "Expect: 100-continue" (curl sends it for larger bodies): tell the client
+        // to go ahead instead of making it wait for its timeout.
+        if (headers.TryGetValue("expect", out var expect) &&
+            expect.Equals("100-continue", StringComparison.OrdinalIgnoreCase))
+        {
+            var cont = Encoding.ASCII.GetBytes("HTTP/1.1 100 Continue\r\n\r\n");
+            await stream.WriteAsync(cont, ct).ConfigureAwait(false);
+        }
 
         string body = string.Empty;
-        if (contentLength > 0)
+        bool chunked = headers.TryGetValue("transfer-encoding", out var te) &&
+                       te.Contains("chunked", StringComparison.OrdinalIgnoreCase);
+        if (chunked)
         {
-            int bodyStart = headerEnd + 4; // past CRLFCRLF
-            var bodyBytes = new byte[contentLength];
-            int have = Math.Max(0, Math.Min(contentLength, acc.Count - bodyStart));
-            for (int i = 0; i < have; i++) bodyBytes[i] = acc[bodyStart + i];
-            int read = have;
-            while (read < contentLength)
+            // .NET HttpClient sends JsonContent (PostAsJsonAsync — SimulatorBench) with
+            // Transfer-Encoding: chunked and NO Content-Length, so chunked bodies must be
+            // decoded (RFC 9112 §7.1): hex size [;ext] CRLF, data CRLF, ..., 0 CRLF,
+            // optional trailers, CRLF.
+            var bytes = await ReadChunkedBodyAsync(reader, ct).ConfigureAwait(false);
+            if (bytes is null) return null; // malformed / oversized
+            body = Encoding.UTF8.GetString(bytes);
+        }
+        else
+        {
+            int contentLength = 0;
+            if (headers.TryGetValue("content-length", out var clStr))
+                int.TryParse(clStr, out contentLength);
+            if (contentLength > MaxBodyBytes) return null;
+            if (contentLength > 0)
             {
-                int n = await stream.ReadAsync(bodyBytes.AsMemory(read, contentLength - read), ct).ConfigureAwait(false);
-                if (n == 0) break;
-                read += n;
+                var bodyBytes = new byte[contentLength];
+                int read = await reader.ReadAsync(bodyBytes, 0, contentLength, ct).ConfigureAwait(false);
+                body = Encoding.UTF8.GetString(bodyBytes, 0, read);
             }
-            body = Encoding.UTF8.GetString(bodyBytes, 0, read);
         }
 
         return (method, target, headers, body);
+    }
+
+    // Request body cap (largest real payloads are VHDL sources + stimulus JSON).
+    private const int MaxBodyBytes = 64 * 1024 * 1024;
+
+    private static async Task<byte[]?> ReadChunkedBodyAsync(BodyReader reader, CancellationToken ct)
+    {
+        using var ms = new MemoryStream();
+        while (true)
+        {
+            var sizeLine = await reader.ReadLineAsync(ct).ConfigureAwait(false);
+            if (sizeLine is null) return null;
+            var semi = sizeLine.IndexOf(';');              // drop chunk extensions
+            var hex = (semi >= 0 ? sizeLine[..semi] : sizeLine).Trim();
+            if (!int.TryParse(hex, System.Globalization.NumberStyles.HexNumber,
+                    System.Globalization.CultureInfo.InvariantCulture, out var size) || size < 0)
+                return null;
+            if (size == 0)
+            {
+                // Trailer section: header lines until an empty line (or EOF).
+                while (true)
+                {
+                    var trailer = await reader.ReadLineAsync(ct).ConfigureAwait(false);
+                    if (string.IsNullOrEmpty(trailer)) break;
+                }
+                return ms.ToArray();
+            }
+            if (ms.Length + size > MaxBodyBytes) return null;
+            var chunk = new byte[size];
+            int got = await reader.ReadAsync(chunk, 0, size, ct).ConfigureAwait(false);
+            if (got < size) return null;                   // truncated
+            ms.Write(chunk, 0, size);
+            var crlf = await reader.ReadLineAsync(ct).ConfigureAwait(false); // CRLF after data
+            if (crlf is null || crlf.Length != 0) return null;
+        }
+    }
+
+    // Reads the request body: first from bytes already buffered with the headers,
+    // then from the network stream.
+    private sealed class BodyReader
+    {
+        private readonly NetworkStream _stream;
+        private byte[] _buf;
+        private int _pos;
+        private int _len;
+
+        public BodyReader(NetworkStream stream, byte[] pending)
+        {
+            _stream = stream; _buf = pending; _pos = 0; _len = pending.Length;
+        }
+
+        private async Task<bool> FillAsync(CancellationToken ct)
+        {
+            if (_buf.Length < 8192) _buf = new byte[8192];
+            _len = await _stream.ReadAsync(_buf.AsMemory(0, _buf.Length), ct).ConfigureAwait(false);
+            _pos = 0;
+            return _len > 0;
+        }
+
+        /// <summary>Reads up to <paramref name="count"/> bytes; returns fewer only at EOF.</summary>
+        public async Task<int> ReadAsync(byte[] dest, int offset, int count, CancellationToken ct)
+        {
+            int read = 0;
+            while (read < count)
+            {
+                if (_pos >= _len && !await FillAsync(ct).ConfigureAwait(false)) break;
+                int n = Math.Min(count - read, _len - _pos);
+                Buffer.BlockCopy(_buf, _pos, dest, offset + read, n);
+                _pos += n; read += n;
+            }
+            return read;
+        }
+
+        /// <summary>Reads one CRLF-terminated ASCII line (without the CRLF); null at EOF.</summary>
+        public async Task<string?> ReadLineAsync(CancellationToken ct)
+        {
+            var sb = new StringBuilder();
+            while (true)
+            {
+                if (_pos >= _len && !await FillAsync(ct).ConfigureAwait(false))
+                    return sb.Length > 0 ? sb.ToString() : null;
+                byte b = _buf[_pos++];
+                if (b == (byte)'\n')
+                {
+                    if (sb.Length > 0 && sb[^1] == '\r') sb.Length--;
+                    return sb.ToString();
+                }
+                sb.Append((char)b);
+                if (sb.Length > 8192) return null;          // runaway line guard
+            }
+        }
     }
 
     private static int IndexOfDoubleCrlf(List<byte> b)
