@@ -23,7 +23,7 @@
             <span class="kmila-replay__meta">@(Replay.IsLivePaused
                 ? Traductor.T("EDITOR_REPLAY_LIVE_PAUSED")
                 : Traductor.T("EDITOR_REPLAY_LIVE_RUNNING"))
-                · @(Replay.LiveDoc?.Steps.Count ?? 0) @Traductor.T("EDITOR_REPLAY_LIVE_FRAMES")
+                · @(Replay.LiveDoc?.StepCount ?? 0) @Traductor.T("EDITOR_REPLAY_LIVE_FRAMES")
             </span>
         </header>
 
@@ -121,7 +121,7 @@
             }
         </details>
 
-        @if (Replay.LiveDoc is { Steps.Count: > 0 } liveDoc)
+        @if (Replay.LiveDoc is { StepCount: > 0 } liveDoc)
         {
             @* FollowLive=true → ExecutionPlayer auto-advances to the latest
                step as the doc grows. LiveTick is a render trigger so the

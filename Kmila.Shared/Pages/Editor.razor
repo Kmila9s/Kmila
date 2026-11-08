@@ -3269,6 +3269,15 @@ end architecture behavioral;",
     /// </summary>
     private void OnReplayLiveChangedForTabBadge()
     {
+        // ReplayState raises OnLiveChanged from the SIMULATOR thread too (a
+        // breakpoint hit inside OnLiveFrameEmitted pauses + notifies there), and
+        // this handler mutates _waveformData (MergeFrom) + Sim state that the
+        // renderer reads — run it on the renderer's context.
+        _ = InvokeAsync(ApplyReplayLiveChanged);
+    }
+
+    private void ApplyReplayLiveChanged()
+    {
         if (Replay.IsLiveActive)
         {
             if (Replay.IsLivePaused && Sim.State == SimState.Running)
@@ -3315,7 +3324,7 @@ end architecture behavioral;",
         // highlight doesn't linger over a stale line.
         _ = UpdateLiveStepHighlightAsync();
 
-        InvokeAsync(StateHasChanged);
+        StateHasChanged(); // already on the renderer context
     }
 
     /// <summary>
@@ -3540,6 +3549,18 @@ end architecture behavioral;",
     /// </summary>
     private void OnSimulationDataReady(Interpreter.Services.SignalHistory history)
     {
+        // Raised on the SIMULATOR thread (ProgramBuilder → runner.OnSimulationEnded).
+        // Everything below mutates _waveformData (MergeFrom appends to the
+        // Transitions lists) while WaveformViewer / SchematicViewer read those lists
+        // during render — so marshal onto the renderer's context, the same way the
+        // 200 ms live merge (OnSimulationProgressUpdate) does. Safe to read `history`
+        // later: the engine's SignalHistory outlives the run (runner disposal does
+        // not clear it).
+        _ = InvokeAsync(() => ApplySimulationDataReady(history));
+    }
+
+    private void ApplySimulationDataReady(Interpreter.Services.SignalHistory history)
+    {
         try
         {
             // Live progress ticks usually populated _waveformData already —
@@ -3611,7 +3632,7 @@ end architecture behavioral;",
             Logger.LogError(ex, "[Editor] Failed to build WaveformData from history");
             Log.Error(Traductor.T("SIM_LOG_WAVEFORM_FAILED_FMT", ex.Message));
         }
-        InvokeAsync(StateHasChanged);
+        StateHasChanged(); // already on the renderer context
     }
 
     /// <summary>

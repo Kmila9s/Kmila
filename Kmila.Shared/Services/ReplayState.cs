@@ -355,6 +355,22 @@ public class ReplayState
     public const int LiveDocFrameCap = 5000;
 
     /// <summary>
+    /// Live tape stores per-frame DELTAS with a full keyframe every N steps;
+    /// reconstructing any step costs at most N small dictionary merges.
+    /// </summary>
+    public const int LiveKeyframeInterval = 64;
+
+    /// <summary>
+    /// Eviction batch: when the tape passes <see cref="LiveDocFrameCap"/> it is
+    /// trimmed to <c>cap - slack</c>, amortizing the O(n) front shift.
+    /// </summary>
+    private const int LiveEvictSlack = LiveDocFrameCap / 10;
+
+    // Live-tape writer state (sim thread only).
+    private HashSet<string> _liveOrderSet = new(StringComparer.OrdinalIgnoreCase);
+    private int _stepsSinceKeyframe;
+
+    /// <summary>
     /// Wire the engine into this scope. The Editor calls this right after
     /// constructing the SimulationRunner for the upcoming run. Replaces any
     /// previous engine and seeds a fresh live-timeline doc so the Replay
@@ -396,8 +412,13 @@ public class ReplayState
                 Code = _liveSource,
                 Language = "vhdl",
                 SignalOrder = new List<string>(),
-                Steps = new List<TimelineStep>()
+                Steps = new List<TimelineStep>(),
+                // Appended on the sim thread, read on the UI thread → writers
+                // lock SyncRoot, readers use ReadView().
+                IsLive = true,
             };
+            _liveOrderSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            _stepsSinceKeyframe = 0;
         }
         else
         {
@@ -464,7 +485,9 @@ public class ReplayState
         // source lines) and skip the per-frame snapshot dictionary that
         // dominates memory on long sims. Pause/Resume/Step still work —
         // they read LiveEngine directly, not the doc.
-        bool accumulate = LiveReplayDuringRun && LiveDoc != null;
+        // Read LiveDoc ONCE: DetachLive (UI thread) can null it mid-frame.
+        var doc = LiveDoc;
+        bool accumulate = LiveReplayDuringRun && doc != null;
 
         // We still need the lineSet to fire breakpoints even when not
         // accumulating, but skip it altogether when there are no
@@ -499,47 +522,90 @@ public class ReplayState
 
         if (accumulate)
         {
-            // Compute a stable signal-order + port-type metadata. Existing
-            // positions are preserved so the side table doesn't reshuffle.
-            foreach (var sig in args.ChangedSignals)
+            long t = (long)(args.Tick * 1000UL) + args.Delta; // 64-bit: (int) overflowed after ~2.1 ms
+
+            // Delta frame: only this frame's changed signals; a full keyframe every
+            // LiveKeyframeInterval steps bounds reconstruction cost
+            // (ExecutionTimelineDoc.ResolveSignals). The old per-frame full-table copy
+            // was the large-object churn on long runs.
+            bool keyframe = _stepsSinceKeyframe == 0;
+            Dictionary<string, string> payload;
+            if (keyframe)
             {
-                var name = sig.Name ?? string.Empty;
-                if (string.IsNullOrEmpty(name)) continue;
-                if (!LiveDoc!.SignalOrder.Contains(name))
-                    LiveDoc.SignalOrder.Add(name);
-                if (!LiveDoc.SignalMeta.ContainsKey(name))
+                payload = new Dictionary<string, string>(_liveValues, StringComparer.OrdinalIgnoreCase);
+            }
+            else
+            {
+                payload = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var sig in args.ChangedSignals)
                 {
-                    LiveDoc.SignalMeta[name] = sig.IsPort
-                        ? sig.PortType.ToString()
-                        : "INTERNAL";
+                    var name = sig.Name ?? string.Empty;
+                    if (name.Length > 0) payload[name] = _liveValues[name];
                 }
             }
+            _stepsSinceKeyframe = (_stepsSinceKeyframe + 1) % LiveKeyframeInterval;
 
-            var t = (int)(args.Tick * 1000) + args.Delta;
-            var snapshot = new Dictionary<string, string>(_liveValues);
-
-            LiveDoc!.Steps.Add(new TimelineStep
+            var step = new TimelineStep
             {
                 T = t,
+                IsDelta = !keyframe,
                 HighlightLines = lineSet!.ToList(),
-                Signals = snapshot,
+                Signals = payload,
                 Note = new Dictionary<string, string>
                 {
                     ["en"] = $"t = {t} ns",
                     ["es"] = $"t = {t} ns"
                 }
-            });
-            LiveFrameTick++;
+            };
 
-            // Hard FIFO cap so an extreme run still terminates with bounded
-            // memory. The user-facing on/off toggle warns about the cost;
-            // this is the safety net that catches the cases where they
-            // forget. 5000 frames ≫ what anyone can usefully scrub.
-            if (LiveDoc.Steps.Count > LiveDocFrameCap)
+            lock (doc!.SyncRoot)
             {
-                int excess = LiveDoc.Steps.Count - LiveDocFrameCap;
-                LiveDoc.Steps.RemoveRange(0, excess);
+                // Stable signal order + port-type metadata. Existing positions are
+                // preserved so the side table doesn't reshuffle. HashSet membership
+                // instead of the old O(n) List.Contains per changed signal.
+                foreach (var sig in args.ChangedSignals)
+                {
+                    var name = sig.Name ?? string.Empty;
+                    if (string.IsNullOrEmpty(name)) continue;
+                    if (_liveOrderSet.Add(name))
+                        doc.SignalOrder.Add(name);
+                    if (!doc.SignalMeta.ContainsKey(name))
+                    {
+                        doc.SignalMeta[name] = sig.IsPort
+                            ? sig.PortType.ToString()
+                            : "INTERNAL";
+                    }
+                }
+
+                doc.Steps.Add(step);
+
+                // Hard FIFO cap so an extreme run still terminates with bounded
+                // memory. Evict in batches (down to cap - LiveEvictSlack) so the
+                // O(n) shift is amortized instead of paid on every frame past the
+                // cap; the count never exceeds LiveDocFrameCap. The new first step
+                // is promoted to a keyframe (a NEW step object holding the resolved
+                // full table) so the deltas after it still reconstruct — steps are
+                // never mutated in place, which keeps ReadView() copies safe.
+                if (doc.Steps.Count > LiveDocFrameCap)
+                {
+                    int target = Math.Max(1, LiveDocFrameCap - LiveEvictSlack);
+                    int excess = doc.Steps.Count - target;
+                    var first = doc.Steps[excess];
+                    if (first.IsDelta)
+                    {
+                        doc.Steps[excess] = new TimelineStep
+                        {
+                            T = first.T,
+                            IsDelta = false,
+                            HighlightLines = first.HighlightLines,
+                            Signals = doc.ResolveSignals(excess),
+                            Note = first.Note,
+                        };
+                    }
+                    doc.Steps.RemoveRange(0, excess);
+                }
             }
+            LiveFrameTick++;
         }
 
         // #3: record the active lines/signals BEFORE firing any consumer
@@ -983,13 +1049,17 @@ public class ReplayState
         // current step's values against the PREVIOUS step in the timeline
         // (deterministic for scrub/seek as well as play), mirroring the live
         // mode's "signals that changed this delta" semantics.
-        var steps = _replayRunner.Document.Steps;
+        var replayDoc = _replayRunner.Document;
+        var steps = replayDoc.Steps;
         int i = _replayRunner.CurrentIndex;
         if (i > 0 && i < steps.Count && step.Signals != null)
         {
-            var prev = steps[i - 1].Signals;
+            // Resolve both sides so a delta-encoded doc diffs full tables.
+            // (Post-run docs are full; ResolveSignals returns them uncopied.)
+            var cur = replayDoc.ResolveSignals(i);
+            var prev = replayDoc.ResolveSignals(i - 1);
             var changed = new List<string>();
-            foreach (var kv in step.Signals)
+            foreach (var kv in cur)
                 if (prev == null || !prev.TryGetValue(kv.Key, out var pv) || pv != kv.Value)
                     changed.Add(kv.Key);
             _replayActiveSignals = changed.ToArray();

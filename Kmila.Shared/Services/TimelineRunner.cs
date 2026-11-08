@@ -37,6 +37,15 @@ public class TimelineRunner
             ? new TimelineStep()
             : _doc.Steps[Math.Clamp(CurrentIndex, 0, _doc.Steps.Count - 1)];
 
+    /// <summary>
+    /// Full signal table at the active step — resolves delta steps (live tape)
+    /// against their keyframe. Use this, not <c>CurrentStep.Signals</c>, for display.
+    /// </summary>
+    public Dictionary<string, string> CurrentSignals =>
+        _doc.Steps.Count == 0
+            ? new Dictionary<string, string>()
+            : _doc.ResolveSignals(Math.Clamp(CurrentIndex, 0, _doc.Steps.Count - 1));
+
     /// <summary>True once the runner has stepped past the last step.</summary>
     public bool IsAtEnd => _doc.Steps.Count == 0 || CurrentIndex >= _doc.Steps.Count - 1;
 
