@@ -118,6 +118,19 @@ public class ProgramBuilder : IDisposable
     // that construct ProgramBuilder without DI.
     private readonly LibraryCompiler.Services.LibraryCompiler? _libraryCompiler;
 
+    // Long-run Phase 2: per-run on-disk trace (null on hosts without a trace store,
+    // e.g. WASM — those keep the Phase-1 rolling windows).
+    private readonly Services.Trace.TraceStorage? _traceStorage;
+
+    /// <summary>
+    /// Trace of the most recent run (long-run Phase 2). After the run, when the
+    /// in-memory history cap evicted samples, <see cref="Services.Trace.TraceSession.IsComplete"/>
+    /// is true and <see cref="Services.Trace.TraceSession.AttachArchives"/> gives the
+    /// post-run waveform its full on-disk history. Disposed (file deleted) when the
+    /// next run starts.
+    /// </summary>
+    public Services.Trace.TraceSession? LastTrace { get; private set; }
+
     /// <summary>
     /// Matches a VHDL <c>use</c> clause as <c>library.package.something</c>.
     /// Captures the library segment (group 1) and the package segment
@@ -155,9 +168,15 @@ public class ProgramBuilder : IDisposable
     /// a pre-seeded FunctionRegistry). Test harnesses that construct
     /// <see cref="ProgramBuilder"/> via <c>new()</c> get the legacy path.
     /// </param>
-    public ProgramBuilder(LibraryCompiler.Services.LibraryCompiler? libraryCompiler = null)
+    /// <param name="traceStorage">
+    /// Long-run Phase 2 trace store (optional). When present, history the in-memory
+    /// cap evicts is spilled to a per-run file instead of being dropped.
+    /// </param>
+    public ProgramBuilder(LibraryCompiler.Services.LibraryCompiler? libraryCompiler = null,
+                          Services.Trace.TraceStorage? traceStorage = null)
     {
         _libraryCompiler = libraryCompiler;
+        _traceStorage = traceStorage;
 
         _timeMachine.OnSimulationEnded += OnSimulationEnd;
         _timeMachine.OnProgressAdvance += OnProgressAdvance;
@@ -479,6 +498,15 @@ public class ProgramBuilder : IDisposable
             ? new FastSimulationRunner()
             : new SimulationRunner();
 
+        // Long-run Phase 2: the previous run's trace goes away with its run (any
+        // waveform still holding its archive falls back to the in-memory window),
+        // and this run gets a fresh one. Nothing touches disk unless the in-memory
+        // history cap actually evicts.
+        LastTrace?.Dispose();
+        LastTrace = null;
+        var trace = _traceStorage?.StartSession(LastTickResNs);
+        LastTrace = trace;
+
         // Live-update timer: periodically pushes the running SignalHistory
         // out via OnSimulationProgressUpdate so the UI can grow the waveform
         // in real time. Created up here in the closure so OnSimulationEnded
@@ -493,13 +521,28 @@ public class ProgramBuilder : IDisposable
         // partial waveform of whatever ran, instead of a blank Waveforms tab
         // after they hit Stop mid-simulation.
         _simulationRunner.OnProgressChanged += progress => OnProgressAdvanced?.Invoke(progress);
-        _simulationRunner.OnEngineReady += engine => OnEngineReady?.Invoke(engine);
+        _simulationRunner.OnEngineReady += engine =>
+        {
+            // Hook the spill sink before anything can be evicted.
+            trace?.Attach(engine.History);
+            OnEngineReady?.Invoke(engine);
+        };
         _simulationRunner.OnSimulationEnded += completed =>
         {
             // Stop the live-update timer first so its callback can't race
             // with the final OnSimulationCompleted fire below.
             progressTimer?.Dispose();
             progressTimer = null;
+
+            // Long-run Phase 2: if the history cap evicted anything, spill the
+            // in-memory tail too and seal the trace so OnSimulationCompleted
+            // consumers can attach the COMPLETE on-disk history. Blocking here (sim
+            // thread, run already over) just drains the background writer.
+            if (trace != null)
+            {
+                try { trace.CompleteAsync().GetAwaiter().GetResult(); }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Trace] complete failed: {ex.Message}"); }
+            }
 
             OnSimulationEnded?.Invoke(completed);
             var history = _simulationRunner?.Engine?.History;
@@ -1003,6 +1046,8 @@ public class ProgramBuilder : IDisposable
         ProgressReporter.Instance.CancellationRequested -= OnInterpreterCancellationRequested;
 
         _simulationRunner?.Dispose();
+        LastTrace?.Dispose(); // deletes the last run's trace file
+        LastTrace = null;
         _cts.Cancel();
         _cts?.Dispose();
         _timeMachine.Dispose();

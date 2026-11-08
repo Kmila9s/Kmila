@@ -83,6 +83,12 @@ public static class MauiProgram
                 provider.GetRequiredService<UserAssetStore>(),
                 provider.GetService<ILogger<FileSystemBlobStore>>()));
 
+        // Long-run Phase 2: per-run trace files (app cache dir — the OS may reclaim
+        // it, which is fine: traces only back the most recent run's history).
+        builder.Services.AddSingleton(sp => new Kmila.Shared.Services.Trace.TraceStorage(
+            Path.Combine(FileSystem.CacheDirectory, "traces"),
+            sp.GetService<ILogger<Kmila.Shared.Services.Trace.TraceStorage>>()));
+
         // ProgramBuilder handles compiling/building FPGA programs from user projects
         builder.Services.AddSingleton<ProgramBuilder>();
 
