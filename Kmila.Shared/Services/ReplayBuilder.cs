@@ -160,7 +160,7 @@ public static class ReplayBuilder
 
             doc.Steps.Add(new TimelineStep
             {
-                T = (int)t,
+                T = t, // 64-bit: (int) truncated ns times past ~2.1 s
                 HighlightLines = highlights.ToList(),
                 Signals = snap,
                 Note = new Dictionary<string, string>

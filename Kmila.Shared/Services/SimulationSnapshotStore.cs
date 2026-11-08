@@ -308,19 +308,20 @@ public class SimulationSnapshotStore
     {
         try
         {
-            var all = await _db.SimulationSnapshots
-                .Where(s => s.ProjectId == projectId && !s.Pinned)
-                .OrderByDescending(s => s.CreatedAt)
-                .ToListAsync();
-            if (all.Count <= MaxPerProject) return;
-
-            var toEvict = all.Skip(MaxPerProject).ToList();
-            foreach (var s in toEvict)
-            {
-                await _db.DeleteAsync(s);
-            }
-            _logger.LogInformation("[SnapshotStore] Evicted {N} old snapshots from project {P}",
-                toEvict.Count, projectId);
+            // One SQL statement, no payloads: the old version materialised EVERY
+            // unpinned row — including its full WaveformJson — just to count and
+            // Skip(MaxPerProject), after every capture/import. Same semantics:
+            // keep the newest MaxPerProject unpinned rows, never touch pinned ones.
+            // (LIMIT -1 OFFSET n = "all rows after the first n" in SQLite.)
+            int evicted = await _db.ExecuteAsync(
+                "DELETE FROM SimulationSnapshots WHERE Id IN (" +
+                "SELECT Id FROM SimulationSnapshots " +
+                "WHERE ProjectId = ? AND Pinned = 0 " +
+                "ORDER BY CreatedAt DESC LIMIT -1 OFFSET ?)",
+                projectId, MaxPerProject);
+            if (evicted > 0)
+                _logger.LogInformation("[SnapshotStore] Evicted {N} old snapshots from project {P}",
+                    evicted, projectId);
         }
         catch (Exception ex)
         {

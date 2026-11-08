@@ -10,9 +10,23 @@ namespace Kmila.Shared.Models;
 /// </summary>
 public class TimelineStep
 {
-    /// <summary>Step ordinal — purely informational, the player iterates by index.</summary>
+    /// <summary>
+    /// Step time / ordinal — informational, the player iterates by index. 64-bit:
+    /// simulator-built docs store simulated time here (ns, or tick*1000+delta for the
+    /// live tape), which overflows <c>int</c> after ~2.1 s (ns) / ~2.1 ms (live).
+    /// </summary>
     [JsonPropertyName("t")]
-    public int T { get; set; }
+    public long T { get; set; }
+
+    /// <summary>
+    /// Live-tape storage mode (never serialized). When true, <see cref="Signals"/>
+    /// holds ONLY the signals that changed at this step; the full table is
+    /// reconstructed by <see cref="ExecutionTimelineDoc.ResolveSignals"/> from the
+    /// nearest earlier keyframe (a step with <c>IsDelta == false</c>). Hand-authored
+    /// timelines and <c>ReplayBuilder</c> output are always full (false).
+    /// </summary>
+    [JsonIgnore]
+    public bool IsDelta { get; set; }
 
     /// <summary>
     /// 1-based Monaco line numbers to highlight at this step. Empty array
@@ -86,4 +100,73 @@ public class ExecutionTimelineDoc
     /// <summary>The steps. Must contain at least one entry to be playable.</summary>
     [JsonPropertyName("steps")]
     public List<TimelineStep> Steps { get; set; } = new();
+
+    /// <summary>
+    /// True for the live tape that <c>ReplayState</c> appends to on the simulator
+    /// thread while the UI reads it. Writers mutate <see cref="Steps"/> /
+    /// <see cref="SignalOrder"/> / <see cref="SignalMeta"/> only under
+    /// <see cref="SyncRoot"/>; readers must go through <see cref="ReadView"/>.
+    /// </summary>
+    [JsonIgnore]
+    public bool IsLive { get; set; }
+
+    /// <summary>Lock guarding a live doc's collections (see <see cref="IsLive"/>).</summary>
+    [JsonIgnore]
+    public object SyncRoot { get; } = new();
+
+    /// <summary>Step count, read under the lock for live docs.</summary>
+    [JsonIgnore]
+    public int StepCount
+    {
+        get
+        {
+            if (!IsLive) return Steps.Count;
+            lock (SyncRoot) return Steps.Count;
+        }
+    }
+
+    /// <summary>
+    /// A doc that is safe to read on any thread. Non-live docs return themselves
+    /// (zero cost). A live doc returns a point-in-time copy of its collections taken
+    /// under <see cref="SyncRoot"/>; the steps themselves are shared, which is safe
+    /// because the writer never mutates a step after appending it (eviction replaces
+    /// step objects instead of editing them).
+    /// </summary>
+    public ExecutionTimelineDoc ReadView()
+    {
+        if (!IsLive) return this;
+        lock (SyncRoot)
+        {
+            return new ExecutionTimelineDoc
+            {
+                Code = Code,
+                Language = Language,
+                SignalOrder = new List<string>(SignalOrder),
+                SignalMeta = new Dictionary<string, string>(SignalMeta, StringComparer.OrdinalIgnoreCase),
+                Steps = new List<TimelineStep>(Steps),
+            };
+        }
+    }
+
+    /// <summary>
+    /// Full signal table at step <paramref name="index"/>. For a full step this is
+    /// its own <see cref="TimelineStep.Signals"/> (no copy). For a delta step it walks
+    /// back to the nearest keyframe and applies the deltas forward. Call on a
+    /// <see cref="ReadView"/> (or a non-live doc).
+    /// </summary>
+    public Dictionary<string, string> ResolveSignals(int index)
+    {
+        if (Steps.Count == 0) return new Dictionary<string, string>();
+        index = Math.Clamp(index, 0, Steps.Count - 1);
+        var step = Steps[index];
+        if (!step.IsDelta) return step.Signals;
+
+        int k = index;
+        while (k > 0 && Steps[k].IsDelta) k--;
+        var full = new Dictionary<string, string>(Steps[k].Signals, StringComparer.OrdinalIgnoreCase);
+        for (int i = k + 1; i <= index; i++)
+            foreach (var kv in Steps[i].Signals)
+                full[kv.Key] = kv.Value;
+        return full;
+    }
 }
