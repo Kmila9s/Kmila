@@ -1,5 +1,7 @@
 ﻿using Android.App;
+using Android.Content;
 using Android.Runtime;
+using Kmila.Shared.Services;
 
 namespace Kmila;
 
@@ -27,4 +29,28 @@ public class MainApplication : MauiApplication
     /// </summary>
     /// <returns>A configured <see cref="MauiApp"/> instance.</returns>
     protected override MauiApp CreateMauiApp() => MauiProgram.CreateMauiApp();
+
+    /// <summary>
+    /// Android memory hardening: forwards the OS's memory signals to the run
+    /// watchdog. Every level first releases garbage; once the system says it is
+    /// about to start killing processes (RUNNING_CRITICAL while in the foreground,
+    /// COMPLETE in the background) a running simulation is stopped gracefully, so
+    /// the user keeps the partial waveform instead of the app being killed.
+    /// </summary>
+    public override void OnTrimMemory([GeneratedEnum] TrimMemory level)
+    {
+        base.OnTrimMemory(level);
+        if (level == TrimMemory.RunningCritical || level == TrimMemory.Complete)
+            RunWatchdog.ReportCriticalMemoryPressure();
+        if (level >= TrimMemory.RunningLow)
+            GC.Collect();
+    }
+
+    /// <summary>Last-resort low-memory callback: stop a running simulation and collect.</summary>
+    public override void OnLowMemory()
+    {
+        base.OnLowMemory();
+        RunWatchdog.ReportCriticalMemoryPressure();
+        GC.Collect();
+    }
 }

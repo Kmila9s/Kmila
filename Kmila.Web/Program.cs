@@ -101,9 +101,22 @@ public sealed class Program
 
         // Long-run Phase 2: per-run trace files for history the in-memory cap evicts.
         // A temp directory — never the shared app database (one file for all users).
+        // Operators can size it per deployment: Kmila:Trace:MaxMB (env Kmila__Trace__MaxMB),
+        // default 2048 MB per run.
+        var traceMaxMb = builder.Configuration.GetValue<long?>("Kmila:Trace:MaxMB");
         builder.Services.AddSingleton(sp => new Kmila.Shared.Services.Trace.TraceStorage(
             Path.Combine(Path.GetTempPath(), "kmila-traces"),
-            sp.GetService<ILogger<Kmila.Shared.Services.Trace.TraceStorage>>()));
+            sp.GetService<ILogger<Kmila.Shared.Services.Trace.TraceStorage>>())
+        {
+            MaxTraceBytes = traceMaxMb is > 0 ? traceMaxMb.Value * 1024 * 1024 : 2L * 1024 * 1024 * 1024,
+        });
+
+        // Long-run safety net: stops a run gracefully before it exhausts the trace
+        // store or the server's memory. Heap budget: Kmila:Watchdog:HeapMB (env
+        // Kmila__Watchdog__HeapMB); default 60% of the GC-visible limit, i.e. the
+        // container limit under Docker.
+        var heapMb = builder.Configuration.GetValue<long?>("Kmila:Watchdog:HeapMB");
+        builder.Services.AddSingleton(_ => new RunWatchdog(heapMb is > 0 ? heapMb.Value * 1024 * 1024 : 0));
 
         // ProgramBuilder handles compiling/building FPGA programs from user projects
         builder.Services.AddSingleton<ProgramBuilder>();
