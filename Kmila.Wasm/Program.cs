@@ -91,6 +91,8 @@ public static class Program
                 sp.GetRequiredService<UserAssetStore>(),
                 sp.GetService<ILogger<FileSystemBlobStore>>()));
 
+        // Long-run safety net (memory only — WASM has no trace store).
+        builder.Services.AddSingleton(_ => new RunWatchdog());
         builder.Services.AddSingleton<ProgramBuilder>();
         builder.Services.AddSingleton<SelectedFPGA>();
         builder.Services.AddScoped<ConfigurationService>();

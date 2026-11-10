@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:allowBackup="true" android:icon="@mipmap/appicon" android:roundIcon="@mipmap/appicon_round" android:supportsRtl="true">
+    <!-- largeHeap: memory hardening (defense-in-depth for long runs). Raises the
+         Java/ART heap limit (WebView + Java-side objects); the Mono managed heap is
+         bounded by the history caps + RunWatchdog, not by this flag. -->
+    <application android:allowBackup="true" android:icon="@mipmap/appicon" android:roundIcon="@mipmap/appicon_round" android:supportsRtl="true" android:largeHeap="true">
         <!-- Tier 5.2 Phase B follow-up — foreground service that keeps
              EmbeddedApiHost's HttpListener alive when the user backgrounds
              the app. Without foregroundServiceType, Android 14+ (API 34+)

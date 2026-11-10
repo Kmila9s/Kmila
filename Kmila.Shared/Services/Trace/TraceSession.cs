@@ -32,6 +32,14 @@ public sealed class TraceSession : IDisposable
 {
     private const int ChunkSize = 1024; // transitions per stored chunk
 
+    /// <summary>
+    /// Backpressure bound: evicted samples queued for the writer but not yet stored.
+    /// Above it the simulation thread waits for the writer (down to half) instead of
+    /// piling boxed samples up in RAM — on slow phone flash a fast run would
+    /// otherwise just move the memory growth from the history into this queue.
+    /// </summary>
+    internal const long MaxPendingSamples = 1_000_000;
+
     private readonly string _path;
     private readonly int _tickResNs;
     private readonly TraceStorage _storage;
@@ -43,6 +51,7 @@ public sealed class TraceSession : IDisposable
     private Task? _writer;
     private SQLiteConnection? _db;
     private long _bytesWritten;
+    private long _pendingSamples;
     private volatile bool _spilled;
     private volatile bool _truncated;
     private volatile bool _disposed;
@@ -85,6 +94,19 @@ public sealed class TraceSession : IDisposable
     /// <summary>True when <see cref="CompleteAsync"/> finished and the file holds the whole run.</summary>
     public bool IsComplete { get; private set; }
 
+    /// <summary>Compressed bytes stored so far (read by the run watchdog).</summary>
+    public long BytesWritten => Interlocked.Read(ref _bytesWritten);
+
+    /// <summary>Evicted samples queued for the writer but not yet stored.</summary>
+    public long PendingSamples => Interlocked.Read(ref _pendingSamples);
+
+    /// <summary>
+    /// True when this run's trace is close enough to the storage limits that the run
+    /// should stop now, while the archive can still be completed (see
+    /// <see cref="TraceStorage.IsNearLimit"/>). Also true once the hard guard tripped.
+    /// </summary>
+    public bool IsNearLimit => _truncated || (_spilled && _storage.IsNearLimit(BytesWritten));
+
     /// <summary>Hooks the engine's history so evicted batches are spilled here.</summary>
     public void Attach(SignalHistory history)
     {
@@ -102,7 +124,18 @@ public sealed class TraceSession : IDisposable
             _writer = Task.Run(WriterLoopAsync);
         }
         var copy = samples as (long, object, int)[] ?? samples.ToArray();
+        long pending = Interlocked.Add(ref _pendingSamples, copy.Length);
         _queue.Writer.TryWrite(new Batch(signal, copy));
+
+        // Backpressure: let the writer catch up rather than buffering without bound.
+        if (pending > MaxPendingSamples)
+        {
+            while (Interlocked.Read(ref _pendingSamples) > MaxPendingSamples / 2
+                   && !_truncated && !_disposed && _writer is { IsCompleted: false })
+            {
+                Thread.Sleep(5);
+            }
+        }
     }
 
     /// <summary>
@@ -125,6 +158,7 @@ public sealed class TraceSession : IDisposable
                 var arr = new (long, object, int)[tail.Count];
                 for (int i = 0; i < tail.Count; i++)
                     arr[i] = (tail[i].TimeMoment, tail[i].Value, tail[i].SourceLine);
+                Interlocked.Add(ref _pendingSamples, arr.Length);
                 _queue.Writer.TryWrite(new Batch(sig, arr));
             }
         }
@@ -171,6 +205,7 @@ public sealed class TraceSession : IDisposable
                         while (n < 4096 && reader.TryRead(out var batch))
                         {
                             n++;
+                            if (batch.Samples != null) Interlocked.Add(ref _pendingSamples, -batch.Samples.Length);
                             if (batch.Signal == null || batch.Samples == null || _truncated) continue;
                             var st = GetState(batch.Signal);
                             foreach (var (tm, value, line) in batch.Samples)
@@ -239,7 +274,7 @@ public sealed class TraceSession : IDisposable
     {
         var buf = st.Buffer;
         if (buf.Count == 0) return;
-        if (_bytesWritten > _storage.MaxTraceBytes || !_storage.HasFreeSpace())
+        if (_bytesWritten > _storage.MaxTraceBytes || !_storage.HasFreeSpace(_storage.MinFreeBytes))
         {
             _truncated = true;
             buf.Clear();
@@ -249,7 +284,7 @@ public sealed class TraceSession : IDisposable
         var data = TraceChunkCodec.Encode(buf);
         _db!.Execute("INSERT INTO Chunk (SignalId, StartNs, EndNs, Count, Data) VALUES (?, ?, ?, ?, ?)",
             st.Id, buf[0].TimeNs, buf[^1].TimeNs, buf.Count, data);
-        _bytesWritten += data.Length;
+        Interlocked.Add(ref _bytesWritten, data.Length);
         st.Count += buf.Count;
         buf.Clear();
     }

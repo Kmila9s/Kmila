@@ -62,15 +62,31 @@ public sealed class TraceStorage
         return new TraceSession(path, tickResNs, this, _log);
     }
 
-    /// <summary>True while the volume still has at least <see cref="MinFreeBytes"/> free.</summary>
-    internal bool HasFreeSpace()
+    /// <summary>
+    /// Fraction of <see cref="MaxTraceBytes"/> at which the run watchdog stops the run
+    /// (soft limit). Stopping BEFORE the hard guard leaves room to spill the in-memory
+    /// tail, so the archive stays complete instead of being disabled. Default 0.9.
+    /// </summary>
+    public double SoftLimitFraction { get; init; } = 0.9;
+
+    /// <summary>
+    /// Soft limit for the run watchdog: true when a trace of <paramref name="bytesWritten"/>
+    /// bytes has reached <see cref="SoftLimitFraction"/> of <see cref="MaxTraceBytes"/>, or
+    /// the volume is down to twice <see cref="MinFreeBytes"/>.
+    /// </summary>
+    public bool IsNearLimit(long bytesWritten)
+        => bytesWritten >= (long)(MaxTraceBytes * SoftLimitFraction)
+           || !HasFreeSpace(MinFreeBytes * 2);
+
+    /// <summary>True while the volume still has at least <paramref name="minFreeBytes"/> free.</summary>
+    internal bool HasFreeSpace(long minFreeBytes)
     {
         try
         {
             var root = Path.GetPathRoot(Path.GetFullPath(Directory));
             if (string.IsNullOrEmpty(root)) return true;
             var drive = new DriveInfo(root);
-            return drive.AvailableFreeSpace >= MinFreeBytes;
+            return drive.AvailableFreeSpace >= minFreeBytes;
         }
         catch
         {

@@ -89,6 +89,11 @@ public static class MauiProgram
             Path.Combine(FileSystem.CacheDirectory, "traces"),
             sp.GetService<ILogger<Kmila.Shared.Services.Trace.TraceStorage>>()));
 
+        // Long-run safety net: stops a run gracefully before it exhausts the trace
+        // store or memory. The heap budget comes from the device's real RAM (Mono's
+        // managed heap is native memory, so the Java memory class doesn't bound it).
+        builder.Services.AddSingleton(_ => new RunWatchdog(WatchdogHeapBudget()));
+
         // ProgramBuilder handles compiling/building FPGA programs from user projects
         builder.Services.AddSingleton<ProgramBuilder>();
 
@@ -537,5 +542,34 @@ public static class MauiProgram
             consoleLogger, LogLevel.Debug));
 
         return app;
+    }
+
+    /// <summary>
+    /// Managed-heap budget for <see cref="RunWatchdog"/> on this device. Mobile Mono
+    /// can't report the memory available to the process, so it's derived from the
+    /// device's physical RAM: a quarter of it on phones/tablets (well under what the
+    /// OS low-memory killer / jetsam tolerates for a foreground app, and ~10× what a
+    /// healthy capped run uses). 0 → the watchdog derives it from the GC.
+    /// </summary>
+    private static long WatchdogHeapBudget()
+    {
+        try
+        {
+#if ANDROID
+            var am = Android.App.Application.Context.GetSystemService(Android.Content.Context.ActivityService)
+                as Android.App.ActivityManager;
+            var info = new Android.App.ActivityManager.MemoryInfo();
+            am?.GetMemoryInfo(info);
+            return info.TotalMem > 0 ? info.TotalMem / 4 : 0;
+#elif IOS
+            return (long)(Foundation.NSProcessInfo.ProcessInfo.PhysicalMemory / 4);
+#else
+            return 0;
+#endif
+        }
+        catch
+        {
+            return 0;
+        }
     }
 }

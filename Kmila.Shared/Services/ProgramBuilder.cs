@@ -131,6 +131,23 @@ public class ProgramBuilder : IDisposable
     /// </summary>
     public Services.Trace.TraceSession? LastTrace { get; private set; }
 
+    // Long-run safety net (null = no watchdog, e.g. test harnesses using new()).
+    private readonly RunWatchdog? _watchdog;
+
+    /// <summary>
+    /// Why the most recent run was stopped by the <see cref="RunWatchdog"/>;
+    /// <see cref="RunStopReason.None"/> when it ended normally or by the user.
+    /// </summary>
+    public RunStopReason LastRunStopReason { get; private set; }
+
+    /// <summary>
+    /// Raised (on a timer thread) when the <see cref="RunWatchdog"/> stops a run to
+    /// protect disk or memory, just before the run is stopped. The usual
+    /// <see cref="OnSimulationEnded"/>(false) / <see cref="OnSimulationCompleted"/>
+    /// follow, so the partial waveform still renders.
+    /// </summary>
+    public event Action<RunStopReason>? OnRunWatchdogStopped;
+
     /// <summary>
     /// Matches a VHDL <c>use</c> clause as <c>library.package.something</c>.
     /// Captures the library segment (group 1) and the package segment
@@ -172,11 +189,17 @@ public class ProgramBuilder : IDisposable
     /// Long-run Phase 2 trace store (optional). When present, history the in-memory
     /// cap evicts is spilled to a per-run file instead of being dropped.
     /// </param>
+    /// <param name="watchdog">
+    /// Long-run safety net (optional). When present, every run is watched and stopped
+    /// gracefully before it exhausts trace storage or memory.
+    /// </param>
     public ProgramBuilder(LibraryCompiler.Services.LibraryCompiler? libraryCompiler = null,
-                          Services.Trace.TraceStorage? traceStorage = null)
+                          Services.Trace.TraceStorage? traceStorage = null,
+                          RunWatchdog? watchdog = null)
     {
         _libraryCompiler = libraryCompiler;
         _traceStorage = traceStorage;
+        _watchdog = watchdog;
 
         _timeMachine.OnSimulationEnded += OnSimulationEnd;
         _timeMachine.OnProgressAdvance += OnProgressAdvance;
@@ -494,9 +517,11 @@ public class ProgramBuilder : IDisposable
         // FastSimulationRunner (skips idle ticks); Visual mode keeps the
         // reference SimulationRunner (live-updating tick-by-tick).
         _simulationRunner?.Dispose();
-        _simulationRunner = fastRun
-            ? new FastSimulationRunner()
+        var runner = fastRun
+            ? (ISimulationRunner)new FastSimulationRunner()
             : new SimulationRunner();
+        _simulationRunner = runner;
+        LastRunStopReason = RunStopReason.None;
 
         // Long-run Phase 2: the previous run's trace goes away with its run (any
         // waveform still holding its archive falls back to the in-memory window),
@@ -514,6 +539,17 @@ public class ProgramBuilder : IDisposable
         // frame from racing with a trailing tick).
         System.Threading.Timer? progressTimer = null;
         int liveTickInflight = 0;
+
+        // Long-run safety net: stop gracefully (same path as the Stop button)
+        // before the trace store or memory runs out. Disposed when the run ends.
+        IDisposable? watch = _watchdog?.Watch(trace, reason =>
+        {
+            LastRunStopReason = reason;
+            Console.WriteLine($"[Sim.Watchdog] stopping run: {reason} " +
+                $"(heapMB={GC.GetTotalMemory(false) / (1024 * 1024)} traceBytes={trace?.BytesWritten ?? 0})");
+            try { OnRunWatchdogStopped?.Invoke(reason); } catch { /* UI listener must not block the stop */ }
+            runner.Stop();
+        });
 
         // Subscribe to runner events and forward them. Important: we fire
         // OnSimulationCompleted whenever *any* signal history exists — even
@@ -533,6 +569,8 @@ public class ProgramBuilder : IDisposable
             // with the final OnSimulationCompleted fire below.
             progressTimer?.Dispose();
             progressTimer = null;
+            watch?.Dispose();
+            watch = null;
 
             // Long-run Phase 2: if the history cap evicted anything, spill the
             // in-memory tail too and seal the trace so OnSimulationCompleted
@@ -633,6 +671,7 @@ public class ProgramBuilder : IDisposable
             // Belt-and-braces: if RunAsync threw before OnSimulationEnded
             // fired, the timer would otherwise leak.
             progressTimer?.Dispose();
+            watch?.Dispose();
         }
     }
 

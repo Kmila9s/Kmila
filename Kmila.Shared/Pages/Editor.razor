@@ -865,6 +865,8 @@
         Builder.OnSimulationEnded         += OnSimulationEnded;
         // Workbench: surface VHDL `report` output into the Output log.
         Builder.OnReport                  += OnSimulationReport;
+        // Long-run watchdog: tell the user WHY a run stopped by itself.
+        Builder.OnRunWatchdogStopped      += OnRunWatchdogStopped;
         // OnProgressAdvanced is owned by SimulationCoordinator (singleton/
         // per-circuit) so progress keeps flowing into Sim even when the
         // Editor isn't mounted. Editor only needs to react to UI-relevant
@@ -1648,6 +1650,24 @@
             // takes over as the Replay tab's content.
             Replay.DetachLive();
 
+            StateHasChanged();
+        });
+    }
+
+    /// <summary>
+    /// The run watchdog stopped the run to protect disk or memory. The normal
+    /// stopped-run flow (partial waveform) follows via OnSimulationEnded; this only
+    /// explains why, in the Output log and as a toast.
+    /// </summary>
+    private void OnRunWatchdogStopped(RunStopReason reason)
+    {
+        InvokeAsync(() =>
+        {
+            var body = Traductor.T(reason == RunStopReason.TraceStorageLimit
+                ? "SIM_WATCHDOG_TRACE_LIMIT"
+                : "SIM_WATCHDOG_MEMORY");
+            Log.Warn(body);
+            ToastService.Notify(Message(Traductor.T("SIM_WATCHDOG_TITLE"), body, ToastType.Warning));
             StateHasChanged();
         });
     }
@@ -4350,6 +4370,7 @@ end architecture behavioral;",
         Builder.OnSimulationProgressUpdate -= OnSimulationProgressUpdate;
         Builder.OnSimulationEnded         -= OnSimulationEnded;
         Builder.OnReport                  -= OnSimulationReport;
+        Builder.OnRunWatchdogStopped      -= OnRunWatchdogStopped;
         _autoCommitTimer?.Dispose();
         // OnProgressAdvanced subscription lives on SimulationCoordinator now.
         Builder.OnEngineReady             -= OnEngineReadyForLiveReplay;

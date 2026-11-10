@@ -80,6 +80,12 @@
     <!-- 64-bit ABIs only — 16 KB pages don't exist on 32-bit Android, and
          Play no longer requires armeabi-v7a / x86 for new submissions. -->
     <RuntimeIdentifiers>android-arm64;android-x64</RuntimeIdentifiers>
+    <!-- Memory hardening for long runs: the original long-run crashes were Mono
+         aborts on the concurrent "SGen worker" thread (sgen-los.c:367 LOS assertion,
+         heap corruption). Use the non-concurrent collector: slightly longer GC pauses
+         on a heap the history caps keep small, in exchange for removing the code path
+         that crashed. -->
+    <AndroidEnableSGenConcurrent>false</AndroidEnableSGenConcurrent>
   </PropertyGroup>
 
   <!-- Mac Catalyst: apply Platforms/MacCatalyst/Entitlements.plist to the
