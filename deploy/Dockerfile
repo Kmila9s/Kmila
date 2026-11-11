@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 #
-# Kmila — web version (App/Kmila/Kmila.Web), a .NET 9 Blazor Server app.
+# Kmila — web version (App/Kmila/Kmila.Web), a .NET 10 Blazor Server app.
 # Multi-stage: full SDK to restore/publish, slim ASP.NET runtime to serve.
 #
 # Build context MUST be the repo root — Kmila.Shared references the repo-root

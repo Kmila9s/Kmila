@@ -2,7 +2,7 @@
 #
 # install.sh — install + run the Kmila web app on Linux, from scratch.
 #
-# Installs all prerequisites (the .NET 9 SDK for --native, or Docker for
+# Installs all prerequisites (the .NET 10 SDK for --native, or Docker for
 # --docker), builds Kmila via build.sh, and sets it up to run as a service
 # reachable on http://<host>:8080.
 #
@@ -71,15 +71,15 @@ if [ "$MODE" = "native" ]; then
     pacman) pm_install icu || true ;;
     zypper) pm_install libicu || true ;;
   esac
-  if dotnet --list-sdks 2>/dev/null | grep -q '^9\.'; then
-    log ".NET 9 SDK already installed: $(command -v dotnet)"
+  if dotnet --list-sdks 2>/dev/null | grep -q '^10\.'; then
+    log ".NET 10 SDK already installed: $(command -v dotnet)"
   else
-    log "installing the .NET 9 SDK via dotnet-install.sh"
+    log "installing the .NET 10 SDK via dotnet-install.sh"
     curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
-    bash /tmp/dotnet-install.sh --channel 9.0 --install-dir /usr/share/dotnet
+    bash /tmp/dotnet-install.sh --channel 10.0 --install-dir /usr/share/dotnet
     ln -sf /usr/share/dotnet/dotnet /usr/local/bin/dotnet
     hash -r
-    dotnet --list-sdks | grep -q '^9\.' || die ".NET 9 SDK install did not take."
+    dotnet --list-sdks | grep -q '^10\.' || die ".NET 10 SDK install did not take."
   fi
 else
   if command -v docker >/dev/null 2>&1; then

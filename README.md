@@ -73,14 +73,14 @@ Kmila-9s is a free, open-source, multiplatform academic platform focused on the 
 *   **Block Editor with VHDL round-trip:** `BlockEditor.razor` (backed by the in-house `wwwroot/js/kmila-blocks.js` DOM engine, not Blockly) offers a Blocks view-tab in the editor. `VhdlBlockBuilder` parses VHDL → blocks and `VhdlBlockEmitter` emits blocks → VHDL, so students can move between text and blocks losslessly.
 *   **Step Replay & Runs:** After each run, `ReplayBuilder` converts `WaveformData` into an `ExecutionTimeline`; `StepReplayPanel.razor` renders a scrubber over it, while `RunsPanel.razor` (Runs dock tab) lists past runs saved by `SimulationSnapshotStore` for re-run / compare / replay.
 *   **Schematic, Flow & Waveform viewers + exporters:** `SchematicViewer.razor` (synthesised netlist, via `Interpreter.Synthesis`), `FlowDiagramViewer.razor` (control-flow, via `PlantUmlFlowEmitter`), and `WaveformViewer.razor`, each with matching exporters — `SchematicExporter`, `WaveformExporter` — surfaced through `ExportSchematicModal` / `ExportWaveformModal`. `FsmAnimator` / `GateAnimator` animate FSM and gate-level behaviour.
-*   **Local headless-simulation API (`/api/v1`) + Swagger:** A local HTTP surface (`Services/Api/`, endpoints `/health`, `/projects`, `/projects/{id}/files`, `/simulate`) lets external tooling drive builds + simulations without the UI. On Web it's mapped in `Kmila.Web/Program.cs` (Minimal API + .NET 9 `AddOpenApi`); on MAUI native heads it's served by an in-process `System.Net.HttpListener` host (`Kmila/Services/EmbeddedApiHost.cs`) sharing the same handler bodies (`SimulationApiHandlers.cs`). A vendored Swagger UI lives under `wwwroot/api-docs/` reading the committed `wwwroot/openapi/v1.json`; `/api-docs` redirects to it.
+*   **Local headless-simulation API (`/api/v1`) + Swagger:** A local HTTP surface (`Services/Api/`, endpoints `/health`, `/projects`, `/projects/{id}/files`, `/simulate`) lets external tooling drive builds + simulations without the UI. On Web it's mapped in `Kmila.Web/Program.cs` (Minimal API + .NET 10 `AddOpenApi`); on MAUI native heads it's served by an in-process `System.Net.HttpListener` host (`Kmila/Services/EmbeddedApiHost.cs`) sharing the same handler bodies (`SimulationApiHandlers.cs`). A vendored Swagger UI lives under `wwwroot/api-docs/` reading the committed `wwwroot/openapi/v1.json`; `/api-docs` redirects to it.
 *   **FPGA Resource Validation:** Pick a target device in the TopBar chip (searchable across 34 devices — AMD/Xilinx Spartan-6 and Artix-7, Intel/Altera Cyclone IV E, and Lattice iCE40 HX / iCE40 UltraPlus / ECP5; full JSON catalogue under `App/Kmila/Devices/`). Resource chip in the status bar stays green → amber → red as the design grows relative to the selected device. Clickable to jump to the Entities tab.
 *   **Configurations on the fly:** Save / load named simulation setups (FPGA + time + port moments) from a TopBar pill — round-trip through SQLite, no file management needed.
 *   **Examples gallery + your own samples:** "Examples" button on the Projects page opens a card grid of pre-wired built-ins — **Demo Board** (every visual widget at once), **Contador 0–9** and **Contador 0–9999** (real counters with clock dividers + 7-seg multiplexing, raw `.kviz` pin wiring, each shipping a ready testbench), **Counter Clock** (00 → 99), **Traffic Light FSM**, **8-bit Shift Register**, and more. One click creates the project + drops you onto the Visual tab already wired. You can also **import a project as a sample**: importing a `.kmila` bundle offers "raw import" vs. "save as sample" (title/icon/description), and saved user samples appear in the same gallery (stored in the `UserSample` table).
 *   **Feedback links (no telemetry):** A "Report to Kmila servers" button (Settings + per-error rows in Logs) opens the website bug-report form (`kmila.com.mx/bug-report`) pre-filled with diagnostics, and an occasional satisfaction prompt links to `/satisfaction`. Both are browser hand-offs — the app never POSTs anything itself, preserving the offline stance (the existing GitHub-issue path stays too).
 *   **In-app Logs viewer:** Every `ILogger<T>` write in the app lands in the `/logs` page with filtering, auto-scroll, pause, and level gating. Useful on mobile / MAUI where there's no console to watch.
 *   **Guided welcome tour (onboarding):** First-time visitors get a spotlight + floating-card walkthrough of each view the first time they open it — a one-time "Welcome" card on any entry route, then a per-view tour for Home, Projects, Editor, Visual, Learn (+ lesson), Concepts (+ concept / block-exercise), Practice (+ challenge), Settings, Logs and Privacy. Skipping one view keeps the rest; there's an explicit "Don't show tours again" opt-out and a **Settings → Replay tours** reset. Self-contained engine (`wwwroot/js/kmila-tutorial.js`, no libraries), steps in `Services/TourCatalog.cs`, fired from `MainLayout`; "seen" state lives in `localStorage` (per-browser/per-WebView, not the shared server DB). See `Documentacion/WELCOME_TOUR.md`.
-*   **Cross-Platform:** Built with .NET 9 and MAUI. Installs on **Windows, macOS, Android, iOS, and iPadOS**. A Blazor Server web version covers **Linux**.
+*   **Cross-Platform:** Built with .NET 10 and MAUI. Installs on **Windows, macOS, Android, iOS, and iPadOS**. A Blazor Server web version covers **Linux**.
 *   **Multilingual Support:** Full i18n across 7 languages — English, Spanish, French, German, Chinese, Japanese, Arabic (with RTL flipping of layouts, borders and chevrons). VHDL keyword docs translate too (EN + ES currently full; FR / DE / CH / JP / AR fall back to English until translated). Preferences persist via SQLite + `localStorage`.
 *   **Standalone and Offline:** The application runs locally without requiring a web service or internet connection.
 *   **"Pre-Laboratory" Function:** Students can do preparatory work ahead of physical lab sessions.
@@ -90,7 +90,7 @@ Kmila-9s is a free, open-source, multiplatform academic platform focused on the 
 ## 4. Technology Stack
 
 ### Core Technologies
-- **Framework**: .NET 9 (C#)
+- **Framework**: .NET 10 (C#)
 - **UI Frameworks**: 
   - .NET MAUI (Desktop/Mobile)
   - Blazor (Web)
@@ -193,7 +193,7 @@ graph TD
 
 ```mermaid
 graph TB
-    subgraph "Shared Core (.NET 9)"
+    subgraph "Shared Core (.NET 10)"
         SharedLib["Kmila.Shared<br/>- Business Logic<br/>- VHDL Parser<br/>- Interpreter<br/>- TimeMachine"]
     end
 
@@ -1066,7 +1066,7 @@ The application uses GitHub Actions for continuous integration and deployment:
 
 ### Build & Self-Host (Web)
 
-The web version is `App/Kmila/Kmila.Web` (Blazor Server, .NET 9). Kmila's code is split across **6 git
+The web version is `App/Kmila/Kmila.Web` (Blazor Server, .NET 10). Kmila's code is split across **6 git
 repos** — `Kmila`, `Interpreter`, `Parser`, `Debugger`, `LibraryCompiler`, `TimeMachine` — so a single
 clone can't be built; they must sit side-by-side in one workspace (see [Manual](#option-b--manual)).
 You can build **the easy way** ([scripts](#option-a--one-command-scripts)) or **by hand**
@@ -1081,7 +1081,7 @@ Two build methods everywhere: **native** (`dotnet publish` → run with the .NET
 | For | Install |
 |---|---|
 | **git** (always) | `apt install git` · `dnf install git` · `brew install git` · [git-scm.com](https://git-scm.com) |
-| **Native build** | **.NET 9 SDK** — [dotnet.microsoft.com/download](https://dotnet.microsoft.com/download) · macOS `brew install dotnet-sdk` · Linux `curl -fsSL https://dot.net/v1/dotnet-install.sh \| bash -s -- --channel 9.0` (needs `libicu`) |
+| **Native build** | **.NET 10 SDK** — [dotnet.microsoft.com/download](https://dotnet.microsoft.com/download) · macOS `brew install dotnet-sdk` · Linux `curl -fsSL https://dot.net/v1/dotnet-install.sh \| bash -s -- --channel 10.0` (needs `libicu`) |
 | **Docker build** | **Docker + Compose** — [docs.docker.com/get-docker](https://docs.docker.com/get-docker/) · Linux `curl -fsSL https://get.docker.com \| sh` |
 
 **Repo source.** The default clone base is `https://github.com/Kmila9s/<repo>.git`. While those mirrors
@@ -1091,11 +1091,11 @@ are private, point the tooling at another source with the `KMILA_REPO_BASE` env 
 #### Option A — one-command scripts
 
 The scripts (in this directory) clone all 6 repos into a self-contained workspace
-(default `~/Downloads/kmila-build`), force `net9.0`, and build. Nothing else on your machine is touched.
+(default `~/Downloads/kmila-build`), force `net10.0`, and build. Nothing else on your machine is touched.
 
 ```bash
 # macOS / Linux / Windows (Git Bash or WSL)
-./build.sh                 # native: dotnet publish  (needs the .NET 9 SDK)
+./build.sh                 # native: dotnet publish  (needs the .NET 10 SDK)
 ./build.sh --docker        # build the Docker image   (needs Docker)
 ./build.sh --native --run  # build, then start on http://localhost:8080
 # options: --workdir <dir>  --port <n>  --branch <b>   (env: KMILA_REPO_BASE)
@@ -1105,7 +1105,7 @@ The scripts (in this directory) clone all 6 repos into a self-contained workspac
 ./build.ps1                 # -Mode native (default) | -Mode docker ; -Run ; -WorkDir ; -Port
 ```
 
-**Linux install as a service.** `install.sh` (run with `sudo`) detects the distro, installs the .NET 9
+**Linux install as a service.** `install.sh` (run with `sudo`) detects the distro, installs the .NET 10
 SDK (or Docker for `--docker`), builds, and registers a **systemd** service on `:8080`:
 
 ```bash
@@ -1132,13 +1132,13 @@ git clone https://github.com/Kmila9s/Kmila.git App/Kmila
 Resulting layout: `kmila-build/{Interpreter, Parser, Debugger, LibraryCompiler, TimeMachine, App/Kmila}`.
 
 **2a. Build & run — native.** The libraries multi-target the MAUI heads
-(`net9.0;net9.0-android;net9.0-ios;net9.0-maccatalyst`); forcing `net9.0` skips them so **no MAUI
+(`net10.0;net10.0-android;net10.0-ios;net10.0-maccatalyst`); forcing `net10.0` skips them so **no MAUI
 workload is required** (and `ios`/`maccatalyst` can't build off macOS anyway). Publish the **`.csproj`**,
 never a `.sln` (the sln pulls in the MAUI app head):
 
 ```bash
 dotnet publish App/Kmila/Kmila.Web/Kmila.Web.csproj \
-  -c Release -f net9.0 -p:TargetFrameworks=net9.0 -o publish
+  -c Release -f net10.0 -p:TargetFrameworks=net10.0 -o publish
 ASPNETCORE_URLS=http://+:8080 dotnet publish/Kmila.Web.dll   # → http://localhost:8080
 ```
 
@@ -1181,12 +1181,12 @@ sudo systemctl daemon-reload && sudo systemctl enable --now kmila
   `deploy/docker-compose.yml`), set `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`, and drop the public
   `8080:8080` mapping so only the proxy is exposed.
 - **Container internals:** `App/Kmila/deploy/` holds the multi-stage `Dockerfile`
-  (`dotnet/sdk:9.0` → `dotnet/aspnet:9.0`), `docker-compose.yml`, `.dockerignore`, and `kmila.service`.
+  (`dotnet/sdk:10.0` → `dotnet/aspnet:10.0`), `docker-compose.yml`, `.dockerignore`, and `kmila.service`.
 
 #### Troubleshooting
 
 - **`NETSDK1147 … workloads must be installed: android` (or ios/maccatalyst)** — you didn't force a
-  single framework. Add `-f net9.0 -p:TargetFrameworks=net9.0` to `dotnet publish` (the scripts +
+  single framework. Add `-f net10.0 -p:TargetFrameworks=net10.0` to `dotnet publish` (the scripts +
   Dockerfile already do). Never publish the `.sln`.
 - **Docker: `Access to the path '/app/KmilaData' is denied`** — `GetFolderPath(ApplicationData)`
   returns empty until its dir exists; the `deploy/Dockerfile` entrypoint pre-creates `$XDG_CONFIG_HOME`.
@@ -1198,7 +1198,7 @@ sudo systemctl daemon-reload && sudo systemctl enable --now kmila
   `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`.
 
 > Verified 2026-09-21: `build.sh --native` (clone → publish → HTTP 200) and `--docker` (image build) on
-> macOS/arm64; `install.sh --native` end-to-end on a clean `ubuntu:24.04` container (apt + .NET 9 SDK via
+> macOS/arm64; `install.sh --native` end-to-end on a clean `ubuntu:24.04` container (apt + .NET 10 SDK via
 > `dotnet-install.sh` + publish). Docker image ≈ 571 MB.
 
 ## 15. Project Structure
@@ -2078,7 +2078,7 @@ graph TB
     subgraph presentacion["Hosts de presentacion"]
         maui["<b>Kmila (MAUI Host)</b><br/>BlazorWebView<br/>DI: Singleton"]:::container
         web["<b>Kmila.Web</b><br/>Blazor Server<br/>DI: Scoped"]:::container
-        shared["<b>Kmila.Shared</b><br/>RCL net9.0 + net9.0-android<br/>9 paginas / 25+ servicios /<br/>3 repositorios / 35+ modelos"]:::container
+        shared["<b>Kmila.Shared</b><br/>RCL net10.0 + net10.0-android<br/>9 paginas / 25+ servicios /<br/>3 repositorios / 35+ modelos"]:::container
     end
 
     subgraph motor["Motor de simulacion y analisis"]

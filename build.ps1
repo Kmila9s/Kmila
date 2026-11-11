@@ -70,9 +70,9 @@ if (-not (Test-Path $WebCsproj)) { Die "missing $WebCsproj — did the Kmila rep
 
 if ($Mode -eq 'native') {
   if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
-    Die 'dotnet not found. Install the .NET 9 SDK from https://dot.net, or use -Mode docker.'
+    Die 'dotnet not found. Install the .NET 10 SDK from https://dot.net, or use -Mode docker.'
   }
-  if (-not ((dotnet --list-sdks) -match '^9\.')) { Write-Host '[build] WARN: no .NET 9 SDK detected; trying anyway.' -ForegroundColor Yellow }
+  if (-not ((dotnet --list-sdks) -match '^10\.')) { Write-Host '[build] WARN: no .NET 10 SDK detected; trying anyway.' -ForegroundColor Yellow }
   $Out = Join-Path $WorkDir 'publish'
   Log "publishing Kmila.Web (net10.0, Release) -> $Out"
   dotnet publish $WebCsproj -c Release -f net10.0 -p:TargetFrameworks=net10.0 -p:UseAppHost=false -o $Out
