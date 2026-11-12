@@ -88,13 +88,17 @@
     [Parameter] public EventCallback<Microsoft.AspNetCore.Components.Web.PointerEventArgs> OnPointerDownExternal { get; set; }
 
     [CascadingParameter(Name = "FrameVersion")] public int FrameVersion { get; set; }
+    [CascadingParameter(Name = "AdvancedMode")] public bool AdvancedMode { get; set; }
 
     private int Digits => Math.Clamp(Comp.Config.GetInt("digits", 4), 2, 8);
 
-    private string Mode => Comp.Config.GetString("mode", "raw");
+    // Advanced-mode enforced: an Expert mode collapses to raw when OFF.
+    private string Mode => KvizWidgetCatalog.EffectiveMode(Comp, AdvancedMode);
 
+    // Wiring (raw + mux): packed vectors are Advanced-only; with Advanced OFF
+    // the bank is always wired pin-by-pin (KvizWidgetCatalog.EffectiveWiring).
+    private string Wiring => KvizWidgetCatalog.EffectiveWiring(Comp, AdvancedMode);
     // Mux-only knobs.
-    private string Wiring => Comp.Config.GetString("wiring", "packed") == "explicit" ? "explicit" : "packed";
     private bool SelectActiveLow => Comp.Config.GetBool("selectActiveLow", true);
     private bool Persistence => Comp.Config.GetBool("persistence", true);
 
@@ -138,6 +142,14 @@
                     if (!string.IsNullOrEmpty(Comp.Bindings.GetValueOrDefault($"an{d}"))) wired++;
                 return $"{wired}/{total} wired";
             }
+            if (Mode == "raw" && Wiring == "explicit")
+            {
+                int wiredPins = 0;
+                for (int d = 0; d < Digits; d++)
+                    foreach (var s in new[] { "a", "b", "c", "d", "e", "f", "g" })
+                        if (!string.IsNullOrEmpty(Comp.Bindings.GetValueOrDefault(KvizWidgetCatalog.BankDigitPin(d, s)))) wiredPins++;
+                return wiredPins == 0 ? "(unwired)" : $"{wiredPins}/{7 * Digits} wired";
+            }
             if (Comp.Bindings.TryGetValue("value", out var p) && !string.IsNullOrEmpty(p))
                 return p;
             return "(unwired)";
@@ -151,6 +163,21 @@
     private string? SliceForDigit(int digit)
     {
         if (Coordinator == null) return null;
+        if (Mode == "raw" && Wiring == "explicit")
+        {
+            // One pin per segment: assemble the digit's abcdefg pattern from
+            // its d{N}_a..g bindings. Unwired segments read '0'; a digit with
+            // no wired segment at all is blank (null).
+            var chars = new char[7];
+            bool any = false;
+            foreach (var s in new[] { 'a', 'b', 'c', 'd', 'e', 'f', 'g' })
+            {
+                string v = ReadLatest(KvizWidgetCatalog.BankDigitPin(digit, s.ToString()));
+                if (!string.IsNullOrEmpty(v)) { chars[SegIndex(s)] = v[^1]; any = true; }
+                else chars[SegIndex(s)] = CommonAnode ? '1' : '0'; // unwired → off
+            }
+            return any ? new string(chars) : null;
+        }
         if (!Comp.Bindings.TryGetValue("value", out var port) || string.IsNullOrEmpty(port))
             return null;
         var raw = Coordinator.LatestSlicedValue(port);

@@ -47,8 +47,10 @@
     [Parameter] public EventCallback<Microsoft.AspNetCore.Components.Web.PointerEventArgs> OnPointerDownExternal { get; set; }
 
     [CascadingParameter(Name = "FrameVersion")] public int FrameVersion { get; set; }
+    [CascadingParameter(Name = "AdvancedMode")] public bool AdvancedMode { get; set; }
 
-    private string Mode => Comp.Config.GetString("mode", "value") == "raw" ? "raw" : "value";
+    // Advanced-mode enforced: an Expert mode collapses to raw when OFF.
+    private string Mode => KvizWidgetCatalog.EffectiveMode(Comp, AdvancedMode);
 
     private string ColorVar => Comp.Config.GetString("color", "red") switch
     {

@@ -37,11 +37,89 @@ public readonly record struct KvizPin(string Name, PinDir Direction);
 /// <summary>Static catalog describing each Visual-mode widget's pins and I/O direction.</summary>
 public static class KvizWidgetCatalog
 {
+    // ── Advanced-mode enforcement ────────────────────────────────────────
+    // Each moded widget: (legacy default when `mode` is missing, raw
+    // pin-level modes, assisted "Expert" modes). The legacy defaults are
+    // kept for loading old .kviz files (and for Sanitize), but with
+    // Advanced mode OFF an Expert/unknown mode is never honoured: the
+    // widget is shown, wired and run in its first raw mode instead. The
+    // stored `config.mode` is never rewritten, so turning Advanced back ON
+    // restores the author's choice.
+    private static readonly Dictionary<string, (string Default, string[] Raw, string[] Expert)> ModeSpec = new()
+    {
+        ["seven-seg"]      = ("raw",     new[] { "raw" },                             new[] { "hex", "dec" }),
+        ["seven-seg-bank"] = ("raw",     new[] { "raw", "mux" },                      new[] { "hex", "dec" }),
+        ["multi-switch"]   = ("per-bit", new[] { "per-bit" },                         new[] { "vector" }),
+        ["matrix-3x3"]     = ("value",   new[] { "raw" },                             new[] { "value" }),
+        ["matrix-3x3-rgb"] = ("planes",  new[] { "raw" },                             new[] { "planes" }),
+        ["buzzer-piezo"]   = ("freq",    new[] { "signal" },                          new[] { "freq" }),
+        ["keypad-matrix"]  = ("decoded", new[] { "raw-scan" },                        new[] { "decoded" }),
+        ["lcd-hd44780"]    = ("text",    new[] { "raw-4bit", "raw-8bit", "raw-panel" }, new[] { "text" }),
+    };
+
+    /// <summary>
+    /// The mode stored in the component's config, normalized to a known mode
+    /// (missing/unknown → the widget's legacy default). Ignores Advanced mode.
+    /// Returns an empty string for widgets without modes.
+    /// </summary>
+    public static string StoredMode(KvizComponent c)
+    {
+        if (!ModeSpec.TryGetValue(c.Type, out var spec)) return string.Empty;
+        var m = c.Config.GetString("mode", spec.Default);
+        return spec.Raw.Contains(m) || spec.Expert.Contains(m) ? m : spec.Default;
+    }
+
+    /// <summary>True when <paramref name="mode"/> is an assisted "Expert" mode of <paramref name="widgetType"/>.</summary>
+    public static bool IsExpertMode(string widgetType, string mode)
+        => ModeSpec.TryGetValue(widgetType, out var spec) && spec.Expert.Contains(mode);
+
+    /// <summary>
+    /// The mode the widget actually uses. With Advanced mode ON this is the
+    /// stored mode; with it OFF an Expert mode collapses to the widget's raw
+    /// pin-level mode (the stored config is left untouched).
+    /// </summary>
+    public static string EffectiveMode(KvizComponent c, bool advanced)
+    {
+        var m = StoredMode(c);
+        if (advanced || m.Length == 0) return m;
+        var spec = ModeSpec[c.Type];
+        return spec.Expert.Contains(m) ? spec.Raw[0] : m;
+    }
+
     /// <summary>Returns the pin surface for the given component based on its type and config.</summary>
     /// <param name="c">The component to inspect.</param>
     /// <returns>The component's pins.</returns>
-    public static IEnumerable<KvizPin> PinsOf(KvizComponent c) => c.Type switch
+    public static IEnumerable<KvizPin> PinsOf(KvizComponent c) => PinsOf(c, advanced: true);
+
+    /// <summary>
+    /// Advanced-aware pin surface: with <paramref name="advanced"/> OFF the
+    /// pins are those of the widget's <see cref="EffectiveMode"/> (raw).
+    /// </summary>
+    public static IEnumerable<KvizPin> PinsOf(KvizComponent c, bool advanced)
     {
+        if (advanced) return PinsForMode(c, null, null);
+        return PinsForMode(c, EffectiveMode(c, advanced: false), EffectiveWiring(c, advanced: false));
+    }
+
+    /// <summary>
+    /// 7-seg bank wiring actually used. <c>packed</c> (one vector per bus:
+    /// raw <c>value</c>, mux <c>seg</c>+<c>sel</c>) is an Advanced-only
+    /// convenience; with Advanced OFF the bank is always wired pin-by-pin
+    /// (<c>explicit</c>), like the real glass. Other widgets: empty string.
+    /// </summary>
+    public static string EffectiveWiring(KvizComponent c, bool advanced)
+    {
+        if (c.Type != "seven-seg-bank") return string.Empty;
+        if (!advanced) return "explicit";
+        return c.Config.GetString("wiring", "packed") == "explicit" ? "explicit" : "packed";
+    }
+
+    // overrides == null → read config exactly as before (legacy defaults).
+    private static IEnumerable<KvizPin> PinsForMode(KvizComponent c, string? modeOverride, string? wiringOverride)
+    {
+        string M(string def) => modeOverride ?? c.Config.GetString("mode", def);
+        return c.Type switch
+        {
         "led"       => new[] { new KvizPin("anode",  PinDir.In) },
         "button"    => new[] { new KvizPin("out",    PinDir.Out) },
         "switch"    => new[] { new KvizPin("out",    PinDir.Out) },
@@ -53,23 +131,23 @@ public static class KvizWidgetCatalog
             new KvizPin("phaseAn", PinDir.In),
             new KvizPin("phaseBn", PinDir.In),
         },
-        "seven-seg"    => SevenSegPins(c.Config.GetString("mode", "raw")),
+        "seven-seg"    => SevenSegPins(M("raw")),
         "seven-seg-bank" => SevenSegBankPins(
-                                c.Config.GetString("mode", "raw"),
-                                c.Config.GetString("wiring", "packed"),
+                                M("raw"),
+                                wiringOverride ?? c.Config.GetString("wiring", "packed"),
                                 c.Config.GetInt("digits", 4)),
         "multi-switch" => MultiSwitchPins(
-                              c.Config.GetString("mode", "per-bit"),
+                              M("per-bit"),
                               c.Config.GetInt("count", 4)),
-        "matrix-3x3"   => LedMatrix33Pins(c.Config.GetString("mode", "value")),
-        "matrix-3x3-rgb" => RgbMatrix33Pins(c.Config.GetString("mode", "planes")),
-        "buzzer-piezo" => BuzzerPins(c.Config.GetString("mode", "freq")),
+        "matrix-3x3"   => LedMatrix33Pins(M("value")),
+        "matrix-3x3-rgb" => RgbMatrix33Pins(M("planes")),
+        "buzzer-piezo" => BuzzerPins(M("freq")),
         "keypad-matrix" => KeypadPins(
-            c.Config.GetString("mode", "decoded"),
+            M("decoded"),
             c.Config.GetInt("rows", 4),
             c.Config.GetInt("cols", 4)),
         "lcd-hd44780" => LcdPins(
-            c.Config.GetString("mode", "text"),
+            M("text"),
             c.Config.GetInt("rows", 2),
             c.Config.GetInt("cols", 16),
             c.Config.GetInt("glassRows", 8),
@@ -78,7 +156,8 @@ public static class KvizWidgetCatalog
             c.Config.GetInt("rows", 8),
             c.Config.GetInt("cols", 8)),
         _ => Array.Empty<KvizPin>(),
-    };
+        };
+    }
 
     private static KvizPin[] SevenSegPins(string mode) => mode == "raw"
         ? new[]
@@ -279,18 +358,33 @@ public static class KvizWidgetCatalog
     // original single packed `value` bus (one dedicated slice per digit); the
     // "mux" mode models a real multiplexed display — shared segment lines +
     // one per-digit common/select (anode/cathode) line. In mux, the `wiring`
-    // config picks how those lines are exposed:
+    // config picks how those lines are exposed (raw mode too — 2026-11):
     //   • "packed"   — two vectors: `seg` (7-bit, MSB=a) + `sel` (digits-bit,
     //                  MSB-first so char 0 = leftmost digit N-1). Compact.
     //   • "explicit" — individual pins: `a..g` + `an0..an{digits-1}`, each
     //                  separately bindable (verbose but precise).
+    // Raw (non-mux) mode: "packed" = the single `value` bus; "explicit" =
+    // one pin per segment per digit, `d{N}_{a..g}` (digit 0 = rightmost) —
+    // the real non-multiplexed glass. With Advanced OFF wiring is always
+    // explicit (see EffectiveWiring).
     // All pins are In (the design drives both segments and selects).
+    /// <summary>Pin name of segment <paramref name="seg"/> (a..g) of digit <paramref name="digit"/> in a raw explicit 7-seg bank.</summary>
+    public static string BankDigitPin(int digit, string seg) => $"d{digit}_{seg}";
+
     private static IEnumerable<KvizPin> SevenSegBankPins(string mode, string wiring, int digits)
     {
+        var n = Math.Clamp(digits, 2, 8);
+        if (mode == "raw" && wiring == "explicit")
+        {
+            var pins = new List<KvizPin>(7 * n);
+            for (int d = 0; d < n; d++)
+                foreach (var seg in new[] { "a", "b", "c", "d", "e", "f", "g" })
+                    pins.Add(new KvizPin(BankDigitPin(d, seg), PinDir.In));
+            return pins;
+        }
         if (mode != "mux")
             return new[] { new KvizPin("value", PinDir.In) };
 
-        var n = Math.Clamp(digits, 2, 8);
         if (wiring == "explicit")
         {
             var pins = new List<KvizPin>(7 + n);
@@ -315,10 +409,11 @@ public static class KvizWidgetCatalog
     /// <summary>Counts a component's input and output pins separately (for mixed-direction widgets like the keypad).</summary>
     /// <param name="c">The component to inspect.</param>
     /// <returns>A tuple of the input pin count and output pin count.</returns>
-    public static (int InCount, int OutCount) PinCountsByDir(KvizComponent c)
+    /// <param name="advanced">Advanced mode; OFF counts the raw (effective) pin surface.</param>
+    public static (int InCount, int OutCount) PinCountsByDir(KvizComponent c, bool advanced = true)
     {
         int inC = 0, outC = 0;
-        foreach (var p in PinsOf(c))
+        foreach (var p in PinsOf(c, advanced))
         {
             if (p.Direction == PinDir.In) inC++;
             else outC++;
@@ -347,13 +442,20 @@ public static class KvizWidgetCatalog
     /// <summary>Drops bindings whose pin key is no longer valid for each component's current type and config.</summary>
     /// <param name="doc">The document whose component bindings are sanitized in place.</param>
     /// <returns>The number of stale bindings removed.</returns>
-    public static int Sanitize(KvizDoc doc)
+    /// <param name="advanced">
+    /// Advanced mode. ON (default) keeps exactly the stored mode's pins. OFF
+    /// also keeps the raw (effective) mode's pins, so wiring a widget whose
+    /// file carries an Expert mode while Advanced is OFF never deletes either
+    /// the author's Expert bindings or the user's raw ones.
+    /// </param>
+    public static int Sanitize(KvizDoc doc, bool advanced = true)
     {
         if (doc?.Components == null) return 0;
         int dropped = 0;
         foreach (var c in doc.Components)
         {
             var valid = PinsOf(c).Select(p => p.Name).ToHashSet();
+            if (!advanced) valid.UnionWith(PinsOf(c, advanced: false).Select(p => p.Name));
             var stale = c.Bindings.Keys.Where(k => !valid.Contains(k)).ToArray();
             foreach (var k in stale)
             {

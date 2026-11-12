@@ -153,12 +153,15 @@ public class AppSettings
     /// pins (raw): a design that "works" with an expert binding in the
     /// simulator would fail on a real FPGA because the hardware protocol was
     /// never described. When OFF, the widget property pane hides those options
-    /// and new widgets default to their raw/basic surface; runtime
-    /// interpretation is unaffected (a .kviz that already carries an expert
-    /// <c>mode</c> still renders). Stored as "true" / "false"; any other value
-    /// falls back to false on read. Persisted in SQLite for native parity; the
-    /// per-user source of truth is the browser-side localStorage copy
-    /// ('kmila-advanced-mode') since the Web host's SQLite is shared.
+    /// and new widgets default to their raw/basic surface. Since 2026-11 it is
+    /// also ENFORCED at runtime: a .kviz that stores an expert <c>mode</c> is
+    /// shown, wired and run in the widget's raw mode while OFF
+    /// (<c>KvizWidgetCatalog.EffectiveMode</c>); the stored mode is kept and
+    /// returns when Advanced is turned ON. Stored as "true" / "false"; any other
+    /// value falls back to false on read. Written to SQLite for native parity
+    /// only — the per-user source of truth is the browser-side localStorage copy
+    /// ('kmila-advanced-mode'), and a missing copy means OFF (never seeded from
+    /// SQLite, which the Web host shares between all users).
     /// </summary>
     public const string KEY_ADVANCED_MODE = "KMILA_ADVANCED_MODE";
 

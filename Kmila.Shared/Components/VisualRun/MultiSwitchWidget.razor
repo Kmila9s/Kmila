@@ -44,9 +44,11 @@
     [Parameter] public EventCallback<(int Index, bool Value)> OnLeverToggleRequested { get; set; }
 
     [CascadingParameter(Name = "FrameVersion")] public int FrameVersion { get; set; }
+    [CascadingParameter(Name = "AdvancedMode")] public bool AdvancedMode { get; set; }
 
     private int Count => Math.Clamp(Comp.Config.GetInt("count", 4), 2, 8);
-    private string Mode => Comp.Config.GetString("mode", "per-bit") == "vector" ? "vector" : "per-bit";
+    // Advanced-mode enforced: an Expert mode collapses to raw when OFF.
+    private string Mode => KvizWidgetCatalog.EffectiveMode(Comp, AdvancedMode);
 
     private string LabelAt(int i)
     {

@@ -68,7 +68,7 @@ public partial class ProjectsView
     // calc_top's external ports:
     //   • keypad-matrix (raw-scan 4×4)   → cols_in / rows_out (fan-in write)
     //   • lcd-hd44780   (text 2×16)      → lcd_chars[255:128] / [127:0]
-    //   • seven-seg-bank (digits=4)      → seg_bus (28-bit)
+    //   • seven-seg-bank (digits=4, raw, one pin per segment) → seg_bus[27:0]
     //   • matrix-3x3    (value mode)     → led_matrix (9-bit)
     //   • buzzer-piezo  (signal mode)    → buzzer_pin
     //
@@ -126,10 +126,39 @@ public partial class ProjectsView
       "position": { "x": 380, "y": 320 },
       "config": {
         "digits": 4,
+        "mode": "raw",
+        "wiring": "explicit",
         "color": "red"
       },
       "bindings": {
-        "value": "seg_bus"
+        "d0_a": "seg_bus[6]",
+        "d0_b": "seg_bus[5]",
+        "d0_c": "seg_bus[4]",
+        "d0_d": "seg_bus[3]",
+        "d0_e": "seg_bus[2]",
+        "d0_f": "seg_bus[1]",
+        "d0_g": "seg_bus[0]",
+        "d1_a": "seg_bus[13]",
+        "d1_b": "seg_bus[12]",
+        "d1_c": "seg_bus[11]",
+        "d1_d": "seg_bus[10]",
+        "d1_e": "seg_bus[9]",
+        "d1_f": "seg_bus[8]",
+        "d1_g": "seg_bus[7]",
+        "d2_a": "seg_bus[20]",
+        "d2_b": "seg_bus[19]",
+        "d2_c": "seg_bus[18]",
+        "d2_d": "seg_bus[17]",
+        "d2_e": "seg_bus[16]",
+        "d2_f": "seg_bus[15]",
+        "d2_g": "seg_bus[14]",
+        "d3_a": "seg_bus[27]",
+        "d3_b": "seg_bus[26]",
+        "d3_c": "seg_bus[25]",
+        "d3_d": "seg_bus[24]",
+        "d3_e": "seg_bus[23]",
+        "d3_f": "seg_bus[22]",
+        "d3_g": "seg_bus[21]"
       }
     },
     {
