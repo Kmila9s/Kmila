@@ -28,40 +28,65 @@
             }
             else
             {
-                <table class="kviz-wiring-table">
-                    <thead>
-                        <tr>
-                            <th>@Traductor.T("VISUAL_WIRING_COL_COMPONENT")</th>
-                            <th>@Traductor.T("VISUAL_WIRING_COL_PIN")</th>
-                            <th>@Traductor.T("VISUAL_WIRING_COL_PORT")</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var c in Doc.Components)
-                        {
-                            foreach (var pin in KvizWidgetCatalog.PinsOf(c))
+                @* One collapsible section per component (same look as the widget
+                   palette groups) so a pin-heavy widget — e.g. a raw 8-digit
+                   7-seg bank = 56 segment pins — doesn't bury everything else.
+                   Only expanded components render their pin table. *@
+                <div class="kviz-wiring-groups">
+                    @foreach (var c in Doc.Components)
+                    {
+                        var localC = c;
+                        var pins = KvizWidgetCatalog.PinsOf(localC, AdvancedMode).ToList();
+                        var wired = pins.Count(p => !string.IsNullOrEmpty(CurrentBinding(localC, p.Name)));
+                        var isOpen = IsGroupOpen(localC);
+                        <div class="visual-page__palette-group kviz-wiring-group"
+                             data-open="@(isOpen ? "true" : "false")"
+                             data-component-id="@localC.Id">
+                            <button type="button"
+                                    class="visual-page__palette-group-header kviz-wiring-group-header"
+                                    aria-expanded="@isOpen"
+                                    data-testid="@($"visual-wiring-group-{localC.Id}")"
+                                    @onclick="() => ToggleGroup(localC)">
+                                <span class="visual-page__palette-group-label">@LabelOf(localC)</span>
+                                <span class="kviz-wiring-group-count @(wired == pins.Count && pins.Count > 0 ? "kviz-wiring-group-count--done" : "")">@wired/@pins.Count</span>
+                                <span class="visual-page__palette-group-chevron" aria-hidden="true">
+                                    <Icon Name="IconName.ChevronDown" />
+                                </span>
+                            </button>
+                            @if (isOpen)
                             {
-                                var localC = c;
-                                var localPin = pin;
-                                <tr>
-                                    <td>@LabelOf(localC)</td>
-                                    <td><code>@localPin.Name</code></td>
-                                    <td>
-                                        <select class="kmila-input"
-                                                value="@CurrentBinding(localC, localPin.Name)"
-                                                @onchange="(e) => SetBinding(localC, localPin.Name, e.Value?.ToString())">
-                                            <option value="">@Traductor.T("VISUAL_UNWIRED")</option>
-                                            @foreach (var opt in CompatibleOptions(localPin))
-                                            {
-                                                <option value="@opt.Binding">@opt.Display</option>
-                                            }
-                                        </select>
-                                    </td>
-                                </tr>
+                                <table class="kviz-wiring-table">
+                                    <thead>
+                                        <tr>
+                                            <th>@Traductor.T("VISUAL_WIRING_COL_PIN")</th>
+                                            <th>@Traductor.T("VISUAL_WIRING_COL_PORT")</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var pin in pins)
+                                        {
+                                            var localPin = pin;
+                                            <tr>
+                                                <td><code>@localPin.Name</code></td>
+                                                <td>
+                                                    <select class="kmila-input"
+                                                            value="@CurrentBinding(localC, localPin.Name)"
+                                                            @onchange="(e) => SetBinding(localC, localPin.Name, e.Value?.ToString())">
+                                                        <option value="">@Traductor.T("VISUAL_UNWIRED")</option>
+                                                        @foreach (var opt in CompatibleOptions(localPin))
+                                                        {
+                                                            <option value="@opt.Binding">@opt.Display</option>
+                                                        }
+                                                    </select>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
                             }
-                        }
-                    </tbody>
-                </table>
+                        </div>
+                    }
+                </div>
             }
         </div>
         <div class="modal-footer">
@@ -77,8 +102,24 @@
     [Parameter] public string Title { get; set; } = "";
     [Parameter] public KvizDoc? Doc { get; set; }
     [Parameter] public Entity? Entity { get; set; }
+    /// <summary>Advanced mode: OFF lists only the raw (effective) pins of each widget.</summary>
+    [Parameter] public bool AdvancedMode { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
+
+    // Expanded component sections (by component id). Collapsed by default;
+    // a document with a single component starts expanded. Kept for the life
+    // of the panel so reopening the modal remembers what was open.
+    private readonly HashSet<string> _openGroups = new();
+
+    private bool IsGroupOpen(KvizComponent c)
+        => _openGroups.Contains(c.Id) || Doc?.Components.Count == 1;
+
+    private void ToggleGroup(KvizComponent c)
+    {
+        if (Doc?.Components.Count == 1) return; // single section always open
+        if (!_openGroups.Add(c.Id)) _openGroups.Remove(c.Id);
+    }
 
     // PinDir + PinsOf moved to KvizWidgetCatalog so VisualPanel can share
     // them for direction chips + load-time binding sanitizer (R3-5).
@@ -96,8 +137,22 @@
         if (c.Type == "stepper")
             return string.Format(Traductor.T("VISUAL_WIRING_ROW_STEPPER"), c.Config.GetInt("stepsPerRev", 200));
         if (c.Type == "seven-seg")
-            return string.Format(Traductor.T("VISUAL_WIRING_ROW_SEVEN_SEG"), c.Config.GetString("mode", "raw"));
-        return c.Type;
+            return string.Format(Traductor.T("VISUAL_WIRING_ROW_SEVEN_SEG"), KvizWidgetCatalog.EffectiveMode(c, AdvancedMode));
+        if (c.Type == "seven-seg-bank")
+            return $"{Traductor.T("VISUAL_PALETTE_SEVEN_SEG_BANK")} ({Math.Clamp(c.Config.GetInt("digits", 4), 2, 8)} × {KvizWidgetCatalog.EffectiveMode(c, AdvancedMode)})";
+        // Section titles for the remaining widgets reuse the palette names.
+        var paletteKey = c.Type switch
+        {
+            "multi-switch"   => "VISUAL_PALETTE_MULTI_SWITCH",
+            "matrix-3x3"     => "VISUAL_PALETTE_LED_MATRIX",
+            "matrix-3x3-rgb" => "VISUAL_PALETTE_RGB_MATRIX",
+            "buzzer-piezo"   => "VISUAL_PALETTE_BUZZER",
+            "keypad-matrix"  => "VISUAL_PALETTE_KEYPAD",
+            "lcd-hd44780"    => "VISUAL_PALETTE_LCD",
+            "dot-matrix"     => "VISUAL_PALETTE_DOT_MATRIX",
+            _                => null,
+        };
+        return paletteKey != null ? Traductor.T(paletteKey) : c.Type;
     }
 
     private string LocalizedColor(string color) => color switch

@@ -66,6 +66,7 @@
     [Parameter] public EventCallback<Microsoft.AspNetCore.Components.Web.PointerEventArgs> OnPointerDownExternal { get; set; }
 
     [CascadingParameter(Name = "FrameVersion")] public int FrameVersion { get; set; }
+    [CascadingParameter(Name = "AdvancedMode")] public bool AdvancedMode { get; set; }
 
     // Per-key pressed state — owned here rather than in VisualPanel
     // because the keypad's press semantics (multi-press, hold, release
@@ -81,7 +82,8 @@
 
     private int Rows => Math.Clamp(Comp.Config.GetInt("rows", 4), 3, 4);
     private int Cols => Math.Clamp(Comp.Config.GetInt("cols", 4), 3, 4);
-    private string Mode => Comp.Config.GetString("mode", "decoded") == "raw-scan" ? "raw-scan" : "decoded";
+    // Advanced-mode enforced: an Expert mode collapses to raw when OFF.
+    private string Mode => KvizWidgetCatalog.EffectiveMode(Comp, AdvancedMode);
 
     // Default labels — telephone/hex 4×4 layout, truncated for smaller
     // sizes. Kept in a single flat string so a user-supplied `labels`
@@ -191,7 +193,7 @@
                 if (string.IsNullOrEmpty(k) && string.IsNullOrEmpty(p)) return "(unwired)";
                 return $"{k ?? "?"} · {p ?? "?"}";
             }
-            var (inC, outC) = KvizWidgetCatalog.PinCountsByDir(Comp);
+            var (inC, outC) = KvizWidgetCatalog.PinCountsByDir(Comp, AdvancedMode);
             int wired = 0;
             foreach (var b in Comp.Bindings.Values)
                 if (!string.IsNullOrEmpty(b)) wired++;

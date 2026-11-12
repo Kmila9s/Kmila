@@ -1097,7 +1097,7 @@
     /// Advanced mode (2026-10-06). Reveals the per-widget "Expert (…)"
     /// Visual-mode bindings and the push-button debounce toggle. OFF by
     /// default. Per-user source of truth is localStorage ('kmila-advanced-mode',
-    /// reconciled in OnAfterRenderAsync); SQLite is native parity. See
+    /// read in OnAfterRenderAsync; missing → OFF); SQLite is write-only parity. See
     /// <see cref="AppSettings.KEY_ADVANCED_MODE"/>.
     /// </summary>
     private bool _advancedMode;
@@ -1183,10 +1183,10 @@
         var syncRaw = await DbContext.GetSettingAsync(AppSettings.KEY_EDITOR_SYNC_MODE);
         _editorSyncMode = EditorSyncModeExtensions.ParseToken(syncRaw);
 
-        // Advanced-mode toggle. SQLite seed here (prerender-safe); the per-user
-        // localStorage copy wins in OnAfterRenderAsync once JS is live.
-        var advRaw = await DbContext.GetSettingAsync(AppSettings.KEY_ADVANCED_MODE);
-        _advancedMode = string.Equals(advRaw, "true", StringComparison.OrdinalIgnoreCase);
+        // Advanced-mode toggle: starts OFF; the per-user localStorage copy is
+        // applied in OnAfterRenderAsync. The shared SQLite copy is write-only
+        // parity — seeding from it leaked one web user's ON to everyone.
+        _advancedMode = false;
 
         // Account state — restore the cached account from the saved
         // token (no-op if logged out), then subscribe to the auth
@@ -1255,7 +1255,7 @@
                 }
             }
         }
-        catch { /* JS not ready — keep the SQLite seed */ }
+        catch { /* JS not ready — stay OFF (safe default) */ }
     }
 
     /// <summary>

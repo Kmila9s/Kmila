@@ -291,8 +291,8 @@ end Behavioral;
   "components": [
     { "id": "btn-reset", "type": "button", "position": { "x": 80, "y": 80 }, "config": { "label": "RESET" }, "bindings": { "out": "reset" } },
     { "id": "bank", "type": "seven-seg-bank", "position": { "x": 260, "y": 220 },
-      "config": { "digits": 4, "mode": "mux", "wiring": "packed", "polarity": "anode", "selectActiveLow": true, "color": "red" },
-      "bindings": { "seg": "segmentos", "sel": "anodos" } }
+      "config": { "digits": 4, "mode": "mux", "wiring": "explicit", "polarity": "anode", "selectActiveLow": true, "color": "red" },
+      "bindings": { "a": "segmentos[6]", "b": "segmentos[5]", "c": "segmentos[4]", "d": "segmentos[3]", "e": "segmentos[2]", "f": "segmentos[1]", "g": "segmentos[0]", "an0": "anodos[0]", "an1": "anodos[1]", "an2": "anodos[2]", "an3": "anodos[3]" } }
   ],
   "settings": {}
 }

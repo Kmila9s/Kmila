@@ -99,9 +99,9 @@ WEB_CSPROJ="$APP/Kmila.Web/Kmila.Web.csproj"
 # ── build ───────────────────────────────────────────────────────────────────
 if [ "$MODE" = "native" ]; then
   command -v dotnet >/dev/null 2>&1 \
-    || die "dotnet not found. Install the .NET 9 SDK (Linux: run ./install.sh), or use --docker."
-  if ! dotnet --list-sdks 2>/dev/null | grep -q '^9\.'; then
-    warn "no .NET 9 SDK detected in 'dotnet --list-sdks'; attempting the build anyway."
+    || die "dotnet not found. Install the .NET 10 SDK (Linux: run ./install.sh), or use --docker."
+  if ! dotnet --list-sdks 2>/dev/null | grep -q '^10\.'; then
+    warn "no .NET 10 SDK detected in 'dotnet --list-sdks'; attempting the build anyway."
   fi
   OUT="$WORKDIR/publish"
   log "publishing Kmila.Web (net10.0, Release) -> $OUT"

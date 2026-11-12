@@ -79,6 +79,7 @@
     [Parameter] public EventCallback<Microsoft.AspNetCore.Components.Web.PointerEventArgs> OnPointerDownExternal { get; set; }
 
     [CascadingParameter(Name = "FrameVersion")] public int FrameVersion { get; set; }
+    [CascadingParameter(Name = "AdvancedMode")] public bool AdvancedMode { get; set; }
 
     // DDRAM for raw mode. Sized to rows*cols after each mode change.
     private char[] _ddram = new char[16 * 2];
@@ -105,14 +106,8 @@
     private int GlassRows => Math.Clamp(Comp.Config.GetInt("glassRows", 8), 1, 16);
     private int GlassCols => Math.Clamp(Comp.Config.GetInt("glassCols", 5), 1, 40);
 
-    private string Mode
-    {
-        get
-        {
-            var m = Comp.Config.GetString("mode", "text");
-            return m == "raw-4bit" || m == "raw-8bit" || m == "raw-panel" ? m : "text";
-        }
-    }
+    // Advanced-mode enforced: assisted `text` collapses to raw-4bit when OFF.
+    private string Mode => KvizWidgetCatalog.EffectiveMode(Comp, AdvancedMode);
 
     private bool Backlight
     {

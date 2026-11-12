@@ -166,6 +166,7 @@
              transformed coordinate space so they scroll + zoom in sync. *@
           <div class="visual-page__canvas-wrap"
                style="width:@(_doc.Canvas.Width)px; height:@(_doc.Canvas.Height)px;">
+            <CascadingValue Name="AdvancedMode" Value="@_advancedMode" IsFixed="false">
             <VisualCanvas Doc="@_doc"
                           Coordinator="@_coord"
                           EditMode="@(_coord?.IsRunning != true)"
@@ -179,6 +180,7 @@
                           MultiSwitchStatesLookup="@MultiSwitchStates"
                           OnMultiSwitchToggle="@OnMultiSwitchToggle"
                           OnDrop="@OnCanvasDrop" />
+            </CascadingValue>
 
             @* Phase 3 wire-visualization overlay. SVG sits on top of the
                canvas with pointer-events: none so it never steals clicks
@@ -216,7 +218,7 @@
                         <h6 class="visual-page__props-title">@Traductor.T(PropsTitleKeyFor(sel.Type))</h6>
                         @{
                             var dir = KvizWidgetCatalog.DirectionOf(sel.Type);
-                            var pinCounts = KvizWidgetCatalog.PinCountsByDir(sel);
+                            var pinCounts = KvizWidgetCatalog.PinCountsByDir(sel, _advancedMode);
                             bool mixed = dir is null && pinCounts.InCount > 0 && pinCounts.OutCount > 0;
                         }
                         @if (dir is WidgetDirection wdir)
@@ -329,11 +331,11 @@
                     }
                     else if (sel.Type == "seven-seg")
                     {
-                        @* The decoded "Expert" modes (hex/dec) are only offered in
-                           Advanced mode; beginners wire the raw a..g segments. The
-                           select still shows for a legacy widget already on an
-                           expert mode so it can be switched back to raw. *@
-                        @if (_advancedMode || SevenSegMode(sel) != "raw")
+                        @* The decoded "Expert" modes (hex/dec) exist only in Advanced
+                           mode; with it OFF the widget is always raw a..g (even if the
+                           file stores hex/dec — see KvizWidgetCatalog.EffectiveMode),
+                           so there is nothing to choose and the select is hidden. *@
+                        @if (_advancedMode)
                         {
                             <label>@Traductor.T("VISUAL_PROP_MODE")
                                 <select class="kmila-input"
@@ -380,18 +382,18 @@
                                     value="@SevenSegBankMode(sel)"
                                     @onchange="@(e => OnSevenSegBankModeChange(sel, e))">
                                 <option value="raw">@Traductor.T("VISUAL_SEVEN_SEG_MODE_RAW")</option>
-                                @if (_advancedMode || SevenSegBankMode(sel) == "hex")
+                                @if (_advancedMode)
                                 {
                                     <option value="hex">@Traductor.T("VISUAL_SEVEN_SEG_MODE_HEX")</option>
-                                }
-                                @if (_advancedMode || SevenSegBankMode(sel) == "dec")
-                                {
                                     <option value="dec">@Traductor.T("VISUAL_SEVEN_SEG_MODE_DEC")</option>
                                 }
                                 <option value="mux">@Traductor.T("VISUAL_SEVEN_SEG_MODE_MUX")</option>
                             </select>
                         </label>
-                        @if (SevenSegBankMode(sel) == "mux")
+                        @* Packed vector wiring (raw `value` / mux `seg`+`sel`) is an
+                           Advanced-only convenience; with Advanced OFF the bank is
+                           always wired pin-by-pin, so there is nothing to choose. *@
+                        @if (_advancedMode && (SevenSegBankMode(sel) == "mux" || SevenSegBankMode(sel) == "raw"))
                         {
                             <label>@Traductor.T("VISUAL_PROP_WIRING")
                                 <select class="kmila-input"
@@ -401,6 +403,9 @@
                                     <option value="explicit">@Traductor.T("VISUAL_SEVEN_SEG_WIRING_EXPLICIT")</option>
                                 </select>
                             </label>
+                        }
+                        @if (SevenSegBankMode(sel) == "mux")
+                        {
                             <label>@Traductor.T("VISUAL_PROP_SELECT_LEVEL")
                                 <select class="kmila-input"
                                         value="@(SevenSegBankSelectActiveLow(sel) ? "low" : "high")"
@@ -478,7 +483,7 @@
                                 <option value="raw-4bit">@Traductor.T("VISUAL_LCD_MODE_RAW_4BIT")</option>
                                 <option value="raw-8bit">@Traductor.T("VISUAL_LCD_MODE_RAW_8BIT")</option>
                                 <option value="raw-panel">@Traductor.T("VISUAL_LCD_MODE_RAW_PANEL")</option>
-                                @if (_advancedMode || LcdMode(sel) == "text")
+                                @if (_advancedMode)
                                 {
                                     <option value="text">@Traductor.T("VISUAL_LCD_MODE_TEXT")</option>
                                 }
@@ -549,7 +554,7 @@
                     {
                         @* Decoded (key+pressed) is the Expert binding; beginners
                            implement the row/col scan themselves (raw-scan). *@
-                        @if (_advancedMode || KeypadMode(sel) != "raw-scan")
+                        @if (_advancedMode)
                         {
                             <label>@Traductor.T("VISUAL_PROP_MODE")
                                 <select class="kmila-input"
@@ -575,7 +580,7 @@
                     {
                         @* freq_hz+enable is the Expert binding; beginners drive the
                            raw PWM `signal` pin and build the divider themselves. *@
-                        @if (_advancedMode || BuzzerMode(sel) != "signal")
+                        @if (_advancedMode)
                         {
                             <label>@Traductor.T("VISUAL_PROP_MODE")
                                 <select class="kmila-input"
@@ -592,7 +597,7 @@
                     {
                         @* Planes (3×9-bit) is the Expert binding; beginners drive the
                            27 raw per-cell colour anodes. *@
-                        @if (_advancedMode || RgbMatrixMode(sel) != "raw")
+                        @if (_advancedMode)
                         {
                             <label>@Traductor.T("VISUAL_PROP_MODE")
                                 <select class="kmila-input"
@@ -613,7 +618,7 @@
                     {
                         @* 9-bit value is the Expert binding; beginners drive the raw
                            per-cell anode/cathode pins. *@
-                        @if (_advancedMode || LedMatrixMode(sel) != "raw")
+                        @if (_advancedMode)
                         {
                             <label>@Traductor.T("VISUAL_PROP_MODE")
                                 <select class="kmila-input"
@@ -645,7 +650,7 @@
                         @* `vector` collapses the bank to one std_logic_vector port —
                            the Expert binding. Beginners wire one raw pin per switch
                            (per-bit). *@
-                        @if (_advancedMode || MultiSwitchMode(sel) != "per-bit")
+                        @if (_advancedMode)
                         {
                             <label>@Traductor.T("VISUAL_PROP_MODE")
                                 <select class="kmila-input"
@@ -674,7 +679,19 @@
                     }
                     <h6 class="visual-page__props-section">@Traductor.T("VISUAL_PIN_TO_PORT")</h6>
                     <div class="visual-page__props-binding">
-                        @foreach (var b in sel.Bindings)
+                        @{
+                            // Advanced OFF + a file that stores an Expert mode: the widget
+                            // runs raw, so list its raw pins (wired or not) instead of the
+                            // stored Expert bindings it no longer reads.
+                            var bindingRows = !_advancedMode
+                                && KvizWidgetCatalog.IsExpertMode(sel.Type, KvizWidgetCatalog.StoredMode(sel))
+                                ? KvizWidgetCatalog.PinsOf(sel, advanced: false)
+                                    .Select(p => new KeyValuePair<string, string>(p.Name,
+                                        sel.Bindings.TryGetValue(p.Name, out var bv) ? bv : ""))
+                                    .ToList()
+                                : sel.Bindings.ToList();
+                        }
+                        @foreach (var b in bindingRows)
                         {
                             var wired = !string.IsNullOrEmpty(b.Value);
                             <div class="visual-page__props-binding-row">
@@ -685,7 +702,7 @@
                                 </span>
                             </div>
                         }
-                        @if (sel.Bindings.Count == 0)
+                        @if (bindingRows.Count == 0)
                         {
                             <div class="visual-page__props-binding-empty">@Traductor.T("VISUAL_NO_BINDINGS")</div>
                         }
@@ -731,6 +748,7 @@
                    Title="@Traductor.T("VISUAL_WIRING_TITLE")"
                    Doc="_doc"
                    Entity="_entity"
+                   AdvancedMode="_advancedMode"
                    OnClose="CloseWiring"
                    OnChanged="MarkDirty" />
 
@@ -1347,11 +1365,14 @@
 
     // Advanced mode (2026-10-06). When false (default), the property pane hides
     // the per-widget "Expert (…)" bindings and newly-added widgets stay on their
-    // raw/basic surface, so beginners only ever wire real device pins. Runtime
-    // interpretation is unaffected — a .kviz that already carries an expert
-    // `mode` still renders. Source of truth is the per-user localStorage copy
-    // (reconciled in OnAfterRenderAsync); SQLite is native parity / the
-    // pre-render seed. See AppSettings.KEY_ADVANCED_MODE.
+    // raw/basic surface, so beginners only ever wire real device pins. It is
+    // ENFORCED (2026-11): with it OFF a .kviz that stores an Expert `mode` is
+    // still shown, wired and run raw (KvizWidgetCatalog.EffectiveMode); the
+    // widgets get the flag via the "AdvancedMode" cascading value. Source of
+    // truth is the per-user localStorage copy (read in OnAfterRenderAsync);
+    // missing → OFF. The shared SQLite copy is NOT used as a seed: on the web
+    // host one user turning it ON must not leak to everyone else.
+    // See AppSettings.KEY_ADVANCED_MODE.
     private bool _advancedMode;
 
     protected override async Task OnInitializedAsync()
@@ -1362,14 +1383,6 @@
             var raw = await DbContext.GetSettingAsync(AppSettings.KEY_VISUAL_RING_BUFFER);
             if (int.TryParse(raw, out var rb) && rb >= 256 && rb <= 16384)
                 _settingsRingBuffer = rb;
-        }
-        catch { }
-        try
-        {
-            // SQLite seed (prerender-safe). localStorage wins once JS is live
-            // (OnAfterRenderAsync) so the flag stays per-user on the shared web host.
-            var adv = await DbContext.GetSettingAsync(AppSettings.KEY_ADVANCED_MODE);
-            _advancedMode = string.Equals(adv, "true", StringComparison.OrdinalIgnoreCase);
         }
         catch { }
     }
@@ -1564,7 +1577,7 @@
                 // R3-5 data-integrity gate — the wiring modal already
                 // enforces direction on write, but historical saves may
                 // still carry mis-directed keys.
-                KvizWidgetCatalog.Sanitize(_doc);
+                KvizWidgetCatalog.Sanitize(_doc, _advancedMode);
                 _lastSnapshot = KvizSerializer.Serialize(_doc);
             }
             else
@@ -2103,8 +2116,7 @@
         MarkDirty();
     }
 
-    private static string RgbMatrixMode(KvizComponent c)
-        => c.Config.GetString("mode", "planes") == "raw" ? "raw" : "planes";
+    private string RgbMatrixMode(KvizComponent c) => KvizWidgetCatalog.EffectiveMode(c, _advancedMode);
 
     private static int RgbMatrixBrightness(KvizComponent c)
         => Math.Clamp(c.Config.GetInt("brightness", 100), 0, 100);
@@ -2115,7 +2127,7 @@
         c.Config["mode"] = System.Text.Json.JsonSerializer.SerializeToElement(v);
         // Mode change swaps pin surface — Sanitize drops any binding whose
         // key isn't valid for the new mode (r|g|b{r}{c} ↔ red/green/blue).
-        KvizWidgetCatalog.Sanitize(_doc);
+        KvizWidgetCatalog.Sanitize(_doc, _advancedMode);
         MarkDirty();
     }
 
@@ -2149,11 +2161,7 @@
         MarkDirty();
     }
 
-    private static string LcdMode(KvizComponent c)
-    {
-        var m = c.Config.GetString("mode", "text");
-        return m == "raw-4bit" || m == "raw-8bit" || m == "raw-panel" ? m : "text";
-    }
+    private string LcdMode(KvizComponent c) => KvizWidgetCatalog.EffectiveMode(c, _advancedMode);
     private static int LcdRows(KvizComponent c) => Math.Clamp(c.Config.GetInt("rows", 2), 2, 4);
     private static int LcdCols(KvizComponent c) => Math.Clamp(c.Config.GetInt("cols", 16), 16, 20);
     private static int LcdGlassRows(KvizComponent c) => Math.Clamp(c.Config.GetInt("glassRows", 8), 1, 16);
@@ -2170,7 +2178,7 @@
             _ => "text",
         };
         c.Config["mode"] = System.Text.Json.JsonSerializer.SerializeToElement(v);
-        KvizWidgetCatalog.Sanitize(_doc);
+        KvizWidgetCatalog.Sanitize(_doc, _advancedMode);
         MarkDirty();
     }
 
@@ -2180,7 +2188,7 @@
         {
             n = Math.Clamp(n, 1, 16);
             c.Config["glassRows"] = System.Text.Json.JsonSerializer.SerializeToElement(n);
-            KvizWidgetCatalog.Sanitize(_doc);
+            KvizWidgetCatalog.Sanitize(_doc, _advancedMode);
             MarkDirty();
         }
     }
@@ -2191,7 +2199,7 @@
         {
             n = Math.Clamp(n, 1, 40);
             c.Config["glassCols"] = System.Text.Json.JsonSerializer.SerializeToElement(n);
-            KvizWidgetCatalog.Sanitize(_doc);
+            KvizWidgetCatalog.Sanitize(_doc, _advancedMode);
             MarkDirty();
         }
     }
@@ -2227,7 +2235,7 @@
         {
             n = Math.Clamp(n, 1, 16);
             c.Config["rows"] = System.Text.Json.JsonSerializer.SerializeToElement(n);
-            KvizWidgetCatalog.Sanitize(_doc);
+            KvizWidgetCatalog.Sanitize(_doc, _advancedMode);
             MarkDirty();
         }
     }
@@ -2238,7 +2246,7 @@
         {
             n = Math.Clamp(n, 1, 16);
             c.Config["cols"] = System.Text.Json.JsonSerializer.SerializeToElement(n);
-            KvizWidgetCatalog.Sanitize(_doc);
+            KvizWidgetCatalog.Sanitize(_doc, _advancedMode);
             MarkDirty();
         }
     }
@@ -2265,7 +2273,7 @@
         {
             n = Math.Clamp(n, 2, 4);
             c.Config["rows"] = System.Text.Json.JsonSerializer.SerializeToElement(n);
-            KvizWidgetCatalog.Sanitize(_doc);
+            KvizWidgetCatalog.Sanitize(_doc, _advancedMode);
             MarkDirty();
         }
     }
@@ -2276,7 +2284,7 @@
         {
             n = Math.Clamp(n, 16, 20);
             c.Config["cols"] = System.Text.Json.JsonSerializer.SerializeToElement(n);
-            KvizWidgetCatalog.Sanitize(_doc);
+            KvizWidgetCatalog.Sanitize(_doc, _advancedMode);
             MarkDirty();
         }
     }
@@ -2301,8 +2309,7 @@
         MarkDirty();
     }
 
-    private static string KeypadMode(KvizComponent c)
-        => c.Config.GetString("mode", "decoded") == "raw-scan" ? "raw-scan" : "decoded";
+    private string KeypadMode(KvizComponent c) => KvizWidgetCatalog.EffectiveMode(c, _advancedMode);
     private static int KeypadRows(KvizComponent c) => Math.Clamp(c.Config.GetInt("rows", 4), 3, 4);
     private static int KeypadCols(KvizComponent c) => Math.Clamp(c.Config.GetInt("cols", 4), 3, 4);
 
@@ -2312,7 +2319,7 @@
         c.Config["mode"] = System.Text.Json.JsonSerializer.SerializeToElement(v);
         // Mode swaps the pin surface entirely — Sanitize drops stale
         // keys (`key`/`pressed` ↔ `row{N}`/`col{N}`).
-        KvizWidgetCatalog.Sanitize(_doc);
+        KvizWidgetCatalog.Sanitize(_doc, _advancedMode);
         MarkDirty();
     }
 
@@ -2322,7 +2329,7 @@
         {
             n = Math.Clamp(n, 3, 4);
             c.Config["rows"] = System.Text.Json.JsonSerializer.SerializeToElement(n);
-            KvizWidgetCatalog.Sanitize(_doc);
+            KvizWidgetCatalog.Sanitize(_doc, _advancedMode);
             MarkDirty();
         }
     }
@@ -2333,7 +2340,7 @@
         {
             n = Math.Clamp(n, 3, 4);
             c.Config["cols"] = System.Text.Json.JsonSerializer.SerializeToElement(n);
-            KvizWidgetCatalog.Sanitize(_doc);
+            KvizWidgetCatalog.Sanitize(_doc, _advancedMode);
             MarkDirty();
         }
     }
@@ -2355,8 +2362,7 @@
         MarkDirty();
     }
 
-    private static string BuzzerMode(KvizComponent c)
-        => c.Config.GetString("mode", "freq") == "signal" ? "signal" : "freq";
+    private string BuzzerMode(KvizComponent c) => KvizWidgetCatalog.EffectiveMode(c, _advancedMode);
 
     private void OnBuzzerModeChange(KvizComponent c, ChangeEventArgs e)
     {
@@ -2364,12 +2370,11 @@
         c.Config["mode"] = System.Text.Json.JsonSerializer.SerializeToElement(v);
         // Mode change swaps the pin surface — Sanitize drops any binding
         // whose key isn't valid for the new mode (freq_hz/enable ↔ signal).
-        KvizWidgetCatalog.Sanitize(_doc);
+        KvizWidgetCatalog.Sanitize(_doc, _advancedMode);
         MarkDirty();
     }
 
-    private static string LedMatrixMode(KvizComponent c)
-        => c.Config.GetString("mode", "value") == "raw" ? "raw" : "value";
+    private string LedMatrixMode(KvizComponent c) => KvizWidgetCatalog.EffectiveMode(c, _advancedMode);
 
     private static int LedMatrixBrightness(KvizComponent c)
         => Math.Clamp(c.Config.GetInt("brightness", 100), 0, 100);
@@ -2380,7 +2385,7 @@
         c.Config["mode"] = System.Text.Json.JsonSerializer.SerializeToElement(v);
         // Mode change swaps the pin surface — Sanitize drops any binding
         // whose key isn't valid for the new mode (a{r}{c}/k{r}{c} ↔ value).
-        KvizWidgetCatalog.Sanitize(_doc);
+        KvizWidgetCatalog.Sanitize(_doc, _advancedMode);
         MarkDirty();
     }
 
@@ -2394,7 +2399,8 @@
         }
     }
 
-    private static string SevenSegMode(KvizComponent c) => c.Config.GetString("mode", "raw");
+    // Pane mode getters return the EFFECTIVE mode (Advanced-mode enforced).
+    private string SevenSegMode(KvizComponent c) => KvizWidgetCatalog.EffectiveMode(c, _advancedMode);
 
     private void OnSevenSegModeChange(KvizComponent c, ChangeEventArgs e)
     {
@@ -2430,12 +2436,12 @@
             c.Config["digits"] = System.Text.Json.JsonSerializer.SerializeToElement(n);
             // In mux+explicit wiring the digit count drives the an{d} pin set;
             // a shrink leaves orphan an{d} bindings — Sanitize prunes them.
-            KvizWidgetCatalog.Sanitize(_doc);
+            KvizWidgetCatalog.Sanitize(_doc, _advancedMode);
             MarkDirty();
         }
     }
 
-    private static string SevenSegBankMode(KvizComponent c) => c.Config.GetString("mode", "raw");
+    private string SevenSegBankMode(KvizComponent c) => KvizWidgetCatalog.EffectiveMode(c, _advancedMode);
 
     private void OnSevenSegBankModeChange(KvizComponent c, ChangeEventArgs e)
     {
@@ -2445,19 +2451,18 @@
         // surface entirely (seg/sel or a..g + an{d}). Set the mode first, then
         // let Sanitize drop any binding that no longer matches PinsOf.
         c.Config.Put("mode", v);
-        KvizWidgetCatalog.Sanitize(_doc);
+        KvizWidgetCatalog.Sanitize(_doc, _advancedMode);
         MarkDirty();
     }
 
-    private static string SevenSegBankWiring(KvizComponent c) =>
-        c.Config.GetString("wiring", "packed") == "explicit" ? "explicit" : "packed";
+    private string SevenSegBankWiring(KvizComponent c) => KvizWidgetCatalog.EffectiveWiring(c, _advancedMode);
 
     private void OnSevenSegBankWiringChange(KvizComponent c, ChangeEventArgs e)
     {
         var v = e.Value?.ToString() == "explicit" ? "explicit" : "packed";
-        // Wiring swaps the mux pin surface (packed seg/sel ↔ explicit a..g/an{d}).
+        // Wiring swaps the pin surface (raw: value ↔ d{N}_a..g; mux: seg/sel ↔ a..g/an{d}).
         c.Config.Put("wiring", v);
-        KvizWidgetCatalog.Sanitize(_doc);
+        KvizWidgetCatalog.Sanitize(_doc, _advancedMode);
         MarkDirty();
     }
 
@@ -2594,7 +2599,7 @@
     {
         if (_coord == null) return;
         var bounce = c.Config.GetBool("bounce", false);
-        var mode = c.Config.GetString("mode", "per-bit");
+        var mode = MultiSwitchMode(c);
         if (mode == "vector")
         {
             if (!c.Bindings.TryGetValue("value", out var port) || string.IsNullOrEmpty(port)) return;
@@ -2637,8 +2642,7 @@
         return new string(chars);
     }
 
-    private static string MultiSwitchMode(KvizComponent c) =>
-        c.Config.GetString("mode", "per-bit") == "vector" ? "vector" : "per-bit";
+    private string MultiSwitchMode(KvizComponent c) => KvizWidgetCatalog.EffectiveMode(c, _advancedMode);
 
     private static int MultiSwitchCount(KvizComponent c) =>
         Math.Clamp(c.Config.GetInt("count", 4), 2, 8);
@@ -2651,7 +2655,7 @@
         c.Config["mode"] = System.Text.Json.JsonSerializer.SerializeToElement(v);
         // Mode change swaps the pin surface — Sanitize drops any binding
         // whose key isn't valid for the new mode (out{i} ↔ value).
-        KvizWidgetCatalog.Sanitize(_doc);
+        KvizWidgetCatalog.Sanitize(_doc, _advancedMode);
         MarkDirty();
     }
 
@@ -2664,7 +2668,7 @@
             // Count shrink invalidates trailing out{i} bindings — Sanitize
             // catches those. Also reshape the state array so the widget's
             // next render sees the right number of levers.
-            KvizWidgetCatalog.Sanitize(_doc);
+            KvizWidgetCatalog.Sanitize(_doc, _advancedMode);
             _ = MultiSwitchStates(c);
             MarkDirty();
         }
@@ -2904,7 +2908,7 @@
                     }
                 }
             }
-            catch { /* JS not ready — keep the SQLite seed */ }
+            catch { /* JS not ready — stay OFF (safe default) */ }
         }
 
         if (!_panZoomAttached)

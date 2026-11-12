@@ -55,8 +55,10 @@
     // FrameVersion bumps once per coordinator tick — forces re-render so
     // we re-evaluate SegOn() against the latest port values.
     [CascadingParameter(Name = "FrameVersion")] public int FrameVersion { get; set; }
+    [CascadingParameter(Name = "AdvancedMode")] public bool AdvancedMode { get; set; }
 
-    private string Mode => Comp.Config.GetString("mode", "raw");
+    // Advanced-mode enforced: an Expert mode collapses to raw when OFF.
+    private string Mode => KvizWidgetCatalog.EffectiveMode(Comp, AdvancedMode);
 
     // Common anode = active-low drive: a raw segment pin lights the segment
     // when it reads '0'. Common cathode (default) is active-high.
