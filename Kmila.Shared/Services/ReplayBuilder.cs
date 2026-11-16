@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Kmila.Shared.Models;
 using Interpreter.Models;
+using Parser.Models;
 
 namespace Kmila.Shared.Services;
 
@@ -234,10 +235,8 @@ public static class ReplayBuilder
     /// </summary>
     private static IEnumerable<string> ExtractAssignedNames(string rawLine)
     {
-        var line = rawLine;
-        // Strip line comments — anything after "--" is irrelevant for matching.
-        var commentIdx = line.IndexOf("--", StringComparison.Ordinal);
-        if (commentIdx >= 0) line = line.Substring(0, commentIdx);
+        // Line comments are irrelevant for matching.
+        var line = VhdlText.StripLineComment(rawLine);
 
         // Drop the leading "when X =>" arm of a case branch so the actual
         // assignment after the arrow can match. Same trick for the

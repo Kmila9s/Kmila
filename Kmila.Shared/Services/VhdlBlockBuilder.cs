@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Interpreter.Models;
+using Parser.Models;
 
 namespace Kmila.Shared.Services;
 
@@ -129,7 +130,7 @@ public class VhdlBlockBuilder
             // `vhdlSource` is the untouched original we copy from when
             // accumulating raw-VHDL block text. Step 6 of #16 — comments
             // round-trip safely when they fall into a raw block.
-            var scan = BlankLineComments(vhdlSource);
+            var scan = VhdlText.BlankLineComments(vhdlSource);
             var topLevel = ParseTopLevel(scan, vhdlSource);
             LastRawCount = CountRawBlocks(topLevel);
 
@@ -4174,37 +4175,6 @@ public class VhdlBlockBuilder
     }
 
     /* ── Source-scanning helpers ─────────────────────────────────── */
-
-    /// <summary>
-    /// Replace each <c>--</c>…end-of-line comment in <paramref name="source"/>
-    /// with spaces, preserving the source length so byte offsets stay
-    /// 1:1 with the untouched original. Used so regex / keyword peeks
-    /// don't accidentally match VHDL keywords hiding inside a comment
-    /// body, while the parallel original string can still feed raw-VHDL
-    /// blocks with the comments intact.
-    /// </summary>
-    private static string BlankLineComments(string source)
-    {
-        var chars = source.ToCharArray();
-        int i = 0;
-        while (i < chars.Length)
-        {
-            // Find a "--" start on this line.
-            if (i + 1 < chars.Length && chars[i] == '-' && chars[i + 1] == '-')
-            {
-                while (i < chars.Length && chars[i] != '\n')
-                {
-                    chars[i] = ' ';
-                    i++;
-                }
-            }
-            else
-            {
-                i++;
-            }
-        }
-        return new string(chars);
-    }
 
     private static int NextNonWhitespace(string s, int from)
     {

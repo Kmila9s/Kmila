@@ -1,6 +1,7 @@
 using Interpreter.Services;
 using Interpreter.Models;
 using Kmila.Shared.Models;
+using Parser.Models;
 
 namespace Kmila.Shared.Services;
 
@@ -774,9 +775,7 @@ public class ReplayState
             | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         for (int i = 0; i < lines.Length; i++)
         {
-            var line = lines[i];
-            var commentIdx = line.IndexOf("--", StringComparison.Ordinal);
-            if (commentIdx >= 0) line = line.Substring(0, commentIdx);
+            var line = VhdlText.StripLineComment(lines[i]);
             var arrowIdx = line.IndexOf("=>", StringComparison.Ordinal);
             if (arrowIdx >= 0) line = line.Substring(arrowIdx + 2);
             foreach (System.Text.RegularExpressions.Match m in assignRx.Matches(line))
@@ -819,9 +818,7 @@ public class ReplayState
             | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         for (int i = 0; i < lines.Length; i++)
         {
-            var line = lines[i];
-            var commentIdx = line.IndexOf("--", StringComparison.Ordinal);
-            if (commentIdx >= 0) line = line.Substring(0, commentIdx);
+            var line = VhdlText.StripLineComment(lines[i]);
             if (rx.IsMatch(line)) set.Add(i + 1);
         }
         return set;
