@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Kmila.Frontend;
 
 namespace Kmila.Shared.Models;
 
@@ -91,6 +92,22 @@ public class LessonModule
     [JsonPropertyName("bimestre")]
     public int Bimestre { get; set; }
 
+    /// <summary>
+    /// HDL language id this module teaches (e.g. <c>"vhdl"</c> for VHDL syntax
+    /// lessons), or null for a language-neutral module. See <see cref="RequiredLanguages"/>.
+    /// </summary>
+    [JsonPropertyName("language")]
+    public string? Language { get; set; }
+
+    /// <summary>
+    /// Languages every sample of this module must ship a variant for: all
+    /// supported languages for a neutral module, only its own for a language
+    /// module. Throws when <see cref="Language"/> is not a supported language id.
+    /// </summary>
+    public IReadOnlyList<HdlLanguage> RequiredLanguages() =>
+        Language == null ? HdlLanguages.Supported
+        : [HdlLanguages.FromId(Language) ?? throw new InvalidOperationException($"Module '{Id}': unknown HDL language '{Language}'.")];
+
     /// <summary>Localized titles keyed by language code (en, es, fr, …).</summary>
     [JsonPropertyName("titles")]
     public Dictionary<string, string> Titles { get; set; } = new();
@@ -136,8 +153,9 @@ public class Lesson
     public Dictionary<string, string> Summaries { get; set; } = new();
 
     /// <summary>
-    /// VHDL payload for <see cref="LessonKind.Sample"/> / <see cref="LessonKind.Exercise"/>
-    /// / <see cref="LessonKind.Project"/>. Null for pure reading lessons.
+    /// HDL payload (one source per language) for <see cref="LessonKind.Sample"/> /
+    /// <see cref="LessonKind.Exercise"/> / <see cref="LessonKind.Project"/>.
+    /// Null for pure reading lessons.
     /// </summary>
     [JsonPropertyName("sample")]
     public LessonSample? Sample { get; set; }
@@ -188,20 +206,28 @@ public class Lesson
 }
 
 /// <summary>
-/// Self-contained VHDL starter that a lesson's "Try this sample" button ships
-/// into a temporary project. The content is kept inline in the manifest so
-/// one JSON round-trips the whole catalog — lesson authors don't need to sync
-/// Markdown + manifest + a third .vhd file for each lesson.
+/// Self-contained HDL starter that a lesson's "Try this sample" button ships
+/// into a temporary project, with one source per HDL language. The content is
+/// kept inline in the manifest so one JSON round-trips the whole catalog —
+/// lesson authors don't need to sync Markdown + manifest + a third source file
+/// for each lesson.
 /// </summary>
 public class LessonSample
 {
-    /// <summary>File name to create in the throw-away project (e.g. <c>main.vhd</c>).</summary>
-    [JsonPropertyName("fileName")]
-    public string FileName { get; set; } = "main.vhd";
+    private Dictionary<string, LessonSampleSource> _variants = new();
+    private HdlVariants<LessonSampleSource>? _byLanguage;
 
-    /// <summary>Raw VHDL source to seed the file.</summary>
-    [JsonPropertyName("content")]
-    public string Content { get; set; } = string.Empty;
+    /// <summary>Source per HDL language id (manifest schema v2).</summary>
+    [JsonPropertyName("variants")]
+    public Dictionary<string, LessonSampleSource> Variants
+    {
+        get => _variants;
+        set { _variants = value; _byLanguage = null; }
+    }
+
+    /// <summary>The <see cref="Variants"/> resolved against the supported HDL languages (computed once).</summary>
+    [JsonIgnore]
+    public HdlVariants<LessonSampleSource> ByLanguage => _byLanguage ??= HdlVariants<LessonSampleSource>.FromIds(_variants);
 
     /// <summary>
     /// Optional companion simulation configuration. If set, the sample flow
@@ -265,12 +291,24 @@ public class LessonPortValue
     public string Value { get; set; } = "0";
 }
 
+/// <summary>One language variant of a <see cref="LessonSample"/>.</summary>
+public class LessonSampleSource
+{
+    /// <summary>File name to create in the throw-away project (e.g. <c>mux21.vhd</c>).</summary>
+    [JsonPropertyName("fileName")]
+    public string FileName { get; set; } = string.Empty;
+
+    /// <summary>Raw source to seed the file.</summary>
+    [JsonPropertyName("content")]
+    public string Content { get; set; } = string.Empty;
+}
+
 /// <summary>Root of the manifest.json file.</summary>
 public class LessonManifest
 {
-    /// <summary>Curriculum version — bumped whenever structure changes.</summary>
+    /// <summary>Content schema version (see <see cref="ContentSchema"/>).</summary>
     [JsonPropertyName("version")]
-    public int Version { get; set; } = 1;
+    public int Version { get; set; } = ContentSchema.Version;
 
     /// <summary>Curriculum modules declared in the manifest.</summary>
     [JsonPropertyName("modules")]

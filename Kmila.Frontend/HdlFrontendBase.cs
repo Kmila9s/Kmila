@@ -23,6 +23,12 @@ public abstract class HdlFrontendBase : IHdlFrontend
     /// <remarks>Text-only (no registry access). Languages without an elaborator keep this default.</remarks>
     public virtual string? ElaborateSource(string root, string entry) => null;
 
+    /// <inheritdoc />
+    public virtual IReadOnlyList<string> DeclaredLibraryUnits(string source) => [];
+
+    /// <inheritdoc />
+    public virtual string? LibraryUnitText(string source, string name) => null;
+
     public virtual Task<IReadOnlyList<LibraryCompiler.Repositories.CompiledLibrary>?> PrepareLibrariesAsync(
         LibraryCompiler.Services.LibraryCompiler? compiler, IReadOnlyList<string> sources,
         CancellationToken cancellationToken = default) =>

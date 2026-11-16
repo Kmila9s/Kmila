@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Interpreter.Services;
+using Kmila.Frontend;
 using Kmila.Shared.Models;
 using Kmila.Shared.Models.Practice;
 using Microsoft.Extensions.Logging;
@@ -8,7 +9,7 @@ namespace Kmila.Shared.Services.Practice;
 
 /// <summary>
 /// Phase 0 grader. For each test case it (a) simulates the canonical
-/// <see cref="PracticeExercise.SolutionVhdl"/> to compute the expected
+/// <see cref="PracticeVariant.Solution"/> of the attempt's language to compute the expected
 /// waveform on first use (cached for the service lifetime), and (b)
 /// simulates the candidate's code, then diffs the listed output ports at the
 /// configured sample times.
@@ -35,24 +36,27 @@ public class PracticeEvaluator
 
     /// <summary>Grades candidate code against an exercise by diffing its simulated output against the canonical solution.</summary>
     /// <param name="exercise">The exercise, including the canonical solution and test cases.</param>
-    /// <param name="candidateCode">The student's submitted VHDL code.</param>
+    /// <param name="language">HDL language of the attempt; selects the exercise variant.</param>
+    /// <param name="candidateCode">The student's submitted code.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A verdict summarizing per-test results and overall pass/fail.</returns>
-    public async Task<PracticeAttemptVerdict> GradeAsync(PracticeExercise exercise, string candidateCode, CancellationToken ct = default)
+    public async Task<PracticeAttemptVerdict> GradeAsync(PracticeExercise exercise, HdlLanguage language, string candidateCode, CancellationToken ct = default)
     {
+        var variant = exercise.Variant(language);
         var totalSw = Stopwatch.StartNew();
         long buildMs = 0;
         var results = new List<PracticeTestResult>();
 
         // Modality-aware code transformation. For FillGap exercises only the
-        // text between -- BEGIN_EDIT and -- END_EDIT in the user's buffer is
+        // text between the BEGIN_EDIT and END_EDIT marker lines (in whatever
+        // comment syntax the language uses) in the user's buffer is
         // accepted: we splice that region into the canonical starter and
         // grade the spliced version. Anything the user typed outside the
         // markers (paste, devtools tampering, accidental edits to the locked
         // scaffold) is silently discarded — the visual lock in Monaco is a
         // hint, this is the actual enforcement.
         var graderInput = exercise.Modality == PracticeModality.FillGap
-            ? SpliceFillGap(exercise.StarterVhdl, candidateCode)
+            ? SpliceFillGap(variant.Starter, candidateCode)
             : candidateCode;
 
         await _runGate.WaitAsync(ct);
@@ -72,7 +76,7 @@ public class PracticeEvaluator
                 WaveformData? expected;
                 try
                 {
-                    expected = await GetExpectedAsync(exercise, test, ct);
+                    expected = await GetExpectedAsync(exercise, language, test, ct);
                 }
                 catch (Exception ex)
                 {
@@ -104,7 +108,7 @@ public class PracticeEvaluator
                 string? errorClass = null;
                 try
                 {
-                    actual = await SimulateAsync(graderInput, test, ct);
+                    actual = await SimulateAsync(graderInput, language, test, ct);
                 }
                 catch (BuildPhaseException bex)
                 {
@@ -162,32 +166,33 @@ public class PracticeEvaluator
         }
     }
 
-    private async Task<WaveformData?> GetExpectedAsync(PracticeExercise ex, PracticeTestCase test, CancellationToken ct)
+    private async Task<WaveformData?> GetExpectedAsync(PracticeExercise ex, HdlLanguage language, PracticeTestCase test, CancellationToken ct)
     {
-        var key = $"{ex.Id}|{test.Id}";
+        var key = $"{ex.Id}|{language.Id}|{test.Id}";
         if (_expectedCache.TryGetValue(key, out var cached)) return cached;
 
-        var produced = await SimulateAsync(ex.SolutionVhdl, test, ct);
+        var produced = await SimulateAsync(ex.Variant(language).Solution, language, test, ct);
         if (produced != null) _expectedCache[key] = produced;
         return produced;
     }
 
     /// <summary>
-    /// Writes <paramref name="vhdlSource"/> to a temp file, builds it with a
+    /// Writes <paramref name="source"/> to a temp file named after
+    /// <paramref name="language"/>'s primary extension, builds it with a
     /// fresh <see cref="ProgramBuilder"/>, runs the simulation, and returns
     /// the resulting <see cref="WaveformData"/>. Throws
     /// <see cref="BuildPhaseException"/> if the parse/build phase fails so
     /// callers can distinguish those from runtime simulation errors.
     /// </summary>
-    private async Task<WaveformData?> SimulateAsync(string vhdlSource, PracticeTestCase test, CancellationToken ct)
+    private async Task<WaveformData?> SimulateAsync(string source, HdlLanguage language, PracticeTestCase test, CancellationToken ct)
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "kmila-practice", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
-        var fileName = "design.vhd";
+        var fileName = "design" + language.PrimaryExtension;
         var filePath = Path.Combine(tempDir, fileName);
         try
         {
-            await File.WriteAllTextAsync(filePath, vhdlSource, ct);
+            await File.WriteAllTextAsync(filePath, source, ct);
 
             using var builder = new ProgramBuilder();
             var project = new Project { Name = "PracticeRun", BasePath = tempDir };
@@ -195,7 +200,7 @@ public class PracticeEvaluator
             {
                 FileName = fileName,
                 DirectoryPath = string.Empty,
-                Content = vhdlSource,
+                Content = source,
                 Project = project,
             };
 

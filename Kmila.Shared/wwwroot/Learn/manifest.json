@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "modules": [
     {
       "id": "digital-fundamentals",
@@ -8,6 +8,7 @@
       "level": "Beginner",
       "asignatura": "fundamentos-diseno-digital",
       "bimestre": 1,
+      "language": null,
       "titles": {
         "en": "Digital Fundamentals",
         "es": "Fundamentos Digitales",
@@ -151,8 +152,12 @@
             "jp": "小さな VHDL 設計を開き、2 つの入力を駆動して、波形ビューアで出力を観察する。"
           },
           "sample": {
-            "fileName": "gates.vhd",
-            "content": "-- Truth-table explorer: all six 2-input gates in one entity.\n-- Set a=0/1 and b=0/1 at different times in the Ports tab\n-- and watch how each output reacts.\n\nlibrary IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\n\nentity gates is\n  port (\n    a      : in  std_logic;\n    b      : in  std_logic;\n    o_and  : out std_logic;\n    o_or   : out std_logic;\n    o_xor  : out std_logic;\n    o_nand : out std_logic;\n    o_nor  : out std_logic;\n    o_xnor : out std_logic\n  );\nend entity gates;\n\narchitecture rtl of gates is\nbegin\n  o_and  <= a and b;\n  o_or   <= a or  b;\n  o_xor  <= a xor b;\n  o_nand <= a nand b;\n  o_nor  <= a nor  b;\n  o_xnor <= a xnor b;\nend architecture rtl;\n",
+            "variants": {
+              "vhdl": {
+                "fileName": "gates.vhd",
+                "content": "-- Truth-table explorer: all six 2-input gates in one entity.\n-- Set a=0/1 and b=0/1 at different times in the Ports tab\n-- and watch how each output reacts.\n\nlibrary IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\n\nentity gates is\n  port (\n    a      : in  std_logic;\n    b      : in  std_logic;\n    o_and  : out std_logic;\n    o_or   : out std_logic;\n    o_xor  : out std_logic;\n    o_nand : out std_logic;\n    o_nor  : out std_logic;\n    o_xnor : out std_logic\n  );\nend entity gates;\n\narchitecture rtl of gates is\nbegin\n  o_and  <= a and b;\n  o_or   <= a or  b;\n  o_xor  <= a xor b;\n  o_nand <= a nand b;\n  o_nor  <= a nor  b;\n  o_xnor <= a xnor b;\nend architecture rtl;\n"
+              }
+            },
             "config": {
               "time": 40,
               "scale": "US",
@@ -222,6 +227,7 @@
       "level": "Easy",
       "asignatura": "fundamentos-diseno-digital",
       "bimestre": 1,
+      "language": "vhdl",
       "titles": {
         "en": "VHDL basics",
         "es": "Fundamentos de VHDL",
@@ -359,8 +365,12 @@
             "jp": "小さな 2 対 1 マルチプレクサを開き、出力が選ばれた入力に追従するのを見る。"
           },
           "sample": {
-            "fileName": "mux21.vhd",
-            "content": "library IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\n\nentity mux21 is\n  port (\n    sel : in  std_logic;\n    a   : in  std_logic;\n    b   : in  std_logic;\n    y   : out std_logic\n  );\nend entity mux21;\n\narchitecture rtl of mux21 is\nbegin\n  y <= a when sel = '0' else b;\nend architecture rtl;\n",
+            "variants": {
+              "vhdl": {
+                "fileName": "mux21.vhd",
+                "content": "library IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\n\nentity mux21 is\n  port (\n    sel : in  std_logic;\n    a   : in  std_logic;\n    b   : in  std_logic;\n    y   : out std_logic\n  );\nend entity mux21;\n\narchitecture rtl of mux21 is\nbegin\n  y <= a when sel = '0' else b;\nend architecture rtl;\n"
+              }
+            },
             "config": {
               "time": 40,
               "scale": "US",
@@ -443,6 +453,7 @@
       "level": "Easy",
       "asignatura": "fundamentos-diseno-digital",
       "bimestre": 2,
+      "language": null,
       "titles": {
         "en": "Combinational logic",
         "es": "Lógica combinacional",
@@ -520,8 +531,12 @@
             "jp": "3 ビットのコードを駆動し、ワンホット出力が波形で点灯するのを見る。"
           },
           "sample": {
-            "fileName": "decoder38.vhd",
-            "content": "library IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\n\nentity decoder38 is\n  port (\n    sel : in  std_logic_vector(2 downto 0);\n    y   : out std_logic_vector(7 downto 0)\n  );\nend entity decoder38;\n\narchitecture rtl of decoder38 is\nbegin\n  with sel select\n    y <=\n      \"00000001\" when \"000\",\n      \"00000010\" when \"001\",\n      \"00000100\" when \"010\",\n      \"00001000\" when \"011\",\n      \"00010000\" when \"100\",\n      \"00100000\" when \"101\",\n      \"01000000\" when \"110\",\n      \"10000000\" when others;\nend architecture rtl;\n",
+            "variants": {
+              "vhdl": {
+                "fileName": "decoder38.vhd",
+                "content": "library IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\n\nentity decoder38 is\n  port (\n    sel : in  std_logic_vector(2 downto 0);\n    y   : out std_logic_vector(7 downto 0)\n  );\nend entity decoder38;\n\narchitecture rtl of decoder38 is\nbegin\n  with sel select\n    y <=\n      \"00000001\" when \"000\",\n      \"00000010\" when \"001\",\n      \"00000100\" when \"010\",\n      \"00001000\" when \"011\",\n      \"00010000\" when \"100\",\n      \"00100000\" when \"101\",\n      \"01000000\" when \"110\",\n      \"10000000\" when others;\nend architecture rtl;\n"
+              }
+            },
             "config": {
               "time": 80,
               "scale": "US",
@@ -608,8 +623,12 @@
             "jp": "定番 — 4 ビット 2 つを入力、4 ビットの和とキャリーアウト出力。ALU の最も単純な部品。"
           },
           "sample": {
-            "fileName": "adder4.vhd",
-            "content": "library IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\nuse IEEE.NUMERIC_STD.ALL;\n\nentity adder4 is\n  port (\n    a    : in  std_logic_vector(3 downto 0);\n    b    : in  std_logic_vector(3 downto 0);\n    cin  : in  std_logic;\n    sum  : out std_logic_vector(3 downto 0);\n    cout : out std_logic\n  );\nend entity adder4;\n\narchitecture rtl of adder4 is\n  signal t : unsigned(4 downto 0);\nbegin\n  t    <= resize(unsigned(a), 5) + resize(unsigned(b), 5) + (\"0000\" & cin);\n  sum  <= std_logic_vector(t(3 downto 0));\n  cout <= t(4);\nend architecture rtl;\n",
+            "variants": {
+              "vhdl": {
+                "fileName": "adder4.vhd",
+                "content": "library IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\nuse IEEE.NUMERIC_STD.ALL;\n\nentity adder4 is\n  port (\n    a    : in  std_logic_vector(3 downto 0);\n    b    : in  std_logic_vector(3 downto 0);\n    cin  : in  std_logic;\n    sum  : out std_logic_vector(3 downto 0);\n    cout : out std_logic\n  );\nend entity adder4;\n\narchitecture rtl of adder4 is\n  signal t : unsigned(4 downto 0);\nbegin\n  t    <= resize(unsigned(a), 5) + resize(unsigned(b), 5) + (\"0000\" & cin);\n  sum  <= std_logic_vector(t(3 downto 0));\n  cout <= t(4);\nend architecture rtl;\n"
+              }
+            },
             "config": {
               "time": 40,
               "scale": "US",
@@ -698,8 +717,12 @@
             "jp": "このトライステートバッファはバスを解放しない。タイポを見つけて動作を直そう。"
           },
           "sample": {
-            "fileName": "tristate.vhd",
-            "content": "-- BUG: this tristate buffer should output 'Z' (high impedance)\n-- when oe='0'. Right now it drives the bus either way.\n-- Fix the condition on the concurrent assignment.\n\nlibrary IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\n\nentity tristate is\n  port (\n    oe : in  std_logic;\n    d  : in  std_logic;\n    y  : out std_logic\n  );\nend entity tristate;\n\narchitecture rtl of tristate is\nbegin\n  -- Hint: the 'Z' branch fires when oe is low, not the other way around.\n  y <= d when oe = '0' else 'Z';\nend architecture rtl;\n",
+            "variants": {
+              "vhdl": {
+                "fileName": "tristate.vhd",
+                "content": "-- BUG: this tristate buffer should output 'Z' (high impedance)\n-- when oe='0'. Right now it drives the bus either way.\n-- Fix the condition on the concurrent assignment.\n\nlibrary IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\n\nentity tristate is\n  port (\n    oe : in  std_logic;\n    d  : in  std_logic;\n    y  : out std_logic\n  );\nend entity tristate;\n\narchitecture rtl of tristate is\nbegin\n  -- Hint: the 'Z' branch fires when oe is low, not the other way around.\n  y <= d when oe = '0' else 'Z';\nend architecture rtl;\n"
+              }
+            },
             "config": {
               "time": 40,
               "scale": "US",
@@ -765,6 +788,7 @@
       "level": "Intermediate",
       "asignatura": "fundamentos-diseno-digital",
       "bimestre": 3,
+      "language": null,
       "titles": {
         "en": "Sequential logic",
         "es": "Lógica secuencial",
@@ -841,8 +865,12 @@
             "jp": "最も単純な状態素子。d がクロックの立ち上がりエッジでのみ q に伝わる様子を見る。"
           },
           "sample": {
-            "fileName": "dff.vhd",
-            "content": "library IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\n\nentity dff is\n  port (\n    clk   : in  std_logic;\n    reset : in  std_logic;\n    d     : in  std_logic;\n    q     : out std_logic\n  );\nend entity dff;\n\narchitecture rtl of dff is\nbegin\n  process(clk, reset)\n  begin\n    if reset = '1' then\n      q <= '0';\n    elsif rising_edge(clk) then\n      q <= d;\n    end if;\n  end process;\nend architecture rtl;\n",
+            "variants": {
+              "vhdl": {
+                "fileName": "dff.vhd",
+                "content": "library IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\n\nentity dff is\n  port (\n    clk   : in  std_logic;\n    reset : in  std_logic;\n    d     : in  std_logic;\n    q     : out std_logic\n  );\nend entity dff;\n\narchitecture rtl of dff is\nbegin\n  process(clk, reset)\n  begin\n    if reset = '1' then\n      q <= '0';\n    elsif rising_edge(clk) then\n      q <= d;\n    end if;\n  end process;\nend architecture rtl;\n"
+              }
+            },
             "config": {
               "time": 80,
               "scale": "US",
@@ -926,8 +954,12 @@
             "jp": "シリアル入力 / パラレル出力 — UART、SPI コントローラ、デシリアライザの基礎。"
           },
           "sample": {
-            "fileName": "shift8.vhd",
-            "content": "library IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\n\nentity shift8 is\n  port (\n    clk   : in  std_logic;\n    reset : in  std_logic;\n    din   : in  std_logic;\n    q     : out std_logic_vector(7 downto 0)\n  );\nend entity shift8;\n\narchitecture rtl of shift8 is\n  signal r : std_logic_vector(7 downto 0) := (others => '0');\nbegin\n  process(clk, reset)\n  begin\n    if reset = '1' then\n      r <= (others => '0');\n    elsif rising_edge(clk) then\n      -- shift left, new bit comes in at the LSB\n      r <= r(6 downto 0) & din;\n    end if;\n  end process;\n\n  q <= r;\nend architecture rtl;\n",
+            "variants": {
+              "vhdl": {
+                "fileName": "shift8.vhd",
+                "content": "library IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\n\nentity shift8 is\n  port (\n    clk   : in  std_logic;\n    reset : in  std_logic;\n    din   : in  std_logic;\n    q     : out std_logic_vector(7 downto 0)\n  );\nend entity shift8;\n\narchitecture rtl of shift8 is\n  signal r : std_logic_vector(7 downto 0) := (others => '0');\nbegin\n  process(clk, reset)\n  begin\n    if reset = '1' then\n      r <= (others => '0');\n    elsif rising_edge(clk) then\n      -- shift left, new bit comes in at the LSB\n      r <= r(6 downto 0) & din;\n    end if;\n  end process;\n\n  q <= r;\nend architecture rtl;\n"
+              }
+            },
             "config": {
               "time": 100,
               "scale": "US",
@@ -1035,8 +1067,12 @@
             "jp": "この組合せ設計はラッチを推論してしまう。原因を見つけ、フリップフロップだけが推論されるよう修正する。"
           },
           "sample": {
-            "fileName": "latch_bug.vhd",
-            "content": "-- BUG: this process forgets to assign y in one branch,\n-- which causes the synthesizer to infer a latch.\n-- Fix it so the behavior is purely combinational\n-- (assign y on EVERY path through the process).\n\nlibrary IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\n\nentity latch_bug is\n  port (\n    enable : in  std_logic;\n    a      : in  std_logic;\n    b      : in  std_logic;\n    y      : out std_logic\n  );\nend entity latch_bug;\n\narchitecture rtl of latch_bug is\nbegin\n  process(enable, a, b)\n  begin\n    if enable = '1' then\n      y <= a and b;\n    end if;\n    -- Missing: what should y be when enable = '0'?\n  end process;\nend architecture rtl;\n",
+            "variants": {
+              "vhdl": {
+                "fileName": "latch_bug.vhd",
+                "content": "-- BUG: this process forgets to assign y in one branch,\n-- which causes the synthesizer to infer a latch.\n-- Fix it so the behavior is purely combinational\n-- (assign y on EVERY path through the process).\n\nlibrary IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\n\nentity latch_bug is\n  port (\n    enable : in  std_logic;\n    a      : in  std_logic;\n    b      : in  std_logic;\n    y      : out std_logic\n  );\nend entity latch_bug;\n\narchitecture rtl of latch_bug is\nbegin\n  process(enable, a, b)\n  begin\n    if enable = '1' then\n      y <= a and b;\n    end if;\n    -- Missing: what should y be when enable = '0'?\n  end process;\nend architecture rtl;\n"
+              }
+            },
             "config": {
               "time": 40,
               "scale": "US",
@@ -1109,6 +1145,7 @@
       "level": "Intermediate",
       "asignatura": "diseno-sistemas-digitales",
       "bimestre": 1,
+      "language": null,
       "titles": {
         "en": "Finite-state machines",
         "es": "Máquinas de estados finitos",
@@ -1184,8 +1221,12 @@
             "jp": "保持カウンタを設定可能な、赤 → 緑 → 黄を巡回する 2 プロセスの Moore FSM。"
           },
           "sample": {
-            "fileName": "traffic.vhd",
-            "content": "library IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\nuse IEEE.NUMERIC_STD.ALL;\n\nentity traffic is\n  port (\n    clk    : in  std_logic;\n    reset  : in  std_logic;\n    red    : out std_logic;\n    yellow : out std_logic;\n    green  : out std_logic\n  );\nend entity traffic;\n\narchitecture rtl of traffic is\n  type state_t is (S_RED, S_GREEN, S_YELLOW);\n  signal state, next_state : state_t;\n  signal count : unsigned(3 downto 0) := (others => '0');\n  constant HOLD : unsigned(3 downto 0) := \"0111\";  -- 7 ticks per colour\nbegin\n\n  -- state register\n  process(clk, reset)\n  begin\n    if reset = '1' then\n      state <= S_RED;\n      count <= (others => '0');\n    elsif rising_edge(clk) then\n      if count = HOLD then\n        state <= next_state;\n        count <= (others => '0');\n      else\n        count <= count + 1;\n      end if;\n    end if;\n  end process;\n\n  -- next-state logic\n  process(state)\n  begin\n    case state is\n      when S_RED    => next_state <= S_GREEN;\n      when S_GREEN  => next_state <= S_YELLOW;\n      when S_YELLOW => next_state <= S_RED;\n    end case;\n  end process;\n\n  -- Moore outputs: function of state only\n  red    <= '1' when state = S_RED    else '0';\n  green  <= '1' when state = S_GREEN  else '0';\n  yellow <= '1' when state = S_YELLOW else '0';\n\nend architecture rtl;\n",
+            "variants": {
+              "vhdl": {
+                "fileName": "traffic.vhd",
+                "content": "library IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\nuse IEEE.NUMERIC_STD.ALL;\n\nentity traffic is\n  port (\n    clk    : in  std_logic;\n    reset  : in  std_logic;\n    red    : out std_logic;\n    yellow : out std_logic;\n    green  : out std_logic\n  );\nend entity traffic;\n\narchitecture rtl of traffic is\n  type state_t is (S_RED, S_GREEN, S_YELLOW);\n  signal state, next_state : state_t;\n  signal count : unsigned(3 downto 0) := (others => '0');\n  constant HOLD : unsigned(3 downto 0) := \"0111\";  -- 7 ticks per colour\nbegin\n\n  -- state register\n  process(clk, reset)\n  begin\n    if reset = '1' then\n      state <= S_RED;\n      count <= (others => '0');\n    elsif rising_edge(clk) then\n      if count = HOLD then\n        state <= next_state;\n        count <= (others => '0');\n      else\n        count <= count + 1;\n      end if;\n    end if;\n  end process;\n\n  -- next-state logic\n  process(state)\n  begin\n    case state is\n      when S_RED    => next_state <= S_GREEN;\n      when S_GREEN  => next_state <= S_YELLOW;\n      when S_YELLOW => next_state <= S_RED;\n    end case;\n  end process;\n\n  -- Moore outputs: function of state only\n  red    <= '1' when state = S_RED    else '0';\n  green  <= '1' when state = S_GREEN  else '0';\n  yellow <= '1' when state = S_YELLOW else '0';\n\nend architecture rtl;\n"
+              }
+            },
             "config": {
               "time": 400,
               "scale": "US",
@@ -1245,8 +1286,12 @@
             "jp": "5¢ と 10¢ の硬貨を受け付け、合計が 25¢ 以上で商品を排出し、釣り銭を返す FSM を設計する。仕様は本文に。"
           },
           "sample": {
-            "fileName": "vending.vhd",
-            "content": "-- Project: vending machine\n--\n-- Your FSM must:\n--   • accept two pulses: nickel (5¢) and dime (10¢)\n--   • track the running total\n--   • assert 'dispense' for exactly one clock cycle when total >= 25¢\n--   • assert 'change' if total > 25¢ after the coin that triggered the sale\n--   • return to the idle state after dispensing\n--\n-- Acceptance criteria:\n--   nickel*5 (=25¢)   → dispense=1, change=0\n--   dime*2 + nickel*1 → dispense=1, change=0\n--   dime*3 (=30¢)     → dispense=1, change=1\n\nlibrary IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\nuse IEEE.NUMERIC_STD.ALL;\n\nentity vending is\n  port (\n    clk      : in  std_logic;\n    reset    : in  std_logic;\n    nickel   : in  std_logic;  -- 5-cent coin pulse\n    dime     : in  std_logic;  -- 10-cent coin pulse\n    dispense : out std_logic;\n    change   : out std_logic\n  );\nend entity vending;\n\narchitecture rtl of vending is\n  -- TODO(student): add a coin-total register and the dispense/change logic.\n  signal total : unsigned(5 downto 0) := (others => '0');\nbegin\n  -- starter: counts coins; does not yet dispense. That's your job.\n  process(clk, reset)\n  begin\n    if reset = '1' then\n      total <= (others => '0');\n    elsif rising_edge(clk) then\n      if    nickel = '1' then total <= total + 5;\n      elsif dime   = '1' then total <= total + 10;\n      end if;\n    end if;\n  end process;\n\n  dispense <= '0';  -- TODO\n  change   <= '0';  -- TODO\nend architecture rtl;\n",
+            "variants": {
+              "vhdl": {
+                "fileName": "vending.vhd",
+                "content": "-- Project: vending machine\n--\n-- Your FSM must:\n--   • accept two pulses: nickel (5¢) and dime (10¢)\n--   • track the running total\n--   • assert 'dispense' for exactly one clock cycle when total >= 25¢\n--   • assert 'change' if total > 25¢ after the coin that triggered the sale\n--   • return to the idle state after dispensing\n--\n-- Acceptance criteria:\n--   nickel*5 (=25¢)   → dispense=1, change=0\n--   dime*2 + nickel*1 → dispense=1, change=0\n--   dime*3 (=30¢)     → dispense=1, change=1\n\nlibrary IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\nuse IEEE.NUMERIC_STD.ALL;\n\nentity vending is\n  port (\n    clk      : in  std_logic;\n    reset    : in  std_logic;\n    nickel   : in  std_logic;  -- 5-cent coin pulse\n    dime     : in  std_logic;  -- 10-cent coin pulse\n    dispense : out std_logic;\n    change   : out std_logic\n  );\nend entity vending;\n\narchitecture rtl of vending is\n  -- TODO(student): add a coin-total register and the dispense/change logic.\n  signal total : unsigned(5 downto 0) := (others => '0');\nbegin\n  -- starter: counts coins; does not yet dispense. That's your job.\n  process(clk, reset)\n  begin\n    if reset = '1' then\n      total <= (others => '0');\n    elsif rising_edge(clk) then\n      if    nickel = '1' then total <= total + 5;\n      elsif dime   = '1' then total <= total + 10;\n      end if;\n    end if;\n  end process;\n\n  dispense <= '0';  -- TODO\n  change   <= '0';  -- TODO\nend architecture rtl;\n"
+              }
+            },
             "config": {
               "time": 200,
               "scale": "US",
@@ -1343,6 +1388,7 @@
       "level": "Intermediate",
       "asignatura": "fundamentos-diseno-digital",
       "bimestre": 1,
+      "language": null,
       "titles": {
         "en": "Concurrent thinking",
         "es": "Pensar en concurrente",
@@ -1433,6 +1479,7 @@
       "level": "Advanced",
       "asignatura": "diseno-sistemas-digitales",
       "bimestre": 2,
+      "language": null,
       "titles": {
         "en": "Memories (ROM and RAM)",
         "es": "Memorias (ROM y RAM)",
@@ -1476,8 +1523,12 @@
             "jp": "どのシンセサイザでも block RAM として認識される 16×8 ROM パターン。"
           },
           "sample": {
-            "fileName": "rom16x8.vhd",
-            "content": "library IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\nuse IEEE.NUMERIC_STD.ALL;\n\nentity rom16x8 is\n  port (\n    clk  : in  std_logic;\n    addr : in  std_logic_vector(3 downto 0);\n    data : out std_logic_vector(7 downto 0)\n  );\nend entity rom16x8;\n\narchitecture rtl of rom16x8 is\n  type rom_t is array(0 to 15) of std_logic_vector(7 downto 0);\n  -- Example contents: first 16 squares (0,1,4,9,16,25,36,49,64,81,100,121,144,169,196,225)\n  constant ROM : rom_t := (\n    x\"00\", x\"01\", x\"04\", x\"09\", x\"10\", x\"19\", x\"24\", x\"31\",\n    x\"40\", x\"51\", x\"64\", x\"79\", x\"90\", x\"A9\", x\"C4\", x\"E1\"\n  );\nbegin\n  process(clk)\n  begin\n    if rising_edge(clk) then\n      data <= ROM(to_integer(unsigned(addr)));\n    end if;\n  end process;\nend architecture rtl;\n",
+            "variants": {
+              "vhdl": {
+                "fileName": "rom16x8.vhd",
+                "content": "library IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\nuse IEEE.NUMERIC_STD.ALL;\n\nentity rom16x8 is\n  port (\n    clk  : in  std_logic;\n    addr : in  std_logic_vector(3 downto 0);\n    data : out std_logic_vector(7 downto 0)\n  );\nend entity rom16x8;\n\narchitecture rtl of rom16x8 is\n  type rom_t is array(0 to 15) of std_logic_vector(7 downto 0);\n  -- Example contents: first 16 squares (0,1,4,9,16,25,36,49,64,81,100,121,144,169,196,225)\n  constant ROM : rom_t := (\n    x\"00\", x\"01\", x\"04\", x\"09\", x\"10\", x\"19\", x\"24\", x\"31\",\n    x\"40\", x\"51\", x\"64\", x\"79\", x\"90\", x\"A9\", x\"C4\", x\"E1\"\n  );\nbegin\n  process(clk)\n  begin\n    if rising_edge(clk) then\n      data <= ROM(to_integer(unsigned(addr)));\n    end if;\n  end process;\nend architecture rtl;\n"
+              }
+            },
             "config": {
               "time": 200,
               "scale": "US",
@@ -1552,8 +1603,12 @@
             "jp": "32×8 シングルポート block RAM、「write-first」読み出しポリシー — ベンダフレンドリーなテンプレート。"
           },
           "sample": {
-            "fileName": "ram32x8.vhd",
-            "content": "library IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\nuse IEEE.NUMERIC_STD.ALL;\n\nentity ram32x8 is\n  port (\n    clk  : in  std_logic;\n    we   : in  std_logic;\n    addr : in  std_logic_vector(4 downto 0);\n    din  : in  std_logic_vector(7 downto 0);\n    dout : out std_logic_vector(7 downto 0)\n  );\nend entity ram32x8;\n\narchitecture rtl of ram32x8 is\n  type mem_t is array(0 to 31) of std_logic_vector(7 downto 0);\n  signal mem : mem_t := (others => (others => '0'));\nbegin\n  process(clk)\n  begin\n    if rising_edge(clk) then\n      if we = '1' then\n        mem(to_integer(unsigned(addr))) <= din;\n        dout <= din;                                 -- write-first read\n      else\n        dout <= mem(to_integer(unsigned(addr)));\n      end if;\n    end if;\n  end process;\nend architecture rtl;\n",
+            "variants": {
+              "vhdl": {
+                "fileName": "ram32x8.vhd",
+                "content": "library IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\nuse IEEE.NUMERIC_STD.ALL;\n\nentity ram32x8 is\n  port (\n    clk  : in  std_logic;\n    we   : in  std_logic;\n    addr : in  std_logic_vector(4 downto 0);\n    din  : in  std_logic_vector(7 downto 0);\n    dout : out std_logic_vector(7 downto 0)\n  );\nend entity ram32x8;\n\narchitecture rtl of ram32x8 is\n  type mem_t is array(0 to 31) of std_logic_vector(7 downto 0);\n  signal mem : mem_t := (others => (others => '0'));\nbegin\n  process(clk)\n  begin\n    if rising_edge(clk) then\n      if we = '1' then\n        mem(to_integer(unsigned(addr))) <= din;\n        dout <= din;                                 -- write-first read\n      else\n        dout <= mem(to_integer(unsigned(addr)));\n      end if;\n    end if;\n  end process;\nend architecture rtl;\n"
+              }
+            },
             "config": {
               "time": 200,
               "scale": "US",
@@ -1645,6 +1700,7 @@
       "level": "Advanced",
       "asignatura": "arquitectura-computadoras",
       "bimestre": 1,
+      "language": null,
       "titles": {
         "en": "Arithmetic units",
         "es": "Unidades aritméticas",
@@ -1688,8 +1744,12 @@
             "jp": "add/sub/and/or/xor/shl/shr に zero と carry フラグを加えて構築。雛形あり。"
           },
           "sample": {
-            "fileName": "alu8.vhd",
-            "content": "-- Project: 8-bit ALU\n--\n-- opcode (3 bits) chooses the operation:\n--   000 = ADD    (y = a + b)\n--   001 = SUB    (y = a - b)\n--   010 = AND\n--   011 = OR\n--   100 = XOR\n--   101 = SHL    (y = a shifted left by 1)\n--   110 = SHR    (y = a shifted right by 1)\n--   111 = PASS_A (y = a)\n--\n-- Flags:\n--   zero  = '1' when y is all zeros\n--   carry = add/sub carry-out; undefined for logic ops (drive '0')\n--\n-- TODO: fill in the case branches.\n\nlibrary IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\nuse IEEE.NUMERIC_STD.ALL;\n\nentity alu8 is\n  port (\n    op    : in  std_logic_vector(2 downto 0);\n    a     : in  std_logic_vector(7 downto 0);\n    b     : in  std_logic_vector(7 downto 0);\n    y     : out std_logic_vector(7 downto 0);\n    zero  : out std_logic;\n    carry : out std_logic\n  );\nend entity alu8;\n\narchitecture rtl of alu8 is\n  signal result : std_logic_vector(7 downto 0);\n  signal cout   : std_logic;\nbegin\n  process(op, a, b)\n    variable ext : unsigned(8 downto 0);\n  begin\n    cout   <= '0';\n    case op is\n      when \"000\" =>  -- ADD\n        ext    := resize(unsigned(a), 9) + resize(unsigned(b), 9);\n        result <= std_logic_vector(ext(7 downto 0));\n        cout   <= ext(8);\n      when \"001\" =>  -- SUB\n        ext    := resize(unsigned(a), 9) - resize(unsigned(b), 9);\n        result <= std_logic_vector(ext(7 downto 0));\n        cout   <= ext(8);\n      -- TODO: AND / OR / XOR / SHL / SHR / PASS_A\n      when others =>\n        result <= (others => '0');\n    end case;\n  end process;\n\n  y     <= result;\n  zero  <= '1' when result = x\"00\" else '0';\n  carry <= cout;\nend architecture rtl;\n",
+            "variants": {
+              "vhdl": {
+                "fileName": "alu8.vhd",
+                "content": "-- Project: 8-bit ALU\n--\n-- opcode (3 bits) chooses the operation:\n--   000 = ADD    (y = a + b)\n--   001 = SUB    (y = a - b)\n--   010 = AND\n--   011 = OR\n--   100 = XOR\n--   101 = SHL    (y = a shifted left by 1)\n--   110 = SHR    (y = a shifted right by 1)\n--   111 = PASS_A (y = a)\n--\n-- Flags:\n--   zero  = '1' when y is all zeros\n--   carry = add/sub carry-out; undefined for logic ops (drive '0')\n--\n-- TODO: fill in the case branches.\n\nlibrary IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\nuse IEEE.NUMERIC_STD.ALL;\n\nentity alu8 is\n  port (\n    op    : in  std_logic_vector(2 downto 0);\n    a     : in  std_logic_vector(7 downto 0);\n    b     : in  std_logic_vector(7 downto 0);\n    y     : out std_logic_vector(7 downto 0);\n    zero  : out std_logic;\n    carry : out std_logic\n  );\nend entity alu8;\n\narchitecture rtl of alu8 is\n  signal result : std_logic_vector(7 downto 0);\n  signal cout   : std_logic;\nbegin\n  process(op, a, b)\n    variable ext : unsigned(8 downto 0);\n  begin\n    cout   <= '0';\n    case op is\n      when \"000\" =>  -- ADD\n        ext    := resize(unsigned(a), 9) + resize(unsigned(b), 9);\n        result <= std_logic_vector(ext(7 downto 0));\n        cout   <= ext(8);\n      when \"001\" =>  -- SUB\n        ext    := resize(unsigned(a), 9) - resize(unsigned(b), 9);\n        result <= std_logic_vector(ext(7 downto 0));\n        cout   <= ext(8);\n      -- TODO: AND / OR / XOR / SHL / SHR / PASS_A\n      when others =>\n        result <= (others => '0');\n    end case;\n  end process;\n\n  y     <= result;\n  zero  <= '1' when result = x\"00\" else '0';\n  carry <= cout;\nend architecture rtl;\n"
+              }
+            },
             "config": {
               "time": 100,
               "scale": "US",
@@ -1777,6 +1837,7 @@
       "level": "Advanced",
       "asignatura": "sistemas-chip",
       "bimestre": 2,
+      "language": null,
       "titles": {
         "en": "Serial communication (UART)",
         "es": "Comunicación serial (UART)",
@@ -1820,8 +1881,12 @@
             "jp": "start/stop フレーム付き 115200 ボーの UART TX を作る。雛形は用意済み、シフトのタイミングを埋める。"
           },
           "sample": {
-            "fileName": "uart_tx.vhd",
-            "content": "-- Project: UART TX\n--\n-- Assumes a 50 MHz clock. Baud = 115200.\n-- You need to:\n--   (1) count clk cycles to generate the baud tick (≈ 434 cycles / bit)\n--   (2) when 'send' is pulsed, latch 'data' and start the frame\n--   (3) transmit: start(0), bit0..bit7 (LSB first), stop(1)\n--   (4) raise 'busy' during the whole frame\n\nlibrary IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\nuse IEEE.NUMERIC_STD.ALL;\n\nentity uart_tx is\n  port (\n    clk   : in  std_logic;\n    reset : in  std_logic;\n    send  : in  std_logic;\n    data  : in  std_logic_vector(7 downto 0);\n    tx    : out std_logic;\n    busy  : out std_logic\n  );\nend entity uart_tx;\n\narchitecture rtl of uart_tx is\n  -- idle state holds tx high; the receiver detects start by the falling edge\n  signal tx_reg : std_logic := '1';\nbegin\n  -- TODO: implement the state machine + shift register.\n  tx   <= tx_reg;\n  busy <= '0';\nend architecture rtl;\n",
+            "variants": {
+              "vhdl": {
+                "fileName": "uart_tx.vhd",
+                "content": "-- Project: UART TX\n--\n-- Assumes a 50 MHz clock. Baud = 115200.\n-- You need to:\n--   (1) count clk cycles to generate the baud tick (≈ 434 cycles / bit)\n--   (2) when 'send' is pulsed, latch 'data' and start the frame\n--   (3) transmit: start(0), bit0..bit7 (LSB first), stop(1)\n--   (4) raise 'busy' during the whole frame\n\nlibrary IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\nuse IEEE.NUMERIC_STD.ALL;\n\nentity uart_tx is\n  port (\n    clk   : in  std_logic;\n    reset : in  std_logic;\n    send  : in  std_logic;\n    data  : in  std_logic_vector(7 downto 0);\n    tx    : out std_logic;\n    busy  : out std_logic\n  );\nend entity uart_tx;\n\narchitecture rtl of uart_tx is\n  -- idle state holds tx high; the receiver detects start by the falling edge\n  signal tx_reg : std_logic := '1';\nbegin\n  -- TODO: implement the state machine + shift register.\n  tx   <= tx_reg;\n  busy <= '0';\nend architecture rtl;\n"
+              }
+            },
             "config": {
               "time": 100,
               "scale": "US",
@@ -1893,6 +1958,7 @@
       "level": "Expert",
       "asignatura": "arquitectura-computadoras",
       "bimestre": 1,
+      "language": null,
       "titles": {
         "en": "A small CPU",
         "es": "Un CPU pequeño",
@@ -1967,8 +2033,12 @@
             "jp": "16 バイト ROM、4 レジスタ、命令 LOAD、ADD、JUMP、HALT を持つ 8 ビット CPU。"
           },
           "sample": {
-            "fileName": "cpu8.vhd",
-            "content": "-- Project: single-cycle 8-bit CPU\n--\n-- ISA (4-bit opcode + 4-bit immediate):\n--   0000 iiii  LOAD  R0, #imm       -- R0 <= imm\n--   0001 iiii  ADD   R0, #imm       -- R0 <= R0 + imm\n--   0010 aaaa  JUMP  addr           -- PC <= addr\n--   1111 ----  HALT\n--\n-- Scaffold:\n--   • PC + ROM fetch\n--   • Decode + execute + writeback\n--   • 'halted' output once HALT is hit\n--\n-- Fill in the case statement for decode/execute.\n\nlibrary IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\nuse IEEE.NUMERIC_STD.ALL;\n\nentity cpu8 is\n  port (\n    clk    : in  std_logic;\n    reset  : in  std_logic;\n    r0_out : out std_logic_vector(7 downto 0);\n    halted : out std_logic\n  );\nend entity cpu8;\n\narchitecture rtl of cpu8 is\n  type rom_t is array(0 to 15) of std_logic_vector(7 downto 0);\n  constant PROGRAM : rom_t := (\n    x\"03\",  -- LOAD R0, #3\n    x\"14\",  -- ADD  R0, #4        -> R0 = 7\n    x\"12\",  -- ADD  R0, #2        -> R0 = 9\n    x\"F0\",  -- HALT\n    others => x\"00\"\n  );\n  signal pc     : unsigned(3 downto 0) := (others => '0');\n  signal r0     : unsigned(7 downto 0) := (others => '0');\n  signal halt   : std_logic            := '0';\n  signal instr  : std_logic_vector(7 downto 0);\nbegin\n  instr <= PROGRAM(to_integer(pc));\n\n  process(clk, reset)\n  begin\n    if reset = '1' then\n      pc   <= (others => '0');\n      r0   <= (others => '0');\n      halt <= '0';\n    elsif rising_edge(clk) then\n      if halt = '0' then\n        case instr(7 downto 4) is\n          when \"0000\" => r0 <= resize(unsigned(instr(3 downto 0)), 8); pc <= pc + 1;\n          when \"0001\" => r0 <= r0 + resize(unsigned(instr(3 downto 0)), 8); pc <= pc + 1;\n          when \"0010\" => pc <= unsigned(instr(3 downto 0));\n          when \"1111\" => halt <= '1';\n          when others => pc <= pc + 1;\n        end case;\n      end if;\n    end if;\n  end process;\n\n  r0_out <= std_logic_vector(r0);\n  halted <= halt;\nend architecture rtl;\n",
+            "variants": {
+              "vhdl": {
+                "fileName": "cpu8.vhd",
+                "content": "-- Project: single-cycle 8-bit CPU\n--\n-- ISA (4-bit opcode + 4-bit immediate):\n--   0000 iiii  LOAD  R0, #imm       -- R0 <= imm\n--   0001 iiii  ADD   R0, #imm       -- R0 <= R0 + imm\n--   0010 aaaa  JUMP  addr           -- PC <= addr\n--   1111 ----  HALT\n--\n-- Scaffold:\n--   • PC + ROM fetch\n--   • Decode + execute + writeback\n--   • 'halted' output once HALT is hit\n--\n-- Fill in the case statement for decode/execute.\n\nlibrary IEEE;\nuse IEEE.STD_LOGIC_1164.ALL;\nuse IEEE.NUMERIC_STD.ALL;\n\nentity cpu8 is\n  port (\n    clk    : in  std_logic;\n    reset  : in  std_logic;\n    r0_out : out std_logic_vector(7 downto 0);\n    halted : out std_logic\n  );\nend entity cpu8;\n\narchitecture rtl of cpu8 is\n  type rom_t is array(0 to 15) of std_logic_vector(7 downto 0);\n  constant PROGRAM : rom_t := (\n    x\"03\",  -- LOAD R0, #3\n    x\"14\",  -- ADD  R0, #4        -> R0 = 7\n    x\"12\",  -- ADD  R0, #2        -> R0 = 9\n    x\"F0\",  -- HALT\n    others => x\"00\"\n  );\n  signal pc     : unsigned(3 downto 0) := (others => '0');\n  signal r0     : unsigned(7 downto 0) := (others => '0');\n  signal halt   : std_logic            := '0';\n  signal instr  : std_logic_vector(7 downto 0);\nbegin\n  instr <= PROGRAM(to_integer(pc));\n\n  process(clk, reset)\n  begin\n    if reset = '1' then\n      pc   <= (others => '0');\n      r0   <= (others => '0');\n      halt <= '0';\n    elsif rising_edge(clk) then\n      if halt = '0' then\n        case instr(7 downto 4) is\n          when \"0000\" => r0 <= resize(unsigned(instr(3 downto 0)), 8); pc <= pc + 1;\n          when \"0001\" => r0 <= r0 + resize(unsigned(instr(3 downto 0)), 8); pc <= pc + 1;\n          when \"0010\" => pc <= unsigned(instr(3 downto 0));\n          when \"1111\" => halt <= '1';\n          when others => pc <= pc + 1;\n        end case;\n      end if;\n    end if;\n  end process;\n\n  r0_out <= std_logic_vector(r0);\n  halted <= halt;\nend architecture rtl;\n"
+              }
+            },
             "config": {
               "time": 200,
               "scale": "US",
@@ -2014,6 +2084,7 @@
       "level": "Beginner",
       "asignatura": "matematicas-discretas",
       "bimestre": 1,
+      "language": null,
       "titles": {
         "en": "Discrete math prerequisites",
         "es": "Prerrequisitos de matemáticas discretas",
@@ -2075,6 +2146,7 @@
       "level": "Expert",
       "asignatura": "sistemas-chip",
       "bimestre": 1,
+      "language": null,
       "titles": {
         "en": "Systems-on-Chip",
         "es": "Sistemas en Chip",
@@ -2133,6 +2205,7 @@
       "level": "Expert",
       "asignatura": "arquitectura-computadoras",
       "bimestre": 2,
+      "language": null,
       "titles": {
         "en": "Pipelining and hazards",
         "es": "Segmentación y hazards",
@@ -2191,6 +2264,7 @@
       "level": "Advanced",
       "asignatura": "diseno-sistemas-digitales",
       "bimestre": 3,
+      "language": null,
       "titles": {
         "en": "Testbenches and verification",
         "es": "Testbenches y verificación",

@@ -1,4 +1,5 @@
 using System.Runtime.ExceptionServices;
+using System.Text.RegularExpressions;
 using Interpreter.Services;
 
 namespace Kmila.Frontend;
@@ -33,6 +34,31 @@ public sealed class VhdlFrontend : HdlFrontendBase
 
     public override string? ElaborateSource(string root, string entry) =>
         SourceElaborator.ElaborateOrNull(root, entry);
+
+    private static readonly Regex PackageDeclRe =
+        new(@"(?im)^\s*package\s+([a-z_][a-z0-9_]*)\s+is\b", RegexOptions.Compiled);
+
+    /// <summary>Every <c>package X is</c> name; <c>package body X is</c> is skipped.</summary>
+    public override IReadOnlyList<string> DeclaredLibraryUnits(string source) =>
+        PackageDeclRe.Matches(source ?? string.Empty)
+            .Select(m => m.Groups[1].Value)
+            .Where(n => !string.Equals(n, "body", StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    /// <summary>
+    /// From <c>package &lt;name&gt; is</c> through its closing <c>end [&lt;name&gt;];</c>
+    /// (VHDL allows the trailing identifier or a bare <c>end;</c>).
+    /// </summary>
+    public override string? LibraryUnitText(string source, string name)
+    {
+        var escaped = Regex.Escape(name);
+        var start = Regex.Match(source, $@"(?im)^\s*package\s+{escaped}\s+is\b");
+        if (!start.Success) return null;
+        var afterStart = source.Substring(start.Index);
+        var end = Regex.Match(afterStart, $@"(?im)^\s*end(?:\s+{escaped})?\s*;");
+        return end.Success ? afterStart.Substring(0, end.Index + end.Length) : null;
+    }
 
     public override Task<IReadOnlyList<LibraryCompiler.Repositories.CompiledLibrary>?> PrepareLibrariesAsync(
         LibraryCompiler.Services.LibraryCompiler? compiler, IReadOnlyList<string> sources,

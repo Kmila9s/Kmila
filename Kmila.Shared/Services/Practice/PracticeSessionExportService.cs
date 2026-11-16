@@ -102,6 +102,7 @@ public sealed class PracticeSessionExportService
     {
         var sb = new StringBuilder();
         var title = PickLang(ex.Titles, lang) ?? ex.Id;
+        var hdl = ex.DefaultLanguage;
 
         sb.Append("# Práctica · ").Append(title).Append(" — Reporte de sesión\n\n");
         sb.Append("- **Ejercicio:** `").Append(ex.Id).Append("` · ")
@@ -244,7 +245,7 @@ public sealed class PracticeSessionExportService
             // Code
             if (req.IncludeFullCode)
             {
-                sb.Append("### Código (VHDL)\n\n```vhdl\n").Append(a.CodeSnapshot).Append("\n```\n\n");
+                sb.Append("### Código (").Append(hdl.DisplayName).Append(")\n\n```").Append(hdl.MonacoId).Append('\n').Append(a.CodeSnapshot).Append("\n```\n\n");
             }
 
             // Diff vs previous
@@ -253,7 +254,7 @@ public sealed class PracticeSessionExportService
                 var prev = attempts[i - 1];
                 var diff = LineDiff.UnifiedDiff(
                     prev.CodeSnapshot, a.CodeSnapshot,
-                    $"intento-{i:D3}.vhd", $"intento-{i + 1:D3}.vhd");
+                    $"intento-{i:D3}{hdl.PrimaryExtension}", $"intento-{i + 1:D3}{hdl.PrimaryExtension}");
                 if (diff.Length == 0)
                 {
                     sb.Append("### Diff vs intento ").Append(i).Append("\n\n_(sin cambios — código idéntico al intento anterior)_\n\n");
@@ -281,6 +282,7 @@ public sealed class PracticeSessionExportService
         string markdownReport,
         PracticeSessionExportRequest req)
     {
+        var hdl = ex.DefaultLanguage;
         using var ms = new MemoryStream();
         using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
         {
@@ -368,7 +370,7 @@ public sealed class PracticeSessionExportService
                 var ord = (i + 1).ToString("D3", CultureInfo.InvariantCulture);
                 var verd = a.Verdict.ToString().ToLowerInvariant();
                 var ts = a.SubmittedAt.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
-                WriteText(zip, $"attempts/attempt-{ord}-{ts}-{verd}.vhd", a.CodeSnapshot);
+                WriteText(zip, $"attempts/attempt-{ord}-{ts}-{verd}{hdl.PrimaryExtension}", a.CodeSnapshot);
             }
 
             // Per-pair diffs.
@@ -380,7 +382,7 @@ public sealed class PracticeSessionExportService
                     var curr = attempts[i];
                     var diff = LineDiff.UnifiedDiff(
                         prev.CodeSnapshot, curr.CodeSnapshot,
-                        $"attempt-{i:D3}.vhd", $"attempt-{i + 1:D3}.vhd");
+                        $"attempt-{i:D3}{hdl.PrimaryExtension}", $"attempt-{i + 1:D3}{hdl.PrimaryExtension}");
                     if (diff.Length == 0) diff = "(no changes — code identical to previous attempt)\n";
                     WriteText(zip, $"diffs/attempt-{i + 1:D3}-vs-{i:D3}.diff", diff);
                 }

@@ -24,7 +24,7 @@ public static class ResourcePaths
 
     /// <summary>
     /// Resolves the <c>Practice</c> folder holding the auto-graded exercise bundle
-    /// (<c>manifest.json</c> + per-exercise <c>solution/starter.vhdl</c>,
+    /// (<c>manifest.json</c> + per-exercise starter/solution per HDL language,
     /// <c>tests.json</c>, <c>statement.*.md</c>), or null if not found.
     /// </summary>
     public static string? Practice() =>

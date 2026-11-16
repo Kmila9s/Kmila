@@ -1,3 +1,5 @@
+using Kmila.Frontend;
+
 namespace Kmila.Shared.Models.Practice;
 
 /// <summary>How a Practice exercise asks the student to engage with the canonical solution.</summary>
@@ -91,7 +93,7 @@ public record PracticeTestCase(
 /// <summary>
 /// Full Practice exercise definition loaded from <c>manifest.json</c> + <c>tests.json</c>:
 /// metadata, multi-language statements, canonical solution, optional starter for
-/// FillGap/FixBug modalities, match policy for grading, and the test case list.
+/// FillGap/FixBug modalities (one <see cref="PracticeVariant"/> per HDL language), match policy for grading, and the test case list.
 /// </summary>
 public record PracticeExercise(
     string Id,
@@ -100,8 +102,7 @@ public record PracticeExercise(
     Dictionary<string, string> Titles,
     Dictionary<string, string> Summaries,
     Dictionary<string, string> Statements,
-    string SolutionVhdl,
-    string StarterVhdl,
+    HdlVariants<PracticeVariant> Variants,
     PracticeMatchKind MatchKind,
     List<string> OutputPortsToCompare,
     List<long> SampleTimesNs,
@@ -110,7 +111,27 @@ public record PracticeExercise(
     // Tiered hints (level 1 → 3), loaded from the exercise's hints.json.
     // Null/empty when the exercise has no authored hints yet — the UI hides
     // the hint section in that case.
-    List<PracticeHint>? Hints = null);
+    List<PracticeHint>? Hints = null)
+{
+    /// <summary>
+    /// Language the exercise opens in: the first supported language with a
+    /// variant. The catalog never yields an exercise without variants.
+    /// </summary>
+    public HdlLanguage DefaultLanguage => Variants.Preferred!.Value.Language;
+
+    /// <summary>The variant of <see cref="DefaultLanguage"/>.</summary>
+    public PracticeVariant DefaultVariant => Variants.Preferred!.Value.Payload;
+
+    /// <summary>The variant for <paramref name="language"/>; throws when the exercise has none.</summary>
+    public PracticeVariant Variant(HdlLanguage language) =>
+        Variants.For(language)
+        ?? throw new InvalidOperationException($"Exercise '{Id}' has no {language.DisplayName} variant.");
+}
+
+/// <summary>One language variant of a Practice exercise: the code the student starts from and the canonical solution.</summary>
+/// <param name="Starter">Source shown in the editor when the exercise opens (empty for FromZero).</param>
+/// <param name="Solution">Canonical solution; its simulation is the expected waveform.</param>
+public sealed record PracticeVariant(string Starter, string Solution);
 
 /// <summary>Outcome of grading one <see cref="PracticeTestCase"/> against the student's simulation.</summary>
 /// <param name="TestCaseId">Identifier of the test case this result belongs to.</param>

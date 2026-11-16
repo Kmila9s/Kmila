@@ -398,7 +398,8 @@
     }
 
     /// <summary>
-    /// Creates a throw-away project seeded with the lesson's sample VHDL and,
+    /// Creates a throw-away project seeded with the lesson's sample source (its
+    /// preferred language variant) and,
     /// if supplied, a companion simulation config — then navigates to the
     /// editor with the config marked as pending so Editor.LoadProjectAsync
     /// auto-applies it on arrival.
@@ -406,6 +407,8 @@
     private async Task OpenSampleAsync()
     {
         if (_openingSample || _module == null || _lesson == null || _lesson.Sample == null) return;
+        if (_lesson.Sample.ByLanguage.Preferred is not { } preferred) return;
+        var (sampleLanguage, sampleSource) = preferred;
         _openingSample = true;
         try
         {
@@ -434,8 +437,8 @@
             var file = new ProjectFile
             {
                 Project = project,
-                FileName = string.IsNullOrWhiteSpace(_lesson.Sample.FileName) ? "main.vhd" : _lesson.Sample.FileName,
-                Content = _lesson.Sample.Content ?? string.Empty
+                FileName = string.IsNullOrWhiteSpace(sampleSource.FileName) ? "main" + sampleLanguage.PrimaryExtension : sampleSource.FileName,
+                Content = sampleSource.Content ?? string.Empty
             };
             if (!await ProjectFiles.CreateAsync(file))
             {
