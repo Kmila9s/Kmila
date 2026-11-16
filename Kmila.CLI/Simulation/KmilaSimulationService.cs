@@ -30,6 +30,8 @@ public sealed class SimRunResult
     /// <summary>Raw chatter the engine wrote to <see cref="Console.Out"/> during the run
     /// (captured so it can never corrupt piped stdout output). Shown only with --verbose.</summary>
     public string EngineConsole { get; init; } = string.Empty;
+    /// <summary>Error that aborted the engine mid-run (the history is partial), or null.</summary>
+    public string? EngineError { get; init; }
 }
 
 /// <summary>Inputs for one simulation run.</summary>
@@ -146,6 +148,7 @@ public sealed class KmilaSimulationService
             SignalCount = run.History.SignalCount,
             Log = run.Log,
             EngineConsole = captured.ToString(),
+            EngineError = run.EngineError,
         };
     }
 }

@@ -839,6 +839,7 @@
         Builder.OnSimulationCompleted     += OnSimulationDataReady;
         Builder.OnSimulationProgressUpdate += OnSimulationProgressUpdate;
         Builder.OnSimulationEnded         += OnSimulationEnded;
+        Builder.OnSimulationError         += OnSimulationError;
         // Workbench: surface VHDL `report` output into the Output log.
         Builder.OnReport                  += OnSimulationReport;
         // Long-run watchdog: tell the user WHY a run stopped by itself.
@@ -1607,19 +1608,19 @@
     {
         InvokeAsync(() =>
         {
-            // Sim.SetState(Complete) / SetProgress(100) / EndRun() are now
-            // owned by SimulationCoordinator so they fire regardless of
-            // whether the Editor is mounted. Editor only handles its own
-            // UI side-effects here.
-            Log.Success(ended
-                ? Traductor.T("SIM_LOG_ENDED_OK")
-                : Traductor.T("SIM_LOG_ENDED_STOPPED"));
+            // Run state (Sim.SetState/EndRun) is owned by SimulationCoordinator;
+            // the Editor only handles its own UI here. A run the engine
+            // aborted was already logged by OnSimulationError, so it is not
+            // reported as a normal stop.
+            bool failed = Builder.LastRunError != null;
+            if (ended) Log.Success(Traductor.T("SIM_LOG_ENDED_OK"));
+            else if (!failed) Log.Info(Traductor.T("SIM_LOG_ENDED_STOPPED"));
 
-            // Phase B+ (follow-up 2): bottom dock no longer has a Replay
-            // tab; auto-focus Waveforms unconditionally. The editor card's
-            // Step Replay tab stays on Replay for post-hoc scrubbing — the
-            // user can flip back to Code from the workbench tab strip.
-            DockState.SetActive(EditorTab.Waveforms);
+            // Focus Waveforms after a run (the editor card's Step Replay tab
+            // stays on Replay for post-hoc scrubbing). A failed run opens the
+            // Output log instead, so the error is what the student sees first;
+            // the partial waveform stays one tab away.
+            DockState.SetActive(failed ? EditorTab.Output : EditorTab.Waveforms);
 
             // Phase B: drop the live-engine reference now that the run is
             // over. The post-hoc replay doc (built by OnSimulationDataReady)
@@ -1627,6 +1628,19 @@
             Replay.DetachLive();
 
             StateHasChanged();
+        });
+    }
+
+    /// <summary>
+    /// The engine aborted the run (simulator thread). Logged as an error so a
+    /// partial waveform is never mistaken for a result; the toast comes from
+    /// <see cref="SimulationCoordinator"/>, which runs even without the Editor.
+    /// </summary>
+    private void OnSimulationError(string message)
+    {
+        InvokeAsync(() =>
+        {
+            Log.Error($"{Traductor.T("SIM_LOG_ERROR")}: {message}");
         });
     }
 
@@ -2018,53 +2032,18 @@
             }
             return ok;
         }
-        catch (global::Parser.Models.ParserException pex)
-        {
-            // Known-shape parser error — synthesize an Error diagnostic from
-            // the exception's line/column/message and also push it through.
-            // Pass FileContent so the source-aware overload can rewrite the
-            // column from Token.Col (a per-line token index) to the real
-            // character offset of the offending identifier — without this,
-            // the squiggle lands on whitespace and looks like "not
-            // highlighting" to the student. See [[project_monaco_error_markers_missing]].
-            Builder.Design?.Diagnostics.Add(
-                global::Parser.Models.Diagnostic.FromException(pex, Builder.Design?.SourceText));
-            await PublishDiagnosticsAsync();
-            Sim.SetState(SimState.BuildError);
-            Log.Error($"{Traductor.T("SIM_LOG_BUILD_FAILED")}: {pex.Message}");
-            DockState.SetActive(EditorTab.Output);
-            return false;
-        }
         catch (Exception ex)
         {
-            // Any non-ParserException failure (missing entity, IO error, etc).
-            // Still push a best-effort error diagnostic to Monaco — without
-            // this, a student staring at a broken file sees nothing in the
-            // gutter and has to read the Output log.
-            //
-            // Other parser modules (e.g. Parser.Repositories.StreamerException)
-            // expose Line/Column properties without subclassing ParserException.
-            // Duck-type via reflection so we capture the right coordinates
-            // without coupling Kmila.Shared to those types.
+            // Push an error diagnostic to Monaco for every build failure —
+            // without it a student staring at a broken file sees nothing in
+            // the gutter. FromAnyException places parser errors on the
+            // offending name (the tokenizer's column is a token index, see
+            // [[project_monaco_error_markers_missing]]) and keeps the position
+            // of any other positioned failure.
             try
             {
-                int? exLine = TryReadIntProp(ex, "Line");
-                int? exCol  = TryReadIntProp(ex, "Column") ?? TryReadIntProp(ex, "Col");
-                int line  = exLine.HasValue && exLine.Value > 0 ? exLine.Value : 1;
-                int sCol  = exCol.HasValue  && exCol.Value  > 0 ? exCol.Value  : 1;
-                // Monaco renders no squiggle for zero-width ranges. Default to
-                // a 6-column highlight when we can't infer the offending token's
-                // length — wide enough to see, narrow enough to not eat the line.
-                int eCol  = sCol + 6;
-                Builder.Design?.Diagnostics.Add(new global::Parser.Models.Diagnostic
-                {
-                    Severity    = global::Parser.Models.DiagnosticSeverity.Error,
-                    Line        = line,
-                    StartColumn = sCol,
-                    EndColumn   = eCol,
-                    Code        = "BUILD-FAILED",
-                    Message     = ex.Message
-                });
+                Builder.Design?.Diagnostics.Add(global::Parser.Models.Diagnostic.FromAnyException(
+                    ex, Builder.Design?.SourceText, "BUILD-FAILED"));
                 await PublishDiagnosticsAsync();
             }
             catch { /* surfaced in Output log already */ }
@@ -2083,28 +2062,6 @@
             catch { }
             StateHasChanged();
         }
-    }
-
-    /// <summary>
-    /// Reads an int-typed property by name off any object via reflection,
-    /// returning null when absent or non-int. Used to extract Line/Column
-    /// from third-party exceptions (e.g. StreamerException) without
-    /// taking a typed dependency on the throwing module.
-    /// </summary>
-    private static int? TryReadIntProp(object obj, string name)
-    {
-        if (obj == null) return null;
-        var p = obj.GetType().GetProperty(name,
-            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
-        if (p == null) return null;
-        try
-        {
-            var v = p.GetValue(obj);
-            if (v is int i) return i;
-            if (v is long l) return (int)l;
-        }
-        catch { }
-        return null;
     }
 
     /// <summary>
@@ -4298,6 +4255,7 @@ end architecture behavioral;",
         Builder.OnSimulationCompleted     -= OnSimulationDataReady;
         Builder.OnSimulationProgressUpdate -= OnSimulationProgressUpdate;
         Builder.OnSimulationEnded         -= OnSimulationEnded;
+        Builder.OnSimulationError         -= OnSimulationError;
         Builder.OnReport                  -= OnSimulationReport;
         Builder.OnRunWatchdogStopped      -= OnRunWatchdogStopped;
         _autoCommitTimer?.Dispose();

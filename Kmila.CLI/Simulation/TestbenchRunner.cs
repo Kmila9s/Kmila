@@ -55,6 +55,7 @@ public static class TestbenchRunner
             using var builder = new ProgramBuilder();
             builder.OnReport += msg => log.Add($"[report] {msg}");
             builder.OnBuildError += (msg, det) => buildError ??= string.IsNullOrEmpty(det) ? msg : $"{msg}: {det}";
+            builder.OnSimulationError += msg => log.Add($"[engine] {msg}");
             builder.OnSimulationCompleted += h => history = h;
 
             int tick = tickResNs > 0 ? tickResNs : 10;
@@ -68,7 +69,7 @@ public static class TestbenchRunner
             history ??= builder.SimulationHistory;
             if (history == null)
                 throw new InvalidOperationException(
-                    buildError ?? "testbench produced no signal history (check the testbench/design).");
+                    buildError ?? builder.LastRunError ?? "testbench produced no signal history (check the testbench/design).");
 
             return new SimRunResult
             {
@@ -80,6 +81,7 @@ public static class TestbenchRunner
                 SignalCount = history.SignalCount,
                 Log = log,
                 EngineConsole = captured.ToString(),
+                EngineError = builder.LastRunError,
             };
         }
         finally

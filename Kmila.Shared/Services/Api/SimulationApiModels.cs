@@ -101,6 +101,11 @@ public sealed class SimulateResponse
     [JsonPropertyName("vcd")] public string Vcd { get; set; } = string.Empty;
     /// <summary>Log lines emitted during the run.</summary>
     [JsonPropertyName("log")] public List<string> Log { get; set; } = new();
+    /// <summary>
+    /// Engine error that aborted the run, or null when it completed. The VCD
+    /// then holds the partial waveform recorded before the failure.
+    /// </summary>
+    [JsonPropertyName("error")] public string? Error { get; set; }
 }
 
 /// <summary>Error payload returned when an API request fails.</summary>

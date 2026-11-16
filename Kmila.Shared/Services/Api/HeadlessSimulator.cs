@@ -72,6 +72,7 @@ public sealed class HeadlessSimulator
             SignalCount = run.History.SignalCount,
             Vcd         = vcd,
             Log         = run.Log,
+            Error       = run.EngineError,
         };
     }
 
@@ -179,6 +180,7 @@ public sealed class HeadlessSimulator
             TotalTicks = config.TotalTicks,
             DurationMs = sw.ElapsedMilliseconds,
             Log        = log,
+            EngineError = runner.Error,
         };
     }
 
@@ -252,4 +254,9 @@ public sealed class HeadlessRunResult
     public ulong TotalTicks { get; init; }
     public long DurationMs { get; init; }
     public List<string> Log { get; init; } = new();
+    /// <summary>
+    /// First error that aborted the engine mid-run, or null when the run
+    /// completed. The history then holds only what was recorded before it.
+    /// </summary>
+    public string? EngineError { get; init; }
 }
