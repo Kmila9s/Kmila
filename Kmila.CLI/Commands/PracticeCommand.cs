@@ -122,11 +122,10 @@ public static class PracticeCommand
         if (ex == null) { Console.Error.WriteLine($"kmila practice: unknown exercise '{id}'."); return 1; }
 
         var files = Directory.EnumerateFiles(dir)
-            .Where(f => f.EndsWith(".vhd", StringComparison.OrdinalIgnoreCase) ||
-                        f.EndsWith(".vhdl", StringComparison.OrdinalIgnoreCase))
+            .Where(Kmila.Frontend.HdlLanguages.IsHdlSource)
             .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
             .ToList();
-        if (files.Count == 0) { Console.Error.WriteLine("kmila practice: no .vhd/.vhdl files in directory."); return 1; }
+        if (files.Count == 0) { Console.Error.WriteLine($"kmila practice: no {Kmila.Frontend.HdlLanguages.AcceptList()} files in directory."); return 1; }
 
         bool verbose = p.Has("verbose", "v");
         int solved = 0;

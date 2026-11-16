@@ -28,7 +28,10 @@
             <div class="form-floating">
                 <select class="form-control" id="extentionType" aria-label="@Traductor.T("CREATE_FILE_TYPE_LABEL")" required @bind=_extention>
                     <option selected disabled>@Traductor.T("COMMON_CHOOSE_ONE")</option>
-                    <option value="vhdl">VHDL</option>
+                    @foreach (var language in Kmila.Frontend.HdlLanguages.Supported)
+                    {
+                        <option value="@language.PrimaryExtension.TrimStart('.')">@language.DisplayName</option>
+                    }
                     <option value="txt">TXT</option>
                     <option value="md">MD</option>
                 </select>
@@ -85,7 +88,7 @@
     // Default to VHDL: this is a VHDL learning tool, students create .vhdl
     // files 95% of the time. Saves a tap and pre-selects the matching
     // <option> in the dropdown.
-    private string _extention = "vhdl";
+    private string _extention = Kmila.Frontend.HdlLanguages.Vhdl.PrimaryExtension.TrimStart('.');
     private bool _creatingFile = false;
 
     protected override void OnInitialized()

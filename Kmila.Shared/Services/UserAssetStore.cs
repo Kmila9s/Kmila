@@ -297,9 +297,7 @@ public class UserAssetStore : IDisposable
         {
             if (!Directory.Exists(UserLibrariesDir)) return new();
             return Directory.EnumerateFiles(UserLibrariesDir, "*.*", SearchOption.TopDirectoryOnly)
-                            .Where(p =>
-                                p.EndsWith(".vhd",  StringComparison.OrdinalIgnoreCase) ||
-                                p.EndsWith(".vhdl", StringComparison.OrdinalIgnoreCase))
+                            .Where(Kmila.Frontend.HdlLanguages.Vhdl.Owns)
                             .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
                             .ToList();
         }
@@ -527,10 +525,9 @@ public class UserAssetStore : IDisposable
         var name = Path.GetFileName(input);
         foreach (var c in Path.GetInvalidFileNameChars()) name = name.Replace(c, '_');
 
-        // Accept .vhd or .vhdl; default to .vhd if the import had no
-        // recognised extension so the file lands somewhere predictable.
-        var lower = name.ToLowerInvariant();
-        if (!lower.EndsWith(".vhd", System.StringComparison.Ordinal) && !lower.EndsWith(".vhdl", System.StringComparison.Ordinal)) name += ".vhd";
+        // User libraries are VHDL packages. Keep a recognised VHDL extension;
+        // default to .vhd so an extension-less import lands somewhere predictable.
+        if (!Kmila.Frontend.HdlLanguages.Vhdl.Owns(name)) name += ".vhd";
         return name;
     }
 

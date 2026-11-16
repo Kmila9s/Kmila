@@ -410,7 +410,7 @@ public class ReplayState
             LiveDoc = new ExecutionTimelineDoc
             {
                 Code = _liveSource,
-                Language = "vhdl",
+                Language = Kmila.Frontend.HdlLanguages.Vhdl.MonacoId,
                 SignalOrder = new List<string>(),
                 Steps = new List<TimelineStep>(),
                 // Appended on the sim thread, read on the UI thread → writers

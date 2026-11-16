@@ -19,7 +19,7 @@ public sealed record HdlLanguage(
     string MonacoId,
     bool CaseSensitiveIdentifiers)
 {
-    /// <summary>The primary (preferred) extension for new files.</summary>
+    /// <summary>The preferred extension for new files (the first of <see cref="Extensions"/>).</summary>
     public string PrimaryExtension => Extensions[0];
 
     /// <summary>True when <paramref name="path"/> has one of this language's extensions.</summary>
@@ -39,7 +39,7 @@ public static class HdlLanguages
     public static readonly HdlLanguage Vhdl = new(
         Id: "vhdl",
         DisplayName: "VHDL",
-        Extensions: [".vhd", ".vhdl"],
+        Extensions: [".vhdl", ".vhd"],
         LineComment: "--",
         MonacoId: "vhdl",
         CaseSensitiveIdentifiers: false);

@@ -51,6 +51,8 @@ public sealed class SimulateRequest
     [JsonPropertyName("projectId")] public string ProjectId { get; set; } = string.Empty;
     /// <summary>Optional top-level entity to simulate; inferred when omitted.</summary>
     [JsonPropertyName("entryPoint")] public string? EntryPoint { get; set; }
+    /// <summary>Optional HDL language id (e.g. "vhdl"); inferred from the source extensions when omitted.</summary>
+    [JsonPropertyName("language")] public string? Language { get; set; }
     /// <summary>Optional target FPGA model.</summary>
     [JsonPropertyName("fpga")] public string? Fpga { get; set; }
     /// <summary>Time scale unit for the run (defaults to nanoseconds).</summary>

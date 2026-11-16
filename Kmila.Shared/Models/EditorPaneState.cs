@@ -33,7 +33,7 @@ public class OpenFileTab
     public int CursorColumn { get; set; } = 1;
 
     /// <summary>Monaco language id. Drives syntax highlighting on tab activation.</summary>
-    public string Language { get; set; } = "vhdl";
+    public string Language { get; set; } = Kmila.Frontend.HdlLanguages.Vhdl.MonacoId;
 
     /// <summary>
     /// Current markdown source for the live-preview pane. Only meaningful

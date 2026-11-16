@@ -76,7 +76,7 @@ public class ExecutionTimelineDoc
     /// pizza-recipe intro lesson).
     /// </summary>
     [JsonPropertyName("language")]
-    public string Language { get; set; } = "vhdl";
+    public string Language { get; set; } = Kmila.Frontend.HdlLanguages.Vhdl.Id;
 
     /// <summary>
     /// Ordered list of named signals to render in the side table. When non-

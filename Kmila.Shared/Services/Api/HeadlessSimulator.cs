@@ -44,8 +44,14 @@ public sealed class HeadlessSimulator
 
         int? wallMs = int.TryParse(Environment.GetEnvironmentVariable("KMILA_SIM_WALL_TIMEOUT_MS"), out int ms) && ms > 0
             ? ms : null;
+        HdlLanguage? language = null;
+        if (!string.IsNullOrWhiteSpace(request.Language))
+            language = HdlLanguages.FromId(request.Language)
+                ?? throw new NotSupportedException($"Unsupported HDL language '{request.Language}'.");
+
         var run = await RunProjectAsync(project.Path, new HeadlessRunOptions
         {
+            Language       = language,
             EntryPoint     = request.EntryPoint,
             TotalNs        = TotalNsFromRequest(request),
             TickResNs      = request.TickResNs,
@@ -105,7 +111,8 @@ public sealed class HeadlessSimulator
         Phase("load-begin");
         var sources = Directory.EnumerateFiles(projectPath, "*.*", SearchOption.AllDirectories)
                                .Where(HdlLanguages.IsHdlSource).ToList();
-        var design = Frontends.ForSources(sources).LoadDesign(new DesignRequest
+        var frontend = options.Language != null ? Frontends.For(options.Language) : Frontends.ForSources(sources);
+        var design = frontend.LoadDesign(new DesignRequest
         {
             Root      = projectPath,
             Files     = sources,
@@ -220,6 +227,8 @@ public sealed class HeadlessSimulator
 /// <summary>Inputs of <see cref="HeadlessSimulator.RunProjectAsync"/>.</summary>
 public sealed class HeadlessRunOptions
 {
+    /// <summary>HDL language to load; null infers it from the project's sources.</summary>
+    public HdlLanguage? Language { get; init; }
     /// <summary>Top entity; when set, the design is elaborated (sub-components inlined).</summary>
     public string? EntryPoint { get; init; }
     /// <summary>Simulated duration in nanoseconds.</summary>

@@ -117,7 +117,7 @@
                     {
                         <span class="editor-unsaved" title="@Traductor.T("EDITOR_UNSAVED")" aria-label="@Traductor.T("EDITOR_UNSAVED")"></span>
                     }
-                    <Icon Name="@GetFileIcon()" Class="editor-file-icon" />
+                    <Icon Name="@FileTypes.Of(_openedFile?.FileName).Icon" Class="editor-file-icon" />
                     <span class="editor-file-name @(_openedFile is null ? "editor-file-name--empty" : "")"
                           title="@(_openedFile?.FileName ?? Traductor.T("EDITOR_NO_FILE"))">
                         @(_openedFile?.FileName ?? Traductor.T("EDITOR_NO_FILE"))
@@ -563,8 +563,7 @@
     /// <summary>Project-relative paths of .vhd/.vhdl files — feeds the Workbench
     /// testbench picker in PortsPanel.</summary>
     private IEnumerable<string> _vhdlFilePaths => _projectFiles
-        .Where(f => f.FileName.EndsWith(".vhd", StringComparison.OrdinalIgnoreCase)
-                 || f.FileName.EndsWith(".vhdl", StringComparison.OrdinalIgnoreCase))
+        .Where(f => Kmila.Frontend.HdlLanguages.IsHdlSource(f.FileName))
         .Select(f => f.RelativePath)
         .OrderBy(p => p, StringComparer.OrdinalIgnoreCase);
 
@@ -643,7 +642,7 @@
 
     private string _currentLanguage
     {
-        get => _pane.ActiveTab?.Language ?? "vhdl";
+        get => _pane.ActiveTab?.Language ?? Kmila.Frontend.HdlLanguages.Vhdl.MonacoId;
         set { if (_pane.ActiveTab != null) _pane.ActiveTab.Language = value; }
     }
 
@@ -1704,15 +1703,13 @@
         // First, look for a file explicitly named "main"
         var mainFile = files.FirstOrDefault(f =>
             System.IO.Path.GetFileNameWithoutExtension(f.FileName).Equals("main", StringComparison.OrdinalIgnoreCase) &&
-            (f.FileName.EndsWith(".vhd", StringComparison.OrdinalIgnoreCase) ||
-             f.FileName.EndsWith(".vhdl", StringComparison.OrdinalIgnoreCase)));
+            Kmila.Frontend.HdlLanguages.IsHdlSource(f.FileName));
 
         if (mainFile != null) return mainFile;
 
         // Then, look for any VHDL file (they are the entry points)
         var vhdlFile = files.FirstOrDefault(f =>
-            f.FileName.EndsWith(".vhd", StringComparison.OrdinalIgnoreCase) ||
-            f.FileName.EndsWith(".vhdl", StringComparison.OrdinalIgnoreCase));
+            Kmila.Frontend.HdlLanguages.IsHdlSource(f.FileName));
 
         if (vhdlFile != null) return vhdlFile;
 
@@ -1832,8 +1829,7 @@
         _projectId <= 0
             ? System.Array.Empty<ProjectFile>()
             : _projectFiles.Where(f =>
-                  f.FileName.EndsWith(".vhd", StringComparison.OrdinalIgnoreCase) ||
-                  f.FileName.EndsWith(".vhdl", StringComparison.OrdinalIgnoreCase)).ToList();
+                  Kmila.Frontend.HdlLanguages.IsHdlSource(f.FileName)).ToList();
 
     /// <summary>User promoted a file to entry point from the RunBar inline picker:
     /// persist it as the project's entry point (same marker the Files-panel ★ uses,
@@ -1924,8 +1920,7 @@
             // explicit entry to avoid building a sub-component as if it
             // were the top.
             int vhdlCount = _projectFiles.Count(f =>
-                f.FileName.EndsWith(".vhd",  StringComparison.OrdinalIgnoreCase) ||
-                f.FileName.EndsWith(".vhdl", StringComparison.OrdinalIgnoreCase));
+                Kmila.Frontend.HdlLanguages.IsHdlSource(f.FileName));
             if (vhdlCount > 1)
             {
                 Log.Warn(Traductor.T("BUILD_NO_ENTRY_MULTIVHD_HINT"));
@@ -2674,7 +2669,7 @@
         return new()
         {
             AutomaticLayout = true,
-            Language="vhdl",
+            Language = Kmila.Frontend.HdlLanguages.Vhdl.MonacoId,
             // 14px reads well on both desktop and phone. The old 16px was
             // premised on iOS zoom-on-focus prevention, but Monaco renders
             // into a contenteditable div — iOS only zooms genuine <input>
@@ -3187,10 +3182,8 @@ end architecture behavioral;",
     {
         if (_vhdlBlockEditor == null || vhdFile == null) return;
 
-        // Don't write sidecars next to non-VHDL files (markdown, etc.).
-        var ext = Path.GetExtension(vhdFile.FileName);
-        if (!string.Equals(ext, ".vhd", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(ext, ".vhdl", StringComparison.OrdinalIgnoreCase))
+        // The block editor is VHDL-only: no sidecars next to other files.
+        if (Kmila.Frontend.HdlLanguages.FromPath(vhdFile.FileName) != Kmila.Frontend.HdlLanguages.Vhdl)
         {
             return;
         }
@@ -3711,47 +3704,6 @@ end architecture behavioral;",
 
     #endregion
 
-    #region Helper Methods
-
-    /// <summary>
-    /// Gets the appropriate icon for the current file type.
-    /// </summary>
-    private IconName GetFileIcon()
-    {
-        if (_openedFile == null) return IconName.FileEarmark;
-
-        var extension = Path.GetExtension(_openedFile.FileName)?.ToLowerInvariant();
-        return extension switch
-        {
-            ".vhd" or ".vhdl" => IconName.Cpu,
-            ".md" => IconName.FileEarmarkText,
-            ".txt" => IconName.FileEarmarkText,
-            ".json" => IconName.Braces,
-            ".xml" => IconName.Code,
-            _ => IconName.FileEarmarkCode
-        };
-    }
-
-    /// <summary>
-    /// Determines the Monaco language based on file extension.
-    /// </summary>
-    private string GetLanguageFromExtension(string fileName)
-    {
-        var extension = Path.GetExtension(fileName)?.ToLowerInvariant();
-        return extension switch
-        {
-            ".vhd" or ".vhdl" => "vhdl",
-            ".md" => "markdown",
-            ".json" => "json",
-            ".xml" => "xml",
-            ".txt" => "plaintext",
-            ".v" or ".sv" => "systemverilog",
-            _ => "plaintext"
-        };
-    }
-
-    #endregion
-
     #region Tabs
 
     /// <summary>
@@ -3779,7 +3731,7 @@ end architecture behavioral;",
             File = file,
             OriginalContent = file.Content ?? string.Empty,
             HasUnsavedChanges = false,
-            Language = GetLanguageFromExtension(file.FileName)
+            Language = FileTypes.Of(file.FileName).MonacoLanguage
         };
         if (tab.IsMarkdown) tab.MarkdownPreview = file.Content ?? string.Empty;
 
