@@ -259,6 +259,27 @@ graph TD
     Parser -- "Reads VHDL Files" --> FS
 ```
 
+### 7.3 HDL front-end (`Kmila.Frontend`, v3.0.2+)
+
+Every design load — editor build, Workbench testbench, Visual run, `/api/v1`,
+CLI (`sim`/`check`/`synth`/`flow`/`fit`), practice grading and the tests — goes
+through one language-neutral front-end. It replaced ~9 hand-copied
+"scan → elaborate → parse → pick top" pipelines that had drifted apart.
+
+| Type | Responsibility |
+|---|---|
+| `HdlLanguage` / `HdlLanguages` | Registry of supported languages (id, extensions, comment prefix, Monaco id, identifier case rule). The **only** place that answers "is this an HDL source / which language". VHDL is the only registered language today. |
+| `IHdlFrontend` / `HdlFrontendBase` | Shared workflow: engine-state reset, source discovery, parse-target and top-entity selection, elaboration fallback, per-file analysis. A language implements only `ScanCore`, `ParseCore` and the optional `ElaborateSource` / `PrepareLibrariesAsync`. |
+| `VhdlFrontend`, `VhdlLibraryPreparer` | VHDL over the existing engine (`Debugger.Repositories.Parser.FromSource`, `SourceElaborator`, `library`/`use` resolution through `LibraryCompiler`). |
+| `EngineState` | The single reset of the process-global registries, behind one gate so concurrent loads can't interleave. |
+| `Frontends` | Resolves the front-end for a language, a path, or a set of sources (mixed languages → `NotSupportedException`, HTTP 422). |
+
+Rules: designs are parsed **in memory** (no temp files, nothing written into the
+user's project); every load starts from clean, scanned registries; UI file
+presentation comes from `Services/FileTypes` (one extension → icon / variant /
+Monaco table). Adding a language = register an `HdlLanguage` + implement an
+`HdlFrontendBase`. Plan and status: `Documentacion/handoffs/HANDOFF_multi_hdl_2026-11-15.md`.
+
 ## 8. Application Diagrams
 
 ### 8.1 Use Case Diagram
@@ -1554,6 +1575,35 @@ We welcome contributions to Kmila-9s! Please check our GitHub repository for con
 Kmila-9s is released as free and open-source software. Please refer to the LICENSE file in the repository for specific licensing terms.
 
 ## 19. Changelog
+
+### Versions 3.0.1 – 3.0.4 (2026-11-15 → 2026-11-16) — multi-HDL Phase 0
+
+Prepares Kmila for N hardware description languages (VHDL remains the only
+one). Every stage was verified against a golden master: SimulatorBench 149/149
+with **byte-identical** Kmila VCDs, CLI outputs identical, PracticeValidator
+135/135.
+
+*   **v3.0.1 — dead code.** Removed unused members, components
+    (`FPGASimpleView`, `EnhancedRangeSlider`, `ResourceProgressBar` + its CSS),
+    JS functions and the `NoopSimEndNotifier`; engine repos dropped ~4.9k LOC
+    of the never-used `ParseV2` parser stack.
+*   **v3.0.2 — `Kmila.Frontend`** (see §7.3). `HeadlessSimulator.RunProjectAsync`
+    is now shared by the HTTP API and the CLI; `ProgramBuilder.Parser` became
+    `ProgramBuilder.Design` (`DesignResult`) and a testbench run no longer
+    replaces it; library/`use` resolution moved to `VhdlLibraryPreparer`;
+    `ProjectFiles.GetDiskPath` is public. Fixed: `kmila check` losing lint
+    diagnostics on a hard failure, leaked `kmila_tb_*` / `kmila_visual_*` temp
+    files, a stale `_elaborated_*` file being picked as entry, and testbench
+    runs overwriting the editor's design.
+*   **v3.0.3 — registry everywhere.** `FileTypes` replaces four diverging
+    extension maps; Editor, CreateFileModal (VHDL's preferred extension is
+    `.vhdl`), Settings, UserAssetStore, TUI and `kmila practice` use
+    `HdlLanguages`; `/api/v1/simulate` accepts an optional `language`
+    (unknown → 422).
+*   **v3.0.4 — engine gaps closed** (Parser/Interpreter): underscores in
+    bit-string literals (`x"3243_1DAC"`), elaboration of entities closed with
+    `end entity;` / `end;` and components declared without `is`. No app-side
+    code change.
 
 ### Version 1.27.0 (2026-09-23)
 
