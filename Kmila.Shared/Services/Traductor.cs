@@ -385,16 +385,6 @@ public class Traductor : IDisposable
         }
     }
 
-    /// <summary>
-    /// Gets the display name for a language code.
-    /// </summary>
-    /// <param name="languageCode">The language code.</param>
-    /// <returns>The display name of the language.</returns>
-    public static string GetLanguageDisplayName(string languageCode)
-    {
-        return AvailableLanguages.FirstOrDefault(x => x.Value == languageCode).Key ?? "Unknown";
-    }
-
     #endregion
 
     #region Private Methods

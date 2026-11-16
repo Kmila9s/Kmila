@@ -247,18 +247,6 @@ public class ProgramBuilder : IDisposable
     }
 
     /// <summary>
-    /// Requests cancellation of the current build operation.
-    /// </summary>
-    /// <remarks>
-    /// This method signals the Interpreter's ProgressReporter to cancel the current operation.
-    /// The cancellation is cooperative and may not be immediate depending on the current phase.
-    /// </remarks>
-    public void CancelBuild()
-    {
-        if (!IsBuilding) return;
-        ProgressReporter.Instance.RequestCancellation();
-    }
-    /// <summary>
     /// Builds the program from the specified project file.
     /// </summary>
     /// <param name="file">The project file to build.</param>
@@ -803,11 +791,6 @@ public class ProgramBuilder : IDisposable
     }
 
     /// <summary>
-    /// Restarts the simulation timer with the specified wait time.
-    /// </summary>
-    /// <param name="WaitTime">The wait time for the simulation.</param>
-    public void RestartTimer(TimeSpan WaitTime) => _timeMachine.Restart(WaitTime);
-    /// <summary>
     /// Pauses the simulation (SimulationRunner or TimeMachine).
     /// </summary>
     public void PauseTimer()
@@ -852,14 +835,6 @@ public class ProgramBuilder : IDisposable
     private void OnSimulationEnd(bool ended)
     {
         OnSimulationEnded?.Invoke(ended);
-    }
-    /// <summary>
-    /// Sets the simulation time (legacy TimeMachine path).
-    /// </summary>
-    /// <param name="WaitTime">The wait time for the simulation.</param>
-    public void SetSimulationTime(TimeSpan WaitTime)
-    {
-        _timeMachine.Start(WaitTime);
     }
     /// <summary>
     /// Pre-scans every <c>.vhd</c> / <c>.vhdl</c> file under the project's

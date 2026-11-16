@@ -552,19 +552,6 @@ public class WaveformData
         return str;
     }
 
-    /// <summary>
-    /// Formats a time value in nanoseconds into the most appropriate human-readable unit.
-    /// Automatically scales to ns, us, ms, or s depending on the magnitude.
-    /// </summary>
-    /// <param name="ns">The time value in nanoseconds.</param>
-    /// <returns>A formatted time string with the appropriate unit suffix (e.g., "100ns", "1.5us", "10ms", "1s").</returns>
-    private static string FormatTimeLabel(long ns)
-    {
-        if (ns < 1_000) return $"{ns}ns";
-        if (ns < 1_000_000) return $"{ns / 1_000.0:G4}us";
-        if (ns < 1_000_000_000) return $"{ns / 1_000_000.0:G4}ms";
-        return $"{ns / 1_000_000_000.0:G4}s";
-    }
 }
 
 /// <summary>

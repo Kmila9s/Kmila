@@ -4,10 +4,6 @@ namespace Kmila.Shared.Services;
 /// Platform-abstracted push-style notifier fired when a simulation
 /// finishes. Implementations:
 /// <list type="bullet">
-///   <item><see cref="NoopSimEndNotifier"/> — used as the fallback when no
-///         platform-specific notifier is registered. Useful for tests and
-///         for the maccatalyst target where push notifications aren't a
-///         priority.</item>
 ///   <item>Web — uses the browser Notification API via JS interop. Lives
 ///         in <see cref="WebSimEndNotifier"/> in this assembly.</item>
 ///   <item>MAUI — uses the native iOS UNUserNotificationCenter and Android
@@ -30,14 +26,4 @@ public interface ISimEndNotifier
     /// <param name="title">Notification title (typically the project name).</param>
     /// <param name="body">Body line (typically "Simulación completa · N señales").</param>
     Task NotifySimEndAsync(string title, string body);
-}
-
-/// <summary>No-op default — registered when no platform notifier is available.</summary>
-public class NoopSimEndNotifier : ISimEndNotifier
-{
-    /// <summary>No-op implementation that completes immediately without notifying.</summary>
-    /// <param name="title">Notification title (ignored).</param>
-    /// <param name="body">Notification body (ignored).</param>
-    /// <returns>A completed task.</returns>
-    public Task NotifySimEndAsync(string title, string body) => Task.CompletedTask;
 }

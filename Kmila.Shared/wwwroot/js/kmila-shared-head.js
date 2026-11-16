@@ -192,8 +192,6 @@
         try { kmilaEditorCmdRef.invokeMethodAsync("JsRunCommand", name); return true; }
         catch (_) { return false; /* ref disposed mid-navigation — next render re-registers */ }
     };
-    // Back-compat alias (older callers / earlier macOS Save menu item).
-    window.kmilaTriggerSave = function () { return window.kmilaRunEditorCommand("save"); };
 
     // ── macOS clipboard bridge ────────────────────────────────────────────
     // Mac Catalyst's WKWebView does NOT deliver ⌘C/⌘X/⌘V/⌘A (nor the system

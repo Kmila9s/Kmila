@@ -90,23 +90,6 @@ public class LessonCatalog
     }
 
     /// <summary>
-    /// Returns the Markdown body for a lesson in the requested language,
-    /// falling back to English when the localized file is missing. Null if
-    /// neither is available.
-    /// </summary>
-    public async Task<string?> GetLessonBodyAsync(string moduleId, string lessonId, string lang)
-    {
-        var key = $"{lang}|{moduleId}|{lessonId}";
-        if (_bodyCache.TryGetValue(key, out var cached)) return cached;
-
-        var body = await TryReadBodyAsync(moduleId, lessonId, lang)
-                ?? (lang != "en" ? await TryReadBodyAsync(moduleId, lessonId, "en") : null);
-
-        if (body != null) _bodyCache[key] = body;
-        return body;
-    }
-
-    /// <summary>
     /// Fetches the body plus metadata about which language was actually
     /// served. When <paramref name="lang"/> had no file and we fell back to
     /// English, the caller knows to surface a "translation missing" banner

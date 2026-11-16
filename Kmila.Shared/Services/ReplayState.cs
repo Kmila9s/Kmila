@@ -994,7 +994,6 @@ public class ReplayState
         OnLiveChanged?.Invoke();
     }
 
-    public void ReplayPause() { _replayRunner.Pause(); OnLiveChanged?.Invoke(); }
     public void ReplayStepForward() => _replayRunner.StepForward();
     public void ReplayStepBack() => _replayRunner.StepBack();
     public void ReplayRestart() => _replayRunner.Restart();

@@ -1388,10 +1388,6 @@
         const ws = workspaces.get(divId);
         return ws && ws.zoomBy ? ws.zoomBy(factor) : 1;
     };
-    window.kmilaBlocksZoomReset = function (divId) {
-        const ws = workspaces.get(divId);
-        return ws && ws.zoomReset ? ws.zoomReset() : 1;
-    };
 
     /* ── #6 Phase C export helpers (module scope) ─────────────────────── */
     // Curated computed-style props to inline onto the export clone (same set
@@ -1609,14 +1605,4 @@
         return ws && ws.exportAs ? ws.exportAs(format) : Promise.resolve(false);
     };
 
-    // Query whether undo / redo stacks are non-empty — toolbar buttons
-    // grey themselves out via this when there's nothing to step.
-    window.kmilaBlocksUndoState = function (divId) {
-        const ws = workspaces.get(divId);
-        if (!ws) return { undo: false, redo: false };
-        return {
-            undo: (ws._undo && ws._undo.length > 0),
-            redo: (ws._redo && ws._redo.length > 0)
-        };
-    };
 })();

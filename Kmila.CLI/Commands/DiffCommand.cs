@@ -71,7 +71,6 @@ public static class DiffCommand
                         .Concat(sb.Transitions.Select(t => t.TimeFs))
                         .Distinct().OrderBy(t => t).ToList();
 
-            bool reported = false;
             foreach (var fs in times)
             {
                 var va = sa.ValueAtFs(fs);
@@ -82,11 +81,9 @@ public static class DiffCommand
                     if (!quiet)
                         Console.Out.WriteLine(
                             $"~ {sa.Name} @ {fs / WaveModel.FsPerNs}ns: {Show(va)} != {Show(vb)}");
-                    reported = true;
                     if (!all) break;
                 }
             }
-            _ = reported;
         }
 
         if (!quiet)
