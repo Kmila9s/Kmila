@@ -34,6 +34,27 @@ flowchart LR
 
 シミュレータの仕事はハードウェアと **一致する** 結果を出すことであって、実際に並列で走らせることではない。**デルタサイクル** はそのためのトリックで、公式に時間を進める前に各信号に安定する機会を 1 度与えることで、多くのイベントを「同じシミュレーション時刻」で処理できるようにする。
 
+<!-- exec-fig:start -->
+## レストランでは：ウェイトレス 1 人 vs 5 人
+
+1 人のウェイトレスにできる最善はベル方式（**1 <svg width="1em" height="1em" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em" aria-hidden="true"><path d="M3 12H13M4.6 12C4.6 6 5.8 3 8 3S11.4 6 11.4 12M6.6 14.2A1.5 1.5 0 0 0 9.4 14.2"/></svg>**）で、シミュレータがやっているのはまさにそれ。本当の並列にはウェイトレスを増やすしかない（**5 ‖**）：
+
+<div class="lesson-figure"><iframe src="/_content/Kmila.Shared/anatomia/exec-restaurant.html?modes=bell,par&mode=bell" title="レストラン：シミュレータのウェイトレス 1 人 vs 5 人" loading="lazy"></iframe></div>
+
+両方の実行を最後まで流して、グラフの点線のゴールラインを比べよう。シミュレータはイベントを順番に並べることで、すべてが同時に起きたように **見せかける** ことしかできない。FPGA は見せかけない。ゲート 1 つ 1 つが自分のウェイトレスなので、全卓が本当に同時に対応される。
+<!-- exec-fig:end -->
+
+<!-- exec-fig2:start -->
+## ベルトコンベア vs 水道管
+
+`a` が変わると、この作業台の 2 つの半分は同じ 3 つのゲートを計算する：
+
+<div class="lesson-figure"><iframe src="/_content/Kmila.Shared/anatomia/exec-conveyor.html" title="シミュレータのコンベアと 1 本のロボットアーム vs ハードウェアの水道管" loading="lazy" style="aspect-ratio:640/340"></iframe></div>
+
+- **奥（シミュレータ）：** 変化はコンベア上の **イベントの箱** になり、1 本のロボットアームが **1 つずつ** 処理する（AND、次に OR、次に XOR）。シミュレーション時計は **0 ns** のまま。すべて同じ瞬間として数えられる。
+- **手前（ハードウェア）：** バルブ `a` を開くと水が 3 本の水路に同時に流れ、3 つのゲートが **一緒に** 点灯する。これが本当の並列だ。
+<!-- exec-fig2:end -->
+
 ## 3 つのモデルを並べて
 
 | モデル | どこに存在する | 「同じ時刻」？ |

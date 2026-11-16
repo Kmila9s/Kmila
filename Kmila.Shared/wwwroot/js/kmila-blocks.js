@@ -14,6 +14,11 @@
  *   window.kmilaBlocklyApplyTheme(divId)       -> no-op (data-bs-theme drives CSS)
  *   window.kmilaBlocklyApplyThemeAll()         -> no-op
  *
+ * Label i18n: every label / dropdown option / statement-slot label passes
+ * through `tr()`, which calls window.kmilaBlockText(text) when present
+ * (installed by kmila-exec-sim.js) to show the current app language;
+ * without the hook the original text is shown unchanged.
+ *
  * The serialized output matches Blockly's `workspaces.save()` shape exactly:
  *   { "blocks": { "blocks": [ { type, id, x, y, fields, inputs, next } ] } }
  * so BlockProgram.cs (Kmila.Shared/Services/BlockProgram.cs) keeps producing
@@ -52,6 +57,11 @@
     function defineBlock(type, def) {
         BLOCK_DEFS[type] = def;
     }
+
+    // UI-language hook: kmila-exec-sim.js installs window.kmilaBlockText(text)
+    // which maps an English label to the current app language. Missing hook or
+    // missing entry → the original text (labels that are VHDL stay as-is).
+    const tr = (text) => (typeof window.kmilaBlockText === 'function' ? window.kmilaBlockText(text) : text);
 
     // The five block "styles" — names match the kmila-block--<style> CSS modifier
     // and lean on pages.css surface tokens so dark mode comes free via
@@ -230,7 +240,7 @@
                 if (stmt.label) {
                     const lab = document.createElement('div');
                     lab.className = 'kmila-block__statement-label';
-                    lab.textContent = stmt.label;
+                    lab.textContent = tr(stmt.label);
                     el.appendChild(lab);
                 }
                 const slot = document.createElement('div');
@@ -255,7 +265,7 @@
             if (part.kind === 'label') {
                 const span = document.createElement('span');
                 span.className = 'kmila-block__field kmila-block__field--label';
-                span.textContent = part.text;
+                span.textContent = tr(part.text);
                 return span;
             }
             if (part.kind === 'dropdown') {
@@ -265,7 +275,7 @@
                 for (const [label, value] of part.options) {
                     const opt = document.createElement('option');
                     opt.value = value;
-                    opt.textContent = label;
+                    opt.textContent = tr(label);
                     select.appendChild(opt);
                 }
                 select.value = this.fields[part.name];

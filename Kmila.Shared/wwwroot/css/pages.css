@@ -13987,6 +13987,36 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     .kmila-exercise-match { animation: none; }
 }
 
+/* Phase 4 (2026-11-15): interpreter verdict extras — stars, progressive
+   hint card, live code panel (VHDL / program listing) and the restaurant
+   figure that replays the student's schedule. Same Glass-Slab grammar. */
+.kmila-exercise-stars { margin-inline-start: auto; display: inline-flex; gap: 2px; color: var(--warning, #f59e0b); font-size: 1.15rem; flex: 0 0 auto; }
+.kmila-exercise-stars .bi:not(.bi-star-fill) { color: var(--text-muted, #64748b); opacity: .55; }
+.kmila-exercise-stars-chip { color: var(--warning, #f59e0b); gap: 1px; }
+.kmila-exercise-stars-chip .bi:not(.bi-star-fill) { color: var(--text-muted, #64748b); opacity: .55; }
+.kmila-exercise-hint {
+    display: flex; align-items: flex-start; gap: var(--space-3);
+    border: 1px dashed color-mix(in srgb, var(--accent, #3c82f6) 45%, var(--border-default));
+    border-radius: var(--radius-md); padding: var(--space-3) var(--space-4);
+    background-color: color-mix(in srgb, var(--accent, #3c82f6) 5%, var(--surface-2));
+    animation: kmila-exercise-match-in 220ms ease-out;
+}
+.kmila-exercise-hint > .bi { font-size: 1.3rem; color: var(--accent, #3c82f6); flex: 0 0 auto; margin-top: 2px; }
+.kmila-exercise-hint > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.kmila-exercise-hint strong { font-size: var(--fs-sm); color: var(--accent, #3c82f6); }
+.kmila-exercise-hint span { color: var(--text-default, inherit); font-size: var(--fs-sm); }
+.kmila-exercise-code {
+    border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
+    background-color: var(--surface-2); padding: var(--space-2) var(--space-3);
+}
+.kmila-exercise-code__title { display: flex; align-items: center; gap: var(--space-2); font-size: var(--fs-xs, .75rem); letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted, #64748b); margin-bottom: var(--space-1); }
+.kmila-exercise-code .lesson-markdown { max-width: none; margin: 0; padding: 0; }
+.kmila-exercise-code .lesson-markdown pre { margin: 0; }
+.kmila-exercise-figure { margin: 0 auto; width: 100%; max-width: 760px; }
+@media (prefers-reduced-motion: reduce) {
+    .kmila-exercise-hint { animation: none; }
+}
+
 /* ── kmila-blocks engine — Glass Slabs (2026-06-28) ─────────────────────────
    DOM-based block renderer for /editor (Blocks tab) + /concepts/exercise/*.
    Blocks are frosted-glass slabs on the slate surface palette. Role-color

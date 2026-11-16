@@ -8,6 +8,31 @@
 
 以下のプレーヤーには、同じ入力 `a`、`b` から 4 つの別々の出力を駆動する 4 つの並行文がある。再生を押して、4 本の出力ラインが同じステップで一斉に更新される様子を観察しよう。
 
+<!-- exec-fig:start -->
+## レストランに戻ろう：見回り vs ベル
+
+ここでもウェイトレスは **1 人だけ** なので、これは並行であって並列ではない。卓を渡り歩く 2 つのやり方を比べよう：
+
+<div class="lesson-figure"><iframe src="/_content/Kmila.Shared/anatomia/exec-restaurant.html?modes=poll,bell&mode=poll" title="レストラン：全卓を見回るウェイトレス vs ベルに応えるウェイトレス" loading="lazy"></iframe></div>
+
+- **1 ↻** — 店内を回って、できていてもいなくても **全卓を確認する**。表示の ↻ は 1 つ 1 つが無駄足。
+- **1 <svg width="1em" height="1em" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em" aria-hidden="true"><path d="M3 12H13M4.6 12C4.6 6 5.8 3 8 3S11.4 6 11.4 12M6.6 14.2A1.5 1.5 0 0 0 9.4 14.2"/></svg>** — 先に全卓の注文を取り、あとは **ベルが鳴った卓にだけ行く**（料理ができると卓のベルが光る）。
+
+VHDL シミュレータは 2 つ目のやり方で動く。すべての文を常に実行し直すのではなく、**感度リスト** に **イベント** が届いた process だけを起こす。ベルが感度リスト、ベルが鳴ることがイベント。同じウェイトレス、同じ卓で、手順は少なく（37 秒ではなく約 23 秒、無駄な確認は 0 回）。
+<!-- exec-fig:end -->
+
+<!-- exec-fig2:start -->
+## カメラマン：写真 1 枚、フラッシュ 1 回
+
+なぜコードの順番は関係ないのか？ 1 つのデルタサイクルでは、すべての並行文が入力の同じ **写真** を読み、**フラッシュ** までは誰もほかの結果を見られないからだ。
+
+<div class="lesson-figure"><iframe src="/_content/Kmila.Shared/anatomia/exec-photo.html" title="撮影スタジオ：4 つの机が 1 枚の写真を写し、フラッシュで 4 枚のボードが一斉に切り替わる" loading="lazy" style="aspect-ratio:640/340"></iframe></div>
+
+- カメラのシャッターが切れ、写真が `a` と `b` を固定する。
+- 各机（文ごとに 1 つ）が同じ写真から自分の **下書き** を書く。
+- フラッシュがデルタの終わり。4 枚の出力ボードが **同時に** 切り替わる。
+<!-- exec-fig2:end -->
+
 ## 検証する 2 通りの方法
 
 - **頭の中で 2 行を入れ替えてみる** — 結果は変わる？ 変わらない。試してみよう。

@@ -1968,6 +1968,19 @@ function _kmilaFindExecEditor() {
     }) || null;
 }
 
+/**
+ * Mirrors the lesson player's current step into every anatomy figure on the
+ * page (iframes inside .lesson-figure). Figures that understand the message
+ * (the execution-model "stepper" figures) jump to that step; others ignore it.
+ * Same-origin iframes, but postMessage keeps the figure decoupled from the app.
+ */
+window.kmilaFigureStep = function (index) {
+    document.querySelectorAll('.lesson-figure iframe').forEach(f => {
+        try { f.contentWindow && f.contentWindow.postMessage({ kmilaFig: 'step', index: index }, '*'); }
+        catch (e) { /* figure not loaded yet — it will follow on the next step */ }
+    });
+};
+
 window.kmilaExecHighlightLines = function (lineNumbers) {
     const editor = _kmilaFindExecEditor();
     if (!editor) return;

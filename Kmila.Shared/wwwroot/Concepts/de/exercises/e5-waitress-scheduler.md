@@ -1,0 +1,3 @@
+**Dein Ziel:** eine Kellnerin, zehn Tische — programmiere ihre Routine und bediene alle so schnell wie möglich. Das Programm unten ist das **sequenzielle** (Bestellung aufnehmen, am Tisch warten, servieren). Drücke **Ausführen**: Es funktioniert, aber langsam (etwa 70 s, ein Stern).
+
+Jetzt verbessere es. Ordne die Blöcke um oder tausche sie aus und starte erneut — das Restaurant oben spielt deine Routine mit Diagramm nach. **Zwei Sterne** bei höchstens 40 s, **drei** bei höchstens 26 s. Die schnellste Routine ist genau die Arbeitsweise des VHDL-Simulators: Er geht nur dorthin, wo ein Ereignis (eine Klingel) passiert ist.

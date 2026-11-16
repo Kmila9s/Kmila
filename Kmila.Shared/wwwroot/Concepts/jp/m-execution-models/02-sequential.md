@@ -11,6 +11,16 @@
 
 プレーヤーは両方を使う小さなプロセスをたどる。行 5 を実行した瞬間に `tmp` が更新されるのに、`result` は `process` を抜けた *後* まで変わらない、という点に注目しよう。
 
+<!-- exec-fig2:start -->
+## メモ帳と郵便受け
+
+**variable** は担当者のポケットのメモ帳のようなもの。4 行目や 5 行目が実行されると新しい数字がすぐに書き込まれ、次の行はもうそれを読める。**signal** は手紙のようなもの。`result <= tmp + b` は手紙（13）を送信トレイに入れるだけで、**郵便トラック**——δ で示したデルタサイクルの終わり——が来て配達するまで、`result` は U のまま。
+
+<div class="lesson-figure"><iframe src="/_content/Kmila.Shared/anatomia/exec-mailbox.html" title="メモ帳（variable）と送信トレイのある机、郵便トラックと郵便受け（signal）" loading="lazy" style="aspect-ratio:640/340"></iframe></div>
+
+図は下のプレーヤーと同じ手順を再生する。コードの下の点をクリックするとその手順へ移動し、図をクリックすると一時停止する。
+<!-- exec-fig2:end -->
+
 ## なぜこれが大事なのか
 
 こう書いたとする：

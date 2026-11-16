@@ -18,7 +18,11 @@ public enum ConceptExerciseKind
     /// <summary>Value-block tree feeding output assignments (E3).</summary>
     Logic,
     /// <summary>Wrapper "on rising_edge" with a body (E4).</summary>
-    Clocked
+    Clocked,
+    /// <summary>One-waitress scheduling program for the restaurant world (E5).</summary>
+    Scheduler,
+    /// <summary>Variable vs signal assignments inside a process (E6).</summary>
+    Signals
 }
 
 /// <summary>
@@ -107,4 +111,48 @@ public class ExercisePayload
     /// <summary>The pre-baked timeline catalog — see <see cref="ExerciseComposition"/>.</summary>
     [JsonPropertyName("compositions")]
     public List<ExerciseComposition> Compositions { get; set; } = new();
+
+    /// <summary>
+    /// Interpreter world (<c>recipe</c>, <c>kitchen</c>, <c>logic</c>, <c>clocked</c>,
+    /// <c>restaurant</c>, <c>signals</c>) run by <c>wwwroot/js/kmila-exec-sim.js</c>. When set, ANY
+    /// block program runs and produces its own timeline + verdict; the pre-baked
+    /// <see cref="Compositions"/> are only a fallback when the interpreter is unavailable.
+    /// </summary>
+    [JsonPropertyName("world")]
+    public string? World { get; set; }
+
+    /// <summary>Optional world-specific goal parameters, passed verbatim to the interpreter.</summary>
+    [JsonPropertyName("goal")]
+    public JsonElement Goal { get; set; }
+
+    /// <summary>
+    /// Progressive hints keyed by language: hint <c>n</c> is revealed after the
+    /// student's <c>n</c>-th unsuccessful run.
+    /// </summary>
+    [JsonPropertyName("hints")]
+    public Dictionary<string, List<string>> Hints { get; set; } = new();
+}
+
+/// <summary>Result of one interpreter run (shape returned by <c>kmilaExecSim.run</c>).</summary>
+public class ExerciseSimResult
+{
+    /// <summary>True when the program meets the exercise goal.</summary>
+    [JsonPropertyName("ok")]
+    public bool Ok { get; set; }
+
+    /// <summary>0–3 stars for this run.</summary>
+    [JsonPropertyName("stars")]
+    public int Stars { get; set; }
+
+    /// <summary>Localized one-line verdict.</summary>
+    [JsonPropertyName("verdict")]
+    public Dictionary<string, string> Verdict { get; set; } = new();
+
+    /// <summary>The run as a lesson-player timeline (may be null for an empty workspace).</summary>
+    [JsonPropertyName("timeline")]
+    public ExecutionTimelineDoc? Timeline { get; set; }
+
+    /// <summary>Restaurant world only: the schedule replayed by the exec-restaurant figure.</summary>
+    [JsonPropertyName("plan")]
+    public JsonElement Plan { get; set; }
 }
