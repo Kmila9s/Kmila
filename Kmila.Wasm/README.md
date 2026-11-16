@@ -1,5 +1,7 @@
 # Kmila.Wasm — Blazor WebAssembly demo head
 
+> 📖 End-user guide: see the **[Manual de Usuario](../docs/manual/README.md)** (Spanish); the WASM demo's caveats are noted in [Cap. 1](../docs/manual/01-primeros-pasos.md) and [Cap. 18](../docs/manual/18-solucion-de-problemas.md).
+
 A **third, parallel head** next to `Kmila` (MAUI) and `Kmila.Web` (Blazor
 Server). This one is a Blazor **WebAssembly** client: the entire VHDL engine
 (parse → simulate → synthesize → SVG) runs **in the browser**, so the app can be

@@ -6,7 +6,9 @@
 **Email:** dulricht1700@alumno.ipn.mx
 **Email 2:** danielulrichtamayo@gmail.com
 **Version:** 1.62.0
-**Last Updated:** November 3, 2026
+**Last Updated:** November 15, 2026
+
+📖 **[Manual de Usuario (español)](docs/manual/README.md)** — guía paso a paso de cada sección de la app, con capturas anotadas, FAQ y solución de errores.
 
 > **Note:** the in-app version string (`APP_VERSION`), the README and the push branch are all `v1.62.0`.
 

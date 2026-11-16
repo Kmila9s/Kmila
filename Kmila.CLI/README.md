@@ -1,5 +1,7 @@
 # Kmila.CLI — terminal head
 
+> 📖 End-user guide: see the **[Manual de Usuario — Cap. 16 (CLI)](../docs/manual/16-cli-y-terminal.md)** for a friendly, Spanish walkthrough of these commands.
+
 A **fifth, parallel head** next to `Kmila` (MAUI), `Kmila.Web` (Blazor Server)
 and `Kmila.Wasm` (Blazor WebAssembly). This one has **no GUI**: it runs the
 *same* VHDL engine from the command line, for low-resource machines, headless

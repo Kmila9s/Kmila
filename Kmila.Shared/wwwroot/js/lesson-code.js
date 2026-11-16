@@ -128,3 +128,66 @@
         themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-bs-theme'] });
     } catch { /* prerender / non-DOM env — fine */ }
 })();
+
+/*
+ * kmilaLessonIndex — keyboard glue for Components/LessonIndex.razor.
+ * "I" (outside text fields) opens the index; while open: Esc closes,
+ * ↑/↓ move focus between lessons, Enter in the search box opens the first hit.
+ * bind() returns a token; unbind(token) is a no-op if a newer page re-bound
+ * in the meantime (Blazor mounts the next page before disposing the old one).
+ */
+window.kmilaLessonIndex = (function () {
+    var ref = null, token = 0;
+
+    function isTyping(t) {
+        if (!t) return false;
+        var tag = (t.tagName || '').toLowerCase();
+        return tag === 'input' || tag === 'textarea' || tag === 'select' || t.isContentEditable;
+    }
+
+    function onKey(e) {
+        if (!ref) return;
+        var panel = document.querySelector('.lesson-index');
+        if (panel) {
+            if (e.key === 'Escape') { e.preventDefault(); ref.invokeMethodAsync('JsClose'); return; }
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                var items = Array.prototype.slice.call(panel.querySelectorAll('.lesson-index__item'));
+                if (!items.length) return;
+                e.preventDefault();
+                var i = items.indexOf(document.activeElement);
+                var down = e.key === 'ArrowDown';
+                if (i < 0) i = down ? 0 : items.length - 1;
+                else i = Math.max(0, Math.min(items.length - 1, i + (down ? 1 : -1)));
+                items[i].focus();
+                items[i].scrollIntoView({ block: 'nearest' });
+                return;
+            }
+            if (e.key === 'Enter' && document.activeElement &&
+                document.activeElement.classList.contains('lesson-index__search-input')) {
+                var first = panel.querySelector('.lesson-index__item');
+                if (first) { e.preventDefault(); first.click(); }
+            }
+            return;
+        }
+        if ((e.key === 'i' || e.key === 'I') && !e.metaKey && !e.ctrlKey && !e.altKey &&
+            !isTyping(e.target) && !document.querySelector('.modal.show')) {
+            e.preventDefault();
+            ref.invokeMethodAsync('JsOpen');
+        }
+    }
+
+    document.addEventListener('keydown', onKey);
+
+    return {
+        bind: function (dotnetRef) { ref = dotnetRef; return ++token; },
+        unbind: function (t) { if (t === token) ref = null; },
+        opened: function () {
+            var p = document.querySelector('.lesson-index');
+            if (!p) return;
+            var cur = p.querySelector('.lesson-index__item--current');
+            if (cur) cur.scrollIntoView({ block: 'center' });
+            var inp = p.querySelector('.lesson-index__search-input');
+            if (inp) inp.focus({ preventScroll: true });
+        }
+    };
+})();

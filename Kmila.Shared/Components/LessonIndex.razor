@@ -1,0 +1,223 @@
+@using Kmila.Shared.Models
+@implements IAsyncDisposable
+
+@*
+    LessonIndex — searchable table of contents for Learn / Concepts.
+
+    Renders an optional trigger button plus a right-side drawer listing every
+    module and its lessons (current module expanded, current lesson
+    highlighted). Typing filters across all modules, accent- and
+    case-insensitively. Keyboard: I opens, Esc closes, ↑/↓ move, Enter opens
+    the first hit from the search box (see window.kmilaLessonIndex in
+    wwwroot/js/lesson-code.js). Global CSS only (.lesson-index*) — scoped CSS
+    does not ship in the MAUI head.
+*@
+
+@if (ShowTrigger)
+{
+    <button type="button" class="lesson-index-trigger" @onclick="() => Open()"
+            aria-haspopup="dialog" aria-expanded="@(_open ? "true" : "false")"
+            data-testid="lesson-index-trigger">
+        <Icon Name="IconName.ListOl" />
+        <span>@Traductor.T("LESSON_INDEX_OPEN")</span>
+        @if (Position is { } p)
+        {
+            <span class="lesson-index-trigger__pos" dir="ltr">@p.Index / @p.Total</span>
+        }
+        @if (EnableShortcut)
+        {
+            <kbd class="lesson-index-trigger__kbd" aria-hidden="true">I</kbd>
+        }
+    </button>
+}
+
+@if (_open)
+{
+    <div class="lesson-index-backdrop" @onclick="Close"></div>
+    <aside class="lesson-index" role="dialog" aria-modal="true" aria-labelledby="lesson-index-title"
+           data-testid="lesson-index">
+        <header class="lesson-index__header">
+            <h2 id="lesson-index-title">
+                <Icon Name="IconName.ListOl" />
+                @Traductor.T("LESSON_INDEX_TITLE")
+            </h2>
+            <button type="button" class="lesson-index__close" @onclick="Close"
+                    aria-label="@Traductor.T("COMMON_CLOSE")">
+                <Icon Name="IconName.XLg" />
+            </button>
+        </header>
+
+        <label class="learn-hero__search lesson-index__search" aria-label="@Traductor.T("LESSON_INDEX_SEARCH_PLACEHOLDER")">
+            <Icon Name="IconName.Search" />
+            <input type="search"
+                   class="form-control lesson-index__search-input"
+                   placeholder="@Traductor.T("LESSON_INDEX_SEARCH_PLACEHOLDER")"
+                   value="@_query"
+                   @oninput="OnQuery" />
+            @if (!string.IsNullOrEmpty(_query))
+            {
+                <button type="button" class="learn-hero__search-clear"
+                        @onclick="() => _query = string.Empty"
+                        aria-label="@Traductor.T("COMMON_CLEAR")">
+                    <Icon Name="IconName.XLg" />
+                </button>
+            }
+        </label>
+
+        <nav class="lesson-index__list" aria-label="@Traductor.T("LESSON_INDEX_TITLE")">
+            @{
+                var searching = !string.IsNullOrWhiteSpace(_query);
+                var needle = LessonIndexBuilder.Fold(_query?.Trim());
+                var anyShown = false;
+            }
+            @foreach (var group in Groups)
+            {
+                var items = searching
+                    ? group.Items.Where(i => LessonIndexBuilder.Fold(i.Title).Contains(needle, StringComparison.Ordinal)
+                                          || LessonIndexBuilder.Fold(i.Summary).Contains(needle, StringComparison.Ordinal)).ToList()
+                    : group.Items.ToList();
+                if (searching && items.Count == 0) continue;
+                anyShown = true;
+                var expanded = searching || _expanded.Contains(group.Id) || Groups.Count == 1;
+                var done = group.Items.Count(i => i.Completed);
+
+                <section class="lesson-index__group @(expanded ? "lesson-index__group--open" : "")">
+                    <button type="button" class="lesson-index__group-head"
+                            aria-expanded="@(expanded ? "true" : "false")"
+                            @onclick="() => Toggle(group.Id)" disabled="@searching">
+                        <Icon Name="@(expanded ? IconName.ChevronDown : IconName.ChevronRight)" Class="lesson-index__chevron" />
+                        <span class="lesson-index__group-title">@group.Title</span>
+                        <span class="lesson-index__group-count" dir="ltr">
+                            @(searching ? $"{items.Count}" : $"{done}/{group.Items.Count}")
+                        </span>
+                    </button>
+
+                    @if (expanded)
+                    {
+                        <ol class="lesson-index__items">
+                            @foreach (var item in items)
+                            {
+                                var summaryHit = searching && !LessonIndexBuilder.Fold(item.Title).Contains(needle, StringComparison.Ordinal);
+                                <li>
+                                    <a href="@item.Href"
+                                       class="lesson-index__item @(item.IsCurrent ? "lesson-index__item--current" : "") @(item.Completed ? "lesson-index__item--done" : "")"
+                                       aria-current="@(item.IsCurrent ? "page" : null)"
+                                       @onclick="Close">
+                                        <span class="lesson-index__num" dir="ltr">@item.Number.ToString("00")</span>
+                                        <span class="lesson-index__body">
+                                            <span class="lesson-index__title">@Highlight(item.Title, needle)</span>
+                                            @if (summaryHit)
+                                            {
+                                                <small class="lesson-index__summary">@Highlight(item.Summary, needle)</small>
+                                            }
+                                        </span>
+                                        @if (item.Completed)
+                                        {
+                                            <Icon Name="IconName.CheckCircleFill" Class="lesson-index__check" />
+                                        }
+                                    </a>
+                                </li>
+                            }
+                        </ol>
+                    }
+                </section>
+            }
+            @if (!anyShown)
+            {
+                <p class="lesson-index__empty">
+                    <Icon Name="IconName.Search" />
+                    @string.Format(Traductor.T("LESSON_INDEX_EMPTY"), _query)
+                </p>
+            }
+        </nav>
+    </aside>
+}
+
+@code {
+    /// <summary>Modules and lessons to list.</summary>
+    [Parameter] public IReadOnlyList<LessonIndexGroup> Groups { get; set; } = Array.Empty<LessonIndexGroup>();
+
+    /// <summary>Render the built-in trigger button. False when the host opens it via <see cref="Open"/>.</summary>
+    [Parameter] public bool ShowTrigger { get; set; } = true;
+
+    /// <summary>Bind the global "I" shortcut while this component is mounted.</summary>
+    [Parameter] public bool EnableShortcut { get; set; } = true;
+
+    private bool _open;
+    private string _query = string.Empty;
+    private readonly HashSet<string> _expanded = new(StringComparer.OrdinalIgnoreCase);
+    private bool _focusOnRender;
+    private DotNetObjectReference<LessonIndex>? _selfRef;
+    private int _bindToken;
+
+    /// <summary>"n / total" for the current lesson inside its module, if any.</summary>
+    public (int Index, int Total)? Position => LessonIndexBuilder.PositionOf(Groups);
+
+    /// <summary>Opens the drawer; expands <paramref name="groupId"/> or the current lesson's module.</summary>
+    public void Open(string? groupId = null)
+    {
+        _expanded.Clear();
+        var target = groupId ?? Groups.FirstOrDefault(g => g.Items.Any(i => i.IsCurrent))?.Id;
+        if (target != null) _expanded.Add(target);
+        _query = string.Empty;
+        _open = true;
+        _focusOnRender = true;
+        StateHasChanged();
+    }
+
+    /// <summary>Closes the drawer.</summary>
+    public void Close()
+    {
+        if (!_open) return;
+        _open = false;
+        StateHasChanged();
+    }
+
+    [JSInvokable] public void JsOpen() => Open();
+    [JSInvokable] public void JsClose() => Close();
+
+    private void Toggle(string id)
+    {
+        if (!_expanded.Remove(id)) _expanded.Add(id);
+    }
+
+    private void OnQuery(ChangeEventArgs e) => _query = e.Value?.ToString() ?? string.Empty;
+
+    /// <summary>Wraps the first accent-insensitive match of <paramref name="needle"/> in &lt;mark&gt;.</summary>
+    private static RenderFragment Highlight(string text, string needle) => builder =>
+    {
+        var idx = needle.Length == 0 ? -1 : LessonIndexBuilder.Fold(text).IndexOf(needle, StringComparison.Ordinal);
+        if (idx < 0) { builder.AddContent(0, text); return; }
+        builder.AddContent(1, text[..idx]);
+        builder.OpenElement(2, "mark");
+        builder.AddContent(3, text.Substring(idx, needle.Length));
+        builder.CloseElement();
+        builder.AddContent(4, text[(idx + needle.Length)..]);
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && EnableShortcut)
+        {
+            _selfRef = DotNetObjectReference.Create(this);
+            try { _bindToken = await JS.InvokeAsync<int>("kmilaLessonIndex.bind", _selfRef); }
+            catch { /* prerender / script not loaded — shortcut just won't work */ }
+        }
+        if (_focusOnRender && _open)
+        {
+            _focusOnRender = false;
+            try { await JS.InvokeVoidAsync("kmilaLessonIndex.opened"); }
+            catch { /* fine */ }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_selfRef != null)
+        {
+            try { await JS.InvokeVoidAsync("kmilaLessonIndex.unbind", _bindToken); }
+            catch { /* circuit gone — fine */ }
+            _selfRef.Dispose();
+        }
+    }
+}
