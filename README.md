@@ -1614,6 +1614,11 @@ with **byte-identical** Kmila VCDs, CLI outputs identical, PracticeValidator
     libraries are listed in `libraryFiles` (no more `pkg.vhd` name sniffing);
     package-name detection/slicing moved to `IHdlFrontend`. Session exports
     name attempts with the language's primary extension (`.vhdl`).
+*   **v3.0.6 — lint without false positives** (Debugger GAP-LINT-001):
+    `kmila check` and the editor's markers no longer warn on multi-line
+    statements or nested `end if`/`end process`. `VhdlLibraryPreparer`,
+    `VhdlBlockBuilder` and the replay services strip comments through
+    `Parser.Models.VhdlText` (a `--` inside a string is no longer a comment).
 
 ### Version 1.27.0 (2026-09-23)
 

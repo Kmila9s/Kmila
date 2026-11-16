@@ -3,6 +3,7 @@ using Interpreter.Models;
 using Interpreter.Services;
 using LibraryCompiler.Repositories;
 using LibraryCompiler.Services;
+using Parser.Models;
 
 namespace Kmila.Frontend;
 
@@ -23,9 +24,6 @@ internal static class VhdlLibraryPreparer
     private static readonly Regex LibraryDeclRe = new(
         @"(?im)^\s*library\s+([a-z_][a-z0-9_]*(?:\s*,\s*[a-z_][a-z0-9_]*)*)\s*;",
         RegexOptions.Compiled);
-
-    /// <summary>Line comments are stripped before scanning (matches the LibraryBuilder rule).</summary>
-    private static readonly Regex LineCommentRe = new(@"--[^\r\n]*", RegexOptions.Compiled);
 
     /// <summary>
     /// Compiles every library the sources import. Returns null when no library
@@ -52,7 +50,7 @@ internal static class VhdlLibraryPreparer
             try { source = File.ReadAllText(path); }
             catch { continue; }   // unreadable sibling — the parser surfaces it later
 
-            source = LineCommentRe.Replace(source, string.Empty);
+            source = VhdlText.StripLineComments(source);
 
             foreach (Match m in LibraryDeclRe.Matches(source))
                 foreach (var raw in m.Groups[1].Value.Split(','))
