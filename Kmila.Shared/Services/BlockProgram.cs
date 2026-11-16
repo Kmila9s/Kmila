@@ -11,6 +11,13 @@ namespace Kmila.Shared.Services;
 /// program shape, then look it up in the exercise's pre-baked catalog.
 /// If no match, surface a friendly "not pre-baked yet" outcome so the
 /// student doesn't hit a dead end.
+/// <para>
+/// Since 2026-11-15 this is the <b>fallback</b> path: exercises whose payload
+/// declares a <see cref="Kmila.Shared.Models.ExercisePayload.World"/> run through
+/// the interpreter in <c>wwwroot/js/kmila-exec-sim.js</c>, which executes any
+/// arrangement of blocks. The fingerprint catalog is used only when that
+/// script isn't loaded on the host.
+/// </para>
 /// </summary>
 /// <remarks>
 /// The fingerprint walks the Blockly serialization (produced by

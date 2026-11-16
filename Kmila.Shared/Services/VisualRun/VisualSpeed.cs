@@ -40,32 +40,6 @@ public static class VisualSpeedExtensions
         _ => "1x",
     };
 
-    /// <summary>
-    /// Maps a slider index (0..3 ↔ Half/Normal/Fast/Free) to a speed preset.
-    /// Out-of-range values collapse to <see cref="VisualSpeed.Normal"/> — never throws.
-    /// </summary>
-    /// <param name="i">The slider index.</param>
-    /// <returns>The corresponding speed preset.</returns>
-    public static VisualSpeed FromSliderIndex(int i) => i switch
-    {
-        0 => VisualSpeed.Half,
-        1 => VisualSpeed.Normal,
-        2 => VisualSpeed.Fast,
-        3 => VisualSpeed.Free,
-        _ => VisualSpeed.Normal,
-    };
-
-    /// <summary>Maps a speed preset to its slider index (0..3).</summary>
-    /// <param name="s">The speed preset.</param>
-    /// <returns>The slider index.</returns>
-    public static int ToSliderIndex(this VisualSpeed s) => s switch
-    {
-        VisualSpeed.Half => 0,
-        VisualSpeed.Normal => 1,
-        VisualSpeed.Fast => 2,
-        VisualSpeed.Free => 3,
-        _ => 1,
-    };
 }
 
 // Continuous full-range speed scale for the Visual Run playback slider.

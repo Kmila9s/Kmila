@@ -17,10 +17,16 @@
 
 <section class="lesson-page">
     <div class="lesson-page__chrome">
-        <a href="/concepts" class="lesson-crumb">
-            <Icon Name="IconName.ArrowLeft" />
-            <span>@Traductor.T("CONCEPTS_ALL_CONCEPTS")</span>
-        </a>
+        <div class="lesson-page__crumb-row">
+            <a href="/concepts" class="lesson-crumb">
+                <Icon Name="IconName.ArrowLeft" />
+                <span>@Traductor.T("CONCEPTS_ALL_CONCEPTS")</span>
+            </a>
+            @if (_indexGroups.Count > 0)
+            {
+                <LessonIndex @ref="_index" Groups="_indexGroups" />
+            }
+        </div>
 
         @if (_module != null && _concept != null)
         {
@@ -139,6 +145,15 @@
                     <span class="lesson-nav-btn lesson-nav-btn--disabled" aria-hidden="true"></span>
                 }
             </div>
+
+            @if (LessonIndexBuilder.PositionOf(_indexGroups) is { } pos)
+            {
+                <button type="button" class="lesson-footer__index" @onclick="() => _index?.Open()">
+                    <Icon Name="IconName.ListOl" />
+                    <span>@Traductor.T("LESSON_INDEX_JUMP")</span>
+                    <span class="lesson-footer__index-pos" dir="ltr">@pos.Index / @pos.Total</span>
+                </button>
+            }
         </footer>
     }
 </section>
@@ -158,6 +173,8 @@
     private bool _loading = true;
     private string _lang = "en";
     private bool _fellBackToEnglish;
+    private LessonIndex? _index;
+    private List<LessonIndexGroup> _indexGroups = new();
 
     protected override void OnInitialized()
     {
@@ -211,6 +228,7 @@
         _body = bodyInfo.Body;
         _fellBackToEnglish = bodyInfo.FellBack;
         _completed = await Progress.IsCompletedAsync(_module.Id, _concept.Id);
+        await RebuildIndexAsync();
 
         // Only load a timeline when the lesson advertises one. Reading-kind
         // lessons skip the network/file round-trip and render markdown-only.
@@ -231,6 +249,19 @@
         else
             await Progress.MarkCompletedAsync(_module.Id, _concept.Id);
         _completed = !_completed;
+        await RebuildIndexAsync();
+    }
+
+    /// <summary>
+    /// Rebuilds the lesson-index groups from the (cached) manifest. Progress is
+    /// already hydrated by the IsCompletedAsync call above, so the cached
+    /// lookup is accurate.
+    /// </summary>
+    private async Task RebuildIndexAsync()
+    {
+        var manifest = await Catalog.GetManifestAsync();
+        _indexGroups = LessonIndexBuilder.ForConcepts(
+            manifest, _lang, Progress.IsCompletedCached, _module?.Id, _concept?.Id);
     }
 
     /// <summary>
@@ -243,6 +274,7 @@
         if (_module == null || _concept == null || _completed) return;
         await Progress.MarkCompletedAsync(_module.Id, _concept.Id);
         _completed = true;
+        await RebuildIndexAsync();
         StateHasChanged();
     }
 

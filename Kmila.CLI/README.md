@@ -1,5 +1,7 @@
 # Kmila.CLI — terminal head
 
+> 📖 End-user guide: see the **[Manual de Usuario — Cap. 16 (CLI)](../docs/manual/16-cli-y-terminal.md)** for a friendly, Spanish walkthrough of these commands.
+
 A **fifth, parallel head** next to `Kmila` (MAUI), `Kmila.Web` (Blazor Server)
 and `Kmila.Wasm` (Blazor WebAssembly). This one has **no GUI**: it runs the
 *same* VHDL engine from the command line, for low-resource machines, headless
@@ -57,10 +59,11 @@ Every command takes `--help`. The default UI/message language is **Spanish**
 
 ## 1. `kmila sim` — non-interactive
 
-Runs one simulation and writes the result in the format you choose. The engine
-pipeline is the same one `Kmila.Shared/Services/Api/HeadlessSimulator.cs` uses
-(scan → elaborate → parse → stimulus → run), mirrored inside the CLI so it can
-keep the engine's live `SignalHistory` and emit **every** output format from it.
+Runs one simulation and writes the result in the format you choose. Since
+v3.0.2 the CLI calls the very same code as the HTTP API —
+`HeadlessSimulator.RunProjectAsync` over the `Kmila.Frontend` HDL front-end
+(scan → elaborate → parse → stimulus → run) — and keeps the engine's live
+`SignalHistory` so it can emit **every** output format from it.
 
 ```
 kmila sim --top-file <file.vhdl> [options]
@@ -385,9 +388,11 @@ Prints a shell completion script for the command set, e.g.
 
 - References `Kmila.Shared` verbatim (the sanctioned variant pattern); the engine
   libs come along transitively.
-- **Headless engine**: `KmilaSimulationService` mirrors the proven pipeline in
-  `HeadlessSimulator` but surfaces the live `SignalHistory`, which is what makes
-  the non-VCD formats and the live TUI viewer possible.
+- **Headless engine**: `KmilaSimulationService` stages the sources in a sandbox,
+  captures engine console output and delegates to `HeadlessSimulator.RunProjectAsync`
+  (no second copy of the pipeline); the live `SignalHistory` it returns is what
+  makes the non-VCD formats and the live TUI viewer possible. `DesignLoader`
+  (synth/flow/fit) and `check` load designs through `Kmila.Frontend` too.
 - **Simulation building blocks** reused directly: `SandboxProjectStore`,
   `SimulationRunner`, `SignalHistory`, `StimulusBuilder.BuildConfigNs`,
   `SourceElaborator`, `EntityRegistry` / `PackageSubtypeScanner`,
@@ -434,8 +439,8 @@ Kmila.CLI/
     ServeCommand.cs               `serve`  — HTTP API host launcher
     CompletionCommand.cs          `completion` — shell scripts
   Simulation/
-    KmilaSimulationService.cs     The headless pipeline; returns SignalHistory + metadata
-    DesignLoader.cs               Parse/elaborate a design to its Entity (for synth/flow/fit)
+    KmilaSimulationService.cs     Sandbox + console capture over HeadlessSimulator.RunProjectAsync
+    DesignLoader.cs               Load a design through Kmila.Frontend to its Entity (synth/flow/fit)
     TestbenchRunner.cs            Run a VHDL testbench via ProgramBuilder
     AssertionChecker.cs           Evaluate sig@time=value assertions
     PracticeContent.cs            File-reader delegate over the bundled Practice/

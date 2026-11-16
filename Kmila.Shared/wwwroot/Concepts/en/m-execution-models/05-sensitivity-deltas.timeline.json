@@ -1,12 +1,22 @@
 {
-  "code": "-- The classic 'I read the OLD value' trap.\nprocess(a, b)\nbegin\n  out1 <= a;            -- line 3: schedule out1\n  out2 <= b and out1;   -- line 4: reads OLD out1\nend process;",
+  "code": "process(a, b)\nbegin\n  out1 <= a;            -- line 3: schedule out1\n  out2 <= b and out1;   -- line 4: reads OLD out1\nend process;",
   "language": "vhdl",
-  "signalOrder": ["a", "b", "out1", "out2"],
+  "signalOrder": [
+    "a",
+    "b",
+    "out1",
+    "out2"
+  ],
   "steps": [
     {
       "t": 0,
       "highlightLines": [],
-      "signals": { "a": "0", "b": "0", "out1": "U", "out2": "U" },
+      "signals": {
+        "a": "0",
+        "b": "0",
+        "out1": "U",
+        "out2": "U"
+      },
       "note": {
         "en": "Cold start. out1 and out2 are U.",
         "es": "Inicio en frío. out1 y out2 están en U.",
@@ -19,8 +29,15 @@
     },
     {
       "t": 1,
-      "highlightLines": [1],
-      "signals": { "a": "1", "b": "1", "out1": "U", "out2": "U" },
+      "highlightLines": [
+        1
+      ],
+      "signals": {
+        "a": "1",
+        "b": "1",
+        "out1": "U",
+        "out2": "U"
+      },
       "note": {
         "en": "Inputs change: a=1, b=1. Both are in the sensitivity list (a, b) so the process wakes.",
         "es": "Las entradas cambian: a=1, b=1. Ambas están en la lista de sensibilidad (a, b), así que el proceso se despierta.",
@@ -33,8 +50,15 @@
     },
     {
       "t": 2,
-      "highlightLines": [3],
-      "signals": { "a": "1", "b": "1", "out1": "U", "out2": "U" },
+      "highlightLines": [
+        3
+      ],
+      "signals": {
+        "a": "1",
+        "b": "1",
+        "out1": "U",
+        "out2": "U"
+      },
       "note": {
         "en": "Line 3: schedule out1 <= a (= 1). Transaction posted, but out1 still reads as U during this delta.",
         "es": "Línea 3: programar out1 <= a (= 1). La transacción queda registrada, pero out1 sigue leyéndose como U durante este delta.",
@@ -47,8 +71,15 @@
     },
     {
       "t": 3,
-      "highlightLines": [4],
-      "signals": { "a": "1", "b": "1", "out1": "U", "out2": "U" },
+      "highlightLines": [
+        4
+      ],
+      "signals": {
+        "a": "1",
+        "b": "1",
+        "out1": "U",
+        "out2": "U"
+      },
       "note": {
         "en": "Line 4: out2 <= b and out1. Reads out1 — gets U (the OLD value, transaction not yet committed). U and 1 = U.",
         "es": "Línea 4: out2 <= b and out1. Lee out1 — obtiene U (el valor VIEJO, la transacción no se ha confirmado). U and 1 = U.",
@@ -61,8 +92,15 @@
     },
     {
       "t": 4,
-      "highlightLines": [5],
-      "signals": { "a": "1", "b": "1", "out1": "U", "out2": "U" },
+      "highlightLines": [
+        5
+      ],
+      "signals": {
+        "a": "1",
+        "b": "1",
+        "out1": "U",
+        "out2": "U"
+      },
       "note": {
         "en": "Process exits. Two transactions queued: out1 <= 1 and out2 <= U.",
         "es": "El proceso termina. Dos transacciones encoladas: out1 <= 1 y out2 <= U.",
@@ -76,7 +114,12 @@
     {
       "t": 5,
       "highlightLines": [],
-      "signals": { "a": "1", "b": "1", "out1": "1", "out2": "U" },
+      "signals": {
+        "a": "1",
+        "b": "1",
+        "out1": "1",
+        "out2": "U"
+      },
       "note": {
         "en": "Delta ends. out1 becomes 1. out2 became U. THE GOTCHA — out2 is U even though both a and b are 1.",
         "es": "Termina el delta. out1 pasa a 1. out2 pasó a U. EL GAZAPO — out2 está en U aunque a y b sean 1.",
@@ -90,7 +133,12 @@
     {
       "t": 6,
       "highlightLines": [],
-      "signals": { "a": "1", "b": "1", "out1": "1", "out2": "U" },
+      "signals": {
+        "a": "1",
+        "b": "1",
+        "out1": "1",
+        "out2": "U"
+      },
       "note": {
         "en": "out1 just changed, but out1 is NOT in the sensitivity list. The process does not wake again. out2 stays U forever.",
         "es": "out1 acaba de cambiar, pero out1 NO está en la lista de sensibilidad. El proceso no se despierta otra vez. out2 se queda en U para siempre.",

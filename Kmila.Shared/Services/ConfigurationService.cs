@@ -133,31 +133,6 @@ public class ConfigurationService
     }
 
     /// <summary>
-    /// Gets the last used configuration.
-    /// </summary>
-    /// <returns>The last configuration, or null if none exists.</returns>
-    public async Task<KmilaConfiguration?> GetLastConfigurationAsync()
-    {
-        try
-        {
-            var lastKey = await _dbContext.GetSettingAsync(LAST_CONFIG_KEY);
-            if (string.IsNullOrEmpty(lastKey))
-                return null;
-
-            var json = await _dbContext.GetSettingAsync(lastKey);
-            if (string.IsNullOrEmpty(json))
-                return null;
-
-            return KmilaConfiguration.FromJson(json);
-        }
-        catch (Exception ex)
-        {
-            LastError = ex.Message;
-            return null;
-        }
-    }
-
-    /// <summary>
     /// Lists all saved configuration names.
     /// </summary>
     /// <returns>List of configuration names.</returns>

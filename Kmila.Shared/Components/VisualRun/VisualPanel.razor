@@ -1559,9 +1559,7 @@
             _files = allFiles.Where(f => !IsKviz(f)).ToList();
             _kvizFile = allFiles.FirstOrDefault(IsKviz);
 
-            _designFile = _files.FirstOrDefault(f =>
-                f.FileName.EndsWith(".vhd", StringComparison.OrdinalIgnoreCase) ||
-                f.FileName.EndsWith(".vhdl", StringComparison.OrdinalIgnoreCase));
+            _designFile = _files.FirstOrDefault(f => Kmila.Frontend.HdlLanguages.IsHdlSource(f.FileName));
 
             if (_kvizFile != null)
             {
@@ -1616,29 +1614,17 @@
         if (_project == null || _designFile == null) return;
         try
         {
-            string filePath = System.IO.Path.Combine(_project.BasePath,
-                _designFile.DirectoryPath ?? string.Empty,
-                _designFile.FileName);
+            string filePath = Kmila.Shared.Repositories.ProjectFiles.GetDiskPath(_project.BasePath, _designFile);
+            var frontend = Kmila.Frontend.Frontends.ForPath(filePath);
 
-            Interpreter.Services.EntityRegistry.Instance.Clear();
-            Interpreter.Services.PackageRegistry.Instance.Clear();
-            Interpreter.Services.FunctionRegistry.Instance.Clear();
-
-            foreach (var f in _files)
+            // Clean engine state, scan every project source, parse the design.
+            var design = frontend.LoadDesign(new Kmila.Frontend.DesignRequest
             {
-                if (!f.FileName.EndsWith(".vhd", StringComparison.OrdinalIgnoreCase) &&
-                    !f.FileName.EndsWith(".vhdl", StringComparison.OrdinalIgnoreCase)) continue;
-                try
-                {
-                    string p = System.IO.Path.Combine(_project.BasePath, f.DirectoryPath ?? "", f.FileName);
-                    Interpreter.Services.EntityRegistry.Instance.ScanFile(p);
-                }
-                catch { }
-            }
-
-            var parser = new Debugger.Repositories.Parser(filePath);
-            parser.ParseFile();
-            _entity = parser.Entities.FirstOrDefault(e => e.Architecture != null);
+                Root = _project.BasePath,
+                ParseTarget = filePath,
+            });
+            design.ThrowIfFailed();
+            _entity = design.Top;
             if (_entity == null)
             {
                 _loadError = Traductor.T("VISUAL_NO_ENTITY_FOUND");
@@ -1646,31 +1632,18 @@
             }
 
             // Multi-component designs: inline the instantiated components into a
-            // flat single-entity source so the live Visual runtime actually
-            // executes the sub-components (otherwise a structural top like a
-            // full adder whose logic lives entirely in its half-adder instances
-            // would drive nothing and every widget would stay dark). Mirrors the
-            // waveform/bounded-sim path in ProgramBuilder. ElaborateOrNull
-            // returns null when the top has no component instance, so single-file
-            // designs are untouched. The flattened source goes to a TEMP file so
-            // the project tree stays clean.
+            // flat single-entity design so the live Visual runtime actually
+            // executes the sub-components (otherwise a structural top whose logic
+            // lives in its instances would drive nothing and every widget would
+            // stay dark). Single-file designs have nothing to inline.
             try
             {
-                var flat = Interpreter.Services.SourceElaborator.ElaborateOrNull(
-                    _project.BasePath, _entity.Name);
+                var flat = frontend.ElaborateSource(_project.BasePath, _entity.Name);
                 if (!string.IsNullOrEmpty(flat))
                 {
-                    var tmp = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
-                        $"kmila_visual_{_entity.Name}_{Guid.NewGuid():N}.vhd");
-                    await System.IO.File.WriteAllTextAsync(tmp, flat);
-                    var flatParser = new Debugger.Repositories.Parser(tmp);
-                    flatParser.ParseFile();
-                    var flatEntity = flatParser.Entities.FirstOrDefault(e =>
-                            string.Equals(e.Name, _entity.Name, StringComparison.OrdinalIgnoreCase)
-                            && e.Architecture != null)
-                        ?? flatParser.Entities.FirstOrDefault(e => e.Architecture != null);
-                    if (flatEntity != null) _entity = flatEntity;
-                    try { System.IO.File.Delete(tmp); } catch { }
+                    var unit = frontend.ParseSource(flat);
+                    unit.ThrowIfFailed();
+                    _entity = frontend.PickTop(unit.Entities, _entity.Name) ?? _entity;
                 }
             }
             catch (Exception elabEx)

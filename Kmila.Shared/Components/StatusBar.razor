@@ -136,7 +136,7 @@
     {
         var fpga = SelectedFPGA?.FPGA;
         if (fpga == null) return null;
-        if (Builder.Parser == null || !Builder.Parser.Entities.Any()) return null;
+        if (Builder.Design == null || !Builder.Design.Entities.Any()) return null;
 
         double max = 0;
         bool gotAny = false;
@@ -160,14 +160,14 @@
                 .Select(ci => ci.EntityName),
             StringComparer.OrdinalIgnoreCase);
 
-        var roots = Builder.Parser.Entities
+        var roots = Builder.Design.Entities
             .Where(e => e.ResourceUsage != null && !instantiated.Contains(e.Name))
             .Select(e => e.HierarchicalResourceUsage ?? e.ResourceUsage)
             .ToList();
         // Fallback: if the hierarchy data left nothing (e.g. every entity is
         // instantiated by another in a cyclic/odd parse), keep the old behavior.
         if (roots.Count == 0)
-            roots = Builder.Parser.Entities.Where(e => e.ResourceUsage != null)
+            roots = Builder.Design.Entities.Where(e => e.ResourceUsage != null)
                 .Select(e => e.ResourceUsage).ToList();
 
         Check(roots.Sum(r => r.FlipFlops),       fpga.Resources?.RegistersFlipFlops);

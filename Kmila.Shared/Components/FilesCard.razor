@@ -148,7 +148,7 @@
                 else
                 {
                     var file = row.File!;
-                    var info = GetFileInfo(file.FileName);
+                    var info = FileTypes.Of(file.FileName);
                     var isActive = _selectedFile?.Id == file.Id;
                     var isEditing = _editingFile?.Id == file.Id;
                     var isEntry = _entryFileName != null && string.Equals(_entryFileName, file.RelativePath, StringComparison.Ordinal);
@@ -194,7 +194,7 @@
                             </button>
                         }
 
-                        <span class="file-row__chip">@info.Ext</span>
+                        <span class="file-row__chip">@info.Label</span>
 
                         @if (!isEditing)
                         {
@@ -1073,25 +1073,4 @@
     }
 
     // ---- Misc helpers --------------------------------------------------------
-
-    private record FileInfo(IconName Icon, string Variant, string Ext);
-
-    private FileInfo GetFileInfo(string fileName)
-    {
-        if (!fileName.Contains('.'))
-            return new FileInfo(IconName.FileEarmark, "other", "");
-
-        var ext = fileName.Substring(fileName.LastIndexOf('.')).ToLowerInvariant();
-        var label = ext.TrimStart('.').ToUpperInvariant();
-
-        return ext switch
-        {
-            ".vhd" or ".vhdl" => new FileInfo(IconName.FileCode,    "vhdl",     label),
-            ".md"              => new FileInfo(IconName.FileTypeMd,  "markdown", label),
-            ".txt"             => new FileInfo(IconName.FileTypeTxt, "text",     label),
-            ".json"            => new FileInfo(IconName.Braces,      "json",     label),
-            ".xml"             => new FileInfo(IconName.Code,        "xml",      label),
-            _                  => new FileInfo(IconName.FileEarmark, "other",    label),
-        };
-    }
 }

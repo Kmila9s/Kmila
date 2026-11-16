@@ -116,7 +116,7 @@ public static class ReplayBuilder
         var doc = new ExecutionTimelineDoc
         {
             Code = sourceCode ?? string.Empty,
-            Language = "vhdl",
+            Language = Kmila.Frontend.HdlLanguages.Vhdl.MonacoId,
             SignalOrder = signals.Select(s => s.Name).ToList(),
             // Phase D: per-signal port-type metadata drives the filter / group
             // UI in the side table. Hand-authored Concepts lessons leave this

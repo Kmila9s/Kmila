@@ -1,0 +1,3 @@
+**Ton objectif :** une serveuse, dix tables — programme sa routine et sers tout le monde le plus vite possible. Le programme ci-dessous est le **séquentiel** (prendre la commande, attendre à la table, servir). Appuie sur **Exécuter** : ça marche, mais lentement (environ 70 s, une étoile).
+
+Améliore-le maintenant. Réorganise ou remplace les blocs et relance — le restaurant ci-dessus rejoue ta routine avec son graphique. **Deux étoiles** à 40 s ou moins, **trois** à 26 s ou moins. La routine la plus rapide est exactement le fonctionnement du simulateur VHDL : il ne va que là où un événement (une sonnette) a eu lieu.

@@ -20,6 +20,17 @@ end process;
 
 プレーヤーを見ると、`a` と `b` が両方 `1` なのに `out2` が `U` のまま出てくる。初めて見ると驚くはずだ。
 
+<!-- exec-fig2:start -->
+## ドアベル
+
+process は部屋のようなもので、担当者はドアベルが鳴るまで **眠っている**。どの signal にドアベルを付けるかは **感度リスト** が決める。
+
+<div class="lesson-figure"><iframe src="/_content/Kmila.Shared/anatomia/exec-doorbell.html?mode=bug" title="感度リストにつながったドアベルで起こされる、眠っている process" loading="lazy" style="aspect-ratio:640/340"></iframe></div>
+
+- `process(a, b)` では `out1` に **ドアベルがない**（線は空のソケット ✕ で終わっている）。4 行目が実行されると担当者は `out1` を読むが、見えるのは **古い** 値の U。その後 `out1` は 1 になるが誰も起きないので、`out2` は U のまま。
+- `process(a, b, out1)` のボタンをクリックしよう。今度は `out1` のベルが鳴り、process がもう一度実行されて `out2` が 1 になる。これが下の方法 B だ。
+<!-- exec-fig2:end -->
+
 ## 直し方は 2 通り
 
 ### 方法 A — variable を使う

@@ -30,24 +30,30 @@
             <span class="visually-hidden">. </span>
             <p class="learn-hero__subtitle">@Traductor.T("LEARN_SUBTITLE")</p>
 
-            <label class="learn-hero__search" aria-label="@Traductor.T("LEARN_SEARCH_LABEL")">
-                <Icon Name="IconName.Search" />
-                <input type="search"
-                       class="form-control"
-                       placeholder="@Traductor.T("LEARN_SEARCH_PLACEHOLDER")"
-                       value="@_filter"
-                       @oninput="OnFilterChanged" />
-                @if (!string.IsNullOrEmpty(_filter))
+            <div class="learn-hero__search-row">
+                <label class="learn-hero__search" aria-label="@Traductor.T("LEARN_SEARCH_LABEL")">
+                    <Icon Name="IconName.Search" />
+                    <input type="search"
+                           class="form-control"
+                           placeholder="@Traductor.T("LEARN_SEARCH_PLACEHOLDER")"
+                           value="@_filter"
+                           @oninput="OnFilterChanged" />
+                    @if (!string.IsNullOrEmpty(_filter))
+                    {
+                        <KmilaTooltip TextKey="LEARN_CLEAR_SEARCH_TIP">
+                            <button type="button" class="learn-hero__search-clear"
+                                    @onclick="() => { _filter = string.Empty; ApplyFilter(); }"
+                                    aria-label="@Traductor.T("COMMON_CLEAR")">
+                                <Icon Name="IconName.XLg" />
+                            </button>
+                        </KmilaTooltip>
+                    }
+                </label>
+                @if (_indexGroups.Count > 0)
                 {
-                    <KmilaTooltip TextKey="LEARN_CLEAR_SEARCH_TIP">
-                        <button type="button" class="learn-hero__search-clear"
-                                @onclick="() => { _filter = string.Empty; ApplyFilter(); }"
-                                aria-label="@Traductor.T("COMMON_CLEAR")">
-                            <Icon Name="IconName.XLg" />
-                        </button>
-                    </KmilaTooltip>
+                    <LessonIndex Groups="_indexGroups" />
                 }
-            </label>
+            </div>
 
             @if (_continueTarget != null)
             {
@@ -161,6 +167,34 @@
     }
     else
     {
+        @if (!string.IsNullOrWhiteSpace(_filter) && LessonIndexBuilder.Search(_indexGroups, _filter) is { Count: > 0 } hits)
+        {
+            <section class="learn-track catalog-hits" aria-labelledby="learn-hits">
+                <header class="learn-track__header">
+                    <h2 id="learn-hits">@Traductor.T("CATALOG_MATCHING_LESSONS") <span class="catalog-hits__count" dir="ltr">@hits.Count</span></h2>
+                </header>
+                <ol class="catalog-hits__list">
+                    @foreach (var (g, item) in hits)
+                    {
+                        <li>
+                            <a class="catalog-hits__item" href="@item.Href" data-testid="@($"learn-hit-{g.Id}-{item.Id}")">
+                                <span class="lesson-index__num" dir="ltr">@item.Number.ToString("00")</span>
+                                <span class="catalog-hits__body">
+                                    <strong>@item.Title</strong>
+                                    <small>@g.Title</small>
+                                </span>
+                                @if (item.Completed)
+                                {
+                                    <Icon Name="IconName.CheckCircleFill" Class="lesson-index__check" />
+                                }
+                                <Icon Name="IconName.ArrowRight" Class="catalog-hits__chevron" />
+                            </a>
+                        </li>
+                    }
+                </ol>
+            </section>
+        }
+
         @foreach (var track in _tracks)
         {
             <section class="learn-track" aria-labelledby="@($"track-{track.Key}")">
@@ -264,6 +298,7 @@
 
     /// <summary>Live filter text. Empty = show everything.</summary>
     private string _filter = string.Empty;
+    private List<LessonIndexGroup> _indexGroups = new();
 
     /// <summary>Selected level chip; null = "All".</summary>
     private LessonLevel? _levelFilter;
@@ -350,6 +385,7 @@
         _continueTarget = continueTarget;
         _continueLessonTitle = continueLessonTitle;
         _continueModuleTitle = continueModuleTitle;
+        _indexGroups = LessonIndexBuilder.ForLearn(manifest, _lang, Progress.IsCompletedCached);
         ApplyFilter();
         _loading = false;
     }
@@ -381,7 +417,7 @@
         var needle = _filter?.Trim();
         bool Match(string haystack) =>
             !string.IsNullOrEmpty(haystack) &&
-            haystack.Contains(needle!, StringComparison.OrdinalIgnoreCase);
+            LessonIndexBuilder.Fold(haystack).Contains(LessonIndexBuilder.Fold(needle), StringComparison.Ordinal);
 
         bool ModuleMatches(LessonModule m)
         {

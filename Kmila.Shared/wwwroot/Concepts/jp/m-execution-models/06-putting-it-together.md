@@ -12,6 +12,17 @@
 | `a` と `b` の和は *たった今* 何？ | 並行 | メモリなし、クロックなし — 純粋なゲート。 |
 | 次のクロックエッジ *の後* のカウントは？ | 順次 | クロックエッジ間で状態を保持するレジスタが必要。 |
 
+<!-- exec-fig2:start -->
+## パイプと回転ゲート
+
+同じ architecture の中に、働き方の違う 2 つの機械がある：
+
+<div class="lesson-figure"><iframe src="/_content/Kmila.Shared/anatomia/exec-turnstile.html" title="半加算器のパイプと、クロックで動く回転ゲートのレジスタ" loading="lazy" style="aspect-ratio:640/340"></iframe></div>
+
+- **パイプ（並行）：** `a` と `b` が変わると水が XOR と AND のモジュールに届き、`sum` と `cout` のランプは同じデルタで更新される。クロックは関係ない。
+- **回転ゲート（順次）：** `count <= count + 1` は次の値（入口で待つ `0001` のカード）を用意するだけ。それが通過する——ゲートが回り、ボードが切り替わる——のは `rising_edge(clk)` のときだけだ。
+<!-- exec-fig2:end -->
+
 ## 2 つの実行モデルが手を組む
 
 再生を押すと、こう見えるはずだ。

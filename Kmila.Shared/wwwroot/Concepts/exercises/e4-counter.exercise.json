@@ -1,5 +1,7 @@
 {
   "version": 1,
+  "world": "clocked",
+  "hints": {"en": ["The increment must live inside the on rising_edge(clk) wrapper.", "One increment block is enough — two of them still count by one."], "es": ["El incremento debe ir dentro del bloque on rising_edge(clk).", "Un bloque de incremento basta: dos siguen contando de uno en uno."], "fr": ["L'incrément doit se trouver dans le bloc on rising_edge(clk).", "Un seul bloc d'incrément suffit — deux comptent toujours de un en un."], "de": ["Das Inkrement gehört in den Block on rising_edge(clk).", "Ein Inkrement-Block reicht — zwei zählen trotzdem nur um eins."], "ch": ["加一的积木必须放在 on rising_edge(clk) 里面。", "一个加一积木就够了——放两个仍然只加一。"], "jp": ["インクリメントは on rising_edge(clk) の中に入れる。", "インクリメントは 1 つで十分——2 つでも 1 ずつしか増えない。"], "ar": ["يجب أن تكون الزيادة داخل الكتلة on rising_edge(clk).", "تكفي كتلة زيادة واحدة — واثنتان ما زالتا تعدّان واحدًا واحدًا."]},
   "toolbox": {
     "kind": "flyoutToolbox",
     "contents": [
@@ -97,57 +99,118 @@
     {
       "fingerprint": "kmila_on_clock(BODY=kmila_increment_count|kmila_increment_count)",
       "label": {
-        "en": "Stride-2 counter: +2 every rising edge",
-        "es": "Contador con paso 2: +2 en cada flanco de subida"
+        "en": "Two increments, still +1: the last assignment wins",
+        "es": "Dos incrementos, sigue siendo +1: gana la última asignación",
+        "fr": "Deux incréments, toujours +1 : la dernière affectation gagne",
+        "de": "Zwei Inkremente, trotzdem +1: die letzte Zuweisung gewinnt",
+        "ch": "两次加一，结果仍是 +1：最后一次赋值生效",
+        "jp": "インクリメント 2 つでも +1：最後の代入が勝つ",
+        "ar": "زيادتان والنتيجة ما زالت +1: آخر إسناد هو الذي يفوز"
       },
       "timeline": {
         "code": "process(clk)\nbegin\n  if rising_edge(clk) then\n    count <= count + 1;\n    count <= count + 1;\n  end if;\nend process;",
         "language": "vhdl",
-        "signalOrder": ["clk", "count", "note"],
+        "signalOrder": [
+          "clk",
+          "count",
+          "note"
+        ],
         "steps": [
           {
             "t": 0,
             "highlightLines": [],
-            "signals": { "clk": "0", "count": "0000", "note": "idle" },
+            "signals": {
+              "clk": "0",
+              "count": "0000",
+              "note": "idle"
+            },
             "note": {
-              "en": "Two increments stacked inside one clocked body. Heads up — VHDL semantics will surprise you here.",
-              "es": "Dos incrementos apilados dentro del mismo cuerpo con reloj. Atento — la semántica de VHDL te va a sorprender."
+              "en": "Two increments stacked inside one clocked process. It looks like +2 per edge — watch what VHDL really does.",
+              "es": "Dos incrementos apilados dentro de un proceso con reloj. Parece +2 por flanco; mira lo que VHDL hace en realidad.",
+              "fr": "Deux incréments empilés dans un process cadencé. On dirait +2 par front — regarde ce que fait vraiment VHDL.",
+              "de": "Zwei Inkremente in einem getakteten Prozess. Sieht nach +2 pro Flanke aus — sieh dir an, was VHDL wirklich tut.",
+              "ch": "一个时钟进程里叠了两个加一。看起来每个边沿 +2——看看 VHDL 实际怎么做。",
+              "jp": "クロック付き process の中にインクリメントが 2 つ。エッジごとに +2 に見えるが、VHDL が実際にどうするか見てみよう。",
+              "ar": "زيادتان متتاليتان داخل process متزامن مع الساعة. يبدو الأمر +2 لكل حافة — شاهد ما يفعله VHDL فعلًا."
             }
           },
           {
             "t": 1,
-            "highlightLines": [1, 3],
-            "signals": { "clk": "1", "count": "0000", "note": "edge!" },
+            "highlightLines": [
+              1,
+              3
+            ],
+            "signals": {
+              "clk": "1",
+              "count": "0000",
+              "note": "edge!"
+            },
             "note": {
-              "en": "Rising edge fires. Both line 4 and line 5 are sequential statements inside the same process — they execute one after the other.",
-              "es": "El flanco se dispara. La línea 4 y la línea 5 son sentencias secuenciales dentro del mismo proceso — se ejecutan una tras otra."
+              "en": "Rising edge: the process wakes up and runs its body top to bottom, one statement after the other.",
+              "es": "Flanco de subida: el proceso despierta y ejecuta su cuerpo de arriba abajo, una sentencia tras otra.",
+              "fr": "Front montant : le process se réveille et exécute son corps de haut en bas, une instruction après l'autre.",
+              "de": "Steigende Flanke: Der Prozess wacht auf und arbeitet seinen Rumpf von oben nach unten ab, Anweisung für Anweisung.",
+              "ch": "上升沿：进程被唤醒，从上到下逐条执行主体。",
+              "jp": "立ち上がりエッジ：process が起き、本体を上から下へ 1 文ずつ実行する。",
+              "ar": "الحافة الصاعدة: يستيقظ الـ process وينفّذ جسمه من الأعلى إلى الأسفل، تعليمة بعد أخرى."
             }
           },
           {
             "t": 2,
-            "highlightLines": [4],
-            "signals": { "clk": "1", "count": "0000", "note": "schedule count<=0001" },
+            "highlightLines": [
+              4
+            ],
+            "signals": {
+              "clk": "1",
+              "count": "0000",
+              "note": "schedule count<=0001"
+            },
             "note": {
-              "en": "Line 4 schedules count to become 0001 at delta-end. Inside the process body the variable read still sees the OLD value (0000).",
-              "es": "La línea 4 programa que count valga 0001 al final del delta. Dentro del cuerpo, la lectura sigue viendo el valor ANTIGUO (0000)."
+              "en": "Line 4 reads count (0000) and schedules count <= 0001. count is a signal: its value does not change until the delta ends.",
+              "es": "La línea 4 lee count (0000) y programa count <= 0001. count es una señal: su valor no cambia hasta que termina el delta.",
+              "fr": "La ligne 4 lit count (0000) et planifie count <= 0001. count est un signal : sa valeur ne change pas avant la fin du delta.",
+              "de": "Zeile 4 liest count (0000) und plant count <= 0001 ein. count ist ein Signal: Sein Wert ändert sich erst am Delta-Ende.",
+              "ch": "第 4 行读取 count（0000），排程 count <= 0001。count 是 signal：在 delta 结束前它的值不变。",
+              "jp": "4 行目は count（0000）を読み、count <= 0001 を予約する。count は signal なので、デルタが終わるまで値は変わらない。",
+              "ar": "يقرأ السطر 4 قيمة count (0000) ويجدول count <= 0001. ‏count إشارة: لا تتغيّر قيمتها حتى تنتهي الدلتا."
             }
           },
           {
             "t": 3,
-            "highlightLines": [5],
-            "signals": { "clk": "1", "count": "0000", "note": "schedule count<=0001 (again!)" },
+            "highlightLines": [
+              5
+            ],
+            "signals": {
+              "clk": "1",
+              "count": "0000",
+              "note": "schedule count<=0001 (again!)"
+            },
             "note": {
-              "en": "Line 5 schedules count + 1 again — but count is still 0000 in this evaluation. So the SECOND schedule is also 0001, and it OVERWRITES the first.",
-              "es": "La línea 5 programa otra vez count + 1 — pero count sigue siendo 0000 en esta evaluación. Así que la SEGUNDA programación también es 0001, y SOBREESCRIBE la primera."
+              "en": "Line 5 reads count again — still the OLD 0000 — and schedules 0001 again. This second assignment replaces the first: the last one wins.",
+              "es": "La línea 5 vuelve a leer count —sigue siendo el VIEJO 0000— y programa 0001 otra vez. Esta segunda asignación reemplaza a la primera: gana la última.",
+              "fr": "La ligne 5 relit count — toujours l'ANCIEN 0000 — et planifie encore 0001. Cette seconde affectation remplace la première : la dernière gagne.",
+              "de": "Zeile 5 liest count erneut — immer noch das ALTE 0000 — und plant wieder 0001 ein. Diese zweite Zuweisung ersetzt die erste: Die letzte gewinnt.",
+              "ch": "第 5 行再次读取 count——仍是旧值 0000——又排程了 0001。第二次赋值取代第一次：最后一次生效。",
+              "jp": "5 行目がもう一度 count を読む——まだ古い 0000——そしてまた 0001 を予約する。2 回目の代入が 1 回目を置き換える：最後のものが勝つ。",
+              "ar": "يقرأ السطر 5 قيمة count مرة أخرى — ما زالت القيمة القديمة 0000 — ويجدول 0001 مجددًا. يحلّ هذا الإسناد الثاني محلّ الأول: آخر إسناد هو الذي يفوز."
             }
           },
           {
             "t": 4,
             "highlightLines": [],
-            "signals": { "clk": "1", "count": "0001", "note": "+1, not +2" },
+            "signals": {
+              "clk": "1",
+              "count": "0001",
+              "note": "+1, not +2"
+            },
             "note": {
-              "en": "Delta ends. count = 0001. Two source-level increments produced ONE actual increment — that's the signal-vs-variable trap. Use a variable, or refactor to count <= count + 2.",
-              "es": "Termina el delta. count = 0001. Dos incrementos en el código produjeron UN solo incremento real — esa es la trampa de signal vs variable. Usa una variable, o reescribe como count <= count + 2."
+              "en": "Delta ends: count = 0001. Two increments in the source, ONE increment in the hardware. For +2 write count <= count + 2, or accumulate in a variable and assign the signal once.",
+              "es": "Fin del delta: count = 0001. Dos incrementos en el código, UN solo incremento en el hardware. Para +2 escribe count <= count + 2, o acumula en una variable y asigna la señal una vez.",
+              "fr": "Fin du delta : count = 0001. Deux incréments dans le code, UN seul dans le matériel. Pour +2, écris count <= count + 2, ou accumule dans une variable et affecte le signal une seule fois.",
+              "de": "Delta endet: count = 0001. Zwei Inkremente im Code, EIN Inkrement in der Hardware. Für +2 schreibe count <= count + 2 oder sammle in einer Variablen und weise das Signal einmal zu.",
+              "ch": "delta 结束：count = 0001。代码里两次加一，硬件里只加了一次。想要 +2，就写 count <= count + 2，或者先在 variable 里累加，再给 signal 赋值一次。",
+              "jp": "デルタ終了：count = 0001。コードではインクリメント 2 つ、ハードウェアでは 1 つだけ。+2 にしたいなら count <= count + 2 と書くか、variable で計算してから signal に 1 回だけ代入する。",
+              "ar": "تنتهي الدلتا: count = 0001. زيادتان في الكود، وزيادة واحدة فقط في العتاد. للحصول على +2 اكتب count <= count + 2، أو اجمع في متغيّر ثم أسند الإشارة مرة واحدة."
             }
           }
         ]

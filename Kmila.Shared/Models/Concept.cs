@@ -74,8 +74,9 @@ public class ConceptModule
 
     /// <summary>
     /// Optional Scratch-style exercises tied to this module. Each exercise
-    /// has its toolbox + pre-baked composition catalog in a sidecar file
-    /// at <c>Concepts/exercises/{id}.exercise.json</c>.
+    /// has its toolbox, interpreter <c>world</c>, hints and (fallback) pre-baked
+    /// composition catalog in a sidecar file at
+    /// <c>Concepts/exercises/{id}.exercise.json</c> — see <see cref="ExercisePayload"/>.
     /// </summary>
     [JsonPropertyName("exercises")]
     public List<ConceptExercise> Exercises { get; set; } = new();

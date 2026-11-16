@@ -3350,118 +3350,6 @@
 }
 
 
-/* --- ResourceProgressBar --- */
-
-.resource-bar {
-    --bx-fg: var(--success);
-    --bx-bg: var(--success-soft);
-
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    padding: var(--space-3) 0;
-}
-
-.resource-bar__head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-    flex-wrap: wrap;
-}
-
-.resource-bar__title {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    color: var(--text-strong);
-    font-size: var(--fs-sm);
-}
-
-.resource-bar__title .bi {
-    color: var(--text-muted);
-}
-
-.resource-bar__counts {
-    display: inline-flex;
-    align-items: baseline;
-    gap: var(--space-1);
-    font-family: var(--font-mono);
-    font-size: var(--fs-sm);
-}
-
-.resource-bar__used {
-    font-weight: var(--fw-bold);
-    padding: 1px 8px;
-    border-radius: var(--radius-xs);
-    background-color: var(--surface-3);
-    color: var(--text-strong);
-}
-
-.resource-bar__used--success { background-color: var(--success-soft); color: var(--success); }
-.resource-bar__used--info    { background-color: var(--kmila-accent-soft); color: var(--kmila-accent); }
-.resource-bar__used--warning { background-color: var(--warning-soft); color: var(--warning); }
-.resource-bar__used--danger  { background-color: var(--danger-soft);  color: var(--danger); }
-
-.resource-bar__sep {
-    color: var(--text-subtle);
-}
-
-.resource-bar__available {
-    color: var(--text-muted);
-}
-
-.resource-bar__percent {
-    margin-left: var(--space-1);
-    color: var(--text-muted);
-    font-size: var(--fs-xs);
-}
-
-@media (max-width: 575.98px) {
-    .resource-bar__percent { display: none; }
-}
-
-
-/* Progress track */
-
-.resource-bar__track {
-    position: relative;
-    width: 100%;
-    height: 8px;
-    background-color: var(--surface-3);
-    border-radius: var(--radius-pill);
-    overflow: hidden;
-}
-
-.resource-bar__fill {
-    display: block;
-    height: 100%;
-    border-radius: inherit;
-    background-color: var(--success);
-    transition: width var(--duration-slow) var(--ease-standard),
-                background-color var(--duration-base) var(--ease-standard);
-}
-
-.resource-bar__fill--success { background-color: var(--success); }
-.resource-bar__fill--info    { background-color: var(--kmila-accent); }
-.resource-bar__fill--warning { background-color: var(--warning); }
-.resource-bar__fill--danger  {
-    background: repeating-linear-gradient(
-        45deg,
-        var(--danger) 0,
-        var(--danger) 8px,
-        color-mix(in srgb, var(--danger) 70%, transparent) 8px,
-        color-mix(in srgb, var(--danger) 70%, transparent) 16px
-    );
-    animation: kmilaPulseStripe 1.6s linear infinite;
-}
-
-@keyframes kmilaPulseStripe {
-    from { background-position: 0 0; }
-    to   { background-position: 32px 0; }
-}
-
-
 /* ============================================================================
    Editor Dock — bottom panel with 5 tabs on the Editor page.
    Chunk 1: tabs + content area + empty states. Drag-to-resize and collapsed
@@ -13987,6 +13875,36 @@ body:has(.visual-page.is-fullscreen) .status-bar {
     .kmila-exercise-match { animation: none; }
 }
 
+/* Phase 4 (2026-11-15): interpreter verdict extras — stars, progressive
+   hint card, live code panel (VHDL / program listing) and the restaurant
+   figure that replays the student's schedule. Same Glass-Slab grammar. */
+.kmila-exercise-stars { margin-inline-start: auto; display: inline-flex; gap: 2px; color: var(--warning, #f59e0b); font-size: 1.15rem; flex: 0 0 auto; }
+.kmila-exercise-stars .bi:not(.bi-star-fill) { color: var(--text-muted, #64748b); opacity: .55; }
+.kmila-exercise-stars-chip { color: var(--warning, #f59e0b); gap: 1px; }
+.kmila-exercise-stars-chip .bi:not(.bi-star-fill) { color: var(--text-muted, #64748b); opacity: .55; }
+.kmila-exercise-hint {
+    display: flex; align-items: flex-start; gap: var(--space-3);
+    border: 1px dashed color-mix(in srgb, var(--accent, #3c82f6) 45%, var(--border-default));
+    border-radius: var(--radius-md); padding: var(--space-3) var(--space-4);
+    background-color: color-mix(in srgb, var(--accent, #3c82f6) 5%, var(--surface-2));
+    animation: kmila-exercise-match-in 220ms ease-out;
+}
+.kmila-exercise-hint > .bi { font-size: 1.3rem; color: var(--accent, #3c82f6); flex: 0 0 auto; margin-top: 2px; }
+.kmila-exercise-hint > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.kmila-exercise-hint strong { font-size: var(--fs-sm); color: var(--accent, #3c82f6); }
+.kmila-exercise-hint span { color: var(--text-default, inherit); font-size: var(--fs-sm); }
+.kmila-exercise-code {
+    border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
+    background-color: var(--surface-2); padding: var(--space-2) var(--space-3);
+}
+.kmila-exercise-code__title { display: flex; align-items: center; gap: var(--space-2); font-size: var(--fs-xs, .75rem); letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted, #64748b); margin-bottom: var(--space-1); }
+.kmila-exercise-code .lesson-markdown { max-width: none; margin: 0; padding: 0; }
+.kmila-exercise-code .lesson-markdown pre { margin: 0; }
+.kmila-exercise-figure { margin: 0 auto; width: 100%; max-width: 760px; }
+@media (prefers-reduced-motion: reduce) {
+    .kmila-exercise-hint { animation: none; }
+}
+
 /* ── kmila-blocks engine — Glass Slabs (2026-06-28) ─────────────────────────
    DOM-based block renderer for /editor (Blocks tab) + /concepts/exercise/*.
    Blocks are frosted-glass slabs on the slate surface palette. Role-color
@@ -18229,4 +18147,295 @@ html[data-kmila-kbd="open"] #blazor-error-ui {
         width: 100%;
         justify-content: center;
     }
+}
+
+
+/* ==========================================================================
+   Lesson index — searchable table of contents (Components/LessonIndex.razor)
+   Used on /learn, /concepts and inside every lesson page. Global (not scoped)
+   because scoped CSS does not ship in the MAUI head.
+   ========================================================================== */
+
+.lesson-page__crumb-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+}
+
+.learn-hero__search-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    margin-top: var(--space-3);
+}
+.learn-hero__search-row > .learn-hero__search { margin-top: 0; flex: 1 1 260px; }
+
+.lesson-index-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 36px;
+    padding: var(--space-1) var(--space-3);
+    background-color: var(--surface-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-pill);
+    color: var(--text-strong);
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-semibold);
+    cursor: pointer;
+    transition: border-color var(--duration-fast) var(--ease-standard),
+                background-color var(--duration-fast) var(--ease-standard);
+}
+.lesson-index-trigger:hover { border-color: var(--kmila-accent); color: var(--kmila-accent); }
+.lesson-index-trigger:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+.lesson-index-trigger__pos {
+    font-family: var(--font-mono);
+    font-size: var(--fs-2xs);
+    color: var(--text-muted);
+    padding: 1px var(--space-2);
+    border-radius: var(--radius-pill);
+    background-color: var(--surface-3);
+}
+.lesson-index-trigger__kbd {
+    font-family: var(--font-mono);
+    font-size: var(--fs-2xs);
+    color: var(--text-muted);
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-xs, 4px);
+    padding: 0 5px;
+    line-height: 1.5;
+}
+
+.lesson-index-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-modal);
+    background-color: rgba(15, 23, 42, 0.45);
+    animation: lesson-index-fade var(--duration-base) var(--ease-standard);
+}
+
+.lesson-index {
+    position: fixed;
+    inset-block: 0;
+    inset-inline-end: 0;
+    z-index: calc(var(--z-modal) + 1);
+    width: min(420px, 100vw);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    background-color: var(--surface-0);
+    border-inline-start: 1px solid var(--border-subtle);
+    box-shadow: var(--shadow-3);
+    animation: lesson-index-in var(--duration-slow) var(--ease-decelerate);
+}
+[dir="rtl"] .lesson-index { animation-name: lesson-index-in-rtl; }
+
+@keyframes lesson-index-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes lesson-index-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes lesson-index-in-rtl { from { transform: translateX(-24px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+.lesson-index__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.lesson-index__header h2 {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0;
+    font-size: var(--fs-md);
+    font-weight: var(--fw-bold);
+    color: var(--text-strong);
+}
+.lesson-index__close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    cursor: pointer;
+}
+.lesson-index__close:hover { background-color: var(--surface-3); color: var(--text-strong); }
+
+.lesson-index__header,
+.lesson-index .lesson-index__search { flex: none; }
+.lesson-index__search { margin-top: 0; max-width: none; }
+
+.lesson-index__list {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    margin-inline: calc(-1 * var(--space-2));
+    padding-inline: var(--space-2);
+}
+
+.lesson-index__group + .lesson-index__group { margin-top: var(--space-2); }
+
+.lesson-index__group-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    padding: var(--space-2);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-strong);
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-bold);
+    text-align: start;
+    cursor: pointer;
+}
+.lesson-index__group-head:hover:not(:disabled) { background-color: var(--surface-1); }
+.lesson-index__group-head:disabled { cursor: default; opacity: 1; }
+.lesson-index__chevron { color: var(--text-muted); flex: none; }
+[dir="rtl"] .lesson-index__group:not(.lesson-index__group--open) .lesson-index__chevron { transform: scaleX(-1); }
+.lesson-index__group-title { flex: 1 1 auto; min-width: 0; }
+.lesson-index__group-count {
+    font-family: var(--font-mono);
+    font-size: var(--fs-2xs);
+    font-weight: var(--fw-semibold);
+    color: var(--text-muted);
+}
+
+.lesson-index__items {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    padding-inline-start: var(--space-2);
+}
+
+.lesson-index__item,
+.catalog-hits__item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-2);
+    border-radius: var(--radius-sm);
+    color: var(--text-strong);
+    font-size: var(--fs-sm);
+    text-decoration: none;
+    border-inline-start: 2px solid transparent;
+}
+.lesson-index__item:hover,
+.lesson-index__item:focus-visible,
+.catalog-hits__item:hover,
+.catalog-hits__item:focus-visible {
+    background-color: var(--surface-1);
+    color: var(--text-strong);
+    text-decoration: none;
+    outline: none;
+}
+.lesson-index__item:focus-visible,
+.catalog-hits__item:focus-visible { box-shadow: var(--shadow-focus); }
+
+.lesson-index__item--current {
+    background-color: color-mix(in srgb, var(--kmila-accent) 12%, transparent);
+    border-inline-start-color: var(--kmila-accent);
+    font-weight: var(--fw-semibold);
+}
+.lesson-index__item--current .lesson-index__num { color: var(--kmila-accent); }
+
+.lesson-index__num {
+    flex: none;
+    min-width: 2ch;
+    font-family: var(--font-mono);
+    font-size: var(--fs-2xs);
+    font-weight: var(--fw-semibold);
+    color: var(--text-muted);
+}
+.lesson-index__body {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.lesson-index__summary {
+    color: var(--text-muted);
+    font-size: var(--fs-2xs);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.lesson-index__item mark {
+    padding: 0 1px;
+    border-radius: 2px;
+    background-color: color-mix(in srgb, var(--kmila-accent) 28%, transparent);
+    color: inherit;
+}
+.lesson-index__check { flex: none; color: var(--bs-success, #16a34a); }
+
+.lesson-index__empty {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-4) var(--space-2);
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+}
+
+/* Footer shortcut under Prev/Next: "Jump to any lesson · 21 / 29" */
+.lesson-footer__index {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    align-self: center;
+    padding: var(--space-1) var(--space-3);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-pill);
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+    cursor: pointer;
+}
+.lesson-footer__index:hover { color: var(--kmila-accent); background-color: var(--surface-1); }
+.lesson-footer__index-pos { font-family: var(--font-mono); font-size: var(--fs-2xs); }
+
+/* Catalog: direct links to lessons matching the search */
+.catalog-hits__count {
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
+    font-weight: var(--fw-semibold);
+}
+.catalog-hits__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: var(--space-2);
+}
+.catalog-hits__item {
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+}
+.catalog-hits__item:hover { border-color: var(--kmila-accent); }
+.catalog-hits__body {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.catalog-hits__body small { color: var(--text-muted); font-size: var(--fs-2xs); }
+.catalog-hits__chevron { flex: none; color: var(--text-muted); }
+[dir="rtl"] .catalog-hits__chevron { transform: scaleX(-1); }
+
+@media (max-width: 560px) {
+    .lesson-index { width: 100vw; border-inline-start: none; }
+    .lesson-index-trigger__kbd { display: none; }
+}
+@media (hover: none) {
+    .lesson-index-trigger__kbd { display: none; }
 }

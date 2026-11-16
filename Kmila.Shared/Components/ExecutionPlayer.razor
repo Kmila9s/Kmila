@@ -8,7 +8,16 @@
 
     Why pre-recorded: see Documentacion/ROADMAP_concurrent_execution_module.md.
     Phase 1 hardcodes the timelines so each step carries a teaching note and
-    we sidestep instrumenting the live simulator.
+    we sidestep instrumenting the live simulator. (Concepts block exercises now
+    generate their timelines at run time — wwwroot/js/kmila-exec-sim.js — but
+    hand them to this same component.)
+
+    Lesson-figure sync (2026-11-15): once the student uses a transport control
+    (play / step / restart — `_driveFigures`), every step change also calls
+    `kmilaFigureStep(CurrentIndex)` (app.js), which posts
+    {kmilaFig:"step", index} to each `.lesson-figure iframe`. The anatomy
+    "stepper" figures mirror the timeline step-for-step; other figures ignore
+    the message. Never sent in live-follow mode.
 *@
 
 @implements IDisposable
@@ -238,6 +247,7 @@
         {
             _lastLoaded = Doc;
             _previousSignals = new();
+            _driveFigures = false;
             // ReadView(): live docs are appended to on the sim thread — load a
             // point-in-time copy; non-live docs return themselves.
             _runner.Load(Doc?.ReadView() ?? new ExecutionTimelineDoc());
@@ -299,7 +309,7 @@
         new()
         {
             AutomaticLayout = true,
-            Language = string.IsNullOrEmpty(Doc?.Language) ? "vhdl" : Doc.Language,
+            Language = string.IsNullOrEmpty(Doc?.Language) ? Kmila.Frontend.HdlLanguages.Vhdl.MonacoId : Doc.Language,
             Value = Doc?.Code ?? string.Empty,
             ReadOnly = true,
             FontSize = 14,
@@ -370,6 +380,10 @@
         {
             var lines = _runner.CurrentStep.HighlightLines ?? new List<int>();
             await JS.InvokeVoidAsync("kmilaExecHighlightLines", lines);
+            // Lesson figures (anatomy iframes) mirror the player once the student
+            // starts driving it; until then they keep their own auto-play.
+            if (_driveFigures && !FollowLive)
+                await JS.InvokeVoidAsync("kmilaFigureStep", _runner.CurrentIndex);
         }
         catch
         {
@@ -383,11 +397,17 @@
         _currentNote = ConceptCatalog.LocalizeWithFallbackWarning(notes, Lang, string.Empty);
     }
 
+    // True once the student has used a transport control: from then on every
+    // step is mirrored to the lesson's figures (kmilaFigureStep). Reset on a
+    // document swap so a fresh lesson starts with free-running figures.
+    private bool _driveFigures;
+
     private void OnPlay()
     {
         // Snapshot signals as "previous" so the next tick's pulse highlights
         // only the values that change *from this moment*.
         SnapshotSignals();
+        _driveFigures = true;
         _runner.Play();
     }
 
@@ -396,18 +416,21 @@
     private void OnRestart()
     {
         SnapshotSignals();
+        _driveFigures = true;
         _runner.Restart();
     }
 
     private void OnStepForward()
     {
         SnapshotSignals();
+        _driveFigures = true;
         _runner.StepForward();
     }
 
     private void OnStepBack()
     {
         SnapshotSignals();
+        _driveFigures = true;
         _runner.StepBack();
     }
 

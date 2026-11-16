@@ -16,7 +16,7 @@
 @inject SimulationParameters Sim
 
 @{
-    IEnumerable<Entity> entities = Builder?.Parser?.Entities ?? Enumerable.Empty<Entity>();
+    IEnumerable<Entity> entities = Builder?.Design?.Entities ?? Enumerable.Empty<Entity>();
     var hasEntities = entities.Any();
     var hasInputs = entities.SelectMany(e => e.Ports).Any(p => p.PortType == PortType.IN);
     var running = Sim.State == SimState.Running || Sim.State == SimState.Paused;

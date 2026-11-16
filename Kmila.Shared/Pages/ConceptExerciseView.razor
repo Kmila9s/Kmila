@@ -11,15 +11,27 @@
 @*
     ConceptExercise — Scratch-style block exercise.
 
-    The student composes a program in a Blockly workspace; when they press
-    Run, we fingerprint the workspace and look up a pre-baked execution
-    timeline from the exercise's catalog. On match, the ExecutionPlayer
-    plays the timeline; on miss, we surface a friendly "this combo isn't
-    pre-baked yet" hint so the page never feels broken.
+    The student composes a program in the kmila-blocks workspace (BlockEditor).
+    On Run:
+
+    1. Interpreter path (2026-11-15) — when the payload has a `world`
+       (recipe · kitchen · logic · clocked · restaurant · signals), the
+       serialized workspace goes to `kmilaExecSim.run` (wwwroot/js/kmila-exec-sim.js).
+       ANY arrangement runs and returns an ExerciseSimResult: a timeline for the
+       ExecutionPlayer, a localized verdict and 0–3 stars. A failed run reveals the
+       next progressive hint (payload `hints`); best stars persist per device
+       (`kmilaExecSim.stars`, localStorage — no DB schema change). Restaurant runs
+       also post their schedule to the embedded exec-restaurant figure
+       (`kmilaExecSim.showPlan`).
+    2. Fallback — if the interpreter isn't loaded on this host, fingerprint the
+       workspace (BlockProgram) and look up a pre-baked composition; on a miss,
+       show the friendly "this combo isn't pre-baked yet" hint.
+
+    While editing, `kmilaExecSim.code` keeps a live listing of the blocks (VHDL for
+    logic/clocked/signals, a numbered program otherwise) in the code panel.
 
     The visible-line highlight pattern is the same one used by the lesson
-    player (kmilaExecHighlightLines), but here the "code" is symbolic —
-    the timeline drives the signal table and notes.
+    player (kmilaExecHighlightLines); the timeline drives the signal table and notes.
 *@
 
 <section class="lesson-page">
@@ -45,6 +57,15 @@
                     <span class="lesson-chip lesson-chip--done">
                         <Icon Name="IconName.CheckCircleFill" />
                         @Traductor.T("CONCEPTS_DONE")
+                    </span>
+                }
+                @if (_bestStars > 0)
+                {
+                    <span class="lesson-chip kmila-exercise-stars-chip" title="@Traductor.T("CONCEPTS_EXERCISE_BEST")">
+                        @for (var s = 1; s <= 3; s++)
+                        {
+                            <Icon Name="@(s <= _bestStars ? IconName.StarFill : IconName.Star)" />
+                        }
                     </span>
                 }
             </div>
@@ -86,6 +107,26 @@
                              Toolbox="@_payload.Toolbox"
                              InitialStateJson="@(_payload.Starter.ValueKind == System.Text.Json.JsonValueKind.Object ? _payload.Starter.GetRawText() : null)"
                              OnChange="OnWorkspaceChanged" />
+                @if (_payload.World == "restaurant")
+                {
+                    @* The restaurant figure replays the student's schedule (plan posted after Run). *@
+                    <div class="lesson-figure kmila-exercise-figure">
+                        <iframe src="/_content/Kmila.Shared/anatomia/exec-restaurant.html?modes=custom"
+                                title="@_title" loading="lazy"></iframe>
+                    </div>
+                }
+                @if (!string.IsNullOrEmpty(_code))
+                {
+                    <div class="kmila-exercise-code">
+                        <div class="kmila-exercise-code__title">
+                            <Icon Name="IconName.CodeSlash" />
+                            <span>@Traductor.T(_codeIsVhdl ? "CONCEPTS_EXERCISE_CODE_VHDL" : "CONCEPTS_EXERCISE_CODE_PROGRAM")</span>
+                        </div>
+                        <div class="lesson-markdown">
+                            @MarkdownRenderer.Render("```" + (_codeIsVhdl ? "vhdl" : "text") + "\n" + _code + "\n```")
+                        </div>
+                    </div>
+                }
 
                 <div class="kmila-exercise-actions">
                     <button type="button" class="kmila-btn kmila-btn--ghost"
@@ -109,7 +150,40 @@
                     </button>
                 </div>
 
-                @if (_matchedComposition != null)
+                @if (_sim != null)
+                {
+                    <div class="kmila-exercise-match @(_sim.Ok ? "kmila-exercise-match--ok" : "kmila-exercise-match--miss")">
+                        <Icon Name="@(_sim.Ok ? IconName.CheckCircleFill : IconName.XCircle)" />
+                        <div>
+                            <strong>@Traductor.T(_sim.Ok ? "CONCEPTS_EXERCISE_GOAL_MET" : "CONCEPTS_EXERCISE_GOAL_MISSED")</strong>
+                            <span>@ConceptCatalog.Localize(_sim.Verdict, _lang, string.Empty)</span>
+                        </div>
+                        @if (_sim.Ok)
+                        {
+                            <span class="kmila-exercise-stars" aria-label="@_sim.Stars / 3">
+                                @for (var s = 1; s <= 3; s++)
+                                {
+                                    <Icon Name="@(s <= _sim.Stars ? IconName.StarFill : IconName.Star)" />
+                                }
+                            </span>
+                        }
+                    </div>
+                    @if (!_sim.Ok && CurrentHint is { } hint)
+                    {
+                        <div class="kmila-exercise-hint">
+                            <Icon Name="IconName.Lightbulb" />
+                            <div>
+                                <strong>@Traductor.T("CONCEPTS_EXERCISE_HINT") @Math.Min(_fails, HintCount)/@HintCount</strong>
+                                <span>@hint</span>
+                            </div>
+                        </div>
+                    }
+                    @if (_sim.Timeline != null)
+                    {
+                        <ExecutionPlayer Doc="_sim.Timeline" Lang="@_lang" />
+                    }
+                }
+                else if (_matchedComposition != null)
                 {
                     <div class="kmila-exercise-match kmila-exercise-match--ok">
                         <Icon Name="IconName.CheckCircleFill" />
@@ -173,6 +247,26 @@
     private string? _lastFingerprint;
     private ExerciseComposition? _matchedComposition;
 
+    // ─── Interpreter (kmila-exec-sim.js) ────────────────────────────────
+    private ExerciseSimResult? _sim;       // last interpreter run (null = none / fallback path)
+    private int _fails;                    // unsuccessful runs this visit → reveals hints
+    private int _bestStars;                // best stars on this device
+    private string _code = string.Empty;   // live listing of the current blocks
+    private bool _codeIsVhdl;
+    private bool _codeDirty;               // re-colorize the code panel after render
+    private bool _needCodeInit;            // build the listing once the editor holds the starter blocks
+
+    private static readonly System.Text.Json.JsonSerializerOptions SimJson = new() { PropertyNameCaseInsensitive = true };
+
+    private List<string>? HintList =>
+        _payload == null || _payload.Hints.Count == 0 ? null
+        : _payload.Hints.TryGetValue(_lang, out var h) && h.Count > 0 ? h
+        : _payload.Hints.TryGetValue("en", out var en) ? en : null;
+    private int HintCount => HintList?.Count ?? 0;
+    private string? CurrentHint => _fails > 0 && HintCount > 0 ? HintList![Math.Min(_fails, HintCount) - 1] : null;
+
+    private bool HasWorld => !string.IsNullOrEmpty(_payload?.World);
+
     protected override void OnInitialized()
     {
         Traductor.StaticOnLangChanged += OnLangChanged;
@@ -185,9 +279,15 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (string.IsNullOrEmpty(_brief)) return;
-        // Pipe fenced code blocks in the brief through Monaco's tokenizer so
-        // any VHDL snippets render with the same colors as the Editor.
+        if (_needCodeInit && !_loading && _editor != null)
+        {
+            _needCodeInit = false;
+            _ = InitCodeLaterAsync();
+        }
+        if (string.IsNullOrEmpty(_brief) && !_codeDirty) return;
+        _codeDirty = false;
+        // Pipe fenced code blocks in the brief (and the live code panel) through
+        // Monaco's tokenizer so VHDL renders with the same colors as the Editor.
         try { await JS.InvokeVoidAsync("kmilaColorizeLessonCode", ".lesson-markdown"); }
         catch { /* monaco not loaded — fine */ }
     }
@@ -225,8 +325,80 @@
         _completed = await Progress.IsCompletedAsync("exercises", _exercise.Id);
 
         _ = Progress.TouchLastOpenedAsync("exercises", _exercise.Id);
+        _sim = null;
+        _fails = 0;
+        _code = string.Empty;
+        _codeIsVhdl = _payload?.World is "logic" or "clocked" or "signals";
+        _needCodeInit = true;
+        try { _bestStars = HasWorld ? await JS.InvokeAsync<int>("kmilaExecSim.stars", _exercise.Id) : 0; }
+        catch { _bestStars = 0; /* interpreter not loaded on this host yet */ }
 
         _loading = false;
+    }
+
+    /// <summary>
+    /// The editor loads the starter blocks in its own first render, after ours — poll briefly until
+    /// the workspace holds them so the code panel is there from the start.
+    /// </summary>
+    private async Task InitCodeLaterAsync()
+    {
+        for (var i = 0; i < 8 && string.IsNullOrEmpty(_code); i++)
+        {
+            await Task.Delay(250);
+            await RefreshCodeAsync();
+        }
+        if (!string.IsNullOrEmpty(_code)) await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>Refreshes the live code listing from the current blocks (interpreter worlds only).</summary>
+    private async Task RefreshCodeAsync()
+    {
+        if (!HasWorld || _editor == null) return;
+        try
+        {
+            var json = await _editor.SerializeAsync();
+            var code = await JS.InvokeAsync<string?>("kmilaExecSim.code", _payload!.World, json, _lang) ?? string.Empty;
+            if (code != _code) { _code = code; _codeDirty = true; }
+        }
+        catch { /* interpreter unavailable — no panel */ }
+    }
+
+    /// <summary>
+    /// Runs the student's blocks in the exercise's interpreter world. Returns false when the
+    /// interpreter isn't available (caller falls back to the pre-baked composition catalog).
+    /// </summary>
+    private async Task<bool> RunInterpreterAsync(string? workspaceJson)
+    {
+        string? raw;
+        try
+        {
+            var goal = _payload!.Goal.ValueKind == System.Text.Json.JsonValueKind.Undefined ? "{}" : _payload.Goal.GetRawText();
+            raw = await JS.InvokeAsync<string?>("kmilaExecSim.run", _payload.World, goal, workspaceJson ?? "{}", _lang);
+        }
+        catch { return false; }
+        if (string.IsNullOrEmpty(raw)) return false;
+
+        var sim = System.Text.Json.JsonSerializer.Deserialize<ExerciseSimResult>(raw, SimJson);
+        if (sim == null) return false;
+        _sim = sim;
+
+        if (sim.Ok)
+        {
+            try { _bestStars = await JS.InvokeAsync<int>("kmilaExecSim.stars", _exercise!.Id, sim.Stars); } catch { }
+            if (_exercise != null && !_completed)
+            {
+                await Progress.MarkCompletedAsync("exercises", _exercise.Id);
+                _completed = true;
+            }
+        }
+        else _fails++;
+
+        // Restaurant world: replay the schedule in the figure.
+        if (sim.Plan.ValueKind == System.Text.Json.JsonValueKind.Object)
+        {
+            try { await JS.InvokeVoidAsync("kmilaExecSim.showPlan", sim.Plan); } catch { }
+        }
+        return true;
     }
 
     /// <summary>
@@ -234,10 +406,12 @@
     /// reset the match state so the student sees fresh feedback only
     /// after they explicitly click Run again.
     /// </summary>
-    private void OnWorkspaceChanged()
+    private async Task OnWorkspaceChanged()
     {
         _matchedComposition = null;
         _attemptedRun = false;
+        _sim = null;
+        await RefreshCodeAsync();
         StateHasChanged();
     }
 
@@ -250,6 +424,16 @@
             var json = await _editor.SerializeAsync();
             _lastFingerprint = BlockProgram.Fingerprint(json);
             _attemptedRun = true;
+            _sim = null;
+
+            // Interpreter first: any arrangement runs and explains itself.
+            if (HasWorld && await RunInterpreterAsync(json))
+            {
+                await RefreshCodeAsync();
+                return;
+            }
+
+            // Fallback: the pre-baked composition catalog (hosts without the interpreter).
             _matchedComposition = BlockProgram.FindMatch(_payload, _lastFingerprint);
 
             // Auto-mark completed the first time a match is found — same
@@ -272,6 +456,8 @@
         _matchedComposition = null;
         _attemptedRun = false;
         _lastFingerprint = null;
+        _sim = null;
+        _code = string.Empty;
     }
 
     private async Task ToggleCompletedAsync()
@@ -298,6 +484,8 @@
         ConceptExerciseKind.Recipe  => Traductor.T("CONCEPTS_EXERCISE_KIND_RECIPE"),
         ConceptExerciseKind.Logic   => Traductor.T("CONCEPTS_EXERCISE_KIND_LOGIC"),
         ConceptExerciseKind.Clocked => Traductor.T("CONCEPTS_EXERCISE_KIND_CLOCKED"),
+        ConceptExerciseKind.Scheduler => Traductor.T("CONCEPTS_EXERCISE_KIND_SCHEDULER"),
+        ConceptExerciseKind.Signals   => Traductor.T("CONCEPTS_EXERCISE_KIND_SIGNALS"),
         _                           => k.ToString()
     };
 

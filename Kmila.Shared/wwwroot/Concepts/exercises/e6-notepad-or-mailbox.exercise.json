@@ -1,0 +1,149 @@
+{
+  "version": 1,
+  "world": "signals",
+  "hints": {
+    "en": [
+      "A signal (<=) only changes when the delta ends: reading s right after assigning it gives its OLD value.",
+      "Keep the intermediate value in the variable: tmp := a + b.",
+      "tmp := a + b; then result <= tmp * 2."
+    ],
+    "es": [
+      "Una señal (<=) solo cambia al terminar el delta: leer s justo después de asignarla da su valor VIEJO.",
+      "Guarda el valor intermedio en la variable: tmp := a + b.",
+      "tmp := a + b; luego result <= tmp * 2."
+    ],
+    "fr": [
+      "Un signal (<=) ne change qu'à la fin du delta : lire s juste après l'avoir affecté donne son ANCIENNE valeur.",
+      "Garde la valeur intermédiaire dans la variable : tmp := a + b.",
+      "tmp := a + b ; puis result <= tmp * 2."
+    ],
+    "de": [
+      "Ein Signal (<=) ändert sich erst am Delta-Ende: s direkt nach der Zuweisung zu lesen liefert den ALTEN Wert.",
+      "Halte den Zwischenwert in der Variablen: tmp := a + b.",
+      "tmp := a + b; dann result <= tmp * 2."
+    ],
+    "ch": [
+      "signal（<=）要到 delta 结束才变：刚赋值就读 s，读到的是旧值。",
+      "把中间值放在 variable 里：tmp := a + b。",
+      "tmp := a + b；然后 result <= tmp * 2。"
+    ],
+    "jp": [
+      "signal（<=）はデルタの終わりにしか変わらない：代入直後に s を読むと古い値になる。",
+      "途中の値は variable に入れよう：tmp := a + b。",
+      "tmp := a + b、続けて result <= tmp * 2。"
+    ],
+    "ar": [
+      "الإشارة (<=) لا تتغيّر إلا عند نهاية الدلتا: قراءة s بعد إسنادها مباشرة تعطي قيمتها القديمة.",
+      "احفظ القيمة الوسيطة في المتغيّر: tmp := a + b.",
+      "tmp := a + b؛ ثم result <= tmp * 2."
+    ]
+  },
+  "toolbox": {
+    "kind": "flyoutToolbox",
+    "contents": [
+      {
+        "kind": "block",
+        "type": "kmila_sig_assign"
+      },
+      {
+        "kind": "sep"
+      },
+      {
+        "kind": "block",
+        "type": "kmila_sig_op"
+      },
+      {
+        "kind": "block",
+        "type": "kmila_sig_ref"
+      }
+    ]
+  },
+  "starter": {
+    "blocks": {
+      "languageVersion": 0,
+      "blocks": [
+        {
+          "type": "kmila_sig_assign",
+          "id": "g1",
+          "x": 24,
+          "y": 24,
+          "fields": {
+            "TARGET": "s"
+          },
+          "inputs": {
+            "VALUE": {
+              "block": {
+                "type": "kmila_sig_op",
+                "id": "g2",
+                "fields": {
+                  "OP": "+"
+                },
+                "inputs": {
+                  "LHS": {
+                    "block": {
+                      "type": "kmila_sig_ref",
+                      "id": "g3",
+                      "fields": {
+                        "NAME": "a"
+                      }
+                    }
+                  },
+                  "RHS": {
+                    "block": {
+                      "type": "kmila_sig_ref",
+                      "id": "g4",
+                      "fields": {
+                        "NAME": "b"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "next": {
+            "block": {
+              "type": "kmila_sig_assign",
+              "id": "g5",
+              "fields": {
+                "TARGET": "result"
+              },
+              "inputs": {
+                "VALUE": {
+                  "block": {
+                    "type": "kmila_sig_op",
+                    "id": "g6",
+                    "fields": {
+                      "OP": "*"
+                    },
+                    "inputs": {
+                      "LHS": {
+                        "block": {
+                          "type": "kmila_sig_ref",
+                          "id": "g7",
+                          "fields": {
+                            "NAME": "s"
+                          }
+                        }
+                      },
+                      "RHS": {
+                        "block": {
+                          "type": "kmila_sig_ref",
+                          "id": "g8",
+                          "fields": {
+                            "NAME": "2"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "compositions": []
+}

@@ -20,7 +20,9 @@ public sealed class TuiApp
     private ScreenBuffer _buf = new(80, 24);
 
     private string _dir;
-    private List<string> _files = new();        // *.vhd/*.vhdl in _dir (names)
+    private List<string> _files = new();        // HDL sources in _dir (names)
+    private static readonly string SourceExtensions =
+        string.Join("/", Kmila.Frontend.HdlLanguages.Supported.SelectMany(l => l.Extensions));
     private int _fileSel, _fileScroll;
 
     private string? _topFile;                    // chosen top file (absolute)
@@ -130,8 +132,7 @@ public sealed class TuiApp
         try
         {
             _files = Directory.EnumerateFiles(_dir)
-                .Where(f => f.EndsWith(".vhd", StringComparison.OrdinalIgnoreCase) ||
-                            f.EndsWith(".vhdl", StringComparison.OrdinalIgnoreCase))
+                .Where(Kmila.Frontend.HdlLanguages.IsHdlSource)
                 .Select(Path.GetFileName)
                 .Where(n => n != null).Select(n => n!)
                 .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
@@ -583,7 +584,7 @@ public sealed class TuiApp
             _buf.TextClipped(x + 1, y + 1 + r, mark + name, w - 2, sel ? Attr.Selected : Attr.Default);
         }
         if (_files.Count == 0)
-            _buf.TextClipped(x + 1, y + 1, "(sin .vhd/.vhdl)", w - 2, Attr.Dim);
+            _buf.TextClipped(x + 1, y + 1, $"(sin {SourceExtensions})", w - 2, Attr.Dim);
     }
 
     /// <summary>Draws the editor panel (line numbers + text + cursor highlight).</summary>

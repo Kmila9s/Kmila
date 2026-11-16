@@ -21,7 +21,7 @@
         {
             var idx = i; // capture for closures
             var tab = Tabs[idx];
-            var info = GetFileInfo(tab.File?.FileName ?? string.Empty);
+            var info = FileTypes.Of(tab.File?.FileName);
             var isActive = idx == ActiveIndex;
 
             <button type="button"
@@ -167,23 +167,6 @@
     /// <summary>File-extension → (icon, variant). Mirrors the same mapping
     /// FilesCard uses so the visual treatment of a file is identical
     /// whether the user sees it in the file list or as a tab.</summary>
-    private static (IconName Icon, string Variant) GetFileInfo(string fileName)
-    {
-        if (!fileName.Contains('.'))
-            return (IconName.FileEarmark, "other");
-
-        var ext = fileName.Substring(fileName.LastIndexOf('.')).ToLowerInvariant();
-        return ext switch
-        {
-            ".vhd" or ".vhdl" => (IconName.FileCode,    "vhdl"),
-            ".md"             => (IconName.FileTypeMd,  "markdown"),
-            ".txt"            => (IconName.FileTypeTxt, "text"),
-            ".json"           => (IconName.Braces,      "json"),
-            ".xml"             => (IconName.Code,        "xml"),
-            _                 => (IconName.FileEarmark, "other"),
-        };
-    }
-
     public void Dispose()
     {
         Traductor.StaticOnLangChanged -= OnLanguageChanged;

@@ -2735,18 +2735,6 @@ public class VhdlBlockBuilder
         @"^\s*(?:transport|inertial)\s+",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    private static string StripDelayQualifier(string expr)
-    {
-        if (string.IsNullOrEmpty(expr)) return expr;
-        var s = expr.Trim();
-        var lead = DelayLeadRe.Match(s);
-        if (lead.Success) s = s.Substring(lead.Length).Trim();
-        // Depth-0 `after` — strip the trailing clause.
-        int afterIdx = FindKeywordAtDepth(s, 0, "after", 0);
-        if (afterIdx >= 0) s = s.Substring(0, afterIdx).TrimEnd();
-        return s;
-    }
-
     private static int TryParseWithSelect(
         string scan, string original, int start,
         out Dictionary<string, object?>? block)

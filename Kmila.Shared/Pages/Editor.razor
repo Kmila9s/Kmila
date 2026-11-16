@@ -117,7 +117,7 @@
                     {
                         <span class="editor-unsaved" title="@Traductor.T("EDITOR_UNSAVED")" aria-label="@Traductor.T("EDITOR_UNSAVED")"></span>
                     }
-                    <Icon Name="@GetFileIcon()" Class="editor-file-icon" />
+                    <Icon Name="@FileTypes.Of(_openedFile?.FileName).Icon" Class="editor-file-icon" />
                     <span class="editor-file-name @(_openedFile is null ? "editor-file-name--empty" : "")"
                           title="@(_openedFile?.FileName ?? Traductor.T("EDITOR_NO_FILE"))">
                         @(_openedFile?.FileName ?? Traductor.T("EDITOR_NO_FILE"))
@@ -283,7 +283,7 @@
                 OnRunTargetSelected="OnRunTargetSelectedAsync" />
 
         @* ---------- Editor Dock: Entities · Ports · Waveforms · Runs · Files · Output ---------- *@
-        <EditorDock EntitiesCount="@(Builder.Parser?.Entities.Count() ?? 0)"
+        <EditorDock EntitiesCount="@(Builder.Design?.Entities.Count() ?? 0)"
                     FilesCount="@_projectFiles.Count"
                     RunsCount="@_runsCount"
                     SourceControlCount="@_scChangedCount"
@@ -338,7 +338,7 @@
                 {
                     var entities = _entityScope is EntityScope.AllProjectFiles or EntityScope.Flattened
                         ? _scopedEntities
-                        : (Builder.Parser?.Entities?.ToList() ?? new List<Interpreter.Services.Entity>());
+                        : (Builder.Design?.Entities.ToList() ?? new List<Interpreter.Services.Entity>());
                     @if (entities.Count > 0)
                     {
                         @foreach (var entity in entities)
@@ -377,7 +377,7 @@
                 @{
                     var schematicCandidates = (_entityScope is EntityScope.AllProjectFiles or EntityScope.Flattened
                             ? _scopedEntities
-                            : (Builder.Parser?.Entities?.ToList() ?? new List<Interpreter.Services.Entity>()))
+                            : (Builder.Design?.Entities.ToList() ?? new List<Interpreter.Services.Entity>()))
                         .Where(e => e.Architecture != null)
                         .ToList();
                     var selectedEntity = _schematicEntity != null
@@ -563,8 +563,7 @@
     /// <summary>Project-relative paths of .vhd/.vhdl files — feeds the Workbench
     /// testbench picker in PortsPanel.</summary>
     private IEnumerable<string> _vhdlFilePaths => _projectFiles
-        .Where(f => f.FileName.EndsWith(".vhd", StringComparison.OrdinalIgnoreCase)
-                 || f.FileName.EndsWith(".vhdl", StringComparison.OrdinalIgnoreCase))
+        .Where(f => Kmila.Frontend.HdlLanguages.IsHdlSource(f.FileName))
         .Select(f => f.RelativePath)
         .OrderBy(p => p, StringComparer.OrdinalIgnoreCase);
 
@@ -643,7 +642,7 @@
 
     private string _currentLanguage
     {
-        get => _pane.ActiveTab?.Language ?? "vhdl";
+        get => _pane.ActiveTab?.Language ?? Kmila.Frontend.HdlLanguages.Vhdl.MonacoId;
         set { if (_pane.ActiveTab != null) _pane.ActiveTab.Language = value; }
     }
 
@@ -701,31 +700,24 @@
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var f in _projectFiles)
             {
-                var name = f.FileName ?? string.Empty;
-                if (!name.EndsWith(".vhd", StringComparison.OrdinalIgnoreCase) &&
-                    !name.EndsWith(".vhdl", StringComparison.OrdinalIgnoreCase))
+                var path = DiskPathFor(f);
+                if (path == null || !Kmila.Frontend.HdlLanguages.IsHdlSource(path))
                     continue;
-                try
+                var unit = Kmila.Frontend.Frontends.ForPath(path).ParseFile(path);
+                if (unit.Error != null) continue; // skip files that don't parse; show what we can
+                foreach (var e in unit.Entities)
                 {
-                    var path = DiskPathFor(f);
-                    if (path == null) continue;
-                    var p = new Debugger.Repositories.Parser(path);
-                    p.ParseFile();
-                    foreach (var e in p.Entities)
+                    if (e?.Name == null) continue;
+                    // Keep the first definition; prefer one that has an
+                    // architecture if a later file supplies it.
+                    if (seen.Add(e.Name)) merged.Add(e);
+                    else if (e.Architecture != null)
                     {
-                        if (e?.Name == null) continue;
-                        // Keep the first definition; prefer one that has an
-                        // architecture if a later file supplies it.
-                        if (seen.Add(e.Name)) merged.Add(e);
-                        else if (e.Architecture != null)
-                        {
-                            var idx = merged.FindIndex(x =>
-                                string.Equals(x.Name, e.Name, StringComparison.OrdinalIgnoreCase));
-                            if (idx >= 0 && merged[idx].Architecture == null) merged[idx] = e;
-                        }
+                        var idx = merged.FindIndex(x =>
+                            string.Equals(x.Name, e.Name, StringComparison.OrdinalIgnoreCase));
+                        if (idx >= 0 && merged[idx].Architecture == null) merged[idx] = e;
                     }
                 }
-                catch { /* skip files that don't parse; show what we can */ }
             }
         }
         else if (_entityScope == EntityScope.Flattened)
@@ -736,35 +728,25 @@
             try
             {
                 var baseDir = _project?.BasePath;
-                var topName = Builder.Parser?.Entities?.FirstOrDefault(e => e.Architecture != null)?.Name
-                              ?? _schematicEntity?.Name;
-                string? flat = !string.IsNullOrEmpty(baseDir) && !string.IsNullOrEmpty(topName)
-                    ? Interpreter.Services.SourceElaborator.ElaborateOrNull(baseDir!, topName!)
-                    : null;
-                if (flat != null)
+                var topName = Builder.Design?.Top?.Name ?? _schematicEntity?.Name;
+                if (Builder.Design is { } design && !string.IsNullOrEmpty(baseDir) && !string.IsNullOrEmpty(topName))
                 {
-                    var tmp = System.IO.Path.Combine(
-                        System.IO.Path.GetTempPath(), $"kmila_flat_{System.Guid.NewGuid():N}.vhd");
-                    System.IO.File.WriteAllText(tmp, flat);
-                    try
-                    {
-                        var p = new Debugger.Repositories.Parser(tmp);
-                        p.ParseFile();
-                        merged.AddRange(p.Entities);
-                    }
-                    finally { try { System.IO.File.Delete(tmp); } catch { } }
+                    var frontend = Kmila.Frontend.Frontends.For(design.Language);
+                    var flat = frontend.ElaborateSource(baseDir!, topName!);
+                    var unit = flat != null ? frontend.ParseSource(flat) : null;
+                    if (unit is { Error: null }) merged.AddRange(unit.Entities);
                 }
             }
             catch { /* fall back to the built parser output below */ }
 
             // No components to inline (or elaboration unavailable) → behave like
             // MainFile so the scope is never empty.
-            if (merged.Count == 0 && Builder.Parser?.Entities != null)
-                merged.AddRange(Builder.Parser.Entities);
+            if (merged.Count == 0 && Builder.Design != null)
+                merged.AddRange(Builder.Design.Entities);
         }
         else // MainFile (Libraries renders its own list, not entities)
         {
-            if (Builder.Parser?.Entities != null) merged.AddRange(Builder.Parser.Entities);
+            if (Builder.Design != null) merged.AddRange(Builder.Design.Entities);
         }
 
         _scopedEntities = merged;
@@ -782,16 +764,10 @@
     }
 
     /// <summary>Absolute on-disk path for a project file, or null if unknown.</summary>
-    private string? DiskPathFor(ProjectFile f)
-    {
-        if (_project == null || string.IsNullOrEmpty(_project.BasePath) || string.IsNullOrEmpty(f.FileName))
-            return null;
-        var parts = new List<string> { _project.BasePath };
-        if (!string.IsNullOrEmpty(f.DirectoryPath))
-            parts.AddRange(f.DirectoryPath.Split('/', StringSplitOptions.RemoveEmptyEntries));
-        parts.Add(f.FileName);
-        return System.IO.Path.Combine(parts.ToArray());
-    }
+    private string? DiskPathFor(ProjectFile f) =>
+        _project == null || string.IsNullOrEmpty(_project.BasePath) || string.IsNullOrEmpty(f.FileName)
+            ? null
+            : Kmila.Shared.Repositories.ProjectFiles.GetDiskPath(_project.BasePath, f);
 
     /// <summary>Scope dropdown change handler.</summary>
     private void OnEntityScopeChanged(ChangeEventArgs e)
@@ -1727,15 +1703,13 @@
         // First, look for a file explicitly named "main"
         var mainFile = files.FirstOrDefault(f =>
             System.IO.Path.GetFileNameWithoutExtension(f.FileName).Equals("main", StringComparison.OrdinalIgnoreCase) &&
-            (f.FileName.EndsWith(".vhd", StringComparison.OrdinalIgnoreCase) ||
-             f.FileName.EndsWith(".vhdl", StringComparison.OrdinalIgnoreCase)));
+            Kmila.Frontend.HdlLanguages.IsHdlSource(f.FileName));
 
         if (mainFile != null) return mainFile;
 
         // Then, look for any VHDL file (they are the entry points)
         var vhdlFile = files.FirstOrDefault(f =>
-            f.FileName.EndsWith(".vhd", StringComparison.OrdinalIgnoreCase) ||
-            f.FileName.EndsWith(".vhdl", StringComparison.OrdinalIgnoreCase));
+            Kmila.Frontend.HdlLanguages.IsHdlSource(f.FileName));
 
         if (vhdlFile != null) return vhdlFile;
 
@@ -1855,8 +1829,7 @@
         _projectId <= 0
             ? System.Array.Empty<ProjectFile>()
             : _projectFiles.Where(f =>
-                  f.FileName.EndsWith(".vhd", StringComparison.OrdinalIgnoreCase) ||
-                  f.FileName.EndsWith(".vhdl", StringComparison.OrdinalIgnoreCase)).ToList();
+                  Kmila.Frontend.HdlLanguages.IsHdlSource(f.FileName)).ToList();
 
     /// <summary>User promoted a file to entry point from the RunBar inline picker:
     /// persist it as the project's entry point (same marker the Files-panel ★ uses,
@@ -1947,8 +1920,7 @@
             // explicit entry to avoid building a sub-component as if it
             // were the top.
             int vhdlCount = _projectFiles.Count(f =>
-                f.FileName.EndsWith(".vhd",  StringComparison.OrdinalIgnoreCase) ||
-                f.FileName.EndsWith(".vhdl", StringComparison.OrdinalIgnoreCase));
+                Kmila.Frontend.HdlLanguages.IsHdlSource(f.FileName));
             if (vhdlCount > 1)
             {
                 Log.Warn(Traductor.T("BUILD_NO_ENTRY_MULTIVHD_HINT"));
@@ -2055,8 +2027,8 @@
             // character offset of the offending identifier — without this,
             // the squiggle lands on whitespace and looks like "not
             // highlighting" to the student. See [[project_monaco_error_markers_missing]].
-            Builder.Parser?.Diagnostics.Add(
-                global::Parser.Models.Diagnostic.FromException(pex, Builder.Parser?.FileContent));
+            Builder.Design?.Diagnostics.Add(
+                global::Parser.Models.Diagnostic.FromException(pex, Builder.Design?.SourceText));
             await PublishDiagnosticsAsync();
             Sim.SetState(SimState.BuildError);
             Log.Error($"{Traductor.T("SIM_LOG_BUILD_FAILED")}: {pex.Message}");
@@ -2084,7 +2056,7 @@
                 // a 6-column highlight when we can't infer the offending token's
                 // length — wide enough to see, narrow enough to not eat the line.
                 int eCol  = sCol + 6;
-                Builder.Parser?.Diagnostics.Add(new global::Parser.Models.Diagnostic
+                Builder.Design?.Diagnostics.Add(new global::Parser.Models.Diagnostic
                 {
                     Severity    = global::Parser.Models.DiagnosticSeverity.Error,
                     Line        = line,
@@ -2145,7 +2117,7 @@
     {
         try
         {
-            var diags = Builder.Parser?.Diagnostics ?? new List<global::Parser.Models.Diagnostic>();
+            var diags = Builder.Design?.Diagnostics ?? new List<global::Parser.Models.Diagnostic>();
             var markers = diags.Select(d => new
             {
                 severity = d.Severity switch
@@ -2402,7 +2374,7 @@
             {
             string? clkName = null;
             string? entityName = null;
-            var entityForLog = Builder?.Parser?.Entities?
+            var entityForLog = Builder?.Design?.Entities?
                 .FirstOrDefault(e => e != null && e.Architecture != null);
             if (entityForLog != null)
             {
@@ -2697,7 +2669,7 @@
         return new()
         {
             AutomaticLayout = true,
-            Language="vhdl",
+            Language = Kmila.Frontend.HdlLanguages.Vhdl.MonacoId,
             // 14px reads well on both desktop and phone. The old 16px was
             // premised on iOS zoom-on-focus prevention, but Monaco renders
             // into a contenteditable div — iOS only zooms genuine <input>
@@ -3210,10 +3182,8 @@ end architecture behavioral;",
     {
         if (_vhdlBlockEditor == null || vhdFile == null) return;
 
-        // Don't write sidecars next to non-VHDL files (markdown, etc.).
-        var ext = Path.GetExtension(vhdFile.FileName);
-        if (!string.Equals(ext, ".vhd", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(ext, ".vhdl", StringComparison.OrdinalIgnoreCase))
+        // The block editor is VHDL-only: no sidecars next to other files.
+        if (Kmila.Frontend.HdlLanguages.FromPath(vhdFile.FileName) != Kmila.Frontend.HdlLanguages.Vhdl)
         {
             return;
         }
@@ -3734,47 +3704,6 @@ end architecture behavioral;",
 
     #endregion
 
-    #region Helper Methods
-
-    /// <summary>
-    /// Gets the appropriate icon for the current file type.
-    /// </summary>
-    private IconName GetFileIcon()
-    {
-        if (_openedFile == null) return IconName.FileEarmark;
-
-        var extension = Path.GetExtension(_openedFile.FileName)?.ToLowerInvariant();
-        return extension switch
-        {
-            ".vhd" or ".vhdl" => IconName.Cpu,
-            ".md" => IconName.FileEarmarkText,
-            ".txt" => IconName.FileEarmarkText,
-            ".json" => IconName.Braces,
-            ".xml" => IconName.Code,
-            _ => IconName.FileEarmarkCode
-        };
-    }
-
-    /// <summary>
-    /// Determines the Monaco language based on file extension.
-    /// </summary>
-    private string GetLanguageFromExtension(string fileName)
-    {
-        var extension = Path.GetExtension(fileName)?.ToLowerInvariant();
-        return extension switch
-        {
-            ".vhd" or ".vhdl" => "vhdl",
-            ".md" => "markdown",
-            ".json" => "json",
-            ".xml" => "xml",
-            ".txt" => "plaintext",
-            ".v" or ".sv" => "systemverilog",
-            _ => "plaintext"
-        };
-    }
-
-    #endregion
-
     #region Tabs
 
     /// <summary>
@@ -3802,7 +3731,7 @@ end architecture behavioral;",
             File = file,
             OriginalContent = file.Content ?? string.Empty,
             HasUnsavedChanges = false,
-            Language = GetLanguageFromExtension(file.FileName)
+            Language = FileTypes.Of(file.FileName).MonacoLanguage
         };
         if (tab.IsMarkdown) tab.MarkdownPreview = file.Content ?? string.Empty;
 

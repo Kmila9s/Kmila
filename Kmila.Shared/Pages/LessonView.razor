@@ -24,10 +24,16 @@
 
 <section class="lesson-page">
     <div class="lesson-page__chrome">
-        <a href="/learn" class="lesson-crumb">
-            <Icon Name="IconName.ArrowLeft" />
-            <span>@Traductor.T("LEARN_ALL_LESSONS")</span>
-        </a>
+        <div class="lesson-page__crumb-row">
+            <a href="/learn" class="lesson-crumb">
+                <Icon Name="IconName.ArrowLeft" />
+                <span>@Traductor.T("LEARN_ALL_LESSONS")</span>
+            </a>
+            @if (_indexGroups.Count > 0)
+            {
+                <LessonIndex @ref="_index" Groups="_indexGroups" />
+            }
+        </div>
 
         @if (_module != null && _lesson != null)
         {
@@ -243,6 +249,15 @@
                     <span class="lesson-nav-btn lesson-nav-btn--disabled" aria-hidden="true"></span>
                 }
             </div>
+
+            @if (LessonIndexBuilder.PositionOf(_indexGroups) is { } pos)
+            {
+                <button type="button" class="lesson-footer__index" @onclick="() => _index?.Open()">
+                    <Icon Name="IconName.ListOl" />
+                    <span>@Traductor.T("LESSON_INDEX_JUMP")</span>
+                    <span class="lesson-footer__index-pos" dir="ltr">@pos.Index / @pos.Total</span>
+                </button>
+            }
         </footer>
     }
 </section>
@@ -255,6 +270,8 @@
     private Lesson? _lesson;
     private Lesson? _prev;
     private Lesson? _next;
+    private LessonIndex? _index;
+    private List<LessonIndexGroup> _indexGroups = new();
     private string? _body;
     private string? _lessonTitle;
     private ExecutionTimelineDoc? _timeline;
@@ -327,6 +344,7 @@
         _body = bodyInfo.Body;
         _fellBackToEnglish = bodyInfo.FellBack;
         _completed = await Progress.IsCompletedAsync(_module.Id, _lesson.Id);
+        await RebuildIndexAsync();
 
         // Optional inline ExecutionPlayer — only fetch when the lesson opts
         // in. Skips the I/O entirely for the (current) majority of lessons
@@ -368,6 +386,15 @@
         else
             await Progress.MarkCompletedAsync(_module.Id, _lesson.Id);
         _completed = !_completed;
+        await RebuildIndexAsync();
+    }
+
+    /// <summary>Rebuilds the lesson-index groups (progress cache is hydrated by now).</summary>
+    private async Task RebuildIndexAsync()
+    {
+        var manifest = await Catalog.GetManifestAsync();
+        _indexGroups = LessonIndexBuilder.ForLearn(
+            manifest, _lang, Progress.IsCompletedCached, _module?.Id, _lesson?.Id);
     }
 
     /// <summary>

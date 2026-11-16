@@ -1465,23 +1465,6 @@ window.downloadFile = function (fileName, content) {
 })();
 
 
-/* ─── Waveform fit-to-width helper ────────────────────────────────────────
- * Returns the trace width that would make the grid (label column + trace)
- * exactly fit the visible body. The caller clamps this against the zoom
- * floor/ceiling. Returns -1 if the body isn't measurable (prerender or
- * detached); the caller should fall back to its BaseWidth in that case.
- * --------------------------------------------------------------------- */
-window.kmilaWaveformFitWidth = function (bodySel, labelW) {
-    const body = (typeof bodySel === 'string')
-        ? document.querySelector(bodySel) : bodySel;
-    if (!body) return -1;
-    const w = body.clientWidth;
-    if (!(w > 0)) return -1;
-    // Subtract a few pixels of buffer so the body doesn't show a scrollbar
-    // from sub-pixel rounding at the exact-fit boundary.
-    return Math.max(0, Math.floor(w - (labelW || 160) - 2));
-};
-
 /* ─── Waveform viewport / scroll observer ─────────────────────────────────
  *
  * Used by the virtualised renderer: the .waveform-viewer__body still
@@ -1691,20 +1674,6 @@ window.kmilaWaveformFitWidth = function (bodySel, labelW) {
         } catch (_) {}
     };
 })();
-
-
-/* ─── Tiny haptic helper (Android-only; iOS Safari ignores) ──────────────── */
-window.kmilaHaptic = function (kind) {
-    if (!navigator.vibrate) return;
-    try {
-        switch (kind) {
-            case 'tick':    navigator.vibrate(8); break;
-            case 'success': navigator.vibrate([12, 30, 12]); break;
-            case 'error':   navigator.vibrate([20, 40, 20]); break;
-            default:        navigator.vibrate(10);
-        }
-    } catch (_) {}
-};
 
 
 /* ─── Bottom-sheet dock controller (mobile) ──────────────────────────────────
@@ -1968,6 +1937,19 @@ function _kmilaFindExecEditor() {
     }) || null;
 }
 
+/**
+ * Mirrors the lesson player's current step into every anatomy figure on the
+ * page (iframes inside .lesson-figure). Figures that understand the message
+ * (the execution-model "stepper" figures) jump to that step; others ignore it.
+ * Same-origin iframes, but postMessage keeps the figure decoupled from the app.
+ */
+window.kmilaFigureStep = function (index) {
+    document.querySelectorAll('.lesson-figure iframe').forEach(f => {
+        try { f.contentWindow && f.contentWindow.postMessage({ kmilaFig: 'step', index: index }, '*'); }
+        catch (e) { /* figure not loaded yet — it will follow on the next step */ }
+    });
+};
+
 window.kmilaExecHighlightLines = function (lineNumbers) {
     const editor = _kmilaFindExecEditor();
     if (!editor) return;
@@ -1994,15 +1976,6 @@ window.kmilaExecHighlightLines = function (lineNumbers) {
     }
 };
 
-window.kmilaExecClearHighlights = function () {
-    const editor = _kmilaFindExecEditor();
-    if (!editor) return;
-    const prev = _kmilaExecDecos.get(editor) || [];
-    if (prev.length > 0) {
-        editor.deltaDecorations(prev, []);
-        _kmilaExecDecos.set(editor, []);
-    }
-};
 
 /* ── Phase B+ Deep AST (follow-up): Monaco gutter line breakpoints ────────
  * Editor.razor's main Monaco (the `.editor-monaco` wrapper) lets the user
