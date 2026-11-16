@@ -20,6 +20,20 @@ public interface IHdlFrontend
     /// </summary>
     DesignResult LoadDesign(DesignRequest request, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Names of the library units (VHDL packages) declared in
+    /// <paramref name="source"/>, in source order and without duplicates.
+    /// Bodies are not declarations. Empty for languages without library units.
+    /// </summary>
+    IReadOnlyList<string> DeclaredLibraryUnits(string source);
+
+    /// <summary>
+    /// The text of library unit <paramref name="name"/> inside
+    /// <paramref name="source"/> (declaration through its closing statement),
+    /// or null when the unit is not found or its end cannot be located.
+    /// </summary>
+    string? LibraryUnitText(string source, string name);
+
     /// <summary>Lists this language's user sources under <paramref name="root"/>.</summary>
     IReadOnlyList<string> DiscoverSources(string root, bool recursive = true);
 

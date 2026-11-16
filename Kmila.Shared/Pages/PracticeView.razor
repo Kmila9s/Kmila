@@ -549,7 +549,7 @@
         new()
         {
             AutomaticLayout = true,
-            Language = Kmila.Frontend.HdlLanguages.Vhdl.MonacoId,
+            Language = (_exercise?.DefaultLanguage ?? Kmila.Frontend.HdlLanguages.Supported[0]).MonacoId,
             FontSize = 16,
             TabSize = 4,
             InsertSpaces = true,
@@ -563,14 +563,14 @@
         };
 
     /// <summary>
-    /// Returns the exercise's StarterVhdl if present, otherwise a generic
+    /// Returns the starter of the exercise's default-language variant if present, otherwise a generic
     /// scaffold so the editor never opens fully blank. An empty buffer left
     /// students staring at a single line "1" with no orientation as to what
     /// VHDL construct was expected (audit 2026-06-14 I-02).
     /// </summary>
     private string ResolveStarter()
     {
-        var starter = _exercise?.StarterVhdl;
+        var starter = _exercise?.DefaultVariant.Starter;
         if (!string.IsNullOrWhiteSpace(starter)) return starter!;
         if (_exercise == null) return string.Empty;
         var title = PracticeCatalog.Localize(_exercise.Titles, _lang, _exercise.Id);
@@ -594,7 +594,7 @@
         try
         {
             code = await _monaco.GetValue() ?? string.Empty;
-            _verdict = await Evaluator.GradeAsync(_exercise, code);
+            _verdict = await Evaluator.GradeAsync(_exercise, _exercise.DefaultLanguage, code);
             _solved = _verdict.Kind == PracticeVerdictKind.Solved;
         }
         catch (Exception)

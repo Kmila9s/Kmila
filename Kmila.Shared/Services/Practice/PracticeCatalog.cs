@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Kmila.Frontend;
 using Kmila.Shared.Models;
 using Kmila.Shared.Models.Practice;
 using Microsoft.Extensions.Logging;
@@ -7,8 +8,8 @@ using Microsoft.Extensions.Logging;
 namespace Kmila.Shared.Services.Practice;
 
 /// <summary>
-/// Loads the Practice catalog manifest + per-exercise assets (solution VHDL,
-/// starter VHDL, tests.json, statement.{lang}.md) from disk. Mirrors the
+/// Loads the Practice catalog manifest + per-exercise assets (solution and
+/// starter per HDL language variant, tests.json, statement.{lang}.md) from disk. Mirrors the
 /// stream-delegate pattern used by <see cref="LessonCatalog"/> so the same
 /// implementation works on the Blazor Web host (file-system path candidates)
 /// and on MAUI Blazor Hybrid (<c>FileSystem.OpenAppPackageFileAsync</c>).
@@ -113,6 +114,7 @@ public class PracticeCatalog
         {
             using var stream = await _open("Practice/manifest.json");
             var doc = await JsonSerializer.DeserializeAsync<ManifestRoot>(stream, JsonOpts);
+            if (doc != null && !ContentSchema.Accepts(doc.Version, "Practice/manifest.json", _logger)) doc = null;
             if (doc?.Exercises == null)
             {
                 _logger.LogWarning("[PracticeCatalog] manifest.json deserialized to empty");
@@ -164,12 +166,24 @@ public class PracticeCatalog
 
             string folder = (e.Folder ?? string.Empty).Trim('/');
 
-            // Required source files. Failure to load any of these → exercise unusable.
-            var solution = await ReadTextAsync($"Practice/{folder}/solution.vhdl");
-            var starter  = await ReadTextAsync($"Practice/{folder}/starter.vhdl");
-            if (solution == null || starter == null)
+            // Required source files, one pair per language variant. A variant
+            // with a missing file is dropped; no usable variant → exercise unusable.
+            var loaded = new Dictionary<string, PracticeVariant>(StringComparer.OrdinalIgnoreCase);
+            foreach (var (langId, files) in e.Variants ?? new())
             {
-                _logger.LogWarning("[PracticeCatalog] Missing solution/starter for {Id}", e.Id);
+                var solution = files.Solution == null ? null : await ReadTextAsync($"Practice/{folder}/{files.Solution}");
+                var starter  = files.Starter  == null ? null : await ReadTextAsync($"Practice/{folder}/{files.Starter}");
+                if (solution == null || starter == null)
+                {
+                    _logger.LogWarning("[PracticeCatalog] Missing solution/starter for {Id} ({Lang})", e.Id, langId);
+                    continue;
+                }
+                loaded[langId] = new PracticeVariant(starter, solution);
+            }
+            var variants = HdlVariants<PracticeVariant>.FromIds(loaded);
+            if (variants.IsEmpty)
+            {
+                _logger.LogWarning("[PracticeCatalog] No usable language variant for {Id}", e.Id);
                 return null;
             }
 
@@ -197,8 +211,7 @@ public class PracticeCatalog
                 Titles: e.Titles ?? new(),
                 Summaries: e.Summaries ?? new(),
                 Statements: statements,
-                SolutionVhdl: solution,
-                StarterVhdl: starter,
+                Variants: variants,
                 MatchKind: matchKind,
                 OutputPortsToCompare: e.OutputPorts ?? new(),
                 SampleTimesNs: e.SampleTimesNs ?? new(),
@@ -339,6 +352,15 @@ public class PracticeCatalog
         public Dictionary<string, string>? Summaries { get; set; }
         /// <summary>Optional engine-feature gate. See PracticeExerciseMeta.RequiresEngine.</summary>
         public string? RequiresEngine { get; set; }
+        /// <summary>Source files per HDL language id (schema v2), relative to <see cref="Folder"/>.</summary>
+        public Dictionary<string, VariantFiles>? Variants { get; set; }
+    }
+
+    /// <summary>File names of one language variant inside an exercise folder.</summary>
+    private sealed class VariantFiles
+    {
+        public string? Starter { get; set; }
+        public string? Solution { get; set; }
     }
 
     /// <summary>Root document shape of an exercise's <c>hints.json</c> file.</summary>

@@ -101,7 +101,7 @@ public static class PracticeCommand
         if (ex == null) { Console.Error.WriteLine($"kmila practice: unknown exercise '{id}'."); return 1; }
 
         bool verbose = p.Has("verbose", "v");
-        var verdict = await GradeOneAsync(ex, File.ReadAllText(solPath), verbose);
+        var verdict = await GradeOneAsync(ex, solPath, verbose);
         PrintVerdict(verdict, PracticeCatalog.Localize(ex.Titles, lang, ex.Id), verbose);
         return verdict.Kind == PracticeVerdictKind.Solved ? 0 : 1;
     }
@@ -131,7 +131,7 @@ public static class PracticeCommand
         int solved = 0;
         foreach (var f in files)
         {
-            var verdict = await GradeOneAsync(ex, File.ReadAllText(f), verbose);
+            var verdict = await GradeOneAsync(ex, f, verbose);
             if (verdict.Kind == PracticeVerdictKind.Solved) solved++;
             int pass = verdict.TestResults.Count(r => r.Passed);
             Console.Out.WriteLine($"{Path.GetFileName(f),-32} {verdict.Kind,-12} {pass}/{verdict.TestResults.Count}");
@@ -140,16 +140,21 @@ public static class PracticeCommand
         return solved == files.Count ? 0 : 1;
     }
 
-    /// <summary>Grades one candidate, capturing engine console chatter so stdout stays clean.</summary>
-    private static async Task<PracticeAttemptVerdict> GradeOneAsync(PracticeExercise ex, string code, bool verbose)
+    /// <summary>
+    /// Grades one candidate file (its extension picks the exercise variant),
+    /// capturing engine console chatter so stdout stays clean.
+    /// </summary>
+    private static async Task<PracticeAttemptVerdict> GradeOneAsync(PracticeExercise ex, string path, bool verbose)
     {
+        var language = Kmila.Frontend.HdlLanguages.FromPath(path) ?? ex.DefaultLanguage;
+        var code = File.ReadAllText(path);
         var originalOut = Console.Out;
         var captured = new StringWriter();
         if (!verbose) Console.SetOut(captured);
         try
         {
             var evaluator = new PracticeEvaluator();
-            return await evaluator.GradeAsync(ex, code);
+            return await evaluator.GradeAsync(ex, language, code);
         }
         finally
         {

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Kmila.Frontend;
 using Kmila.Shared.Models;
 using Kmila.Shared.Repositories;
 using Microsoft.Extensions.Logging;
@@ -7,7 +8,8 @@ using Microsoft.Extensions.Logging;
 namespace Kmila.Shared.Services;
 
 /// <summary>
-/// One entry in the gallery: id + display keys + default settings + file list.
+/// One entry in the gallery: id + display keys + default settings + one file
+/// set per HDL language.
 /// </summary>
 public sealed record ProjectTemplate(
     string  Id,
@@ -16,8 +18,25 @@ public sealed record ProjectTemplate(
     string  DescriptionKey,
     string? DefaultFpgaModel,
     int     DefaultClockMhz,
-    bool    AutoImportAsLibrary,
-    IReadOnlyList<ProjectTemplateFile> Files);
+    HdlVariants<ProjectTemplateVariant> Variants)
+{
+    /// <summary>True when the template's (preferred) file set forms a library to register.</summary>
+    public bool AutoImportAsLibrary => Variants.Preferred?.Payload.IsLibrary == true;
+}
+
+/// <summary>One HDL language's file set of a template.</summary>
+/// <param name="Files">Files to create, relative to the template root ('/'-separated, no leading slash).</param>
+/// <param name="LibraryFiles">Paths (subset of <paramref name="Files"/>), in
+/// compile order, that form the library registered when the template
+/// auto-imports as a library (declaration first, then body). Empty for a
+/// non-library template.</param>
+public sealed record ProjectTemplateVariant(
+    IReadOnlyList<ProjectTemplateFile> Files,
+    IReadOnlyList<string> LibraryFiles)
+{
+    /// <summary>True when this file set forms a library.</summary>
+    public bool IsLibrary => LibraryFiles.Count > 0;
+}
 
 /// <summary>One file in a template's tree. Path is relative to the template root and may include directory components.</summary>
 public sealed record ProjectTemplateFile(string Path);
@@ -123,7 +142,7 @@ public sealed class ProjectTemplateService
             {
                 using var stream = await _open($"Templates/{id}/template.json");
                 var dto = await JsonSerializer.DeserializeAsync<TemplateDto>(stream, JsonOpts);
-                if (dto is null) continue;
+                if (dto is null || !ContentSchema.Accepts(dto.Version, $"Templates/{id}/template.json", _logger)) continue;
                 list.Add(new ProjectTemplate(
                     Id:                  dto.Id ?? id,
                     Icon:                dto.Icon ?? "FileEarmark",
@@ -131,12 +150,8 @@ public sealed class ProjectTemplateService
                     DescriptionKey:      dto.DescriptionKey ?? string.Empty,
                     DefaultFpgaModel:    dto.DefaultFpgaModel,
                     DefaultClockMhz:     dto.DefaultClockMhz ?? 50,
-                    AutoImportAsLibrary: dto.AutoImportAsLibrary ?? false,
-                    Files:               dto.Files?
-                                            .Where(f => !string.IsNullOrWhiteSpace(f.Path))
-                                            .Select(f => new ProjectTemplateFile(f.Path!))
-                                            .ToList()
-                                          ?? new List<ProjectTemplateFile>()));
+                    Variants:            HdlVariants<ProjectTemplateVariant>.FromIds(
+                                            dto.Variants?.ToDictionary(kv => kv.Key, kv => ToVariant(kv.Value)))));
             }
             catch (Exception ex)
             {
@@ -155,9 +170,11 @@ public sealed class ProjectTemplateService
     /// <param name="description">Optional description stored with the project.</param>
     /// <param name="languageCode">Resolved against the template's available
     /// language folders; falls back to English when missing.</param>
+    /// <param name="language">HDL language of the file set to create; the
+    /// template's preferred variant when null.</param>
     /// <param name="registerAsLibrary">When the template's
     /// <see cref="ProjectTemplate.AutoImportAsLibrary"/> is true and this is
-    /// also true, the project's package files are concatenated and registered
+    /// also true, the variant's library files are concatenated and registered
     /// with <see cref="UserAssetStore"/> so other projects can `use` them.</param>
     /// <returns>The created <see cref="Project"/>, or null on failure (look at
     /// <see cref="Projects.LastError"/> for the reason).</returns>
@@ -166,13 +183,24 @@ public sealed class ProjectTemplateService
         string projectName,
         string? description,
         string? languageCode = null,
-        bool registerAsLibrary = false)
+        bool registerAsLibrary = false,
+        HdlLanguage? language = null)
     {
         if (string.IsNullOrWhiteSpace(projectName))
         {
             _logger.LogWarning("[ProjectTemplate] CreateProjectAsync: empty projectName");
             return null;
         }
+
+        var picked = language is null ? template.Variants.Preferred
+            : template.Variants.For(language) is { } requested ? (language, requested) : null;
+        if (picked is not { } choice)
+        {
+            _logger.LogWarning("[ProjectTemplate] Template '{Id}' has no {Lang} variant",
+                template.Id, language?.DisplayName ?? "supported");
+            return null;
+        }
+        var (hdl, variant) = choice;
 
         var lang = string.IsNullOrWhiteSpace(languageCode) ? "en" : languageCode!.ToLowerInvariant();
 
@@ -217,9 +245,9 @@ public sealed class ProjectTemplateService
         };
 
         var writtenContents = new Dictionary<string, string>();
-        foreach (var tf in template.Files)
+        foreach (var tf in variant.Files)
         {
-            var rel = tf.Path.Replace('\\', '/').TrimStart('/');
+            var rel = tf.Path;
             var content = await ReadTemplateFileWithFallbackAsync(template.Id, lang, rel);
             if (content is null)
             {
@@ -288,13 +316,13 @@ public sealed class ProjectTemplateService
             }
         }
 
-        // Library auto-import: concatenate pkg.vhd + pkg_body.vhd and hand to
+        // Library auto-import: concatenate the variant's library files and hand to
         // UserAssetStore. ImportLibraryAsync fires OnChange → SyncResolver,
-        // so the new package is visible to LibraryCompiler on the next build
+        // so the new library is visible to LibraryCompiler on the next build
         // without an app restart.
-        if (template.AutoImportAsLibrary && registerAsLibrary)
+        if (variant.IsLibrary && registerAsLibrary)
         {
-            await RegisterAsLibraryAsync(template, writtenContents, ident);
+            await RegisterAsLibraryAsync(hdl, variant, writtenContents, ident);
         }
 
         return project;
@@ -329,36 +357,31 @@ public sealed class ProjectTemplateService
     }
 
     private async Task RegisterAsLibraryAsync(
-        ProjectTemplate template,
+        HdlLanguage language,
+        ProjectTemplateVariant variant,
         IReadOnlyDictionary<string, string> writtenContents,
         string ident)
     {
-        // Find the package declaration file (pkg.vhd) and body (pkg_body.vhd).
-        // The library template ships them as separate files for human
-        // readability, but UserAssetStore expects a single .vhd that declares
-        // the package — and the body must compile alongside. Concatenate.
-        string? decl = null, body = null;
-        foreach (var (rel, content) in writtenContents)
+        // The library template ships declaration and body as separate files
+        // for readability, but UserAssetStore expects one file that declares
+        // the library — and the body must compile alongside. Concatenate in
+        // the variant's declared order.
+        var parts = variant.LibraryFiles
+            .Select(writtenContents.GetValueOrDefault)
+            .Where(c => !string.IsNullOrEmpty(c))
+            .ToList();
+        if (parts.Count == 0)
         {
-            var name = Path.GetFileName(rel).ToLowerInvariant();
-            if (name == "pkg.vhd")       decl = content;
-            else if (name == "pkg_body.vhd") body = content;
-        }
-        if (string.IsNullOrEmpty(decl))
-        {
-            _logger.LogWarning("[ProjectTemplate] Library auto-import: pkg.vhd missing — skipping");
+            _logger.LogWarning("[ProjectTemplate] Library auto-import: no library files written — skipping");
             return;
         }
+        var combined = string.Join(Environment.NewLine + Environment.NewLine, parts);
 
-        var combined = string.IsNullOrEmpty(body)
-            ? decl
-            : decl + Environment.NewLine + Environment.NewLine + body;
-
-        // Use the actual `package <name> is` identifier from the file rather
-        // than the project's sanitized identifier — the package declaration is
-        // the canonical name downstream `use ...` clauses will reference.
-        var packageName = ExtractFirstPackageName(decl!) ?? ident;
-        var importFileName = $"{packageName}.vhd";
+        // Use the library unit's declared name rather than the project's
+        // sanitized identifier — it is the canonical name downstream `use`
+        // clauses reference.
+        var packageName = Frontends.For(language).DeclaredLibraryUnits(combined).FirstOrDefault() ?? ident;
+        var importFileName = packageName + language.PrimaryExtension;
 
         try
         {
@@ -380,6 +403,16 @@ public sealed class ProjectTemplateService
     }
 
     // ---- helpers ----
+
+    /// <summary>Maps a variant DTO, normalising every path to '/'-separated without a leading slash.</summary>
+    private static ProjectTemplateVariant ToVariant(TemplateVariantDto dto) => new(
+        Files: (dto.Files ?? new())
+                   .Where(f => !string.IsNullOrWhiteSpace(f.Path))
+                   .Select(f => new ProjectTemplateFile(NormalizePath(f.Path!)))
+                   .ToList(),
+        LibraryFiles: (dto.LibraryFiles ?? new()).Select(NormalizePath).ToList());
+
+    private static string NormalizePath(string path) => path.Replace('\\', '/').TrimStart('/');
 
     /// <summary>
     /// Lowercases + collapses non-identifier characters into underscores so
@@ -425,19 +458,6 @@ public sealed class ProjectTemplateService
         return s;
     }
 
-    private static readonly System.Text.RegularExpressions.Regex PackageDeclRe =
-        new(@"(?im)^\s*package\s+([a-z_][a-z0-9_]*)\s+is\b",
-            System.Text.RegularExpressions.RegexOptions.Compiled);
-
-    private static string? ExtractFirstPackageName(string source)
-    {
-        var m = PackageDeclRe.Match(source);
-        if (!m.Success) return null;
-        var name = m.Groups[1].Value;
-        if (string.Equals(name, "body", StringComparison.OrdinalIgnoreCase)) return null;
-        return name;
-    }
-
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -461,8 +481,15 @@ public sealed class ProjectTemplateService
         public string? DescriptionKey { get; set; }
         public string? DefaultFpgaModel { get; set; }
         public int?    DefaultClockMhz { get; set; }
-        public bool?   AutoImportAsLibrary { get; set; }
+        public int     Version { get; set; }
+        /// <summary>File set per HDL language id (schema v2).</summary>
+        public Dictionary<string, TemplateVariantDto>? Variants { get; set; }
+    }
+
+    private sealed class TemplateVariantDto
+    {
         public List<TemplateFileDto>? Files { get; set; }
+        public List<string>? LibraryFiles { get; set; }
     }
 
     private sealed class TemplateFileDto

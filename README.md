@@ -269,16 +269,19 @@ through one language-neutral front-end. It replaced ~9 hand-copied
 | Type | Responsibility |
 |---|---|
 | `HdlLanguage` / `HdlLanguages` | Registry of supported languages (id, extensions, comment prefix, Monaco id, identifier case rule). The **only** place that answers "is this an HDL source / which language". VHDL is the only registered language today. |
-| `IHdlFrontend` / `HdlFrontendBase` | Shared workflow: engine-state reset, source discovery, parse-target and top-entity selection, elaboration fallback, per-file analysis. A language implements only `ScanCore`, `ParseCore` and the optional `ElaborateSource` / `PrepareLibrariesAsync`. |
+| `IHdlFrontend` / `HdlFrontendBase` | Shared workflow: engine-state reset, source discovery, parse-target and top-entity selection, elaboration fallback, per-file analysis. A language implements only `ScanCore`, `ParseCore` and the optional `ElaborateSource` / `PrepareLibrariesAsync` / `DeclaredLibraryUnits` / `LibraryUnitText`. |
 | `VhdlFrontend`, `VhdlLibraryPreparer` | VHDL over the existing engine (`Debugger.Repositories.Parser.FromSource`, `SourceElaborator`, `library`/`use` resolution through `LibraryCompiler`). |
 | `EngineState` | The single reset of the process-global registries, behind one gate so concurrent loads can't interleave. |
 | `Frontends` | Resolves the front-end for a language, a path, or a set of sources (mixed languages → `NotSupportedException`, HTTP 422). |
+| `HdlVariants<T>` | Per-language variants of one content item (practice exercise, template file set, lesson sample), resolved against the registry; `Preferred` = first supported language with a variant, `MissingFrom` = what a new language still lacks. |
 
 Rules: designs are parsed **in memory** (no temp files, nothing written into the
 user's project); every load starts from clean, scanned registries; UI file
 presentation comes from `Services/FileTypes` (one extension → icon / variant /
-Monaco table). Adding a language = register an `HdlLanguage` + implement an
-`HdlFrontendBase`. Plan and status: `Documentacion/handoffs/HANDOFF_multi_hdl_2026-11-15.md`.
+Monaco table); bundled content (Practice, Templates, Learn) is
+`ContentSchema` v2 — one variant per HDL language, keyed by language id — and
+loaders reject other versions. Adding a language = register an `HdlLanguage` + implement an
+`HdlFrontendBase` (+ the content variants below). Plan and status: `Documentacion/handoffs/HANDOFF_multi_hdl_2026-11-15.md`.
 
 ## 8. Application Diagrams
 
@@ -1604,6 +1607,13 @@ with **byte-identical** Kmila VCDs, CLI outputs identical, PracticeValidator
     bit-string literals (`x"3243_1DAC"`), elaboration of entities closed with
     `end entity;` / `end;` and components declared without `is`. No app-side
     code change.
+*   **v3.0.5 — content schema v2.** Practice, Templates and Learn manifests
+    carry per-HDL-language `variants` (`HdlVariants<T>`, `ContentSchema`);
+    `PracticeExercise.Variants` replaces `SolutionVhdl`/`StarterVhdl` and
+    `PracticeEvaluator.GradeAsync` takes the attempt's language; template
+    libraries are listed in `libraryFiles` (no more `pkg.vhd` name sniffing);
+    package-name detection/slicing moved to `IHdlFrontend`. Session exports
+    name attempts with the language's primary extension (`.vhdl`).
 
 ### Version 1.27.0 (2026-09-23)
 

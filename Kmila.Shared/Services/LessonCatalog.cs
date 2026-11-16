@@ -78,6 +78,7 @@ public class LessonCatalog
                 _logger.LogWarning("[LessonCatalog] manifest.json deserialized to null — empty catalog");
                 return new LessonManifest();
             }
+            if (!ContentSchema.Accepts(manifest.Version, "Learn/manifest.json", _logger)) return new LessonManifest();
             _logger.LogInformation("[LessonCatalog] Loaded manifest with {Count} modules",
                 manifest.Modules.Count);
             return manifest;

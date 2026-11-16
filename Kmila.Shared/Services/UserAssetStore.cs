@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Kmila.Frontend;
 using LibraryCompiler.Repositories;
 using LibraryCompiler.Services;
 using Microsoft.Extensions.Logging;
@@ -297,7 +298,7 @@ public class UserAssetStore : IDisposable
         {
             if (!Directory.Exists(UserLibrariesDir)) return new();
             return Directory.EnumerateFiles(UserLibrariesDir, "*.*", SearchOption.TopDirectoryOnly)
-                            .Where(Kmila.Frontend.HdlLanguages.Vhdl.Owns)
+                            .Where(HdlLanguages.Vhdl.Owns)
                             .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
                             .ToList();
         }
@@ -345,7 +346,7 @@ public class UserAssetStore : IDisposable
                 continue;
             }
 
-            var packageNames = ExtractPackageNames(text).ToList();
+            var packageNames = Frontends.ForPath(p).DeclaredLibraryUnits(text);
             if (packageNames.Count == 0)
             {
                 // No `package X is` declaration found — treat the entire
@@ -448,8 +449,7 @@ public class UserAssetStore : IDisposable
     {
         try
         {
-            var text = File.ReadAllText(filePath);
-            return ExtractPackageNames(text).ToList();
+            return Frontends.ForPath(filePath).DeclaredLibraryUnits(File.ReadAllText(filePath));
         }
         catch
         {
@@ -527,40 +527,17 @@ public class UserAssetStore : IDisposable
 
         // User libraries are VHDL packages. Keep a recognised VHDL extension;
         // default to .vhd so an extension-less import lands somewhere predictable.
-        if (!Kmila.Frontend.HdlLanguages.Vhdl.Owns(name)) name += ".vhd";
+        if (!HdlLanguages.Vhdl.Owns(name)) name += ".vhd";
         return name;
-    }
-
-    private static readonly System.Text.RegularExpressions.Regex PackageDeclRe =
-        new(@"(?im)^\s*package\s+([a-z_][a-z0-9_]*)\s+is\b",
-            System.Text.RegularExpressions.RegexOptions.Compiled);
-
-    /// <summary>
-    /// Returns every <c>package X is</c> name declared in <paramref name="vhdlSource"/>.
-    /// Skips <c>package body</c> declarations — those don't introduce a
-    /// new library, they fill in an already-declared one.
-    /// </summary>
-    private static IEnumerable<string> ExtractPackageNames(string vhdlSource)
-    {
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (System.Text.RegularExpressions.Match m in PackageDeclRe.Matches(vhdlSource))
-        {
-            var name = m.Groups[1].Value;
-            // Suppress duplicates and the legacy `package body X is`
-            // pattern: we only care about the declaration that introduces
-            // the package's symbols.
-            if (string.Equals(name, "body", StringComparison.OrdinalIgnoreCase)) continue;
-            if (seen.Add(name)) yield return name;
-        }
     }
 
     /// <summary>
     /// Reads the bytes belonging to <paramref name="packageName"/> inside the file
     /// <paramref name="filePath"/>. When the file contains a single package or no
     /// package declarations, returns the full file. When several packages
-    /// share the file, returns the substring from <c>package X is</c> through
-    /// the matching <c>end</c>. The trim is conservative — better to ship
-    /// a few extra lines than miss a function declaration.
+    /// share the file, returns that unit's text as cut by the file's
+    /// <see cref="IHdlFrontend.LibraryUnitText"/>. The trim is conservative —
+    /// better to ship a few extra lines than miss a function declaration.
     /// </summary>
     public static byte[]? ReadPackageBytes(string filePath, string? packageName)
     {
@@ -571,27 +548,11 @@ public class UserAssetStore : IDisposable
 
         if (string.IsNullOrEmpty(packageName)) return all;
 
-        var text = System.Text.Encoding.UTF8.GetString(all);
-        // `package <name> is` opens the block; the matching close is
-        // `end [<name>]?;` — VHDL allows the trailing identifier or just
-        // `end;`. Two regexes wired with a positional anchor keep the
-        // body extraction simple.
-        var startRe = new System.Text.RegularExpressions.Regex(
-            $@"(?im)^\s*package\s+{System.Text.RegularExpressions.Regex.Escape(packageName)}\s+is\b",
-            System.Text.RegularExpressions.RegexOptions.Compiled);
-        var startMatch = startRe.Match(text);
-        if (!startMatch.Success) return all; // fall back to whole file
-
-        var afterStart = text.Substring(startMatch.Index);
-        // Match `end` followed by optional package name and a semicolon.
-        var endRe = new System.Text.RegularExpressions.Regex(
-            $@"(?im)^\s*end(?:\s+{System.Text.RegularExpressions.Regex.Escape(packageName)})?\s*;",
-            System.Text.RegularExpressions.RegexOptions.Compiled);
-        var endMatch = endRe.Match(afterStart);
-        if (!endMatch.Success) return all; // mis-shaped — better to overshoot than miss symbols
-
-        var slice = afterStart.Substring(0, endMatch.Index + endMatch.Length);
-        return System.Text.Encoding.UTF8.GetBytes(slice);
+        // Mis-shaped or missing unit → whole file: better to overshoot than miss symbols.
+        var slice = HdlLanguages.FromPath(filePath) is { } language
+            ? Frontends.For(language).LibraryUnitText(System.Text.Encoding.UTF8.GetString(all), packageName)
+            : null;
+        return slice == null ? all : System.Text.Encoding.UTF8.GetBytes(slice);
     }
 
     /// <summary>
