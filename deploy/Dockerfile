@@ -22,6 +22,7 @@ WORKDIR /src
 #    first, so `dotnet restore` is cached until a csproj actually changes.
 COPY ["App/Kmila/Kmila.Web/Kmila.Web.csproj", "App/Kmila/Kmila.Web/"]
 COPY ["App/Kmila/Kmila.Shared/Kmila.Shared.csproj", "App/Kmila/Kmila.Shared/"]
+COPY ["App/Kmila/Kmila.Frontend/Kmila.Frontend.csproj", "App/Kmila/Kmila.Frontend/"]
 COPY ["Debugger/Debugger.csproj", "Debugger/"]
 COPY ["Interpreter/Interpreter.csproj", "Interpreter/"]
 COPY ["LibraryCompiler/LibraryCompiler.csproj", "LibraryCompiler/"]
@@ -38,6 +39,7 @@ RUN dotnet restore "App/Kmila/Kmila.Web/Kmila.Web.csproj" -p:TargetFrameworks=ne
 # 2) Copy the sources of just those projects and publish.
 COPY App/Kmila/Kmila.Web/   App/Kmila/Kmila.Web/
 COPY App/Kmila/Kmila.Shared/ App/Kmila/Kmila.Shared/
+COPY App/Kmila/Kmila.Frontend/ App/Kmila/Kmila.Frontend/
 COPY Debugger/       Debugger/
 COPY Interpreter/    Interpreter/
 COPY LibraryCompiler/ LibraryCompiler/
