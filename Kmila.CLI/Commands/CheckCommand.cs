@@ -1,14 +1,13 @@
 using Kmila.CLI.Cli;
-using DParser = Debugger.Repositories.Parser;
 using Sev = Parser.Models.DiagnosticSeverity;
 
 namespace Kmila.CLI.Commands;
 
 /// <summary>
-/// Implements <c>kmila check</c> — parse + lint a VHDL file and report
+/// Implements <c>kmila check</c> — parse + lint HDL files and report
 /// diagnostics without running a simulation. A fast "does it compile?" gate for
-/// CI and editors. Reuses the parser's own diagnostics stream
-/// (<see cref="DParser.Diagnostics"/>, populated by its source-level lint pass).
+/// CI and editors. Reuses the front-end's per-file diagnostics (lint pass +
+/// parse errors).
 /// </summary>
 public static class CheckCommand
 {
@@ -40,81 +39,51 @@ public static class CheckCommand
         bool quiet = p.Has("quiet", "q");
         bool warnAsError = p.Has("warnings-as-errors");
 
-        // v1.17.0 (P3): populate the entity/package/function registries from
-        // every input file before parsing, mirroring the sim/DesignLoader path.
-        // Without this, `check` synthesises with empty registries so package
-        // constants and cross-file references collapse to stubs — which the
-        // stricter undeclared-identifier check would then reject. Single-file
-        // input still only sees its own packages, matching GHDL analysing one
-        // file in isolation. ScanFile writes synthesis chatter to stdout, so
-        // capture it to keep diagnostics (on stderr) clean.
-        {
-            var popOut = Console.Out;
-            Console.SetOut(new StringWriter());
-            try
-            {
-                Interpreter.Services.EntityRegistry.Instance.Clear();
-                Interpreter.Services.PackageRegistry.Instance.Clear();
-                Interpreter.Services.FunctionRegistry.Instance.Clear();
-                foreach (var f in files)
-                {
-                    if (!File.Exists(f)) continue;
-                    try { Interpreter.Services.EntityRegistry.Instance.ScanFile(f); } catch { }
-                    try { Interpreter.Services.PackageSubtypeScanner.ScanFile(f); } catch { }
-                    try { Interpreter.Services.PackageRegistry.Instance.RegisterDeclaredNamesFromSource(File.ReadAllText(f)); } catch { }
-                }
-            }
-            catch { /* best-effort population; parsing still runs below */ }
-            finally { Console.SetOut(popOut); }
-        }
-
         int errors = 0, warnings = 0, infos = 0;
+
+        // The front-end scans every input first (so cross-file entities and
+        // packages resolve — single-file input still only sees its own
+        // packages, like GHDL analysing one file) and then parses each file on
+        // its own. Synthesis writes chatter to Console.Out; capture it so the
+        // diagnostics on stderr stay clean.
+        IReadOnlyList<(string File, Kmila.Frontend.ParsedUnit Unit)> analyzed;
+        var originalOut = Console.Out;
+        Console.SetOut(new StringWriter());
+        try { analyzed = Kmila.Frontend.Frontends.ForSources(files).AnalyzeEach(files.Where(File.Exists).ToList()); }
+        catch (NotSupportedException ex)
+        {
+            Console.Error.WriteLine($"kmila check: {ex.Message}");
+            return Task.FromResult(1);
+        }
+        finally { Console.SetOut(originalOut); }
+
+        var unitByFile = analyzed.ToDictionary(a => a.File, a => a.Unit);
         foreach (var file in files)
         {
-            if (!File.Exists(file))
+            if (!unitByFile.TryGetValue(file, out var unit))
             {
                 Console.Error.WriteLine($"kmila check: file not found: {file}");
                 errors++;
                 continue;
             }
-
-            var diags = new List<Parser.Models.Diagnostic>();
-            // The parser runs synthesis, which writes chatter to Console.Out;
-            // capture it so `check` output stays clean (diagnostics go to stderr).
-            var originalOut = Console.Out;
-            var sink = new StringWriter();
-            Console.SetOut(sink);
-            try
-            {
-                var parser = new DParser(file);
-                parser.ParseFile();
-                diags.AddRange(parser.Diagnostics);
-                if (parser.Entities.Count == 0)
-                    diags.Add(new Parser.Models.Diagnostic
-                    {
-                        Severity = Sev.Warning,
-                        Line = 1,
-                        Code = "NO-ENTITY",
-                        Message = "no entity was parsed from this file",
-                    });
-            }
-            catch (Exception ex)
-            {
-                // A hard parse failure. The diagnostics list is still mirrored
-                // for the lint pass; add the fatal error on top.
-                try { diags.AddRange(new DParser(file).Diagnostics); } catch { }
+            // Lint diagnostics are kept even when the parse failed.
+            var diags = new List<Parser.Models.Diagnostic>(unit.Diagnostics);
+            if (unit.Error != null)
                 diags.Add(new Parser.Models.Diagnostic
                 {
                     Severity = Sev.Error,
                     Line = 1,
                     Code = "PARSE-ERROR",
-                    Message = ex.Message,
+                    Message = unit.Error.Message,
                 });
-            }
-            finally
-            {
-                Console.SetOut(originalOut);
-            }
+            else if (unit.Entities.Count == 0)
+                diags.Add(new Parser.Models.Diagnostic
+                {
+                    Severity = Sev.Warning,
+                    Line = 1,
+                    Code = "NO-ENTITY",
+                    Message = "no entity was parsed from this file",
+                });
 
             var name = Path.GetFileName(file);
             foreach (var d in diags.OrderBy(d => d.Line).ThenBy(d => d.StartColumn))

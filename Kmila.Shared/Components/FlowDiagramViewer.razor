@@ -7,7 +7,7 @@
     structures inside processes. Edges are control-flow (sequential within a
     process; parallel "fan-out" from architecture root to processes).
 
-    Source of data: <c>Builder.Parser.Entities</c>, populated by the build
+    Source of data: <c>Builder.Design.Entities</c>, populated by the build
     pipeline. We render after each build (and when the parent component
     notifies us via Refresh()). The output is a Mermaid <c>flowchart TB</c>
     string injected as <pre class="mermaid"> — the page-level mermaid@11
@@ -379,7 +379,7 @@
         var fileName = $"kmila-flow-{stamp}.puml";
         try
         {
-            var uml = PlantUmlFlowEmitter.Emit(Builder?.Parser?.Entities);
+            var uml = PlantUmlFlowEmitter.Emit(Builder?.Design?.Entities);
             if (string.IsNullOrEmpty(uml))
             {
                 ToastService.Notify(Message(Traductor.T("COMMON_ERROR"),
@@ -429,7 +429,7 @@
     }
 
     /// <summary>
-    /// Walks <c>Builder.Parser.Entities</c> and emits a Mermaid flowchart.
+    /// Walks <c>Builder.Design.Entities</c> and emits a Mermaid flowchart.
     /// Each entity gets its own subgraph; inside an arch we render a node for
     /// every concurrent task, drilling into Process tasks to show their
     /// if/case/loop structure. Falls back to the task type name when we don't
@@ -437,7 +437,7 @@
     /// </summary>
     private string BuildMermaidSource()
     {
-        var parser = Builder?.Parser;
+        var parser = Builder?.Design;
         var entities = parser?.Entities;
         if (entities == null || entities.Count == 0)
         {

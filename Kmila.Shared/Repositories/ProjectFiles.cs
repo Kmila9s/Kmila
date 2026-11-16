@@ -53,7 +53,7 @@ public class ProjectFiles : IRepository<ProjectFile>
     }
 
     /// <summary>Combines BasePath with the file's DirectoryPath and FileName for disk I/O.</summary>
-    private static string GetDiskPath(string basePath, ProjectFile file)
+    public static string GetDiskPath(string basePath, ProjectFile file)
         => GetDiskPath(basePath, file.DirectoryPath, file.FileName);
 
     /// <summary>Combines BasePath + (optional) directoryPath + fileName.</summary>

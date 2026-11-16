@@ -180,8 +180,9 @@ public static class SimulationApiHandlers
         {
             return ApiResponse.Json(400, new ApiError { Error = "bad_request", Detail = ex.Message });
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException)
         {
+            // NotSupportedException: no HDL source, or a mixed/unsupported language.
             return ApiResponse.Json(422, new ApiError { Error = "sim_unprocessable", Detail = ex.Message });
         }
         catch (Exception ex)

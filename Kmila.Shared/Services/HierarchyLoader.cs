@@ -1,15 +1,16 @@
 using Interpreter.Services;
+using Kmila.Frontend;
 
 namespace Kmila.Shared.Services;
 
 /// <summary>
-/// Parses a multi-file VHDL design into a name→<see cref="Entity"/> map and
+/// Parses a multi-file HDL design into a name→<see cref="Entity"/> map and
 /// registers its component-instance (port-map) edges in
 /// <see cref="EntityRegistry"/>, so <see cref="Resources.ComputeHierarchical"/>
 /// can walk the hierarchy and aggregate a structural top's resource usage.
 /// </summary>
 /// <remarks>
-/// <para>Why this exists: <see cref="Debugger.Repositories.Parser.ParseFile()"/>
+/// <para>Why this exists: a single-source parse
 /// only parses the entities declared in the one file it is given, and it is the
 /// Interpreter's synthesis (not <see cref="EntityRegistry.ScanFile"/>) that
 /// records port-map edges. To sum a structural parent's sub-components we need
@@ -21,15 +22,8 @@ namespace Kmila.Shared.Services;
 /// </remarks>
 public static class HierarchyLoader
 {
-    private static bool IsVhdl(string path)
-    {
-        var ext = Path.GetExtension(path);
-        return ext.Equals(".vhd", StringComparison.OrdinalIgnoreCase)
-            || ext.Equals(".vhdl", StringComparison.OrdinalIgnoreCase);
-    }
-
     /// <summary>
-    /// Fully parses every VHDL file in <paramref name="files"/> into a
+    /// Fully parses every HDL source in <paramref name="files"/> into a
     /// case-insensitive name→entity map, with the registry reset so edges are
     /// fresh. Best-effort per file — a child that fails to parse simply
     /// contributes nothing (the aggregate degrades to self-usage).
@@ -62,20 +56,16 @@ public static class HierarchyLoader
         var fileByName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var f in files)
         {
-            if (string.IsNullOrWhiteSpace(f) || !IsVhdl(f) || !File.Exists(f))
+            if (string.IsNullOrWhiteSpace(f) || !HdlLanguages.IsHdlSource(f))
                 continue;
-            try
-            {
-                var parser = new Debugger.Repositories.Parser(f);
-                parser.ParseFile();
-                foreach (var e in parser.Entities)
-                    if (!byName.ContainsKey(e.Name))
-                    {
-                        byName[e.Name] = e;
-                        fileByName[e.Name] = f;
-                    }
-            }
-            catch { /* best-effort: skip files that fail to parse */ }
+            var unit = Frontends.ForPath(f).ParseFile(f);
+            if (unit.Error != null) continue; // best-effort: skip files that fail to parse
+            foreach (var e in unit.Entities)
+                if (!byName.ContainsKey(e.Name))
+                {
+                    byName[e.Name] = e;
+                    fileByName[e.Name] = f;
+                }
         }
 
         top = null;
@@ -120,20 +110,10 @@ public static class HierarchyLoader
             var specialized = SourceElaborator.SpecializeEntitySource(src, childName, overrides);
             if (!string.IsNullOrEmpty(specialized))
             {
-                var tmp = Path.Combine(Path.GetTempPath(),
-                    $"_kmila_spec_{childName}_{Guid.NewGuid():N}.vhd");
-                try
-                {
-                    File.WriteAllText(tmp, specialized);
-                    var parser = new Debugger.Repositories.Parser(tmp);
-                    parser.ParseFile();
-                    var e = parser.Entities.FirstOrDefault(x =>
-                                string.Equals(x.Name, childName, StringComparison.OrdinalIgnoreCase)
-                                && x.Architecture != null)
-                            ?? parser.Entities.FirstOrDefault(x => x.Architecture != null);
-                    if (e?.ResourceUsage != null) result = e.ResourceUsage;
-                }
-                finally { try { File.Delete(tmp); } catch { /* temp cleanup best-effort */ } }
+                var frontend = Frontends.ForPath(path);
+                var unit = frontend.ParseSource(specialized);
+                var e = unit.Error == null ? frontend.PickTop(unit.Entities, childName) : null;
+                if (e?.ResourceUsage != null) result = e.ResourceUsage;
             }
         }
         catch { result = null; }

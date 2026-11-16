@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Interpreter.Services;
 using Kmila.Shared.Models;
 using Kmila.Shared.Services;
@@ -57,11 +56,10 @@ public sealed class SimRunRequest
 }
 
 /// <summary>
-/// Drives the Kmila VHDL engine headlessly. This deliberately mirrors the
-/// proven pipeline in <c>Kmila.Shared/Services/Api/HeadlessSimulator.cs</c>
-/// (scan → elaborate → parse → stimulus → run → history) — the one difference
-/// is that it surfaces the live <see cref="SignalHistory"/> to the caller.
-/// Keep the two in step if the shared pipeline changes.
+/// Drives the Kmila engine headlessly for the CLI: stages the sources in a
+/// throw-away sandbox, captures engine console chatter, and delegates the
+/// pipeline to <see cref="HeadlessSimulator.RunProjectAsync"/> (the same
+/// code path as the HTTP API), keeping the live <see cref="SignalHistory"/>.
 /// </summary>
 public sealed class KmilaSimulationService
 {
@@ -125,113 +123,28 @@ public sealed class KmilaSimulationService
     private async Task<SimRunResult> RunPipelineAsync(
         string projectPath, string entry, SimRunRequest request, StringWriter captured)
     {
-        var log = new List<string>();
-        var sw = Stopwatch.StartNew();
-
-        using var cts = new CancellationTokenSource();
-        if (request.WallTimeoutMs is int ms && ms > 0)
-            cts.CancelAfter(TimeSpan.FromMilliseconds(ms));
-        var ct = cts.Token;
-
-        // --- Reset the engine's process-global registries (one run per process,
-        //     but mirror the shared pipeline's hygiene exactly). ---
-        EntityRegistry.Instance.Clear();
-        PackageRegistry.Instance.Clear();
-        FunctionRegistry.Instance.Clear();
-        global::Parser.Services.ParseProfile.Reset();
-
-        // --- Scan every source so cross-file entities / packages resolve. ---
-        string? vhdlPath = null;
-        foreach (var f in Directory.EnumerateFiles(projectPath))
+        var run = await HeadlessSimulator.RunProjectAsync(projectPath, new HeadlessRunOptions
         {
-            if (!(f.EndsWith(".vhdl", StringComparison.OrdinalIgnoreCase) ||
-                  f.EndsWith(".vhd", StringComparison.OrdinalIgnoreCase)))
-                continue;
-            if (Path.GetFileName(f).StartsWith("_elaborated_", StringComparison.OrdinalIgnoreCase))
-                continue;
+            EntryPoint     = entry,
+            TotalNs        = request.TotalNs,
+            TickResNs      = request.TickResNs,
+            SystemClockMhz = request.SystemClockMhz,
+            PortMoments    = request.PortMoments,
+            WallTimeoutMs  = request.WallTimeoutMs,
+        }, OnProgress);
 
-            vhdlPath ??= f;
-            // Prefer the entry file as the parse target when we can see it.
-            if (string.Equals(Path.GetFileNameWithoutExtension(f), entry, StringComparison.OrdinalIgnoreCase))
-                vhdlPath = f;
+        if (!string.IsNullOrEmpty(request.Fpga))
+            run.Log.Add($"[sim] fpga={request.Fpga}");
 
-            try { EntityRegistry.Instance.ScanFile(f); }
-            catch (Exception ex) { log.Add($"[scan] {Path.GetFileName(f)}: {ex.Message}"); }
-            try { PackageSubtypeScanner.ScanFile(f); }
-            catch (Exception ex) { log.Add($"[subscan] {Path.GetFileName(f)}: {ex.Message}"); }
-            // v1.17.0 (P3): record declared names for the undeclared-identifier check.
-            try { PackageRegistry.Instance.RegisterDeclaredNamesFromSource(File.ReadAllText(f)); } catch { /* best-effort */ }
-        }
-        if (vhdlPath == null)
-            throw new InvalidOperationException("no .vhdl/.vhd source found.");
-
-        // --- Elaborate: flatten any component instantiations into one source. ---
-        try
-        {
-            var flat = SourceElaborator.ElaborateOrNull(projectPath, entry);
-            if (flat != null)
-            {
-                var elaborated = Path.Combine(projectPath, $"_elaborated_{entry}.vhd");
-                File.WriteAllText(elaborated, flat);
-                vhdlPath = elaborated;
-                log.Add($"[elab] inlined components for {entry}");
-            }
-        }
-        catch (Exception ex)
-        {
-            log.Add($"[elab] elaboration skipped: {ex.Message}");
-        }
-
-        // --- Parse. ---
-        var parser = new Debugger.Repositories.Parser(vhdlPath);
-        parser.ParseFile(ct);
-        if (parser.Entities.Count == 0)
-            throw new InvalidOperationException("parser produced no entities (check the VHDL syntax).");
-
-        var entity = parser.Entities
-                         .FirstOrDefault(e => string.Equals(e.Name, entry, StringComparison.OrdinalIgnoreCase) && e.Architecture != null)
-                     ?? parser.Entities.FirstOrDefault(e => e.Architecture != null);
-        if (entity == null)
-            throw new InvalidOperationException("no entity with an architecture found.");
-
-        // --- Build the run config (clocks + stimuli, ns → ticks). ---
-        int tickResNs = request.TickResNs > 0 ? request.TickResNs : 10;
-        var config = StimulusBuilder.BuildConfigNs(
-            entity,
-            request.PortMoments.Count > 0 ? request.PortMoments : null,
-            totalNs: request.TotalNs,
-            tickResNs: tickResNs,
-            systemClockMhz: request.SystemClockMhz > 0 ? request.SystemClockMhz : 50);
-
-        log.Add($"[sim] entity={entity.Name} ports={entity.Ports.Count} totalTicks={config.TotalTicks} " +
-                $"clockMHz={(request.SystemClockMhz > 0 ? request.SystemClockMhz : 50)}" +
-                (string.IsNullOrEmpty(request.Fpga) ? "" : $" fpga={request.Fpga}"));
-
-        // --- Run. ---
-        using var runner = new SimulationRunner();
-        runner.OnEngineReady += eng => eng.TickResolutionNs = tickResNs;
-        runner.OnError += msg => log.Add($"[engine] {msg}");
-        runner.OnReport += msg => log.Add($"[report] {msg}");
-        if (OnProgress != null) runner.OnProgressChanged += p => OnProgress(p);
-        using var cancelReg = ct.Register(runner.Stop);
-
-        await runner.RunAsync(config);
-
-        var history = runner.Engine?.History
-            ?? throw new InvalidOperationException("simulation produced no signal history.");
-        if (runner.Engine != null)
-            log.Add($"[diag] {runner.Engine.GetDiagnosticSummary()}");
-
-        sw.Stop();
         return new SimRunResult
         {
-            Entity = entity.Name,
-            History = history,
-            TickResNs = tickResNs,
-            TotalTicks = config.TotalTicks,
-            DurationMs = sw.ElapsedMilliseconds,
-            SignalCount = history.SignalCount,
-            Log = log,
+            Entity = run.Entity.Name,
+            History = run.History,
+            TickResNs = run.TickResNs,
+            TotalTicks = run.TotalTicks,
+            DurationMs = run.DurationMs,
+            SignalCount = run.History.SignalCount,
+            Log = run.Log,
             EngineConsole = captured.ToString(),
         };
     }

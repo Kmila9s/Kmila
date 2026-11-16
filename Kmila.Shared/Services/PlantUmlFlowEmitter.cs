@@ -8,7 +8,7 @@ using System.Text.RegularExpressions;
 namespace Kmila.Shared.Services;
 
 /// <summary>
-/// Emits a PlantUML activity diagram from <see cref="ProgramBuilder.Parser"/>'s
+/// Emits a PlantUML activity diagram from <see cref="ProgramBuilder.Design"/>'s
 /// Entities collection. Parallel walker to the Mermaid renderer in
 /// FlowDiagramViewer.razor — kept independent so the on-screen Mermaid path
 /// is untouched. Output is a <c>.puml</c> text payload that opens in PlantUML
