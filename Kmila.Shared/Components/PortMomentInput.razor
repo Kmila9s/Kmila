@@ -127,7 +127,22 @@
                             </select>
 
                             <div class="port-moment__value-wrap">
-                                @switch (Variable?.Type ?? DATATYPES.UNKNOWN)
+                                @if (Variable?.EnumLiterals is { } literals)
+                                {
+                                    @* enumeration (port or record field): pick a literal *@
+                                    <select class="form-select form-select-sm port-moment__value"
+                                            value="@m.Value"
+                                            disabled="@IsRunning"
+                                            @onchange="@(e => OnValueChangedAsync(idx, e))"
+                                            aria-label="@Traductor.T("PORT_VALUE")">
+                                        <option value=""></option>
+                                        @foreach (var literal in literals)
+                                        {
+                                            <option value="@literal">@literal</option>
+                                        }
+                                    </select>
+                                }
+                                else switch (Variable?.Type ?? DATATYPES.UNKNOWN)
                                 {
                                     case DATATYPES.INTEGER:
                                     case DATATYPES.NATURAL:
@@ -383,6 +398,9 @@
     private string SanitizeValue(string raw)
     {
         if (string.IsNullOrEmpty(raw)) return string.Empty;
+        // An enumeration accepts exactly one of its literals.
+        if (Variable?.EnumLiterals is { } literals)
+            return literals.FirstOrDefault(l => l.Equals(raw.Trim(), StringComparison.OrdinalIgnoreCase)) ?? string.Empty;
         var type = Variable?.Type ?? DATATYPES.UNKNOWN;
         var maxLen = MaxValueLength;
 

@@ -903,7 +903,8 @@ else if (Data != null && Data.Signals.Count > 0)
             return t.Value.HasValue ? (t.Value.Value >= 0.5 ? "1" : "0") : "X";
 
         string? bits = ResolveBits(t, s);
-        if (string.IsNullOrEmpty(bits)) return "X";
+        // No numeric form but a label: an enumeration literal (`m_on`, `idle`).
+        if (string.IsNullOrEmpty(bits)) return t.Label ?? "X";
 
         bool clean = bits.All(c => c == '0' || c == '1');
         if (!clean)

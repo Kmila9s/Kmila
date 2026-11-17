@@ -57,28 +57,21 @@ public static class StimulusBuilder
         var clocks = new List<ClockConfig>();
         var stimuli = new List<StimulusEvent>();
 
-        // Build a lookup for ports by name. Defensive against null entries
-        // in the HashSet and against ports with a null Name — both have
-        // been observed coming out of the parser on certain malformed or
-        // incomplete port blocks, and the previous direct `ToDictionary`
-        // call threw a bare NullReferenceException that masked the real
-        // parse issue.
-        var allPorts = new Dictionary<string, Variable>(StringComparer.OrdinalIgnoreCase);
-        if (entity.Ports != null)
-        {
-            foreach (var p in entity.Ports)
-            {
-                if (p is null || string.IsNullOrEmpty(p.Name)) continue;
-                allPorts[p.Name] = p;
-            }
-        }
-
+        // Ports stimuli resolve against. Defensive against null entries in
+        // the HashSet and against ports with a null Name — both have been
+        // observed coming out of the parser on certain malformed or
+        // incomplete port blocks.
+        var portSet = new HashSet<Variable>(
+            entity.Ports?.Where(p => p is not null && !string.IsNullOrEmpty(p.Name)) ?? []);
         if (portMoments != null)
         {
             foreach (var pm in portMoments)
             {
-                if (string.IsNullOrEmpty(pm.PortName) || !allPorts.TryGetValue(pm.PortName, out var signal))
-                    continue;
+                if (string.IsNullOrEmpty(pm.PortName)) continue;
+                // A port name with selectors (`p.lo`, `v(3)`) drives that part of the port.
+                if (AssignmentTarget.Resolve(pm.PortName, portSet) is not { } target) continue;
+                var signal = target.Base;
+                var part = target.IsPartial ? target : null;
 
                 if (pm.Values == null || pm.Values.Count == 0)
                     continue;
@@ -105,7 +98,8 @@ public static class StimulusBuilder
                     {
                         Tick = tick,
                         Signal = signal,
-                        Value = pmv.Value
+                        Value = pmv.Value,
+                        Target = part,
                     });
                 }
             }
