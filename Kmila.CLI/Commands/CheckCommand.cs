@@ -69,13 +69,7 @@ public static class CheckCommand
             // Lint diagnostics are kept even when the parse failed.
             var diags = new List<Parser.Models.Diagnostic>(unit.Diagnostics);
             if (unit.Error != null)
-                diags.Add(new Parser.Models.Diagnostic
-                {
-                    Severity = Sev.Error,
-                    Line = 1,
-                    Code = "PARSE-ERROR",
-                    Message = unit.Error.Message,
-                });
+                diags.Add(Parser.Models.Diagnostic.FromAnyException(unit.Error, unit.Source, "PARSE-ERROR"));
             else if (unit.Entities.Count == 0)
                 diags.Add(new Parser.Models.Diagnostic
                 {

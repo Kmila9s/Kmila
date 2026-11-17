@@ -251,8 +251,11 @@ public class PracticeEvaluator
                 }
             }
 
+            void OnEngineErr(string msg) => OnRuntimeErr("Simulation error", msg);
+
             builder.OnSimulationCompleted += OnDone;
             builder.OnBuildError += OnRuntimeErr;
+            builder.OnSimulationError += OnEngineErr;
 
             try
             {
@@ -311,6 +314,7 @@ public class PracticeEvaluator
             {
                 builder.OnSimulationCompleted -= OnDone;
                 builder.OnBuildError -= OnRuntimeErr;
+                builder.OnSimulationError -= OnEngineErr;
             }
         }
         finally

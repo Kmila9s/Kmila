@@ -37,6 +37,13 @@ public class ProgramBuilder : IDisposable
     /// Occurs when a build error occurs.
     /// </summary>
     public event Action<string, string?>? OnBuildError;
+
+    /// <summary>
+    /// The engine aborted a running simulation (message from the runner).
+    /// Raised on the simulator thread, before <see cref="OnSimulationEnded"/>(false).
+    /// </summary>
+    public event Action<string>? OnSimulationError;
+
     /// <summary>
     /// Occurs when build completes successfully.
     /// </summary>
@@ -93,6 +100,8 @@ public class ProgramBuilder : IDisposable
     /// Gets the signal history from the last simulation run.
     /// </summary>
     public SignalHistory? SimulationHistory => _simulationRunner?.Engine?.History;
+    /// <summary>Error that aborted the last simulation run, or null when it completed or was stopped.</summary>
+    public string? LastRunError => _simulationRunner?.Error;
     /// <summary>
     /// Effective ns-per-tick used by the most recent run. Persisted on the
     /// builder (not the config) so the waveform factory — which is called
@@ -499,7 +508,7 @@ public class ProgramBuilder : IDisposable
                 OnSimulationCompleted?.Invoke(history);
             }
         };
-        _simulationRunner.OnError += msg => OnBuildError?.Invoke("Simulation error", msg);
+        _simulationRunner.OnError += msg => OnSimulationError?.Invoke(msg);
         // Surface VHDL `report` output (testbench self-checks) to subscribers.
         _simulationRunner.OnReport += msg => OnReport?.Invoke(msg);
 

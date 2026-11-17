@@ -78,6 +78,24 @@ public class SimulationCoordinator : IDisposable
         _builder.OnProgressAdvanced  += OnProgressAdvanced;
         _builder.OnSimulationEnded   += OnSimulationEnded;
         _builder.OnSimulationCompleted += OnSimulationCompleted;
+        _builder.OnSimulationError   += OnSimulationError;
+    }
+
+    /// <summary>
+    /// The engine aborted the run. Toasted here (not in the Editor) so the
+    /// student hears about it even when the Editor isn't mounted.
+    /// </summary>
+    private void OnSimulationError(string message)
+    {
+        try
+        {
+            _toast.Notify(Kmila.Shared.Models.ToastMessages.Message(
+                _traductor.T("SIM_LOG_ERROR"), message, BlazorBootstrap.ToastType.Danger));
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "[SimulationCoordinator] error toast failed");
+        }
     }
 
     /// <summary>Engine progress tick → mirror into Sim so every subscriber re-renders.</summary>
@@ -141,6 +159,10 @@ public class SimulationCoordinator : IDisposable
                 }
             }
 
+            // A run the engine aborted keeps its partial snapshot but is not
+            // announced as complete (its error was toasted already).
+            if (_builder.LastRunError != null) return;
+
             // Resolve project name for the toast / notification. If lookup
             // fails (project deleted mid-run, db locked), fall back to a
             // generic title — better to fire a slightly-less-informative
@@ -197,6 +219,7 @@ public class SimulationCoordinator : IDisposable
         _builder.OnProgressAdvanced    -= OnProgressAdvanced;
         _builder.OnSimulationEnded     -= OnSimulationEnded;
         _builder.OnSimulationCompleted -= OnSimulationCompleted;
+        _builder.OnSimulationError     -= OnSimulationError;
         GC.SuppressFinalize(this);
     }
 }

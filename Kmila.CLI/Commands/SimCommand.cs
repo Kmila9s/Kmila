@@ -173,6 +173,12 @@ public static class SimCommand
                 Console.Error.WriteLine(line);
         }
 
+        // An engine abort is a failed run even though the partial waveform is
+        // still written below; it is reported regardless of --quiet.
+        bool aborted = result.EngineError != null;
+        if (aborted)
+            Console.Error.WriteLine($"kmila sim: engine error: {result.EngineError}");
+
         // Assertions (--assert signal@time=value, repeatable; --assert-file <f>).
         var assertTokens = new List<string>(p.GetAll("assert"));
         var assertFile = p.Get("assert-file");
@@ -228,7 +234,7 @@ public static class SimCommand
                     $"ticks={result.TotalTicks} {result.DurationMs}ms → {outFile}");
         }
 
-        return assertExit;
+        return aborted ? 1 : assertExit;
         }
 
         if (!p.Has("watch"))

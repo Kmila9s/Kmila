@@ -1619,6 +1619,12 @@ with **byte-identical** Kmila VCDs, CLI outputs identical, PracticeValidator
     statements or nested `end if`/`end process`. `VhdlLibraryPreparer`,
     `VhdlBlockBuilder` and the replay services strip comments through
     `Parser.Models.VhdlText` (a `--` inside a string is no longer a comment).
+*   **v3.1.0 — engine errors are visible** (Fase 1, G34–G38): an engine abort
+    sets `HeadlessRunResult.EngineError` / `SimulateResponse.error`, makes
+    `kmila sim` exit 1 (the partial waveform is still written), is logged in
+    red and toasted in the editor (Output tab focused, no "completed" toast),
+    and fails the practice grade. `kmila check` and the editor's markers keep
+    the real line/column of analysis errors (`Diagnostic.FromAnyException`).
 
 ### Version 1.27.0 (2026-09-23)
 
