@@ -1619,6 +1619,11 @@ with **byte-identical** Kmila VCDs, CLI outputs identical, PracticeValidator
     statements or nested `end if`/`end process`. `VhdlLibraryPreparer`,
     `VhdlBlockBuilder` and the replay services strip comments through
     `Parser.Models.VhdlText` (a `--` inside a string is no longer a comment).
+*   **v3.1.2 — records** (Fase 1, G13/G16): record ports get one stimulus input
+    per field (`ci.en`, `ci.mode`, …; enumerations pick a literal) and the
+    stimulus builder drives that part of the port (`--stimulus p.lo@0=1`,
+    API `portMoments` by field name); the waveform shows one row per record
+    field, enumeration values by literal, unconstrained integers as 32 bits.
 *   **v3.1.0 — engine errors are visible** (Fase 1, G34–G38): an engine abort
     sets `HeadlessRunResult.EngineError` / `SimulateResponse.error`, makes
     `kmila sim` exit 1 (the partial waveform is still written), is logged in

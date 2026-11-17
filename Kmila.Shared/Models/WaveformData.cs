@@ -1,3 +1,4 @@
+using Interpreter.Models;
 using Interpreter.Services;
 using Parser.Models;
 using static Parser.Models.Constants;
@@ -38,6 +39,12 @@ public class WaveformData
     /// snapshots round-trip through <see cref="SerializedForm"/> only.
     /// </summary>
     private readonly Dictionary<Variable, int> _liveWatermarks = new();
+
+    /// <summary>Rows of each live signal (one, or one per record field), computed once.</summary>
+    private readonly Dictionary<Variable, IReadOnlyList<WaveRow>> _liveRows = new();
+
+    /// <summary>The waveform rows each live signal feeds (aligned with <see cref="_liveRows"/>).</summary>
+    private readonly Dictionary<Variable, WaveformSignal[]> _liveSignals = new();
 
     /// <summary>
     /// Name → signal index for O(1) lookup during the live <see cref="MergeFrom"/>
@@ -168,53 +175,40 @@ public class WaveformData
 
         foreach (var signal in trackedSignals)
         {
-            var name = signal.Name;
-            if (!_byName.TryGetValue(name, out var sig))
+            if (!_liveRows.TryGetValue(signal, out var rows))
+                _liveRows[signal] = rows = RowsOf(signal);
+            if (!_liveSignals.TryGetValue(signal, out var sigs))
+                _liveSignals[signal] = sigs = new WaveformSignal[rows.Count];
+            for (int r = 0; r < rows.Count; r++)
             {
-                sig = new WaveformSignal
+                if (sigs[r] is not null) continue;
+                var row = rows[r];
+                if (!_byName.TryGetValue(row.Name, out var sig))
                 {
-                    Name = name,
-                    DataType = GetSignalDataType(signal),
-                    BitWidth = GetBitWidth(signal),
-                    PortType = signal.IsPort ? signal.PortType.ToString() : "INTERNAL"
-                };
-                Signals.Add(sig);
-                _byName[name] = sig;
-                addedSignal = true;
+                    sig = new WaveformSignal
+                    {
+                        Name = row.Name,
+                        DataType = GetSignalDataType(row.Meta),
+                        BitWidth = GetBitWidth(row.Meta),
+                        PortType = signal.IsPort ? signal.PortType.ToString() : "INTERNAL"
+                    };
+                    Signals.Add(sig);
+                    _byName[row.Name] = sig;
+                    addedSignal = true;
+                }
+                sigs[r] = sig;
             }
 
             int from = _liveWatermarks.GetValueOrDefault(signal, 0);
-            var transitions = sig.Transitions;
             // Capture so the inner closure can flip the outer-scope flag.
             bool localAppended = false;
-            int newCount = history.ReadSince(signal, from, (timeMoment, value) =>
+            int newCount = history.ReadSince(signal, from, (timeMoment, raw) =>
             {
                 if (timeMoment > maxTimeMoment) maxTimeMoment = timeMoment;
                 ulong tick = (ulong)(timeMoment / 1000);
                 long ns = (long)tick * TimescaleNs;
-                double? val = ConvertToChartValue(value, sig.DataType, sig.BitWidth);
-                string? lbl = (sig.DataType != "std_logic" && value != null)
-                    ? FormatDisplayLabel(value, sig.DataType, sig.BitWidth)
-                    : null;
-                // Display-only per-bit string for buses — see the static path in
-                // FromSignalHistory and WaveformTransition.Bits. Not exported.
-                string? bits = sig.DataType == "std_logic_vector" ? value?.ToString() : null;
-
-                // Same-tick collapse: deltas inside one tick → keep last.
-                if (transitions.Count > 0 && transitions[^1].TimeNs == ns)
-                {
-                    transitions[^1] = new WaveformTransition(ns, val, lbl, 0, bits);
-                    localAppended = true;
-                    return;
-                }
-                // Same-state skip: the step function only cares about real changes.
-                if (transitions.Count > 0 && Equals(val, transitions[^1].Value) &&
-                    string.Equals(lbl, transitions[^1].Label, StringComparison.Ordinal))
-                {
-                    return;
-                }
-                transitions.Add(new WaveformTransition(ns, val, lbl, 0, bits));
-                localAppended = true;
+                for (int r = 0; r < rows.Count; r++)
+                    localAppended |= AppendLive(sigs[r], ns, rows[r].Project(raw));
             });
             _liveWatermarks[signal] = newCount;
             if (localAppended) appendedAny = true;
@@ -226,11 +220,15 @@ public class WaveformData
             // ascending, so IndexAtOrBefore / GetWindow stay valid. The watermark
             // indexes SignalHistory (not this list), so eviction here never
             // disturbs it. MaxLiveTransitionsPerSignal <= 0 opts into unbounded.
-            if (MaxLiveTransitionsPerSignal > 0 && transitions.Count > MaxLiveTransitionsPerSignal)
+            foreach (var sig in sigs)
             {
-                int remove = Math.Max(1, MaxLiveTransitionsPerSignal / 8);
-                if (remove > transitions.Count) remove = transitions.Count;
-                transitions.RemoveRange(0, remove);
+                var transitions = sig.Transitions;
+                if (MaxLiveTransitionsPerSignal > 0 && transitions.Count > MaxLiveTransitionsPerSignal)
+                {
+                    int remove = Math.Max(1, MaxLiveTransitionsPerSignal / 8);
+                    if (remove > transitions.Count) remove = transitions.Count;
+                    transitions.RemoveRange(0, remove);
+                }
             }
         }
 
@@ -254,6 +252,36 @@ public class WaveformData
         }
 
         return appendedAny || addedSignal;
+    }
+
+    /// <summary>
+    /// Appends one live sample to <paramref name="sig"/> with the step-function
+    /// rules: same-tick deltas keep the last value, an unchanged state is skipped.
+    /// True when the transition list changed.
+    /// </summary>
+    private static bool AppendLive(WaveformSignal sig, long ns, object? value, int sourceLine = 0)
+    {
+        var transitions = sig.Transitions;
+        double? val = ConvertToChartValue(value, sig.DataType, sig.BitWidth);
+        string? lbl = (sig.DataType != "std_logic" && value != null)
+            ? FormatDisplayLabel(value, sig.DataType, sig.BitWidth)
+            : null;
+        // Display-only per-bit string for buses — see the static path in
+        // FromSignalHistory and WaveformTransition.Bits. Not exported.
+        string? bits = sig.DataType == "std_logic_vector" ? value?.ToString() : null;
+
+        // Same-tick collapse: deltas inside one tick → keep last.
+        if (transitions.Count > 0 && transitions[^1].TimeNs == ns)
+        {
+            transitions[^1] = new WaveformTransition(ns, val, lbl, sourceLine, bits);
+            return true;
+        }
+        // Same-state skip: the step function only cares about real changes.
+        if (transitions.Count > 0 && Equals(val, transitions[^1].Value) &&
+            string.Equals(lbl, transitions[^1].Label, StringComparison.Ordinal))
+            return false;
+        transitions.Add(new WaveformTransition(ns, val, lbl, sourceLine, bits));
+        return true;
     }
 
     private static int SortOrderForPortString(string port) => port switch
@@ -294,74 +322,10 @@ public class WaveformData
             // the underlying recording wasn't tagged (synthetic / legacy).
             var rawHistory = history.GetSignalHistoryDetailed(signal);
             if (rawHistory.Count == 0) continue;
-
-            // Classify the signal for chart rendering
-            var dataType = GetSignalDataType(signal);
-            int bitWidth = GetBitWidth(signal);
             string portType = signal.IsPort ? signal.PortType.ToString() : "INTERNAL";
 
-            // Collapse delta-level events to tick-level: when multiple deltas
-            // occur within the same tick we only keep the last value. The raw
-            // history is roughly tick-ordered already, but a final OrderBy
-            // guarantees monotonic time even if the engine flushed deltas out
-            // of order during a stop.
-            //
-            // Build the transition list in a single forward pass over the raw
-            // history. The previous implementation iterated every Nth tick and
-            // searched backwards through a tick→value dictionary, which scaled
-            // with simulation length even when the signal barely changed.
-            var transitions = new List<WaveformTransition>();
-            ulong? lastTick = null;
-            double? prevVal = null;
-            string? prevLbl = null;
-            foreach (var entry in rawHistory)
-            {
-                ulong tick = (ulong)(entry.TimeMoment / 1000);
-                long ns = (long)tick * timescaleNs;
-                double? val = ConvertToChartValue(entry.Value, dataType, bitWidth);
-                string? lbl = (dataType != "std_logic" && entry.Value != null)
-                    ? FormatDisplayLabel(entry.Value, dataType, bitWidth)
-                    : null;
-                // Display-only: keep the raw per-bit string for buses so the
-                // viewer can expand into per-bit waves (preserving U/Z/X). Not
-                // read by any export path — see WaveformTransition.Bits.
-                string? bits = dataType == "std_logic_vector" ? entry.Value?.ToString() : null;
-                int srcLine = entry.SourceLine;
-
-                if (lastTick == tick && transitions.Count > 0)
-                {
-                    // Multiple deltas inside the same tick — keep only the last
-                    // value (matches the previous tick→value dictionary's
-                    // last-write-wins semantics). The source line from the
-                    // winning (last) delta wins too.
-                    transitions[^1] = new WaveformTransition(ns, val, lbl, srcLine, bits);
-                    prevVal = val;
-                    prevLbl = lbl;
-                    continue;
-                }
-
-                if (transitions.Count > 0 && Equals(val, prevVal) &&
-                    string.Equals(lbl, prevLbl, StringComparison.Ordinal))
-                {
-                    // Same logical state as the previous tick — skip to keep
-                    // the step-function list compact.
-                    continue;
-                }
-
-                transitions.Add(new WaveformTransition(ns, val, lbl, srcLine, bits));
-                lastTick = tick;
-                prevVal = val;
-                prevLbl = lbl;
-            }
-
-            waveformSignals.Add(new WaveformSignal
-            {
-                Name = signal.Name,
-                DataType = dataType,
-                BitWidth = bitWidth,
-                PortType = portType,
-                Transitions = transitions
-            });
+            foreach (var row in RowsOf(signal))
+                waveformSignals.Add(BuildSignal(row.Name, row.Meta, portType, rawHistory, timescaleNs, row.Project));
         }
 
         return new WaveformData
@@ -370,6 +334,49 @@ public class WaveformData
             TotalTicks = totalTicks,
             TimescaleNs = timescaleNs
         };
+    }
+
+    /// <summary>A waveform row of a signal: its name, type/width source and how its value is taken from the signal's.</summary>
+    private sealed record WaveRow(string Name, Variable Meta, Func<object?, object?> Project);
+
+    /// <summary>
+    /// The rows a signal shows: itself, or — for a record — one row per field
+    /// (<c>c.cnt</c>, <c>q.a.lo</c>) decoded with the field's type. Shared by the
+    /// one-shot and the live builders.
+    /// </summary>
+    private static IReadOnlyList<WaveRow> RowsOf(Variable signal)
+    {
+        if (signal.Layout is not { } layout) return [new WaveRow(signal.Name, signal, v => v)];
+        return layout.Leaves().Select(leaf =>
+        {
+            string name = $"{signal.Name}.{leaf.Path}";
+            var field = leaf.Field;
+            int at = leaf.Offset;
+            return new WaveRow(name, FieldCodec.Template(field, name),
+                v => FieldCodec.Slice(v, at, field.Width) is { } bits ? FieldCodec.DecodeValue(field, bits) : null);
+        }).ToList();
+    }
+
+    /// <summary>
+    /// One waveform row from a signal's history: <paramref name="project"/>
+    /// takes the row's value out of each recorded value (the whole value, or a
+    /// record field), <paramref name="meta"/> gives its type and width.
+    /// </summary>
+    private static WaveformSignal BuildSignal(string name, Variable meta, string portType,
+        List<(long TimeMoment, object Value, int SourceLine)> rawHistory, int timescaleNs,
+        Func<object?, object?> project)
+    {
+        // Classify the signal for chart rendering
+        var dataType = GetSignalDataType(meta);
+        int bitWidth = GetBitWidth(meta);
+
+        // One forward pass over the raw history with the live builder's rules
+        // (same-tick deltas keep the last value and its source line; an
+        // unchanged state is skipped).
+        var sig = new WaveformSignal { Name = name, DataType = dataType, BitWidth = bitWidth, PortType = portType };
+        foreach (var entry in rawHistory)
+            AppendLive(sig, (long)(ulong)(entry.TimeMoment / 1000) * timescaleNs, project(entry.Value), entry.SourceLine);
+        return sig;
     }
 
     /// <summary>
@@ -457,8 +464,12 @@ public class WaveformData
     /// <returns>The bit width of the signal, minimum of 1.</returns>
     private static int GetBitWidth(Variable signal)
     {
+        // An enumeration is drawn as a labelled value (its literal), never as a
+        // single bit — even a two-literal type that encodes in one bit.
+        if (signal.EnumLiterals is not null) return Math.Max(signal.Size, 2);
         if (signal.Size > 0) return signal.Size;
-        return 1;
+        // An unconstrained integer is 32 bits (as in the VCD).
+        return signal.IsInteger ? 32 : 1;
     }
 
     /// <summary>

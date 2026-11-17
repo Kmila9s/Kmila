@@ -12,6 +12,7 @@
 *@
 @implements IDisposable
 @using Parser.Models
+@using Interpreter.Models
 @using Interpreter.Services
 @inject SimulationParameters Sim
 
@@ -109,14 +110,14 @@ else
                         <span class="ports-panel__entity-name">@entity.Name</span>
                     </header>
                     <div class="ports-panel__list">
-                        @foreach (var port in entity.Ports.Where(p => p.PortType == PortType.IN))
+                        @foreach (var input in entity.Ports.Where(p => p.PortType == PortType.IN).SelectMany(StimulusInputs))
                         {
                             <PortMomentInput
-                                Variable="port"
+                                Variable="input"
                                 LimitTime="Sim.Time"
                                 TimeScale="Sim.Scale"
                                 IsRunning="running"
-                                InitialConfiguration="@(Sim.PortMoments.TryGetValue(port.Name ?? string.Empty, out var cfg) ? cfg : null)"
+                                InitialConfiguration="@(Sim.PortMoments.TryGetValue(input.Name ?? string.Empty, out var cfg) ? cfg : null)"
                                 OnPortMomentsChanged="@((PortMomentConfiguration c) => Sim.UpsertPortMoment(c))" />
                         }
                     </div>
@@ -127,6 +128,28 @@ else
 }
 
 @code {
+    /// <summary>Per-field inputs of record ports, built once per port object.</summary>
+    private readonly Dictionary<Variable, IReadOnlyList<Variable>> _fieldInputs = new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>
+    /// What the student drives for an IN port: the port itself, or one input
+    /// per field of a record port (named <c>p.lo</c>, typed like the field), which
+    /// the stimulus builder writes into that part of the port.
+    /// </summary>
+    private IEnumerable<Variable> StimulusInputs(Variable port)
+    {
+        if (port.Layout is not { } layout) return [port];
+        if (!_fieldInputs.TryGetValue(port, out var inputs))
+            _fieldInputs[port] = inputs = layout.Leaves().Select(leaf =>
+            {
+                var input = FieldCodec.Template(leaf.Field, $"{port.Name}.{leaf.Path}");
+                input.IsPort = true;
+                input.PortType = PortType.IN;
+                return input;
+            }).ToList();
+        return inputs;
+    }
+
     /// <summary>Fired when the user taps the inline "Build" button in the empty state.</summary>
     [Parameter] public EventCallback OnBuildRequested { get; set; }
 
