@@ -1624,6 +1624,13 @@ with **byte-identical** Kmila VCDs, CLI outputs identical, PracticeValidator
     stimulus builder drives that part of the port (`--stimulus p.lo@0=1`,
     API `portMoments` by field name); the waveform shows one row per record
     field, enumeration values by literal, unconstrained integers as 32 bits.
+*   **v3.1.3 — strict parser** (Fase 1, G25–G33): statements GHDL rejects
+    (`count <= count + 1; by one`, undeclared procedures, misplaced reserved
+    words) are errors with their line in the editor, `kmila check` and the
+    API instead of being skipped; labels, exit/next, concurrent assert and
+    procedure calls, VHDL-2008 conditional assignments in processes run like
+    GHDL; `std.env.stop/finish` end the run early, `severity failure` fails
+    it, and textio `writeline(output, …)` lines appear in the output log.
 *   **v3.1.0 — engine errors are visible** (Fase 1, G34–G38): an engine abort
     sets `HeadlessRunResult.EngineError` / `SimulateResponse.error`, makes
     `kmila sim` exit 1 (the partial waveform is still written), is logged in
