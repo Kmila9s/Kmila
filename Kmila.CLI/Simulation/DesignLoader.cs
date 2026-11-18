@@ -48,21 +48,14 @@ public static class DesignLoader
         Console.SetOut(captured);
         try
         {
-            foreach (var src in extraFiles.Prepend(topFile))
-            {
-                if (!File.Exists(src)) throw new FileNotFoundException($"source file not found: {src}");
-                project.WriteFile(Path.GetFileName(src), File.ReadAllText(src));
-            }
-
-            var entryName = string.IsNullOrWhiteSpace(entry)
-                ? Path.GetFileNameWithoutExtension(topFile)
-                : entry!;
+            var staged = SourceStaging.Stage(project, topFile, extraFiles, entry);
 
             var design = Frontends.ForPath(topFile).LoadDesign(new DesignRequest
             {
                 Root = project.Path,
-                Recursive = false,
-                Entry = entryName,
+                Files = staged.Files.Select(n => Path.Combine(project.Path, n)).ToList(),
+                Entry = staged.Entry,
+                EntryIsExplicit = staged.EntryIsExplicit,
                 Elaborate = elaborate,
             });
             design.ThrowIfFailed();

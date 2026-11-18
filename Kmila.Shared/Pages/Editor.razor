@@ -732,7 +732,7 @@
                 if (Builder.Design is { } design && !string.IsNullOrEmpty(baseDir) && !string.IsNullOrEmpty(topName))
                 {
                     var frontend = Kmila.Frontend.Frontends.For(design.Language);
-                    var flat = frontend.ElaborateSource(baseDir!, topName!);
+                    var flat = frontend.ElaborateSource(design.Sources, topName!);
                     var unit = flat != null ? frontend.ParseSource(flat) : null;
                     if (unit is { Error: null }) merged.AddRange(unit.Entities);
                 }

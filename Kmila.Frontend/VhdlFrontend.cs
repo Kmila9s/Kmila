@@ -23,17 +23,45 @@ public sealed class VhdlFrontend : HdlFrontendBase
         }
     }
 
-    protected override ParsedUnit ParseCore(string source, CancellationToken cancellationToken)
+    protected override ParsedUnit ParseCore(string source, IReadOnlyList<string> companions, CancellationToken cancellationToken)
     {
         var parser = Debugger.Repositories.Parser.FromSource(source);
         ExceptionDispatchInfo? error = null;
-        try { parser.ParseFile(cancellationToken); }
+        try
+        {
+            // G21: units of other files this text needs — the entity of an
+            // architecture declared elsewhere is parsed first and seeded, and the
+            // selected architecture of an entity declared here without one is
+            // parsed against it afterwards (line numbers stay this text's own).
+            var (entities, architectures) = companions.Count > 0
+                ? SourceElaborator.CompanionUnits(companions, source)
+                : ([], []);
+            foreach (var text in entities) parser.Entities.AddRange(ParseUnit(text, [], cancellationToken));
+            parser.ParseFile(cancellationToken);
+            foreach (var text in architectures) ParseUnit(text, parser.Entities, cancellationToken);
+        }
         catch (Exception ex) { error = ExceptionDispatchInfo.Capture(ex); }
         return new ParsedUnit(source, parser.Entities, parser.Diagnostics, error);
     }
 
-    public override string? ElaborateSource(string root, string entry) =>
-        SourceElaborator.ElaborateOrNull(root, entry);
+    /// <summary>Parses a companion unit's text with <paramref name="seed"/> entities visible; returns its entities.</summary>
+    private static List<Entity> ParseUnit(string text, List<Entity> seed, CancellationToken cancellationToken)
+    {
+        var unit = Debugger.Repositories.Parser.FromSource(text);
+        unit.Entities.AddRange(seed);
+        unit.ParseFile(cancellationToken);
+        return unit.Entities;
+    }
+
+    public override string? ElaborateSource(IReadOnlyList<string> files, string entry) =>
+        SourceElaborator.ElaborateOrNull(files, entry);
+
+    public override string? ResolveEntityName(IReadOnlyList<string> files, string entry) =>
+        SourceElaborator.ResolveEntityName(files, entry);
+
+    // GHDL's wording for `ghdl -e <unit>`.
+    protected override string MissingTopMessage(string entry) => $"cannot find entity or configuration \"{entry}\"";
+    protected override string TopWithoutBodyMessage(string name) => $"entity \"{name}\" has no architecture";
 
     private static readonly Regex PackageDeclRe =
         new(@"(?im)^\s*package\s+([a-z_][a-z0-9_]*)\s+is\b", RegexOptions.Compiled);
