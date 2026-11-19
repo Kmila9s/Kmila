@@ -53,6 +53,7 @@ public sealed class HeadlessSimulator
         {
             Language       = language,
             EntryPoint     = request.EntryPoint,
+            Files          = request.Files?.Select(f => f.Name).ToList(),
             TotalNs        = TotalNsFromRequest(request),
             TickResNs      = request.TickResNs,
             SystemClockMhz = request.SystemClockMhz,
@@ -110,14 +111,16 @@ public sealed class HeadlessSimulator
         var ct = requestCts.Token;
 
         Phase("load-begin");
-        var sources = Directory.EnumerateFiles(projectPath, "*.*", SearchOption.AllDirectories)
-                               .Where(HdlLanguages.IsHdlSource).ToList();
+        var sources = SourceOrder.Sort(projectPath,
+            Directory.EnumerateFiles(projectPath, "*.*", SearchOption.AllDirectories).Where(HdlLanguages.IsHdlSource),
+            options.Files);
         var frontend = options.Language != null ? Frontends.For(options.Language) : Frontends.ForSources(sources);
         var design = frontend.LoadDesign(new DesignRequest
         {
             Root      = projectPath,
             Files     = sources,
             Entry     = options.EntryPoint,
+            EntryIsExplicit = options.EntryIsExplicit,
             // Inline sub-component instances into one flat design when an
             // entry point is named: child architectures are not executed at
             // run time, so a modular design would otherwise produce no output.
@@ -231,8 +234,12 @@ public sealed class HeadlessRunOptions
 {
     /// <summary>HDL language to load; null infers it from the project's sources.</summary>
     public HdlLanguage? Language { get; init; }
-    /// <summary>Top entity; when set, the design is elaborated (sub-components inlined).</summary>
+    /// <summary>Top unit (entity or configuration); when set, the design is elaborated (sub-components inlined).</summary>
     public string? EntryPoint { get; init; }
+    /// <summary>False when <see cref="EntryPoint"/> was inferred (e.g. from a file name): a missing unit is then a warning, not an error.</summary>
+    public bool EntryIsExplicit { get; init; } = true;
+    /// <summary>Source names (relative to the project) in analysis order; the project's other sources follow sorted by path.</summary>
+    public IReadOnlyList<string>? Files { get; init; }
     /// <summary>Simulated duration in nanoseconds.</summary>
     public long TotalNs { get; init; }
     /// <summary>Nanoseconds per engine tick; 0 or less uses <see cref="TimeClock.NS_PER_TICK"/>.</summary>

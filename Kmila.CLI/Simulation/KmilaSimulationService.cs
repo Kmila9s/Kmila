@@ -81,21 +81,9 @@ public sealed class KmilaSimulationService
         var project = store.Create("cli-run", retain: false);
         try
         {
-            // Stage the top file + dependencies into the sandbox.
-            var topName = Path.GetFileName(request.TopFilePath);
-            project.WriteFile(topName, File.ReadAllText(request.TopFilePath));
-            foreach (var extra in request.ExtraFiles)
-            {
-                if (!File.Exists(extra))
-                    throw new FileNotFoundException($"source file not found: {extra}");
-                project.WriteFile(Path.GetFileName(extra), File.ReadAllText(extra));
-            }
-
-            var entry = string.IsNullOrWhiteSpace(request.EntryPoint)
-                ? Path.GetFileNameWithoutExtension(topName)
-                : request.EntryPoint!;
-
-            return await RunInProjectAsync(project.Path, entry, request);
+            // Stage the top file + dependencies into the sandbox (analysis order).
+            var staged = SourceStaging.Stage(project, request.TopFilePath, request.ExtraFiles, request.EntryPoint);
+            return await RunInProjectAsync(project.Path, staged, request);
         }
         finally
         {
@@ -103,7 +91,7 @@ public sealed class KmilaSimulationService
         }
     }
 
-    private async Task<SimRunResult> RunInProjectAsync(string projectPath, string entry, SimRunRequest request)
+    private async Task<SimRunResult> RunInProjectAsync(string projectPath, SourceStaging.Staged staged, SimRunRequest request)
     {
         // The VHDL engine (Interpreter) writes diagnostic chatter straight to
         // Console.Out. If the CLI is piping VCD/TXT/CSV to stdout, that chatter
@@ -114,7 +102,7 @@ public sealed class KmilaSimulationService
         Console.SetOut(captured);
         try
         {
-            return await RunPipelineAsync(projectPath, entry, request, captured);
+            return await RunPipelineAsync(projectPath, staged, request, captured);
         }
         finally
         {
@@ -123,11 +111,13 @@ public sealed class KmilaSimulationService
     }
 
     private async Task<SimRunResult> RunPipelineAsync(
-        string projectPath, string entry, SimRunRequest request, StringWriter captured)
+        string projectPath, SourceStaging.Staged staged, SimRunRequest request, StringWriter captured)
     {
         var run = await HeadlessSimulator.RunProjectAsync(projectPath, new HeadlessRunOptions
         {
-            EntryPoint     = entry,
+            EntryPoint     = staged.Entry,
+            EntryIsExplicit = staged.EntryIsExplicit,
+            Files          = staged.Files,
             TotalNs        = request.TotalNs,
             TickResNs      = request.TickResNs,
             SystemClockMhz = request.SystemClockMhz,

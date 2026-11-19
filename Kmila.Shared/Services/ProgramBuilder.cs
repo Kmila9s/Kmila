@@ -647,7 +647,7 @@ public class ProgramBuilder : IDisposable
         var unit = probe.Unit!;
         try
         {
-            var flat = frontend.ElaborateSource(projectBasePath, tbName);
+            var flat = frontend.ElaborateSource(sources, tbName);
             if (!string.IsNullOrEmpty(flat)) unit = frontend.ParseSource(flat);
         }
         catch (Exception elabEx)

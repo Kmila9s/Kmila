@@ -58,11 +58,19 @@ public interface IHdlFrontend
     Interpreter.Services.Entity? PickTop(IEnumerable<Interpreter.Services.Entity> entities, string? entry);
 
     /// <summary>
-    /// Flattens the hierarchy rooted at <paramref name="entry"/> under
-    /// <paramref name="root"/> into one source text, or null when there is
-    /// nothing to inline (or the language has no elaborator).
+    /// Flattens the hierarchy rooted at unit <paramref name="entry"/> of the design
+    /// in <paramref name="files"/> (analysis order) into one source text, or null
+    /// when the top's own file can be parsed as is (or the language has no elaborator).
     /// </summary>
-    string? ElaborateSource(string root, string entry);
+    /// <exception cref="Parser.Models.ParserException">A named unit or binding cannot be resolved.</exception>
+    string? ElaborateSource(IReadOnlyList<string> files, string entry);
+
+    /// <summary>
+    /// The entity a top unit name designates in <paramref name="files"/> — the
+    /// entity itself, or the one a configuration configures; null when the
+    /// design has no such unit.
+    /// </summary>
+    string? ResolveEntityName(IReadOnlyList<string> files, string entry);
 
     /// <summary>
     /// Compiles and seeds the libraries <paramref name="sources"/> import so the
@@ -93,13 +101,21 @@ public sealed record DesignRequest
     /// <summary>Explicit source list (overrides discovery). Order is significant.</summary>
     public IReadOnlyList<string>? Files { get; init; }
 
-    /// <summary>Preferred top entity. Also selects the parse target by file stem.</summary>
+    /// <summary>Top unit (entity, or a configuration of one). Also selects the parse target by file stem.</summary>
     public string? Entry { get; init; }
+
+    /// <summary>
+    /// True when the caller named <see cref="Entry"/> explicitly (an <c>--entity</c>
+    /// option, an API <c>entryPoint</c>): a unit that does not exist is then an
+    /// error, as for GHDL. False when it was inferred (e.g. from the top file's
+    /// name): the first entity with an architecture is used, with a warning.
+    /// </summary>
+    public bool EntryIsExplicit { get; init; } = true;
 
     /// <summary>Explicit file to parse; otherwise the file named after <see cref="Entry"/>, else the first source.</summary>
     public string? ParseTarget { get; init; }
 
-    /// <summary>Inline component instances into one flat design (requires <see cref="Root"/> and <see cref="Entry"/>).</summary>
+    /// <summary>Inline component instances into one flat design (requires <see cref="Entry"/>).</summary>
     public bool Elaborate { get; init; }
 
     /// <summary>Recurse into sub-directories when discovering sources.</summary>

@@ -1631,6 +1631,17 @@ with **byte-identical** Kmila VCDs, CLI outputs identical, PracticeValidator
     procedure calls, VHDL-2008 conditional assignments in processes run like
     GHDL; `std.env.stop/finish` end the run early, `severity failure` fails
     it, and textio `writeline(output, …)` lines appear in the output log.
+*   **v3.1.4 — elaboration** (Fase 1, G18–G24 + G55–G57): the design is
+    analysed like GHDL's work library — the last analysed architecture by
+    default, `(arch)`, configuration specifications and declarations (also as the
+    top), `component`/`configuration` instances, entity and architecture in
+    different files (also in the editor and `kmila check`), and a deterministic
+    analysis order (`DiscoverSources`, the API's file order, the CLI's argument
+    order). An explicit `--entity`/`entryPoint` that does not exist is an error
+    (`cannot find entity or configuration`); an inferred one falls back with a
+    warning. Instances inside generates get one copy per iteration; aggregate
+    targets `(a, b) <= …` simulate; report/textio text keeps its blanks and
+    punctuation. The CLI rejects two sources with the same file name.
 *   **v3.1.0 — engine errors are visible** (Fase 1, G34–G38): an engine abort
     sets `HeadlessRunResult.EngineError` / `SimulateResponse.error`, makes
     `kmila sim` exit 1 (the partial waveform is still written), is logged in
