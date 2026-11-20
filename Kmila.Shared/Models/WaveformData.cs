@@ -268,7 +268,8 @@ public class WaveformData
             : null;
         // Display-only per-bit string for buses — see the static path in
         // FromSignalHistory and WaveformTransition.Bits. Not exported.
-        string? bits = sig.DataType == "std_logic_vector" ? value?.ToString() : null;
+        // A std_logic keeps its character too, so a metavalue shows as itself (Z, U, W…), not X.
+        string? bits = sig.DataType is "std_logic_vector" or "std_logic" ? value?.ToString() : null;
 
         // Same-tick collapse: deltas inside one tick → keep last.
         if (transitions.Count > 0 && transitions[^1].TimeNs == ns)
@@ -936,7 +937,7 @@ public sealed class WaveformTransitionCollapser
         string? lbl = (_dataType != "std_logic" && value != null)
             ? WaveformData.DisplayLabel(value, _dataType, _bitWidth)
             : null;
-        string? bits = _dataType == "std_logic_vector" ? value?.ToString() : null;
+        string? bits = _dataType is "std_logic_vector" or "std_logic" ? value?.ToString() : null;
 
         if (_hasPending && _lastTick == tick)
         {
