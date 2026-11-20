@@ -361,12 +361,14 @@ public class ProgramBuilder : IDisposable
     /// </param>
     /// <param name="tickResNs">Tick resolution in nanoseconds for the simulation clock.</param>
     /// <param name="fastRun">When true, runs without per-tick throttling for maximum speed.</param>
+    /// <param name="initialValues">Initial values of objects declared without <c>:=</c> (the app setting).</param>
     public async Task RunSimulationAsync(
         List<PortMomentConfiguration>? portMoments,
         TimeSpan duration,
         int systemClockMhz = 50,
         int tickResNs = TimeMachine.Models.TimeClock.NS_PER_TICK,
-        bool fastRun = false)
+        bool fastRun = false,
+        InitialValuePolicy initialValues = InitialValuePolicy.Lrm)
     {
         // Get first entity with architecture
         var entity = Design?.Top;
@@ -378,9 +380,11 @@ public class ProgramBuilder : IDisposable
         LastTickResNs = tickResNs > 0 ? tickResNs : TimeMachine.Models.TimeClock.NS_PER_TICK;
 
         // Build simulation config from UI parameters
+        // The clock is the clock-named port, proposed visibly (the «auto clock» badge).
         var config = StimulusBuilder.BuildConfig(entity, portMoments, duration,
             tickResNs: LastTickResNs,
-            systemClockMhz: systemClockMhz);
+            systemClockMhz: systemClockMhz,
+            options: new StimulusOptions { InitialValues = initialValues });
 
         // Surface the config to stdout (and therefore /logs via the Console
         // redirector wired up in Program.cs) so the user can see exactly what

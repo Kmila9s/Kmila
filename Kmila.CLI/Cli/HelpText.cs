@@ -61,6 +61,18 @@ public static class HelpText
         STIMULUS
           --stimulus <port@time=value>   Drive an input port at a time (repeatable).
                                          time may carry a unit, e.g. a@0=0 a@20ns=1.
+          --clock <port[:period]>        Drive a clock on an input port (repeatable);
+                                         period as a time (20ns) or a frequency (50MHz),
+                                         default --clockMHZ. Without --clock no clock is
+                                         driven (with --didactic: the clk/clock port).
+          --initial <port=value>         Value of an input port before t=0 (no event),
+                                         like a testbench signal's initial value.
+
+        INITIAL VALUES
+          (default)                      LRM, like GHDL: objects without := start at
+                                         their type's left value ('U' for std_logic).
+          --didactic                     Start objects without := and undriven inputs
+                                         at 0 (en/enable at 1) and drive the clk port.
 
         ASSERTIONS (exit non-zero on any miss)
           --assert <sig@time=value>      Check a signal at a time (repeatable).

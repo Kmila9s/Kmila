@@ -24,6 +24,10 @@ public sealed class ConfigFile
     [JsonPropertyName("format")] public string? Format { get; set; }
     /// <summary>Default UI/message language (es|en).</summary>
     [JsonPropertyName("lang")] public string? Lang { get; set; }
+    /// <summary>Initial values: <c>lrm</c> (default) or <c>didactic</c>.</summary>
+    [JsonPropertyName("initialValues")] public string? InitialValues { get; set; }
+    /// <summary>Clocks to drive, as in <c>--clock</c> (<c>"clk"</c>, <c>"clk:20ns"</c>, <c>"clk:50MHz"</c>).</summary>
+    [JsonPropertyName("clocks")] public List<string>? Clocks { get; set; }
 
     private static readonly JsonSerializerOptions Opts = new()
     {

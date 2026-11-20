@@ -59,6 +59,7 @@ public sealed class HeadlessSimulator
             SystemClockMhz = request.SystemClockMhz,
             PortMoments    = MaterializePortMoments(request.PortMoments),
             WallTimeoutMs  = wallMs,
+            Stimulus       = StimulusOptionsOf(request),
         });
 
         string vcd = run.History.ExportToVcd(run.Entity.Name, timescaleNs: run.TickResNs);
@@ -76,6 +77,12 @@ public sealed class HeadlessSimulator
             Error       = run.EngineError,
         };
     }
+
+    /// <summary>The request's clocks, port initial values and initial-value policy.</summary>
+    private static StimulusOptions StimulusOptionsOf(SimulateRequest r) => StimulusOptions.Declared(
+        StimulusOptions.ParsePolicy(r.InitialValues),
+        r.Clocks?.Select(c => new ClockSpec(c.Port, c.PeriodNs, c.InitialHigh)).ToList(),
+        r.PortInitials?.Select(p => KeyValuePair.Create(p.Port, p.Value)).ToList());
 
     /// <summary>
     /// The headless pipeline shared by the HTTP API and the CLI: load the
@@ -141,7 +148,8 @@ public sealed class HeadlessSimulator
             options.PortMoments is { Count: > 0 } ? options.PortMoments : null,
             totalNs: options.TotalNs,
             tickResNs: tickResNs,
-            systemClockMhz: systemClockMhz);
+            systemClockMhz: systemClockMhz,
+            options: options.Stimulus);
         Phase("stimulus-end");
 
         log.Add($"[sim] entity={entity.Name} ports={entity.Ports.Count} totalTicks={config.TotalTicks} stimuli={config.Stimuli.Count} clocks={config.Clocks.Count}");
@@ -248,6 +256,8 @@ public sealed class HeadlessRunOptions
     public int SystemClockMhz { get; init; }
     /// <summary>Port stimulus; null or empty for none.</summary>
     public List<PortMomentConfiguration>? PortMoments { get; init; }
+    /// <summary>Clocks, port initial values and initial-value policy; null proposes the clock by name under LRM.</summary>
+    public StimulusOptions? Stimulus { get; init; }
     /// <summary>Wall-clock budget for load + simulation, or null for none.</summary>
     public int? WallTimeoutMs { get; init; }
 }

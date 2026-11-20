@@ -15,10 +15,16 @@ public static partial class DurationParser
     private static partial Regex TimeRegex();
 
     /// <summary>
-    /// Converts a time string to nanoseconds (rounded to the nearest ns, never
+    /// Converts a duration string to nanoseconds (rounded to the nearest ns, never
     /// below 1). Throws <see cref="FormatException"/> on an unparseable value.
     /// </summary>
-    public static long ParseToNs(string text)
+    public static long ParseToNs(string text) => Math.Max(1, ParseInstantNs(text));
+
+    /// <summary>
+    /// Converts a point in time to nanoseconds (rounded to the nearest ns; <c>0</c>
+    /// is t = 0). Throws <see cref="FormatException"/> on an unparseable value.
+    /// </summary>
+    public static long ParseInstantNs(string text)
     {
         if (string.IsNullOrWhiteSpace(text))
             throw new FormatException("empty duration");
@@ -43,8 +49,7 @@ public static partial class DurationParser
             _             => magnitude,
         };
 
-        var rounded = (long)Math.Round(ns, MidpointRounding.AwayFromZero);
-        return Math.Max(1, rounded);
+        return (long)Math.Round(ns, MidpointRounding.AwayFromZero);
     }
 
     /// <summary>
@@ -62,7 +67,7 @@ public static partial class DurationParser
         var port = token[..at].Trim();
         var timePart = token[(at + 1)..eq].Trim();
         var value = token[(eq + 1)..].Trim();
-        var timeNs = (int)Math.Min(int.MaxValue, ParseToNs(timePart));
+        var timeNs = (int)Math.Min(int.MaxValue, ParseInstantNs(timePart));
         return (port, timeNs, value);
     }
 }

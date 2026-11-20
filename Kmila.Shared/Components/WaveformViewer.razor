@@ -900,7 +900,7 @@ else if (Data != null && Data.Signals.Count > 0)
     private static string FormatRadix(WaveformTransition t, WaveformSignal s, WaveRadix radix)
     {
         if (s.DataType == "std_logic")
-            return t.Value.HasValue ? (t.Value.Value >= 0.5 ? "1" : "0") : "X";
+            return Level(t);
 
         string? bits = ResolveBits(t, s);
         // No numeric form but a label: an enumeration literal (`m_on`, `idle`).
@@ -936,6 +936,18 @@ else if (Data != null && Data.Signals.Count > 0)
         var sb = new System.Text.StringBuilder();
         while (v > 0) { sb.Insert(0, digits[(int)(v % b)]); v /= b; }
         return sb.ToString();
+    }
+
+    /// <summary>A std_logic transition as one character: 1/0, or the metavalue it holds.</summary>
+    private static string Level(WaveformTransition t) =>
+        t.Value.HasValue ? (t.Value.Value >= 0.5 ? "1" : "0") : MetaLevel(t);
+
+    /// <summary>The metavalue a std_logic transition holds (U, X, Z, W, L, H, -), or X.</summary>
+    private static string MetaLevel(WaveformTransition t)
+    {
+        string raw = t.Bits ?? t.Label ?? "";
+        return raw.Length == 1 && Interpreter.Models.StdLogic.IsValue(raw[0])
+            ? Interpreter.Models.StdLogic.Norm(raw[0]).ToString() : "X";
     }
 
     /// <summary>
@@ -1218,7 +1230,7 @@ else if (Data != null && Data.Signals.Count > 0)
     private bool _showClock = true;
 
     private static bool IsClockName(string name)
-        => Kmila.Shared.Services.StimulusBuilder.IsClockPortName(name);
+        => Kmila.Shared.Services.ClockPortPolicy.IsClockPortName(name);
 
     // ─── Zoom geometry ──────────────────────────────────────────────────
     //
@@ -1739,7 +1751,7 @@ else if (Data != null && Data.Signals.Count > 0)
     /// <summary>Per-signal stroke colour — clock in green, inputs blue, outputs orange, vectors purple.</summary>
     private static string GetSignalColor(WaveformSignal signal)
     {
-        if (Kmila.Shared.Services.StimulusBuilder.IsClockPortName(signal.Name))
+        if (Kmila.Shared.Services.ClockPortPolicy.IsClockPortName(signal.Name))
             return "#10b981"; // success
         if (signal.BitWidth > 1) return "#a855f7"; // purple
         return signal.PortType switch
@@ -1875,7 +1887,7 @@ else if (Data != null && Data.Signals.Count > 0)
         sb.AppendLine("$enddefinitions $end");
 
         // Merge every signal's transitions into one time-sorted stream.
-        var stream = new SortedDictionary<long, List<(string Id, double? V, int W)>>();
+        var stream = new SortedDictionary<long, List<(string Id, string Bits)>>();
         foreach (var signal in exported)
         {
             // AllTransitions: the complete run (on-disk archive) for long runs,
@@ -1886,25 +1898,26 @@ else if (Data != null && Data.Signals.Count > 0)
                 {
                     list = new(); stream[t.TimeNs] = list;
                 }
-                list.Add((ids[signal.Name], t.Value, signal.BitWidth));
+                list.Add((ids[signal.Name], VcdBits(t, signal)));
             }
         }
 
         foreach (var kv in stream)
         {
             sb.Append('#').AppendLine((kv.Key / Math.Max(1, Data.TimescaleNs)).ToString());
-            foreach (var (id, v, w) in kv.Value)
-            {
-                if (w <= 1)
-                    sb.AppendLine($"{(v == 1.0 ? '1' : v == 0.0 ? '0' : 'x')}{id}");
-                else
-                {
-                    var bits = v.HasValue ? Convert.ToString((long)v.Value, 2).PadLeft(w, '0') : new string('x', w);
-                    sb.AppendLine($"b{bits} {id}");
-                }
-            }
+            foreach (var (id, bits) in kv.Value)
+                sb.AppendLine(bits.Length == 1 ? $"{bits}{id}" : $"b{bits} {id}");
         }
         return sb.ToString();
+
+        // The value as VCD bits, metavalues kept (U, X, Z, W, L, H, -).
+        static string VcdBits(WaveformTransition t, WaveformSignal s)
+        {
+            int w = Math.Max(1, s.BitWidth);
+            if (w == 1) return Level(t);
+            if (ResolveBits(t, s) is { Length: > 0 } raw) return raw.ToUpperInvariant();
+            return t.Value.HasValue ? Convert.ToString((long)t.Value.Value, 2).PadLeft(w, '0') : new string('X', w);
+        }
     }
 
     // ─── Image export (SVG / PNG, optional multi-page split) ────────────────

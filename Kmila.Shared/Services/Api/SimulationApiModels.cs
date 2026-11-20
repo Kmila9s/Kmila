@@ -67,6 +67,38 @@ public sealed class SimulateRequest
     [JsonPropertyName("portMoments")] public List<ApiPortMoment> PortMoments { get; set; } = new();
     /// <summary>Optional inline files to write into the project before simulating.</summary>
     [JsonPropertyName("files")] public List<WriteFileRequest>? Files { get; set; }
+    /// <summary>
+    /// Initial values of objects declared without <c>:=</c>: <c>"lrm"</c> (default, like GHDL: <c>'U'</c>,
+    /// <c>T'left</c>) or <c>"didactic"</c> (start at 0, clock proposed by name).
+    /// </summary>
+    [JsonPropertyName("initialValues")] public string? InitialValues { get; set; }
+    /// <summary>
+    /// Clocks driven on input ports. When omitted: none under <c>"lrm"</c>; the clock-named port
+    /// (<c>clk</c>, <c>clock</c>…) at <see cref="SystemClockMhz"/> under <c>"didactic"</c>.
+    /// </summary>
+    [JsonPropertyName("clocks")] public List<ApiClock>? Clocks { get; set; }
+    /// <summary>Initial values of input ports, set before time 0 (no event at t=0).</summary>
+    [JsonPropertyName("portInitials")] public List<ApiPortInitial>? PortInitials { get; set; }
+}
+
+/// <summary>A clock driven on an input port.</summary>
+public sealed class ApiClock
+{
+    /// <summary>Input port to drive.</summary>
+    [JsonPropertyName("port")] public string Port { get; set; } = string.Empty;
+    /// <summary>Period in nanoseconds; 0 or omitted uses <see cref="SimulateRequest.SystemClockMhz"/>.</summary>
+    [JsonPropertyName("periodNs")] public double PeriodNs { get; set; }
+    /// <summary>True when the clock starts at '1' (default '0').</summary>
+    [JsonPropertyName("initialHigh")] public bool InitialHigh { get; set; }
+}
+
+/// <summary>The initial value of an input port.</summary>
+public sealed class ApiPortInitial
+{
+    /// <summary>Port (or part, e.g. <c>v(0)</c>).</summary>
+    [JsonPropertyName("port")] public string Port { get; set; } = string.Empty;
+    /// <summary>Value (<c>0</c>, <c>1</c>, <c>U</c>, a bit string…).</summary>
+    [JsonPropertyName("value")] public string Value { get; set; } = string.Empty;
 }
 
 /// <summary>A single scheduled input value applied to a port at a given time.</summary>

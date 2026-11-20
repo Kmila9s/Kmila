@@ -1642,6 +1642,19 @@ with **byte-identical** Kmila VCDs, CLI outputs identical, PracticeValidator
     warning. Instances inside generates get one copy per iteration; aggregate
     targets `(a, b) <= …` simulate; report/textio text keeps its blanks and
     punctuation. The CLI rejects two sources with the same file name.
+*   **v3.1.5 — LRM values** (Fase 1, G39–G42, G46–G49, G58): IEEE 1164
+    nine-valued logic (`'X' and '1'` = `X`, `U` propagates, `rising_edge` needs
+    `0→1`), numeric_std metavalues (`X` results, GHDL's warnings), VHDL-2008
+    `?=`/`??`/reduction/`std_match`, `mod`/`rem`/`abs`, `string`/`character`;
+    division by zero and a run-time index out of range stop the run with the
+    line. Objects without `:=` start at `T'left` (`'U'`, `integer'left`, the
+    first enum literal); port defaults and `open` inputs work. The didactic
+    start at 0 is an option: Settings → «Valores iniciales didácticos»,
+    `kmila sim --didactic`, API `initialValues`. No synthetic `_clk`: the API
+    and CLI declare clocks (`clocks`, `--clock clk:20ns`) and port initial
+    values (`portInitials`, `--initial clk=0`); the editor and the practices
+    keep proposing the clock-named port. VCDs keep U/X/Z/W/L/H/- and hold one
+    settled value per instant.
 *   **v3.1.0 — engine errors are visible** (Fase 1, G34–G38): an engine abort
     sets `HeadlessRunResult.EngineError` / `SimulateResponse.error`, makes
     `kmila sim` exit 1 (the partial waveform is still written), is logged in
