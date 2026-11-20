@@ -134,9 +134,9 @@ public abstract class HdlFrontendBase : IHdlFrontend
     /// </summary>
     private Exception? CheckEntry(DesignRequest request, string? topName, Entity? top, ParsedUnit unit, List<string> log)
     {
-        if (topName == null || unit.Error != null || (top != null && top.Name.Equals(topName, StringComparison.OrdinalIgnoreCase)))
+        if (topName == null || unit.Error != null || (top != null && top.Name.Equals(topName, IdentifierComparison)))
             return null;
-        bool declared = unit.Entities.Any(e => e.Name.Equals(topName, StringComparison.OrdinalIgnoreCase));
+        bool declared = unit.Entities.Any(e => e.Name.Equals(topName, IdentifierComparison));
         string message = declared ? TopWithoutBodyMessage(topName) : MissingTopMessage(request.Entry!);
         if (request.EntryIsExplicit) return new InvalidOperationException(message);
         string fallback = top == null ? "" : $"; using \"{top.Name}\"";

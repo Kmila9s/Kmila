@@ -118,6 +118,8 @@ public sealed class HeadlessSimulator
         var ct = requestCts.Token;
 
         Phase("load-begin");
+        // std.textio files (`file f : text open read_mode is "data.txt"`) open from the project, as GHDL from its working directory.
+        Interpreter.Models.TextioFiles.BaseDirectory = projectPath;
         var sources = SourceOrder.Sort(projectPath,
             Directory.EnumerateFiles(projectPath, "*.*", SearchOption.AllDirectories).Where(HdlLanguages.IsHdlSource),
             options.Files);
