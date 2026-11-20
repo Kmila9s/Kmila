@@ -97,6 +97,13 @@ public class AppSettings
     public const string KEY_LIVE_REPLAY_DURING_RUN = "KMILA_LIVE_REPLAY_DURING_RUN";
 
     /// <summary>
+    /// v3.1.5 — initial values of objects declared without <c>:=</c>: <c>"lrm"</c>
+    /// (default, like GHDL: <c>'U'</c>, <c>T'left</c>) or <c>"didactic"</c> (start at 0).
+    /// Read at Run by the editor and the visual panel.
+    /// </summary>
+    public const string KEY_INITIAL_VALUES = "KMILA_INITIAL_VALUES";
+
+    /// <summary>
     /// Tier 5.2 Phase B — opt-in switch that boots the embedded Kestrel host
     /// serving <c>/api/v1</c> inside the MAUI app process. When "true", the
     /// MAUI startup hydration (see MauiProgram.cs) resolves EmbeddedApiHost

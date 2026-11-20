@@ -808,6 +808,7 @@
     private int? _customDelayMs = VisualSpeed.Normal.TickDelayMs();
     private int _speedPos = VisualSpeedScale.SliderFromDelay(VisualSpeed.Normal.TickDelayMs());
     private int _settingsRingBuffer;
+    private Interpreter.Models.InitialValuePolicy _initialValues;
     private ulong _scrubTick;
     private string _bpInput = string.Empty;
     private ulong? _lastBreakHitTick;
@@ -1383,6 +1384,8 @@
             var raw = await DbContext.GetSettingAsync(AppSettings.KEY_VISUAL_RING_BUFFER);
             if (int.TryParse(raw, out var rb) && rb >= 256 && rb <= 16384)
                 _settingsRingBuffer = rb;
+            _initialValues = Kmila.Shared.Services.StimulusOptions.ParsePolicyOrLrm(
+                await DbContext.GetSettingAsync(AppSettings.KEY_INITIAL_VALUES));
         }
         catch { }
     }
@@ -1757,6 +1760,7 @@
         if (ringTicks <= 0) ringTicks = 2000;
         _coord = new VisualRunCoordinator(_entity, ringTicks, userDrivenPorts, Traductor);
         _coord.Speed = _speedIndex;
+        _coord.InitialValues = _initialValues;
         _coord.CustomTickDelayMs = _customDelayMs;
         var coordForCallbacks = _coord;
         var pidForCallbacks = _projectId;

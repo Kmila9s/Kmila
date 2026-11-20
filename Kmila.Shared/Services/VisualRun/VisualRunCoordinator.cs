@@ -1,3 +1,4 @@
+using Interpreter.Models;
 using Interpreter.Services;
 using Kmila.Shared.Services;
 using Parser.Models;
@@ -266,10 +267,9 @@ public sealed class VisualRunCoordinator : IDisposable
             // switch/button to it, in which case they drive it manually.
             _clockPorts = _entity.Ports
                 .Where(p => (p.PortType == PortType.IN || p.PortType == PortType.INOUT)
-                    && StimulusBuilder.IsClockPortName(p.Name)
+                    && ClockPortPolicy.IsClockPortName(p.Name)
                     && !_userDrivenPorts.Contains(p.Name))
                 .ToList();
-            foreach (var clk in _clockPorts) clk.Value = "0";
 
             ulong tick = 0;
             CurrentTick = 0;
@@ -354,35 +354,22 @@ public sealed class VisualRunCoordinator : IDisposable
         }
     }
 
-    // Sweep every signal that's about to be used as a design input and
-    // seed sensible defaults. Mirrors SimulationRunner's pre-tick-0 sweep
-    // — without it `U` propagates through combinational logic and the
-    // very first tick produces unreadable output.
+    /// <summary>Initial values of objects declared without <c>:=</c> (the app setting; LRM by default).</summary>
+    public InitialValuePolicy InitialValues { get; set; } = InitialValuePolicy.Lrm;
+
+    // Inputs are driven by the widgets (a released switch drives '0'); every
+    // other object starts under the initial-value policy, like a timed run.
     private void InitializeSignals()
     {
-        foreach (var sig in _allSignals)
-        {
-            string? existing = sig.Value?.ToString();
-            bool needsDefault =
-                string.IsNullOrEmpty(existing) ||
-                existing.All(c => c == 'U' || c == 'u') ||
-                existing == "System.Object";
-            if (!needsDefault && !sig.IsPort) continue;
-
-            string defaultVal = sig.Size > 1 ? new string('0', sig.Size) : "0";
-            sig.Value = defaultVal;
-        }
+        var widgetDriven = new HashSet<Variable>(_entity.Ports.Where(p => p.PortType is PortType.IN or PortType.INOUT));
+        InitialValueSeeder.Apply(InitialValues, InitialValueSeeder.ObjectsOf(_entity), widgetDriven);
+        foreach (var port in widgetDriven) port.Value = port.Size > 1 ? new string('0', port.Size) : "0";
 
         // Seed InputStateMap with current values for every input/inout port
         // so widgets that never write get a deterministic baseline.
-        foreach (var port in _entity.Ports)
-        {
-            if (port.PortType == PortType.IN || port.PortType == PortType.INOUT)
-            {
-                if (Inputs.Get(port.Name) is var v && string.IsNullOrEmpty(v))
-                    Inputs.Set(port.Name, port.Size > 1 ? new string('0', port.Size) : "0");
-            }
-        }
+        foreach (var port in widgetDriven)
+            if (string.IsNullOrEmpty(Inputs.Get(port.Name)))
+                Inputs.Set(port.Name, port.Value.ToString()!);
     }
 
     private void DrainInputsToPorts()

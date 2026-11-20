@@ -2313,62 +2313,16 @@
         var tickModeRaw = await DbContext.GetSettingAsync(AppSettings.KEY_TICK_RESOLUTION_MODE);
         var tickMode    = TickResolutionModeExtensions.ParseToken(tickModeRaw);
         var tickResNs   = tickMode.ResolveTickResNs(effectiveClockMhz);
+        var initialValues = StimulusOptions.ParsePolicyOrLrm(await DbContext.GetSettingAsync(AppSettings.KEY_INITIAL_VALUES));
+        if (initialValues == Interpreter.Models.InitialValuePolicy.Didactic)
+            Log.Info(Traductor.T("SIM_LOG_DIDACTIC_INITIAL_VALUES"));
 
-        // Log what the auto-clock injector is about to do so the student
-        // doesn't stare at an empty waveform wondering whether Kmila even
-        // wired a clock. Defensive null-guards because this block runs on
-        // the UI thread right before we detach into Task.Run — a silly NRE
-        // here blocked the whole simulation in one student's build.
-        // Skipped in Workbench mode: the testbench supplies its own clock,
-        // so an auto-clock note would be misleading there.
-        try
-        {
-            if (workbenchRun)
-            {
-                Log.Info(Traductor.T("SIM_LOG_WORKBENCH_RUNNING_FMT", Sim.TestbenchFile));
-            }
-            else
-            {
-            string? clkName = null;
-            string? entityName = null;
-            var entityForLog = Builder?.Design?.Entities?
-                .FirstOrDefault(e => e != null && e.Architecture != null);
-            if (entityForLog != null)
-            {
-                entityName = entityForLog.Name;
-                var entityPorts = entityForLog.Ports;
-                if (entityPorts != null)
-                {
-                    foreach (var p in entityPorts)
-                    {
-                        if (p is null) continue;
-                        if (p.PortType != global::Parser.Models.Constants.PortType.IN) continue;
-                        if (Kmila.Shared.Services.StimulusBuilder.IsClockPortName(p.Name))
-                        {
-                            clkName = p.Name;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if (clkName != null)
-            {
-                Log.Info(Traductor.T("SIM_LOG_AUTOCLOCK_DRIVING_FMT", clkName, effectiveClockMhz));
-            }
-            else if (entityName != null)
-            {
-                // No clock port declared. StimulusBuilder will synthesize a
-                // virtual `_clk` signal so the waveform always carries a
-                // clock trace — helpful for combinational designs too.
-                Log.Info(Traductor.T("SIM_LOG_AUTOCLOCK_VIRTUAL_FMT", entityName, effectiveClockMhz, tickResNs, tickMode.ToToken()));
-            }
-            }
-        }
-        catch (Exception clkLogEx)
-        {
-            Logger.LogWarning(clkLogEx, "[Editor] Clock-status log failed — continuing run");
-        }
+        // Say which clock the run drives (the clock-named port, proposed by name);
+        // in Workbench mode the testbench supplies its own clock.
+        if (workbenchRun)
+            Log.Info(Traductor.T("SIM_LOG_WORKBENCH_RUNNING_FMT", Sim.TestbenchFile));
+        else if (Builder?.Design?.Top is { } top && Kmila.Shared.Services.ClockPortPolicy.Suggest(top) is { } clk)
+            Log.Info(Traductor.T("SIM_LOG_AUTOCLOCK_DRIVING_FMT", clk.Name, effectiveClockMhz));
 
         // Workbench mode: drive the design from a VHDL testbench instead of the
         // port-moment timeline. The testbench supplies its own clock/reset, so
@@ -2407,7 +2361,8 @@
                     await Builder!.RunSimulationAsync(ports, duration,
                         systemClockMhz: effectiveClockMhz,
                         tickResNs: tickResNs,
-                        fastRun: Sim.FastMode);
+                        fastRun: Sim.FastMode,
+                        initialValues: initialValues);
                 }
             }
             catch (Exception ex)

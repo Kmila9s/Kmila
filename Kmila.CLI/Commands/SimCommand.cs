@@ -1,7 +1,9 @@
 using Kmila.CLI.Cli;
 using Kmila.CLI.I18n;
 using Kmila.CLI.Simulation;
+using Interpreter.Models;
 using Kmila.Shared.Models;
+using Kmila.Shared.Services;
 
 namespace Kmila.CLI.Commands;
 
@@ -13,7 +15,7 @@ public static class SimCommand
     public static async Task<int> RunAsync(string[] args)
     {
         var p = new ArgParser(args,
-            "no-breakpoints", "quiet", "q", "verbose", "v", "progress", "watch", "help", "h");
+            "no-breakpoints", "quiet", "q", "verbose", "v", "progress", "watch", "help", "h", "didactic");
 
         if (p.Has("help", "h"))
         {
@@ -101,6 +103,21 @@ public static class SimCommand
         try { portMoments = BuildStimuli(p.GetAll("stimulus")); }
         catch (FormatException ex) { Console.Error.WriteLine($"kmila sim: {ex.Message}"); return 64; }
 
+        // Initial values, declared clocks and port initial values.
+        StimulusOptions stimulusOptions;
+        try
+        {
+            var policy = p.Has("didactic") ? InitialValuePolicy.Didactic : StimulusOptions.ParsePolicy(cfg.InitialValues);
+            var clockSpecs = p.GetAll("clock").Concat(cfg.Clocks ?? []).Select(ParseClock).ToList();
+            var initials = p.GetAll("initial").Select(ParseInitial).ToList();
+            stimulusOptions = StimulusOptions.Declared(policy, clockSpecs, initials);
+        }
+        catch (Exception ex) when (ex is FormatException or NotSupportedException)
+        {
+            Console.Error.WriteLine($"kmila sim: {ex.Message}");
+            return 64;
+        }
+
         // Output format.
         OutputFormat format;
         try { format = OutputWriter.ParseFormat(p.Get("output-format", "format") ?? cfg.Format); }
@@ -119,6 +136,7 @@ public static class SimCommand
             Fpga = fpga,
             PortMoments = portMoments,
             WallTimeoutMs = wallTimeout,
+            Stimulus = stimulusOptions,
         };
 
         var testbench = p.Get("testbench", "tb");
@@ -300,6 +318,30 @@ public static class SimCommand
         }
         if (!quiet) Console.Error.WriteLine("[watch] stopped.");
         return 0;
+    }
+
+    /// <summary>
+    /// Parses <c>--clock port[:period]</c>: the period is a time (<c>20ns</c>) or a
+    /// frequency (<c>50MHz</c>); without one the system clock (<c>--clockMHZ</c>) is used.
+    /// </summary>
+    private static ClockSpec ParseClock(string spec)
+    {
+        int colon = spec.IndexOf(':');
+        if (colon < 0) return new ClockSpec(spec.Trim());
+        string port = spec[..colon].Trim(), period = spec[(colon + 1)..].Trim();
+        if (port.Length == 0) throw new FormatException($"invalid --clock '{spec}' (use port[:20ns|:50MHz])");
+        if (period.EndsWith("mhz", StringComparison.OrdinalIgnoreCase)
+            && double.TryParse(period[..^3], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double mhz) && mhz > 0)
+            return new ClockSpec(port, 1_000.0 / mhz);
+        return new ClockSpec(port, DurationParser.ParseToNs(period));
+    }
+
+    /// <summary>Parses <c>--initial port=value</c> (the port's value before time 0).</summary>
+    private static KeyValuePair<string, string> ParseInitial(string token)
+    {
+        int eq = token.IndexOf('=');
+        if (eq <= 0 || eq == token.Length - 1) throw new FormatException($"invalid --initial '{token}' (use port=value, e.g. clk=0)");
+        return KeyValuePair.Create(token[..eq].Trim(), token[(eq + 1)..].Trim());
     }
 
     /// <summary>

@@ -340,7 +340,7 @@ public static class WaveformExporter
         };
     }
 
-    private static bool IsClockName(string name) => StimulusBuilder.IsClockPortName(name);
+    private static bool IsClockName(string name) => ClockPortPolicy.IsClockPortName(name);
 
     // ─── Ruler ─────────────────────────────────────────────────────────────
 

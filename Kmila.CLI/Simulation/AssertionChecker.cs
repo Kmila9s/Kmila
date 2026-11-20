@@ -53,7 +53,7 @@ public static class AssertionChecker
         var name = token[..at].Trim();
         var timePart = token[(at + 1)..eq].Trim();
         var value = token[(eq + 1)..].Trim();
-        long timeNs = DurationParser.ParseToNs(timePart);
+        long timeNs = DurationParser.ParseInstantNs(timePart);
         return (name, timeNs, value);
     }
 

@@ -94,8 +94,7 @@ public static class VcdReader
                 if (long.TryParse(tok.AsSpan(1), out var t))
                     currentFs = t * timescaleFs;
             }
-            else if (c0 == '0' || c0 == '1' || c0 == 'x' || c0 == 'X' || c0 == 'z' || c0 == 'Z' ||
-                     c0 == 'u' || c0 == 'U' || c0 == 'l' || c0 == 'L' || c0 == 'h' || c0 == 'H')
+            else if (Interpreter.Models.StdLogic.IsValue(c0))
             {
                 // Scalar change: <value><id>
                 string id = tok[1..];

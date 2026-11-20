@@ -55,6 +55,8 @@ public sealed class SimRunRequest
     public List<PortMomentConfiguration> PortMoments { get; init; } = new();
     /// <summary>Optional wall-clock budget; aborts the run when exceeded.</summary>
     public int? WallTimeoutMs { get; init; }
+    /// <summary>Clocks, port initial values and initial-value policy; null proposes the clock by name under LRM.</summary>
+    public StimulusOptions? Stimulus { get; init; }
 }
 
 /// <summary>
@@ -123,6 +125,7 @@ public sealed class KmilaSimulationService
             SystemClockMhz = request.SystemClockMhz,
             PortMoments    = request.PortMoments,
             WallTimeoutMs  = request.WallTimeoutMs,
+            Stimulus       = request.Stimulus,
         }, OnProgress);
 
         if (!string.IsNullOrEmpty(request.Fpga))
