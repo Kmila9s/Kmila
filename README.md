@@ -1655,6 +1655,23 @@ with **byte-identical** Kmila VCDs, CLI outputs identical, PracticeValidator
     values (`portInitials`, `--initial clk=0`); the editor and the practices
     keep proposing the clock-named port. VCDs keep U/X/Z/W/L/H/- and hold one
     settled value per instant.
+*   **v3.1.6 — drivers, numbers and time** (Fase 1, G43–G45, G53, G54, G59,
+    G62–G81): every process owns a driver per signal (per bit), resolved with
+    the IEEE 1164 table (two buffers fighting give `X`, `Z` yields), and two
+    drivers on an unresolved type are an error; `transport`, inertial and
+    `reject` waveforms with several `after` elements. `inout`/`buffer` ports
+    work through instances and as top ports (the stimulus is one more driver;
+    the waveform shows the resolved value). Concurrent statements are
+    sensitive only to the signals named in their text (not inside called
+    functions, like GHDL); `process (all)`. `time` and `now` are real
+    (femtoseconds), `wait … until … for`. Vector arithmetic at any width with
+    numeric_std widths and sign (`signed`, `resize`, `shift_right`, `abs`),
+    `std_logic_signed`/`unsigned` per unit, integer subtype range errors
+    (`bound check failure`) with the line. Identifiers are case-insensitive
+    everywhere; constants initialised by functions, conditional/selected
+    variable assignments, nested aggregate targets, binding with maps,
+    `if…elsif…else`/`case` generates, textio input and `T'image` in `report`
+    simulate. The waveform cursor shows `Z`/`U` of a scalar `std_logic`.
 *   **v3.1.0 — engine errors are visible** (Fase 1, G34–G38): an engine abort
     sets `HeadlessRunResult.EngineError` / `SimulateResponse.error`, makes
     `kmila sim` exit 1 (the partial waveform is still written), is logged in
