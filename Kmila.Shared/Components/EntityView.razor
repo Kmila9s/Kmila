@@ -80,7 +80,7 @@
     public Entity Entity { get; set; } = default!;
 
     private int _inCount  => Entity.Ports.Count(p => p.PortType == PortType.IN);
-    private int _outCount => Entity.Ports.Count(p => p.PortType == PortType.OUT);
+    private int _outCount => Entity.Ports.Count(p => p.PortType is PortType.OUT or PortType.INOUT or PortType.BUFFER);
 
     /// <summary>
     /// True once at least one port has a non-empty current value — i.e. a

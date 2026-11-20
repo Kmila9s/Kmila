@@ -430,7 +430,7 @@ public class WaveformData
         return signal.PortType switch
         {
             PortType.IN => 0,
-            PortType.OUT => 1,
+            PortType.OUT or PortType.BUFFER => 1,
             PortType.INOUT => 2,
             _ => 3
         };

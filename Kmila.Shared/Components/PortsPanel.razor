@@ -19,7 +19,7 @@
 @{
     IEnumerable<Entity> entities = Builder?.Design?.Entities ?? Enumerable.Empty<Entity>();
     var hasEntities = entities.Any();
-    var hasInputs = entities.SelectMany(e => e.Ports).Any(p => p.PortType == PortType.IN);
+    var hasInputs = entities.SelectMany(e => e.Ports).Any(p => p.PortType is PortType.IN or PortType.INOUT);
     var running = Sim.State == SimState.Running || Sim.State == SimState.Paused;
 }
 
@@ -102,7 +102,7 @@ else
         }
         else
         {
-            @foreach (var entity in entities.Where(e => e.Ports.Any(p => p.PortType == PortType.IN)))
+            @foreach (var entity in entities.Where(e => e.Ports.Any(p => p.PortType is PortType.IN or PortType.INOUT)))
             {
                 <section class="ports-panel__entity">
                     <header class="ports-panel__entity-head">
@@ -110,7 +110,7 @@ else
                         <span class="ports-panel__entity-name">@entity.Name</span>
                     </header>
                     <div class="ports-panel__list">
-                        @foreach (var input in entity.Ports.Where(p => p.PortType == PortType.IN).SelectMany(StimulusInputs))
+                        @foreach (var input in entity.Ports.Where(p => p.PortType is PortType.IN or PortType.INOUT).SelectMany(StimulusInputs))
                         {
                             <PortMomentInput
                                 Variable="input"
