@@ -18,8 +18,13 @@ public sealed class VhdlFrontend : HdlFrontendBase
             catch (Exception ex) { log?.Invoke($"[scan] {name}: {ex.Message}"); }
             try { PackageSubtypeScanner.ScanFile(f); }
             catch (Exception ex) { log?.Invoke($"[subscan] {name}: {ex.Message}"); }
-            try { PackageRegistry.Instance.RegisterDeclaredNamesFromSource(File.ReadAllText(f)); }
-            catch { /* best-effort: names only feed the undeclared-identifier check */ }
+            try
+            {
+                string text = File.ReadAllText(f);
+                PackageRegistry.Instance.RegisterDeclaredNamesFromSource(text);
+                PackageRegistry.Instance.RegisterContextClauses(text);
+            }
+            catch { /* best-effort: names feed the undeclared-identifier check, use clauses the vector arithmetic */ }
         }
     }
 
