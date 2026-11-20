@@ -6,6 +6,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <DefineConstants>$(DefineConstants);ASPNETCORE</DefineConstants>
     <NoWarn>$(NoWarn);CS1587;CS1591;CS1570;CS1573;CS1574;CS1998;CS8602;CS8604;CS8625;CS8892;CS0219;CS0618;CS4014;NETSDK1206</NoWarn>
+    <!-- .NET 10 ships blazor.web.js as a static web asset and only adds it when the SDK sees .razor
+         Content at RESTORE time. deploy/Dockerfile restores with just the .csproj files (layer cache),
+         so the self-host image had no _framework/blazor.web.js and no interactivity. Force it on. -->
+    <RequiresAspNetWebAssets>true</RequiresAspNetWebAssets>
   </PropertyGroup>
 
   <ItemGroup>
