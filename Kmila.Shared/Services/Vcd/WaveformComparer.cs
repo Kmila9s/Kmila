@@ -92,6 +92,16 @@ public sealed class SignalDiff
     /// <summary>True when both dumps have the signal and every sample matches.</summary>
     public bool Equal => Missing == MissingSide.None && Mismatches == 0;
 
+    /// <summary>
+    /// One line for a report: the signal, then where it is missing or how many samples
+    /// differ (with the first mismatch unless <paramref name="firstMismatch"/> is false).
+    /// </summary>
+    public string Describe(string expected, string actual, bool firstMismatch = true) =>
+        $"{Signal}: " + (MissingFrom(expected, actual) ?? $"{Mismatches}/{Samples} mismatched"
+            + (firstMismatch && Examples.Count > 0
+                ? $" (first at {Examples[0].TimeFs / Interpreter.Models.PhysicalTime.FsPerNs} ns: {expected}={Examples[0].Expected} {actual}={Examples[0].Actual})"
+                : ""));
+
     /// <summary>Which dump lacks the signal, in words (<paramref name="expected"/> and <paramref name="actual"/> name the dumps); null when both have it.</summary>
     public string? MissingFrom(string expected, string actual) => Missing switch
     {
