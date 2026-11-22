@@ -43,6 +43,9 @@ public sealed class CaseVariant
     /// <summary>The language, set by the loader.</summary>
     [JsonIgnore] public HdlLanguage Language { get; internal set; } = null!;
 
+    /// <summary>The committed reference golden of a unit-test fixture (<c>variants/&lt;lang&gt;/expected.vcd</c>).</summary>
+    [JsonIgnore] public string ExpectedVcdPath => Path.Combine(Dir, "expected.vcd");
+
     /// <summary>Absolute paths of <see cref="Sources"/>, in order (set by the loader).</summary>
     [JsonIgnore] public IReadOnlyList<string> SourcePaths { get; internal set; } = [];
 }

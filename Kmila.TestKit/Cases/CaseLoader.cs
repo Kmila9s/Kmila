@@ -17,6 +17,12 @@ public static class CaseLoader
             .Order(StringComparer.Ordinal)
             .Select(Load);
 
+    /// <summary>Every case under <paramref name="root"/>, at any depth (fixture groups), ordered by path.</summary>
+    public static IEnumerable<LoadedCase> FindAll(string root) =>
+        Directory.EnumerateFiles(root, "case.json", SearchOption.AllDirectories)
+            .Order(StringComparer.Ordinal)
+            .Select(f => Load(Path.GetDirectoryName(f)!));
+
     /// <summary>
     /// Loads one case. A <c>case.json</c> of another schema version is an error
     /// (never half-read); a variant whose language is not enabled yet is ignored,
