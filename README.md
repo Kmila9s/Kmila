@@ -283,6 +283,20 @@ Monaco table); bundled content (Practice, Templates, Learn) is
 loaders reject other versions. Adding a language = register an `HdlLanguage` + implement an
 `HdlFrontendBase` (+ the content variants below). Plan and status: `Documentacion/handoffs/HANDOFF_multi_hdl_2026-11-15.md`.
 
+### 7.4 Test kit (`Kmila.TestKit`, v3.0.7+)
+
+Not referenced by any app head; used by `SimulatorBench`, `PracticeValidator` and
+`Tests/Unit/Kmila.Shared.Tests`. Multi-variant cases (`Cases/`: `CaseSpec`,
+`CaseVariant`, `CaseLoader`, `VariantVerdict` — a missing variant fails —,
+`KnownGaps` ratchet, `CaseSimulation`), reference simulators per language
+(`ReferenceSimulators` → `GhdlReferenceSimulator`), Kmila runners
+(`InProcessKmilaRunner` over `HeadlessSimulator`, `HttpKmilaRunner`), the practice
+oracle (`IHarnessGenerator` → `VhdlHarnessGenerator`, `PracticeOracle`),
+`StimulusDeriver`, `TestbenchInitials`, `GoldenHashes`. The one VCD reader and
+comparer (`VcdReader`, `VcdDocument`, `WaveformComparer`) live in
+`Kmila.Shared/Services/Vcd` because the CLI uses them too. A new HDL registers its
+reference simulator and harness generator; no `if (language == …)` anywhere.
+
 ## 8. Application Diagrams
 
 ### 8.1 Use Case Diagram
@@ -1683,6 +1697,15 @@ with **byte-identical** Kmila VCDs, CLI outputs identical, PracticeValidator
     content. `kmila diff` now matches GHDL's `y[3:0]` with Kmila's `y`, treats
     `q`/`Q` as one signal and fails on a `--signals` name present in neither
     file.
+*   **v3.0.8–v3.0.12 — multi-HDL test suites** (Fase 0, 5b–6): multi-variant
+    case model and known-gaps ratchet in `Kmila.TestKit`; `SimulatorBench` runs
+    the reference sources verbatim (138/149, the rest catalogued);
+    `HeadlessRunResult.Config` exposes the executed stimulus configuration and
+    the practice oracle replays it in GHDL (`PracticeExercise.GradedInstantsNs`
+    is the one rule for graded instants); `ProjectTemplateService.RenderFilesAsync`
+    renders a template's files once for project creation and the content tests;
+    `SignalDiff.Describe` is the one diff line. CI builds GHDL 6 per job (cached).
+    Kmila's VCD output is unchanged.
 *   **v3.1.0 — engine errors are visible** (Fase 1, G34–G38): an engine abort
     sets `HeadlessRunResult.EngineError` / `SimulateResponse.error`, makes
     `kmila sim` exit 1 (the partial waveform is still written), is logged in
