@@ -58,11 +58,9 @@ public static class TestbenchRunner
             builder.OnSimulationError += msg => log.Add($"[engine] {msg}");
             builder.OnSimulationCompleted += h => history = h;
 
-            int tick = tickResNs > 0 ? tickResNs : 10;
-
             var sw = System.Diagnostics.Stopwatch.StartNew();
             await builder.RunTestbenchAsync(dir, tbName, totalNs,
-                systemClockMhz > 0 ? systemClockMhz : 50, tick);
+                systemClockMhz > 0 ? systemClockMhz : 50, tickResNs);
             sw.Stop();
 
             history ??= builder.SimulationHistory;

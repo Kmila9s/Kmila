@@ -52,10 +52,10 @@ public static class StimulusBuilder
         ArgumentNullException.ThrowIfNull(entity);
 
         // The tick lands every static delay of the design exactly (`wait for 1 ns` under a 10 ns request → 1 ns).
-        tickResNs = DesignTimeGrid.Instance.TickNs(tickResNs);
+        tickResNs = StaticDelays.TickNs(entity, tickResNs > 0 ? tickResNs : TimeClock.NS_PER_TICK);
 
         // Convert duration to ticks
-        ulong totalTicks = (ulong)(totalNs / Math.Max(1, tickResNs));
+        ulong totalTicks = (ulong)(totalNs / tickResNs);
         if (totalTicks == 0) totalTicks = 1;
 
         var clocks = new List<ClockConfig>();

@@ -155,7 +155,6 @@ public sealed class HeadlessSimulator
         Phase("stimulus-end");
         if (config.TickResNs != tickResNs)
             log.Add($"[sim] tick adjusted to {config.TickResNs} ns (static delays of the design)");
-        tickResNs = config.TickResNs;
 
         log.Add($"[sim] entity={entity.Name} ports={entity.Ports.Count} totalTicks={config.TotalTicks} stimuli={config.Stimuli.Count} clocks={config.Clocks.Count}");
 
@@ -189,7 +188,7 @@ public sealed class HeadlessSimulator
         {
             Entity     = entity,
             History    = history,
-            TickResNs  = tickResNs,
+            TickResNs  = config.TickResNs,
             Config     = config,
             DurationMs = sw.ElapsedMilliseconds,
             Log        = log,

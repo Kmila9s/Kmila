@@ -375,17 +375,14 @@ public class ProgramBuilder : IDisposable
         if (entity == null)
             throw new InvalidOperationException("No entity with architecture found.");
 
-        // Remember the effective tick resolution for downstream waveform
-        // labelling — see LastTickResNs doc comment.
-        LastTickResNs = tickResNs > 0 ? tickResNs : TimeMachine.Models.TimeClock.NS_PER_TICK;
-
         // Build simulation config from UI parameters
         // The clock is the clock-named port, proposed visibly (the «auto clock» badge).
         var config = StimulusBuilder.BuildConfig(entity, portMoments, duration,
-            tickResNs: LastTickResNs,
+            tickResNs: tickResNs,
             systemClockMhz: systemClockMhz,
             options: new StimulusOptions { InitialValues = initialValues });
-        LastTickResNs = config.TickResNs; // narrowed to the design's static delays
+        // The effective tick (narrowed to the design's static delays) labels the waveform.
+        LastTickResNs = config.TickResNs;
 
         // Surface the config to stdout (and therefore /logs via the Console
         // redirector wired up in Program.cs) so the user can see exactly what
@@ -631,8 +628,6 @@ public class ProgramBuilder : IDisposable
         if (!File.Exists(tbPath))
             throw new InvalidOperationException($"Testbench file not found: {testbenchRelativePath}");
 
-        LastTickResNs = tickResNs > 0 ? tickResNs : TimeMachine.Models.TimeClock.NS_PER_TICK;
-
         var frontend = Frontends.ForPath(tbPath);
         var sources = frontend.DiscoverSources(projectBasePath);
 
@@ -673,7 +668,7 @@ public class ProgramBuilder : IDisposable
         var config = StimulusBuilder.BuildConfigNs(
             entity, portMoments: null,
             totalNs: totalNs,
-            tickResNs: LastTickResNs,
+            tickResNs: tickResNs,
             systemClockMhz: systemClockMhz);
         LastTickResNs = config.TickResNs; // narrowed to the design's static delays
 
