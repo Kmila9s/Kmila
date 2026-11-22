@@ -1,5 +1,5 @@
 using Kmila.CLI.Cli;
-using Kmila.CLI.Simulation;
+using Kmila.Shared.Services.Vcd;
 using Kmila.CLI.Tui;
 
 namespace Kmila.CLI.Commands;
@@ -7,8 +7,9 @@ namespace Kmila.CLI.Commands;
 /// <summary>
 /// Implements <c>kmila diff a.vcd b.vcd</c> — compare two waveform dumps
 /// signal-by-signal and report where they diverge. Pairs with the "fix-a-bug"
-/// workflow (diff a student's run against a golden dump). Reuses the CLI's own
-/// <see cref="VcdReader"/> + <see cref="WaveModel"/>; exits non-zero when they differ.
+/// workflow (diff a student's run against a golden dump). Reads both dumps with the
+/// shared <see cref="VcdReader"/> and compares them with <see cref="WaveformComparer"/>
+/// (buses by numeric value); exits non-zero when they differ.
 /// </summary>
 public static class DiffCommand
 {
@@ -38,53 +39,42 @@ public static class DiffCommand
         bool all = p.Has("all");
         bool quiet = p.Has("quiet", "q");
 
-        WaveModel wa, wb;
-        try { wa = VcdReader.ParseFile(a); wb = VcdReader.ParseFile(b); }
+        VcdDocument da, db;
+        try { da = VcdReader.ParseFile(a); db = VcdReader.ParseFile(b); }
         catch (Exception ex) { Console.Error.WriteLine($"kmila diff: {ex.Message}"); return Task.FromResult(1); }
 
         // Optional signal filter.
         var only = p.GetAll("signals", "signal")
                     .SelectMany(s => s.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    .ToList();
 
-        var namesA = wa.Signals.Select(s => s.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var namesB = wb.Signals.Select(s => s.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var diffs = WaveformComparer.Compare(da, db, new CompareOptions
+        {
+            Signals = only.Count > 0 ? only : null,
+            Equality = ValueEquality.NumericBuses,
+            MaxExamples = all ? int.MaxValue : 1,
+        });
 
         int differences = 0;
 
         // Signals present in only one file.
-        foreach (var n in namesA.Except(namesB))
-            if (only.Count == 0 || only.Contains(n))
-            { differences++; if (!quiet) Console.Out.WriteLine($"- {n}: only in {Path.GetFileName(a)}"); }
-        foreach (var n in namesB.Except(namesA))
-            if (only.Count == 0 || only.Contains(n))
-            { differences++; if (!quiet) Console.Out.WriteLine($"+ {n}: only in {Path.GetFileName(b)}"); }
+        foreach (var d in diffs.Where(d => d.Missing == MissingSide.Actual))
+        { differences++; if (!quiet) Console.Out.WriteLine($"- {d.Signal}: only in {Path.GetFileName(a)}"); }
+        foreach (var d in diffs.Where(d => d.Missing == MissingSide.Expected))
+        { differences++; if (!quiet) Console.Out.WriteLine($"+ {d.Signal}: only in {Path.GetFileName(b)}"); }
+        // A --signals name in neither file (a typo) is a difference, not a silent pass.
+        foreach (var d in diffs.Where(d => d.Missing == MissingSide.Both))
+        { differences++; if (!quiet) Console.Out.WriteLine($"? {d.Signal}: {d.MissingFrom(Path.GetFileName(a), Path.GetFileName(b))}"); }
 
-        // Common signals: compare value at every transition time of either side.
-        foreach (var sa in wa.Signals)
-        {
-            if (only.Count > 0 && !only.Contains(sa.Name)) continue;
-            var sb = wb.Signals.FirstOrDefault(s => string.Equals(s.Name, sa.Name, StringComparison.OrdinalIgnoreCase));
-            if (sb == null) continue;
-
-            var times = sa.Transitions.Select(t => t.TimeFs)
-                        .Concat(sb.Transitions.Select(t => t.TimeFs))
-                        .Distinct().OrderBy(t => t).ToList();
-
-            foreach (var fs in times)
+        // Common signals: the first divergence of each (every one with --all).
+        foreach (var d in diffs.Where(d => d.Missing == MissingSide.None))
+            foreach (var m in d.Examples)
             {
-                var va = sa.ValueAtFs(fs);
-                var vb = sb.ValueAtFs(fs);
-                if (!ValuesEqual(va, vb, sa.Width, sb.Width))
-                {
-                    differences++;
-                    if (!quiet)
-                        Console.Out.WriteLine(
-                            $"~ {sa.Name} @ {fs / WaveModel.FsPerNs}ns: {Show(va)} != {Show(vb)}");
-                    if (!all) break;
-                }
+                differences++;
+                if (!quiet)
+                    Console.Out.WriteLine(
+                        $"~ {d.Signal} @ {m.TimeFs / WaveModel.FsPerNs}ns: {Show(m.Expected, d.Width)} != {Show(m.Actual, d.ActualWidth)}");
             }
-        }
 
         if (!quiet)
             Console.Error.WriteLine(differences == 0
@@ -94,23 +84,5 @@ public static class DiffCommand
         return Task.FromResult(differences == 0 ? 0 : 1);
     }
 
-    private static string Show(string? v) => v ?? "(none)";
-
-    private static bool ValuesEqual(string? a, string? b, int widthA, int widthB)
-    {
-        if (a == null || b == null) return a == b;
-        if (widthA <= 1 && widthB <= 1)
-            return string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
-        // Bus: compare numerically when both are clean binary, else textually.
-        if (TryBin(a, out var na) && TryBin(b, out var nb)) return na == nb;
-        return string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool TryBin(string bits, out long value)
-    {
-        value = 0;
-        if (string.IsNullOrEmpty(bits) || !bits.All(c => c is '0' or '1')) return false;
-        foreach (var c in bits) value = (value << 1) | (c == '1' ? 1L : 0L);
-        return true;
-    }
+    private static string Show(string? v, int width) => v is null ? "(none)" : WaveModel.Display(v, width);
 }

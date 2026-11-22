@@ -39,29 +39,7 @@ public static class ResourcePaths
         var local = Path.Combine(AppContext.BaseDirectory, folder);
         if (Directory.Exists(local)) return local;
 
-        // 2) Walk up to the shared wwwroot in a source checkout.
-        var dir = AppContext.BaseDirectory;
-        for (int i = 0; i < 10 && dir != null; i++)
-        {
-            var candidate = Path.Combine(dir, "App", "Kmila", "Kmila.Shared", "wwwroot", folder);
-            if (Directory.Exists(candidate)) return candidate;
-            // Also handle being run from within App/Kmila/*.
-            candidate = Path.Combine(dir, "Kmila.Shared", "wwwroot", folder);
-            if (Directory.Exists(candidate)) return candidate;
-            dir = Path.GetDirectoryName(dir);
-        }
-
-        // 3) From the current working directory as a last resort.
-        dir = Directory.GetCurrentDirectory();
-        for (int i = 0; i < 10 && dir != null; i++)
-        {
-            var candidate = Path.Combine(dir, "App", "Kmila", "Kmila.Shared", "wwwroot", folder);
-            if (Directory.Exists(candidate)) return candidate;
-            candidate = Path.Combine(dir, "Kmila.Shared", "wwwroot", folder);
-            if (Directory.Exists(candidate)) return candidate;
-            dir = Path.GetDirectoryName(dir);
-        }
-
-        return null;
+        // 2) The shared wwwroot of a source checkout (walking up from the binary, then the working directory).
+        return Kmila.Shared.Services.SharedContentPaths.Find(folder);
     }
 }

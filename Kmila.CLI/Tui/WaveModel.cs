@@ -1,10 +1,12 @@
+using Kmila.Shared.Services.Vcd;
+
 namespace Kmila.CLI.Tui;
 
 /// <summary>
 /// A terminal-friendly waveform model. Both TUI data sources funnel through
 /// this one shape: a live simulation (its engine VCD) and an opened
-/// <c>.vcd</c> file are parsed by <see cref="Kmila.CLI.Simulation.VcdReader"/>
-/// into a <see cref="WaveModel"/>, so the renderer only ever deals with one
+/// <c>.vcd</c> file are read by the shared <see cref="VcdReader"/> and adapted
+/// here (<see cref="FromVcd"/>), so the renderer only ever deals with one
 /// thing. Times are kept in femtoseconds (VCD's finest unit) and converted to
 /// ns only for display.
 /// </summary>
@@ -19,11 +21,45 @@ public sealed class WaveModel
     /// <summary>Module name from the VCD scope, if any.</summary>
     public string Module { get; set; } = "";
 
-    /// <summary>Femtoseconds per nanosecond.</summary>
-    public const long FsPerNs = 1_000_000L;
+    /// <summary>Femtoseconds per nanosecond (the engine's constant).</summary>
+    public const long FsPerNs = Interpreter.Models.PhysicalTime.FsPerNs;
 
     /// <summary>True when there are no signals to show.</summary>
     public bool IsEmpty => Signals.Count == 0;
+
+    /// <summary>
+    /// Adapts VCD text for the renderer: every variable in declaration order
+    /// under its display name, scalars in lower case, and repeated values
+    /// collapsed (a later change at the same instant replaces the earlier one).
+    /// </summary>
+    public static WaveModel FromVcd(string vcd)
+    {
+        var doc = VcdReader.Parse(vcd);
+        var model = new WaveModel { Module = doc.Module };
+        foreach (var s in doc.Signals)
+        {
+            var track = new WaveSignal { Name = s.DisplayName, Width = s.Width };
+            foreach (var c in s.Transitions)
+                Append(track, c.TimeFs, Display(c.Value, s.Width));
+            model.Signals.Add(track);
+            if (track.Transitions.Count > 0) model.MaxTimeFs = Math.Max(model.MaxTimeFs, track.Transitions[^1].TimeFs);
+        }
+        return model;
+    }
+
+    /// <summary>How the terminal shows a value: scalars in lower case (<c>x</c>, <c>z</c>, <c>u</c>), buses as written.</summary>
+    public static string Display(string value, int width) => width == 1 ? value.ToLowerInvariant() : value;
+
+    private static void Append(WaveSignal sig, long fs, string value)
+    {
+        if (sig.Transitions.Count > 0)
+        {
+            var last = sig.Transitions[^1];
+            if (last.Value == value) return;
+            if (last.TimeFs == fs) { sig.Transitions[^1] = new WaveTransition(fs, value); return; }
+        }
+        sig.Transitions.Add(new WaveTransition(fs, value));
+    }
 }
 
 /// <summary>One signal track: a name, a width (&gt;1 ⇒ bus), and its value-change list.</summary>

@@ -82,7 +82,7 @@ public sealed class TuiApp
 
         if (!string.IsNullOrWhiteSpace(openVcd) && File.Exists(openVcd))
         {
-            try { _lastVcd = File.ReadAllText(openVcd); _wave = VcdReader.Parse(_lastVcd); _autoFit = true; _status = $"VCD: {Path.GetFileName(openVcd)}"; }
+            try { _lastVcd = File.ReadAllText(openVcd); _wave = WaveModel.FromVcd(_lastVcd); _autoFit = true; _status = $"VCD: {Path.GetFileName(openVcd)}"; }
             catch (Exception ex) { _status = "VCD error: " + ex.Message; }
         }
     }
@@ -207,7 +207,7 @@ public sealed class TuiApp
             };
             var result = svc.RunAsync(req).GetAwaiter().GetResult();
             var vcd = result.History.ExportToVcd(result.Entity, timescaleNs: result.TickResNs);
-            _wave = VcdReader.Parse(vcd);
+            _wave = WaveModel.FromVcd(vcd);
             _lastResult = result; _lastVcd = vcd;
             _log.Clear();
             _log.AddRange(result.Log);
