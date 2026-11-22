@@ -202,8 +202,6 @@ public sealed class ProjectTemplateService
         }
         var (hdl, variant) = choice;
 
-        var lang = string.IsNullOrWhiteSpace(languageCode) ? "en" : languageCode!.ToLowerInvariant();
-
         // Compute the platform base path (matches ProjectsView.CreateSampleAsync).
         string basePath;
 #if WINDOWS || MACCATALYST || ANDROID || IOS
@@ -234,29 +232,9 @@ public sealed class ProjectTemplateService
             return null;
         }
 
-        // Write each templated file. Read content from the language-specific
-        // folder; fall back to English when missing so the project still gets
-        // its expected file set.
-        var tokenSubs = new Dictionary<string, string>
-        {
-            { "PROJECT_NAME", project.Name },
-            { "PROJECT_IDENT", ident },
-            { "PACKAGE_NAME", ident }
-        };
-
         var writtenContents = new Dictionary<string, string>();
-        foreach (var tf in variant.Files)
+        foreach (var (rel, content) in await RenderFilesAsync(template, variant, project.Name, languageCode))
         {
-            var rel = tf.Path;
-            var content = await ReadTemplateFileWithFallbackAsync(template.Id, lang, rel);
-            if (content is null)
-            {
-                _logger.LogWarning("[ProjectTemplate] Missing template file: {Id}/{Lang}/files/{Rel}",
-                    template.Id, lang, rel);
-                continue;
-            }
-            content = ApplyTokens(content, tokenSubs);
-
             // Split path into directory + filename.
             var lastSlash = rel.LastIndexOf('/');
             var dir       = lastSlash >= 0 ? rel.Substring(0, lastSlash) : string.Empty;
@@ -446,6 +424,38 @@ public sealed class ProjectTemplateService
                    .Replace("\\", "_", System.StringComparison.Ordinal)
                    .Replace("-", "_", System.StringComparison.Ordinal);
         return s;
+    }
+
+    /// <summary>
+    /// The files a project created from <paramref name="variant"/> gets, rendered:
+    /// read from the <paramref name="languageCode"/> folder (English when null, empty or missing) with
+    /// <c>{{PROJECT_NAME}}</c>, <c>{{PROJECT_IDENT}}</c> and <c>{{PACKAGE_NAME}}</c>
+    /// substituted. Missing files are logged and skipped.
+    /// </summary>
+    public async Task<IReadOnlyList<(string Path, string Content)>> RenderFilesAsync(
+        ProjectTemplate template, ProjectTemplateVariant variant, string projectName, string? languageCode = null)
+    {
+        var lang = string.IsNullOrWhiteSpace(languageCode) ? "en" : languageCode.ToLowerInvariant();
+        var ident = SanitizeIdentifier(projectName);
+        var tokens = new Dictionary<string, string>
+        {
+            { "PROJECT_NAME", projectName.Trim() },
+            { "PROJECT_IDENT", ident },
+            { "PACKAGE_NAME", ident },
+        };
+        var files = new List<(string, string)>();
+        foreach (var tf in variant.Files)
+        {
+            var content = await ReadTemplateFileWithFallbackAsync(template.Id, lang, tf.Path);
+            if (content is null)
+            {
+                _logger.LogWarning("[ProjectTemplate] Missing template file: {Id}/{Lang}/files/{Rel}",
+                    template.Id, lang, tf.Path);
+                continue;
+            }
+            files.Add((tf.Path, ApplyTokens(content, tokens)));
+        }
+        return files;
     }
 
     private static string ApplyTokens(string content, IReadOnlyDictionary<string, string> tokens)
