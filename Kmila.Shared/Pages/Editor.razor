@@ -2351,7 +2351,7 @@
                     await Builder!.RunTestbenchAsync(
                         projectBasePath ?? string.Empty,
                         testbenchFile!,
-                        duration,
+                        (long)Math.Round(duration.TotalSeconds * 1e9),
                         systemClockMhz: effectiveClockMhz,
                         tickResNs: tickResNs,
                         fastRun: Sim.FastMode);

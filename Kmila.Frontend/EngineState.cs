@@ -21,6 +21,7 @@ public static class EngineState
         PackageRegistry.Instance.Clear();
         FunctionRegistry.Instance.Clear();
         SkipDiagnosticLog.Instance.Clear();
+        DesignTimeGrid.Instance.Clear();
         global::Parser.Services.ParseProfile.Reset();
     }
 

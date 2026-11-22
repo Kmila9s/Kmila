@@ -385,6 +385,7 @@ public class ProgramBuilder : IDisposable
             tickResNs: LastTickResNs,
             systemClockMhz: systemClockMhz,
             options: new StimulusOptions { InitialValues = initialValues });
+        LastTickResNs = config.TickResNs; // narrowed to the design's static delays
 
         // Surface the config to stdout (and therefore /logs via the Console
         // redirector wired up in Program.cs) so the user can see exactly what
@@ -606,14 +607,14 @@ public class ProgramBuilder : IDisposable
     /// </summary>
     /// <param name="projectBasePath">Absolute project root (holds the .vhd files on disk).</param>
     /// <param name="testbenchRelativePath">Project-relative path of the chosen testbench file.</param>
-    /// <param name="duration">Total simulation duration.</param>
+    /// <param name="totalNs">Total simulated time in nanoseconds (exact: a <see cref="TimeSpan"/> only holds 100 ns steps).</param>
     /// <param name="systemClockMhz">Effective system clock frequency (MHz) for this run.</param>
     /// <param name="tickResNs">Tick resolution in nanoseconds for the simulation clock.</param>
     /// <param name="fastRun">When true, runs without per-tick throttling for maximum speed.</param>
     public async Task RunTestbenchAsync(
         string projectBasePath,
         string testbenchRelativePath,
-        TimeSpan duration,
+        long totalNs,
         int systemClockMhz = 50,
         int tickResNs = TimeMachine.Models.TimeClock.NS_PER_TICK,
         bool fastRun = false)
@@ -669,12 +670,12 @@ public class ProgramBuilder : IDisposable
             ?? throw new InvalidOperationException("No testbench entity with architecture found.");
 
         // Testbench drives its own clock/reset in VHDL → no UI port moments.
-        var totalNs = (long)Math.Round(duration.TotalSeconds * 1e9);
         var config = StimulusBuilder.BuildConfigNs(
             entity, portMoments: null,
             totalNs: totalNs,
             tickResNs: LastTickResNs,
             systemClockMhz: systemClockMhz);
+        LastTickResNs = config.TickResNs; // narrowed to the design's static delays
 
         Console.WriteLine($"[Sim.TB] entity={entity.Name} totalTicks={config.TotalTicks} " +
             $"clocks={config.Clocks.Count} stimuli={config.Stimuli.Count}");
