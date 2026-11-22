@@ -1672,6 +1672,17 @@ with **byte-identical** Kmila VCDs, CLI outputs identical, PracticeValidator
     variable assignments, nested aggregate targets, binding with maps,
     `if…elsif…else`/`case` generates, textio input and `T'image` in `report`
     simulate. The waveform cursor shows `Z`/`U` of a scalar `std_logic`.
+*   **v3.0.7 — test kit** (Fase 0, 5a): one VCD reader and one waveform
+    comparator in `Kmila.Shared/Services/Vcd` (`VcdReader`, `VcdDocument`,
+    `WaveformComparer` with the strict bench mode and the `kmila diff` mode)
+    replace the CLI's reader and the bench's parser and differ. New
+    `Kmila.TestKit` (bench, practice validator, unit tests): GHDL as
+    `IReferenceSimulator`, Kmila runners in process and over HTTP
+    (`IKmilaRunner`), stimulus from a golden dump, testbench initial values,
+    golden hashes. `SharedContentPaths` is the one locator of the bundled
+    content. `kmila diff` now matches GHDL's `y[3:0]` with Kmila's `y`, treats
+    `q`/`Q` as one signal and fails on a `--signals` name present in neither
+    file.
 *   **v3.1.0 — engine errors are visible** (Fase 1, G34–G38): an engine abort
     sets `HeadlessRunResult.EngineError` / `SimulateResponse.error`, makes
     `kmila sim` exit 1 (the partial waveform is still written), is logged in
