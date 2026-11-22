@@ -138,7 +138,7 @@ public class PracticeEvaluator
                     continue;
                 }
 
-                results.Add(Compare(test, expected, actual, exercise.MatchKind, exercise.OutputPortsToCompare, exercise.SampleTimesNs, sw.ElapsedMilliseconds));
+                results.Add(Compare(test.Id, expected, actual, exercise.OutputPortsToCompare, exercise.GradedInstantsNs(test), sw.ElapsedMilliseconds));
             }
 
             totalSw.Stop();
@@ -324,25 +324,17 @@ public class PracticeEvaluator
     }
 
     /// <summary>
-    /// Compares actual to expected on the listed output ports. Phase 0 only
-    /// implements <see cref="PracticeMatchKind.ValueAtTimes"/>; other modes
-    /// degrade to "first sample == final sample".
+    /// Compares actual to expected on the listed output ports at the graded
+    /// instants (<see cref="PracticeExercise.GradedInstantsNs"/>).
     /// </summary>
     private static PracticeTestResult Compare(
-        PracticeTestCase test,
+        string testId,
         WaveformData expected,
         WaveformData actual,
-        PracticeMatchKind matchKind,
         IReadOnlyList<string> outputPorts,
-        List<long> sampleTimes,
+        IReadOnlyList<long> times,
         long simMs)
     {
-        IReadOnlyList<long> times = matchKind switch
-        {
-            PracticeMatchKind.FinalValueOnly => new[] { (long)((double)test.Duration.Ticks / TimeSpan.TicksPerMillisecond * 1_000_000.0) },
-            _ => sampleTimes.Count > 0 ? sampleTimes : new long[] { (long)((double)test.Duration.Ticks / TimeSpan.TicksPerMillisecond * 1_000_000.0) }
-        };
-
         int mismatches = 0;
         string? firstSig = null;
         long? firstNs = null;
@@ -385,7 +377,7 @@ public class PracticeEvaluator
         }
 
         return new PracticeTestResult(
-            TestCaseId: test.Id,
+            TestCaseId: testId,
             Passed: mismatches == 0,
             ErrorClass: mismatches == 0 ? null : "value-mismatch",
             FirstMismatchSignal: firstSig,

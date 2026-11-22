@@ -190,7 +190,7 @@ public sealed class HeadlessSimulator
             Entity     = entity,
             History    = history,
             TickResNs  = tickResNs,
-            TotalTicks = config.TotalTicks,
+            Config     = config,
             DurationMs = sw.ElapsedMilliseconds,
             Log        = log,
             EngineError = runner.Error,
@@ -270,7 +270,9 @@ public sealed class HeadlessRunResult
     public required Entity Entity { get; init; }
     public required SignalHistory History { get; init; }
     public int TickResNs { get; init; }
-    public ulong TotalTicks { get; init; }
+    /// <summary>The stimulus configuration the engine executed (clocks, timed inputs, initial values).</summary>
+    public required IModels.SimulationConfig Config { get; init; }
+    public ulong TotalTicks => Config.TotalTicks;
     public long DurationMs { get; init; }
     public List<string> Log { get; init; } = new();
     /// <summary>
