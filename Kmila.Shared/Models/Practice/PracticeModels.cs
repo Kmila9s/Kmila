@@ -88,7 +88,11 @@ public record PracticeTestCase(
     bool Visible,
     List<PortMomentConfiguration> Inputs,
     TimeSpan Duration,
-    int SystemClockMhz);
+    int SystemClockMhz)
+{
+    /// <summary>The simulated duration in nanoseconds.</summary>
+    public long DurationNs => (long)Duration.TotalNanoseconds;
+}
 
 /// <summary>
 /// Full Practice exercise definition loaded from <c>manifest.json</c> + <c>tests.json</c>:
@@ -121,6 +125,14 @@ public record PracticeExercise(
 
     /// <summary>The variant of <see cref="DefaultLanguage"/>.</summary>
     public PracticeVariant DefaultVariant => Variants.Preferred!.Value.Payload;
+
+    /// <summary>
+    /// The instants (ns) a test is graded at: <see cref="SampleTimesNs"/>, or only the
+    /// end of the run when the exercise grades the final value or lists none. The
+    /// grader and the practice oracle sample at exactly these.
+    /// </summary>
+    public IReadOnlyList<long> GradedInstantsNs(PracticeTestCase test) =>
+        MatchKind != PracticeMatchKind.FinalValueOnly && SampleTimesNs.Count > 0 ? SampleTimesNs : [test.DurationNs];
 
     /// <summary>The variant for <paramref name="language"/>; throws when the exercise has none.</summary>
     public PracticeVariant Variant(HdlLanguage language) =>

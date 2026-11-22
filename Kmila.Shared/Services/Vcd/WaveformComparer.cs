@@ -40,6 +40,12 @@ public sealed record CompareOptions
     /// <summary>Equality rule for sampled values.</summary>
     public ValueEquality Equality { get; init; } = ValueEquality.PaddedExact;
 
+    /// <summary>
+    /// Instants (femtoseconds, ascending) at which to sample both sides; null samples
+    /// at every instant either side changes. Practice tests grade at fixed times.
+    /// </summary>
+    public IReadOnlyList<long>? SampleTimesFs { get; init; }
+
     /// <summary>Mismatches recorded per signal (all of them are counted).</summary>
     public int MaxExamples { get; init; } = 5;
 
@@ -137,18 +143,29 @@ public static class WaveformComparer
         var acts = Steps(a, o);
         int ei = 0, ai = 0;
         string? ev = o.InitialValue, av = o.InitialValue;
-        // Merge the two ascending step lists: sample at every instant either side changes.
-        while (ei < es.Count || ai < acts.Count)
+        foreach (long t in o.SampleTimesFs ?? MergedInstants(es, acts))
         {
-            long t = Math.Min(ei < es.Count ? es[ei].TimeFs : long.MaxValue, ai < acts.Count ? acts[ai].TimeFs : long.MaxValue);
-            if (ei < es.Count && es[ei].TimeFs == t) ev = es[ei++].Value;
-            if (ai < acts.Count && acts[ai].TimeFs == t) av = acts[ai++].Value;
+            while (ei < es.Count && es[ei].TimeFs <= t) ev = es[ei++].Value;
+            while (ai < acts.Count && acts[ai].TimeFs <= t) av = acts[ai++].Value;
             diff.Samples++;
             if (Same(ev, av, e.Width, a.Width, o.Equality) || (o.IgnoreT0 && t == 0)) continue;
             diff.Mismatches++;
             if (diff.Examples.Count < o.MaxExamples) diff.Examples.Add(new ValueMismatch(t, ev, av));
         }
         return diff;
+    }
+
+    /// <summary>Every instant either ascending step list changes (a two-pointer merge).</summary>
+    private static IEnumerable<long> MergedInstants(List<VcdChange> es, List<VcdChange> acts)
+    {
+        int i = 0, j = 0;
+        while (i < es.Count || j < acts.Count)
+        {
+            long t = Math.Min(i < es.Count ? es[i].TimeFs : long.MaxValue, j < acts.Count ? acts[j].TimeFs : long.MaxValue);
+            if (i < es.Count && es[i].TimeFs == t) i++;
+            if (j < acts.Count && acts[j].TimeFs == t) j++;
+            yield return t;
+        }
     }
 
     /// <summary>
