@@ -1,5 +1,5 @@
 {
-  "openapi": "3.0.1",
+  "openapi": "3.1.1",
   "info": {
     "title": "Kmila.Web | v1",
     "version": "1.0.0"
@@ -43,7 +43,14 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateProjectRequest"
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CreateProjectRequest"
+                  }
+                ]
               }
             }
           }
@@ -164,96 +171,206 @@
   },
   "components": {
     "schemas": {
+      "ApiClock": {
+        "type": "object",
+        "properties": {
+          "port": {
+            "type": "string",
+            "description": "Input port to drive."
+          },
+          "periodNs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Period in nanoseconds; 0 or omitted uses int SimulateRequest.SystemClockMhz.",
+            "format": "double"
+          },
+          "initialHigh": {
+            "type": "boolean",
+            "description": "True when the clock starts at '1' (default '0')."
+          }
+        },
+        "description": "A clock driven on an input port."
+      },
+      "ApiPortInitial": {
+        "type": "object",
+        "properties": {
+          "port": {
+            "type": "string",
+            "description": "Port (or part, e.g. `v(0)`)."
+          },
+          "value": {
+            "type": "string",
+            "description": "Value (`0`, `1`, `U`, a bit string…)."
+          }
+        },
+        "description": "The initial value of an input port."
+      },
       "ApiPortMoment": {
         "type": "object",
         "properties": {
           "port": {
-            "type": "string"
+            "type": "string",
+            "description": "Name of the port to drive."
           },
           "t": {
-            "type": "integer",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Time at which the value is applied, in string ApiPortMoment.Scale units.",
             "format": "int32"
           },
           "scale": {
-            "type": "string"
+            "type": "string",
+            "description": "Time scale unit for int ApiPortMoment.Time (defaults to nanoseconds)."
           },
           "value": {
-            "type": "string"
+            "type": "string",
+            "description": "Value to apply to the port."
           }
-        }
+        },
+        "description": "A single scheduled input value applied to a port at a given time."
       },
       "CreateProjectRequest": {
         "type": "object",
         "properties": {
           "name": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional display name for the project."
           },
           "retain": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "When true, the sandbox is kept on disk after the run instead of being cleaned up."
           }
         },
-        "nullable": true
+        "description": "Request body for creating a new sandbox project."
       },
       "SimulateRequest": {
         "type": "object",
         "properties": {
           "projectId": {
-            "type": "string"
+            "type": "string",
+            "description": "Identifier of the project to simulate."
           },
           "entryPoint": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional top-level entity to simulate; inferred when omitted."
           },
           "language": {
-            "type": "string",
-            "description": "Optional HDL language id (e.g. \"vhdl\"); inferred from the source extensions when omitted.",
-            "nullable": true
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional HDL language id (e.g. \"vhdl\"); inferred from the source extensions when omitted."
           },
           "fpga": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional target FPGA model."
           },
           "timeScale": {
-            "type": "string"
+            "type": "string",
+            "description": "Time scale unit for the run (defaults to nanoseconds)."
           },
           "duration": {
-            "type": "integer",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Total simulated duration in string SimulateRequest.TimeScale units.",
             "format": "int32"
           },
           "systemClockMhz": {
-            "type": "integer",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "System clock frequency in megahertz.",
             "format": "int32"
           },
           "tickResNs": {
-            "type": "integer",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Tick resolution in nanoseconds.",
             "format": "int32"
           },
           "portMoments": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ApiPortMoment"
-            }
+            },
+            "description": "Scheduled input stimuli applied to ports over time."
           },
           "files": {
-            "type": "array",
+            "type": [
+              "null",
+              "array"
+            ],
             "items": {
               "$ref": "#/components/schemas/WriteFileRequest"
             },
-            "nullable": true
+            "description": "Optional inline files to write into the project before simulating."
+          },
+          "initialValues": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Initial values of objects declared without `:=`: `\"lrm\"` (default, like GHDL: `'U'`,\n`T'left`) or `\"didactic\"` (start at 0, clock proposed by name)."
+          },
+          "clocks": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ApiClock"
+            },
+            "description": "Clocks driven on input ports. When omitted: none under `\"lrm\"`; the clock-named port\n(`clk`, `clock`…) at int SimulateRequest.SystemClockMhz under `\"didactic\"`."
+          },
+          "portInitials": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ApiPortInitial"
+            },
+            "description": "Initial values of input ports, set before time 0 (no event at t=0)."
           }
-        }
+        },
+        "description": "Request body for running a simulation."
       },
       "WriteFileRequest": {
         "type": "object",
         "properties": {
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "File name to write."
           },
           "content": {
-            "type": "string"
+            "type": "string",
+            "description": "Text content to store in the file."
           }
-        }
+        },
+        "description": "Request body for writing a single file into a project."
       }
     }
   },
