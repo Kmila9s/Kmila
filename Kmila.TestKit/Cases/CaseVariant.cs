@@ -28,15 +28,6 @@ public sealed class CaseVariant
     /// <summary>Declared type of each DUT port in this language (documentation).</summary>
     [JsonPropertyName("portTypes")] public Dictionary<string, string> PortTypes { get; set; } = new();
 
-    /// <summary>
-    /// The pre-verbatim re-implementation (relative to the case folder) that
-    /// the golden master simulates until the verbatim gaps are closed, or null.
-    /// </summary>
-    [JsonPropertyName("legacySource")] public string? LegacySource { get; set; }
-
-    /// <summary>Why the legacy re-implementation differs from the reference at t=0 (that sample is not compared), or null.</summary>
-    [JsonPropertyName("legacyT0Divergence")] public string? LegacyT0Divergence { get; set; }
-
     /// <summary>The variant's folder (<c>variants/&lt;lang&gt;</c>), set by the loader.</summary>
     [JsonIgnore] public string Dir { get; internal set; } = "";
 
