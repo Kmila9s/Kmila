@@ -383,6 +383,7 @@ public class ProgramBuilder : IDisposable
             options: new StimulusOptions { InitialValues = initialValues });
         // The effective tick (narrowed to the design's static delays) labels the waveform.
         LastTickResNs = config.TickResNs;
+        config.LineMap = Design?.Unit?.LineMap;
 
         // Surface the config to stdout (and therefore /logs via the Console
         // redirector wired up in Program.cs) so the user can see exactly what
@@ -671,6 +672,7 @@ public class ProgramBuilder : IDisposable
             tickResNs: tickResNs,
             systemClockMhz: systemClockMhz);
         LastTickResNs = config.TickResNs; // narrowed to the design's static delays
+        config.LineMap = unit.LineMap;
 
         Console.WriteLine($"[Sim.TB] entity={entity.Name} totalTicks={config.TotalTicks} " +
             $"clocks={config.Clocks.Count} stimuli={config.Stimuli.Count}");
