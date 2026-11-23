@@ -58,12 +58,9 @@ public static class TestbenchRunner
             builder.OnSimulationError += msg => log.Add($"[engine] {msg}");
             builder.OnSimulationCompleted += h => history = h;
 
-            int tick = tickResNs > 0 ? tickResNs : 10;
-            var duration = TimeSpan.FromTicks(Math.Max(1, totalNs / 100)); // 1 TimeSpan tick = 100 ns
-
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            await builder.RunTestbenchAsync(dir, tbName, duration,
-                systemClockMhz > 0 ? systemClockMhz : 50, tick);
+            await builder.RunTestbenchAsync(dir, tbName, totalNs,
+                systemClockMhz > 0 ? systemClockMhz : 50, tickResNs);
             sw.Stop();
 
             history ??= builder.SimulationHistory;
@@ -75,7 +72,7 @@ public static class TestbenchRunner
             {
                 Entity = Path.GetFileNameWithoutExtension(tbName),
                 History = history,
-                TickResNs = tick,
+                TickResNs = builder.LastTickResNs, // the effective tick (narrowed to the design's static delays)
                 TotalTicks = 0,
                 DurationMs = sw.ElapsedMilliseconds,
                 SignalCount = history.SignalCount,

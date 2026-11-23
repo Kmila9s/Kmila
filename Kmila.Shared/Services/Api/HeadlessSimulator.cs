@@ -151,15 +151,15 @@ public sealed class HeadlessSimulator
             totalNs: options.TotalNs,
             tickResNs: tickResNs,
             systemClockMhz: systemClockMhz,
-            options: options.Stimulus);
+            options: options.Stimulus,
+            lineMap: design.Unit?.LineMap);
         Phase("stimulus-end");
+        if (config.TickResNs != tickResNs)
+            log.Add($"[sim] tick adjusted to {config.TickResNs} ns (static delays of the design)");
 
         log.Add($"[sim] entity={entity.Name} ports={entity.Ports.Count} totalTicks={config.TotalTicks} stimuli={config.Stimuli.Count} clocks={config.Clocks.Count}");
 
         using var runner = new SimulationRunner();
-        // Hand the tick resolution to the runner via its engine so
-        // `after N ns` clauses convert to the correct future-tick offset.
-        runner.OnEngineReady += eng => eng.TickResolutionNs = tickResNs;
         // Surface runtime errors and VHDL `report` output into the log —
         // otherwise a failing run looks like an empty successful VCD.
         runner.OnError += msg => log.Add($"[engine] {msg}");
@@ -189,7 +189,7 @@ public sealed class HeadlessSimulator
         {
             Entity     = entity,
             History    = history,
-            TickResNs  = tickResNs,
+            TickResNs  = config.TickResNs,
             Config     = config,
             DurationMs = sw.ElapsedMilliseconds,
             Log        = log,

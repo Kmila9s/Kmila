@@ -28,12 +28,14 @@ public static class StimulusBuilder
         TimeSpan duration,
         int tickResNs = TimeClock.NS_PER_TICK,
         int systemClockMhz = 50,
-        StimulusOptions? options = null)
+        StimulusOptions? options = null,
+        ElaborationLineMap? lineMap = null)
         => BuildConfigNs(entity, portMoments,
             totalNs: (long)Math.Round(duration.TotalSeconds * 1e9),
             tickResNs: tickResNs,
             systemClockMhz: systemClockMhz,
-            options: options);
+            options: options,
+            lineMap: lineMap);
 
     /// <summary>
     /// Direct nanosecond-precision overload for callers that need sub-100ns
@@ -47,12 +49,16 @@ public static class StimulusBuilder
         long totalNs,
         int tickResNs = TimeClock.NS_PER_TICK,
         int systemClockMhz = 50,
-        StimulusOptions? options = null)
+        StimulusOptions? options = null,
+        ElaborationLineMap? lineMap = null)
     {
         ArgumentNullException.ThrowIfNull(entity);
 
+        // The tick lands every static delay of the design exactly (`wait for 1 ns` under a 10 ns request → 1 ns).
+        tickResNs = StaticDelays.TickNs(entity, tickResNs > 0 ? tickResNs : TimeClock.NS_PER_TICK);
+
         // Convert duration to ticks
-        ulong totalTicks = (ulong)(totalNs / Math.Max(1, tickResNs));
+        ulong totalTicks = (ulong)(totalNs / tickResNs);
         if (totalTicks == 0) totalTicks = 1;
 
         var clocks = new List<ClockConfig>();
@@ -146,6 +152,8 @@ public static class StimulusBuilder
         {
             Entity = entity,
             TotalTicks = totalTicks,
+            TickResNs = tickResNs,
+            LineMap = lineMap,
             Clocks = clocks,
             Stimuli = stimuli,
             PortInitials = portInitials,

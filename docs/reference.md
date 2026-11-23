@@ -290,7 +290,7 @@ Not referenced by any app head; used by `SimulatorBench`, `PracticeValidator` an
 (`ReferenceSimulators` → `GhdlReferenceSimulator`), Kmila runners
 (`InProcessKmilaRunner` over `HeadlessSimulator`, `HttpKmilaRunner`), the practice
 oracle (`IHarnessGenerator` → `VhdlHarnessGenerator`, `PracticeOracle`),
-`StimulusDeriver`, `TestbenchInitials`, `GoldenHashes`. The one VCD reader and
+`GoldenHashes`. The one VCD reader and
 comparer (`VcdReader`, `VcdDocument`, `WaveformComparer`) live in
 `Kmila.Shared/Services/Vcd` because the CLI uses them too. A new HDL registers its
 reference simulator and harness generator; no `if (language == …)` anywhere.

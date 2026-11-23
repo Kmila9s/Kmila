@@ -128,7 +128,16 @@ public sealed class ParsedUnit
     internal ParsedUnit(string source, List<Entity> entities, List<Diagnostic> diagnostics, ExceptionDispatchInfo? error)
     {
         Source = source; Entities = entities; Diagnostics = diagnostics; _error = error;
+        // An elaborated text locates its errors in the files the user wrote (G82).
+        LineMap = Interpreter.Services.ElaborationLineMap.Parse(source);
+        if (LineMap is null) return;
+        if (error?.SourceException is Parser.Models.ParserException parseError)
+            _error = ExceptionDispatchInfo.Capture(LineMap.Relocate(parseError));
+        for (int i = 0; i < diagnostics.Count; i++) diagnostics[i] = LineMap.Relocate(diagnostics[i]);
     }
+
+    /// <summary>Where the lines of an elaborated text come from; null for a source as written.</summary>
+    public Interpreter.Services.ElaborationLineMap? LineMap { get; }
 
     private readonly ExceptionDispatchInfo? _error;
 

@@ -69,7 +69,9 @@ public static class VcdReader
                         };
                         byId[id] = sig;
                         doc.Signals.Add(sig);
+                        sig.Depth = depth;
                     }
+                    else if (depth < sig.Depth) sig.Depth = depth;
                     if (!nameDepth.TryGetValue(name, out int best) || depth <= best)
                     {
                         nameDepth[name] = depth;

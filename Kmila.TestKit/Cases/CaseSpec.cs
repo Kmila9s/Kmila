@@ -27,15 +27,6 @@ public sealed class CaseSpec
     [JsonPropertyName("tickResNs")] public int TickResNs { get; set; } = 10;
     [JsonPropertyName("systemClockMhz")] public int SystemClockMhz { get; set; } = 50;
 
-    /// <summary>Hand-written port moments (appended after the derived ones when <see cref="AutoStimulus"/>).</summary>
-    [JsonPropertyName("stimulus")] public List<ApiPortMoment> Stimulus { get; set; } = new();
-
-    /// <summary>Clocks driven on input ports (an auto-stimulus case takes them from the golden dump).</summary>
-    [JsonPropertyName("clocks")] public List<ApiClock> Clocks { get; set; } = new();
-
-    /// <summary>Derive the stimulus from the golden dump's input changes instead of transcribing the testbench.</summary>
-    [JsonPropertyName("autoStimulus")] public bool AutoStimulus { get; set; }
-
     /// <summary>Why the case is not run (reported as SKIP), or null.</summary>
     [JsonPropertyName("skipReason")] public string? SkipReason { get; set; }
 

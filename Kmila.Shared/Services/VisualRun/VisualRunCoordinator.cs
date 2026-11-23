@@ -344,7 +344,7 @@ public sealed class VisualRunCoordinator : IDisposable
         catch (OperationCanceledException) { /* expected on Stop */ }
         catch (Exception ex)
         {
-            OnError?.Invoke(LocalizeErr("VISUAL_ERR_RUNTIME", "Runtime error: {0}", ex.Message));
+            OnError?.Invoke(LocalizeErr("VISUAL_ERR_RUNTIME", "Runtime error: {0}", (LineMap?.Locate(ex) ?? ex).Message));
         }
         finally
         {
@@ -353,6 +353,9 @@ public sealed class VisualRunCoordinator : IDisposable
             OnStopped?.Invoke();
         }
     }
+
+    /// <summary>Where the lines of an elaborated design come from, so a run-time error names the user's file and line (G82).</summary>
+    public Interpreter.Services.ElaborationLineMap? LineMap { get; set; }
 
     /// <summary>Initial values of objects declared without <c>:=</c> (the app setting; LRM by default).</summary>
     public InitialValuePolicy InitialValues { get; set; } = InitialValuePolicy.Lrm;

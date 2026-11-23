@@ -23,6 +23,20 @@ public sealed class VcdDocument
     /// inside an instance); among equally deep ones the last declared wins.
     /// </summary>
     public Dictionary<string, VcdSignal> ByName { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Leaf names declared in the outermost scope (the testbench's own signals,
+    /// not the nets inside its instances), in declaration order.
+    /// </summary>
+    public IReadOnlyList<string> TopLevelNames
+    {
+        get
+        {
+            if (Signals.Count == 0) return [];
+            int top = Signals.Min(s => s.Depth);
+            return Signals.Where(s => s.Depth == top).Select(s => s.Name).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        }
+    }
 }
 
 /// <summary>One VCD variable: its names, width and time-ordered value changes.</summary>
@@ -36,6 +50,9 @@ public sealed class VcdSignal
 
     /// <summary>Leaf name as declared, including any subscript or range token (<c>y[3:0]</c>).</summary>
     public required string DisplayName { get; init; }
+
+    /// <summary>Scope depth of its shallowest declaration (1 = the outermost module).</summary>
+    public int Depth { get; internal set; }
 
     /// <summary>Bit width (1 for a scalar).</summary>
     public int Width { get; init; } = 1;
