@@ -151,8 +151,8 @@ public sealed class HeadlessSimulator
             totalNs: options.TotalNs,
             tickResNs: tickResNs,
             systemClockMhz: systemClockMhz,
-            options: options.Stimulus);
-        config.LineMap = design.Unit?.LineMap;
+            options: options.Stimulus,
+            lineMap: design.Unit?.LineMap);
         Phase("stimulus-end");
         if (config.TickResNs != tickResNs)
             log.Add($"[sim] tick adjusted to {config.TickResNs} ns (static delays of the design)");

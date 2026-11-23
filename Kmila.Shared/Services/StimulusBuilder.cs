@@ -28,12 +28,14 @@ public static class StimulusBuilder
         TimeSpan duration,
         int tickResNs = TimeClock.NS_PER_TICK,
         int systemClockMhz = 50,
-        StimulusOptions? options = null)
+        StimulusOptions? options = null,
+        ElaborationLineMap? lineMap = null)
         => BuildConfigNs(entity, portMoments,
             totalNs: (long)Math.Round(duration.TotalSeconds * 1e9),
             tickResNs: tickResNs,
             systemClockMhz: systemClockMhz,
-            options: options);
+            options: options,
+            lineMap: lineMap);
 
     /// <summary>
     /// Direct nanosecond-precision overload for callers that need sub-100ns
@@ -47,7 +49,8 @@ public static class StimulusBuilder
         long totalNs,
         int tickResNs = TimeClock.NS_PER_TICK,
         int systemClockMhz = 50,
-        StimulusOptions? options = null)
+        StimulusOptions? options = null,
+        ElaborationLineMap? lineMap = null)
     {
         ArgumentNullException.ThrowIfNull(entity);
 
@@ -150,6 +153,7 @@ public static class StimulusBuilder
             Entity = entity,
             TotalTicks = totalTicks,
             TickResNs = tickResNs,
+            LineMap = lineMap,
             Clocks = clocks,
             Stimuli = stimuli,
             PortInitials = portInitials,

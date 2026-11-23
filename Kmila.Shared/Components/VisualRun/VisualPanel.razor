@@ -778,6 +778,8 @@
     private ProjectFile? _designFile;
     private ProjectFile? _kvizFile;
     private Entity? _entity;
+    // Where the flattened design's lines come from (G82): run-time errors name the user's file and line.
+    private Interpreter.Services.ElaborationLineMap? _lineMap;
     private KvizDoc _doc = new();
     private VisualRunCoordinator? _coord;
     private string? _selectedId;
@@ -1647,6 +1649,7 @@
                     var unit = frontend.ParseSource(flat);
                     unit.ThrowIfFailed();
                     _entity = frontend.PickTop(unit.Entities, _entity.Name) ?? _entity;
+                    _lineMap = unit.LineMap;
                 }
             }
             catch (Exception elabEx)
@@ -1758,7 +1761,7 @@
             .ToList();
         int ringTicks = Math.Max(_doc.Settings.RingBufferTicks, _settingsRingBuffer);
         if (ringTicks <= 0) ringTicks = 2000;
-        _coord = new VisualRunCoordinator(_entity, ringTicks, userDrivenPorts, Traductor);
+        _coord = new VisualRunCoordinator(_entity, ringTicks, userDrivenPorts, Traductor) { LineMap = _lineMap };
         _coord.Speed = _speedIndex;
         _coord.InitialValues = _initialValues;
         _coord.CustomTickDelayMs = _customDelayMs;
