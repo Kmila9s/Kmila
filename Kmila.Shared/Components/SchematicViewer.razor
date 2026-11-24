@@ -2728,7 +2728,7 @@ else
         if (_layout == null || Waveform == null) return "";
         var ci = System.Globalization.CultureInfo.InvariantCulture;
         var sb = new System.Text.StringBuilder();
-        long cursorNs = (long)Cursor.CursorTick * Math.Max(1, Waveform.TimescaleNs);
+        long cursorNs = Waveform.NsAt(Cursor.CursorTick);
         foreach (var wire in _layout.Wires)
         {
             if (!_netById.TryGetValue(wire.NetId, out var net) || wire.Points.Count == 0) continue;

@@ -28,10 +28,12 @@ public sealed record HarnessSpec(
     IReadOnlyDictionary<string, string> Initials,
     long DurationNs)
 {
-    /// <summary>The harness for <paramref name="config"/> on <paramref name="top"/> (ticks of <paramref name="tickResNs"/> ns).</summary>
-    public static HarnessSpec From(string top, IEnumerable<Variable> ports, SimulationConfig config, int tickResNs)
+    /// <summary>The harness for <paramref name="config"/> on <paramref name="top"/> (ticks of <paramref name="tickFs"/> fs).</summary>
+    public static HarnessSpec From(string top, IEnumerable<Variable> ports, SimulationConfig config, long tickFs)
     {
-        long Ns(ulong ticks) => (long)ticks * tickResNs;
+        if (tickFs % PhysicalTime.FsPerNs != 0)
+            throw new NotSupportedException($"harness: a tick of {tickFs} fs is not a whole number of ns");
+        long Ns(ulong ticks) => (long)ticks * (tickFs / PhysicalTime.FsPerNs);
         if (config.Stimuli.Any(s => s.Target is not null))
             throw new NotSupportedException("harness: stimulus on part of a port (v(3), p.f) is not reproduced");
         return new HarnessSpec(

@@ -61,7 +61,7 @@ public sealed class SimulateRequest
     [JsonPropertyName("duration")] public int Duration { get; set; } = 1000;
     /// <summary>System clock frequency in megahertz.</summary>
     [JsonPropertyName("systemClockMhz")] public int SystemClockMhz { get; set; } = 50;
-    /// <summary>Tick resolution in nanoseconds.</summary>
+    /// <summary>Requested tick in nanoseconds; the run narrows it to the design's static delays (the response's <c>tickFs</c>).</summary>
     [JsonPropertyName("tickResNs")] public int TickResNs { get; set; } = 10;
     /// <summary>Scheduled input stimuli applied to ports over time.</summary>
     [JsonPropertyName("portMoments")] public List<ApiPortMoment> PortMoments { get; set; } = new();
@@ -125,8 +125,8 @@ public sealed class SimulateResponse
     [JsonPropertyName("durationMs")] public long DurationMs { get; set; }
     /// <summary>Total number of simulated ticks.</summary>
     [JsonPropertyName("totalTicks")] public ulong TotalTicks { get; set; }
-    /// <summary>Tick resolution in nanoseconds.</summary>
-    [JsonPropertyName("tickResNs")] public int TickResNs { get; set; }
+    /// <summary>Effective tick in femtoseconds (the requested one narrowed to the design's static delays); <c>totalTicks</c> counts these.</summary>
+    [JsonPropertyName("tickFs")] public long TickFs { get; set; }
     /// <summary>Number of signals captured.</summary>
     [JsonPropertyName("signalCount")] public int SignalCount { get; set; }
     /// <summary>VCD (Value Change Dump) waveform output.</summary>

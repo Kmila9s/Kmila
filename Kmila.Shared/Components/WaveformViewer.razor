@@ -39,7 +39,7 @@
     // Compare mode keeps the old "wide SVG" rendering — width derives from
     // the same pxPerNs that single-mode uses, capped so the toolbar can't
     // overshoot the browser's max scroll width when several runs overlay.
-    var compareMaxNs = _compareTracks.Max(t => (long)t.Data.TotalTicks * t.Data.TimescaleNs);
+    var compareMaxNs = CurrentMaxNs();
     var compareTrackWidthPx = (int)Math.Clamp(
         _pxPerNs * Math.Max(1L, compareMaxNs), 200, 200_000);
     <section class="waveform-viewer waveform-viewer--compare" aria-label="@Traductor.T("WAVEFORM_VIEWER")">
@@ -177,7 +177,7 @@ else if (Data != null && Data.Signals.Count > 0)
     //                        sticky label column. The path inside is
     //                        clipped to the current time window so it
     //                        stays small regardless of total sim length.
-    long maxNs = (long)Data.TotalTicks * Math.Max(1, Data.TimescaleNs);
+    long maxNs = Data.TotalNs;
     long contentWidthPx = ComputeContentWidthPx(maxNs);
     int visibleTrackPx = ComputeVisibleTrackPx();
     var (viewStartNs, viewEndNs) = GetViewBounds(maxNs, visibleTrackPx);
@@ -643,10 +643,8 @@ else if (Data != null && Data.Signals.Count > 0)
     private long CurrentMaxNs()
     {
         if (IsCompare)
-            return _compareTracks!.Max(t => (long)t.Data.TotalTicks * Math.Max(1, t.Data.TimescaleNs));
-        ulong totalTicks = Data?.TotalTicks ?? 0UL;
-        int timescale = Math.Max(1, Data?.TimescaleNs ?? 1);
-        return (long)totalTicks * timescale;
+            return _compareTracks!.Max(t => t.Data.TotalNs);
+        return Data?.TotalNs ?? 0;
     }
 
     // ─── Compare-mode trace memoisation ──────────────────────────────────
@@ -1000,9 +998,7 @@ else if (Data != null && Data.Signals.Count > 0)
     [JSInvokable]
     public Task OnCursorHover(double ns)
     {
-        int scale = Math.Max(1, Data?.TimescaleNs ?? 1);
-        if (ns < 0) ns = 0;
-        Cursor.SetCursorTick((ulong)(ns / scale));
+        Cursor.SetCursorTick(Data?.TickAt(ns) ?? 0);
         // Re-render this viewer directly rather than relying only on the shared
         // Cursor.OnChange event: the hover originates here, so the value column
         // must refresh even if the bus's subscriber chain is disrupted. (Fixes
@@ -1704,7 +1700,7 @@ else if (Data != null && Data.Signals.Count > 0)
     }
 
     private string BuildRulerSvg(int widthPx) =>
-        BuildRulerSvg(widthPx, (long)(Data?.TotalTicks ?? 0) * (Data?.TimescaleNs ?? 1));
+        BuildRulerSvg(widthPx, Data?.TotalNs ?? 0);
 
     /// <summary>
     /// Compare-mode / legacy overload: ruler drawn from 0 to
@@ -1826,7 +1822,7 @@ else if (Data != null && Data.Signals.Count > 0)
             // Use the sim's total simulated time as the breakpoint anchor.
             // A click on the toolbar pin while looking at the post-run wave
             // marks the END of the current sim — the next Run pauses there.
-            long bpNs = (long)(Data?.TotalTicks ?? 0UL) * (long)(Data?.TimescaleNs ?? 1L);
+            long bpNs = Data?.TotalNs ?? 0;
             if (bpNs <= 0) return;
             Replay.ToggleTimeBreakpoint(bpNs);
             var added = Replay.TimeBreakpoints.Contains(bpNs);
@@ -1848,7 +1844,7 @@ else if (Data != null && Data.Signals.Count > 0)
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("$date ").AppendLine($"  {DateTime.Now:yyyy-MM-dd HH:mm:ss}").AppendLine("$end");
         sb.AppendLine("$version ").AppendLine("  Kmila-9s waveform exporter").AppendLine("$end");
-        sb.AppendLine($"$timescale {Data.TimescaleNs} ns $end");
+        sb.AppendLine("$timescale 1 ns $end");
         sb.AppendLine("$scope module top $end");
 
         // Honor the per-signal hide set so the exported VCD mirrors what the
@@ -1904,7 +1900,7 @@ else if (Data != null && Data.Signals.Count > 0)
 
         foreach (var kv in stream)
         {
-            sb.Append('#').AppendLine((kv.Key / Math.Max(1, Data.TimescaleNs)).ToString());
+            sb.Append('#').AppendLine(kv.Key.ToString());
             foreach (var (id, bits) in kv.Value)
                 sb.AppendLine(bits.Length == 1 ? $"{bits}{id}" : $"b{bits} {id}");
         }
@@ -1932,7 +1928,7 @@ else if (Data != null && Data.Signals.Count > 0)
     private async Task OpenExportModalAsync()
     {
         if (Data == null || Data.Signals.Count == 0) return;
-        long totalNs = (long)Data.TotalTicks * Math.Max(1, Data.TimescaleNs);
+        long totalNs = Data.TotalNs;
         var parameters = new Dictionary<string, object>
         {
             { "TotalNs", totalNs },
@@ -1966,7 +1962,7 @@ else if (Data != null && Data.Signals.Count > 0)
             : new WaveformData
             {
                 TotalTicks  = Data.TotalTicks,
-                TimescaleNs = Data.TimescaleNs,
+                TickFs = Data.TickFs,
                 Signals     = Data.Signals.Where(s => !_hiddenSignals.Contains(s.Name)).ToList()
             };
 

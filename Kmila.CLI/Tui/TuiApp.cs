@@ -206,7 +206,7 @@ public sealed class TuiApp
                 Fpga = _fpga,
             };
             var result = svc.RunAsync(req).GetAwaiter().GetResult();
-            var vcd = result.History.ExportToVcd(result.Entity, timescaleNs: result.TickResNs);
+            var vcd = result.History.ExportToVcd(result.Entity, result.TickFs);
             _wave = WaveModel.FromVcd(vcd);
             _lastResult = result; _lastVcd = vcd;
             _log.Clear();

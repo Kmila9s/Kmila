@@ -308,7 +308,7 @@ public class PracticeEvaluator
 
                 var history = await tcs.Task;
                 if (history == null) return null;
-                return WaveformData.FromSignalHistory(history, builder.LastTickResNs);
+                return WaveformData.FromSignalHistory(history, builder.LastTickFs);
             }
             finally
             {

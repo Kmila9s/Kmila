@@ -19,7 +19,7 @@ public class WaveformData
     /// <summary>
     /// (Deprecated.) Time labels for the legacy Chart.js categorical X-axis.
     /// The SVG viewer derives its own ruler from <see cref="TotalTicks"/> +
-    /// <see cref="TimescaleNs"/>; kept as an empty list for JSON-shape
+    /// <see cref="TickFs"/>; kept as an empty list for JSON-shape
     /// compatibility with older snapshot payloads.
     /// </summary>
     public List<string> TimeLabels { get; init; } = new();
@@ -58,9 +58,25 @@ public class WaveformData
     private Dictionary<string, WaveformSignal>? _byName;
 
     /// <summary>
-    /// Nanoseconds per tick (timescale).
+    /// Femtoseconds per tick (the run's effective tick, <c>SimulationConfig.TickFs</c>).
+    /// The waveform itself is drawn in whole nanoseconds (<see cref="NsAt(ulong)"/>).
     /// </summary>
-    public int TimescaleNs { get; init; }
+    public long TickFs { get; init; } = PhysicalTime.DefaultTickFs;
+
+    /// <summary>The time in whole nanoseconds (rounded down) of tick <paramref name="tick"/> under a tick of <paramref name="tickFs"/> fs.</summary>
+    public static long NsAt(ulong tick, long tickFs) => (long)(tick * (ulong)Math.Max(1, tickFs) / PhysicalTime.FsPerNs);
+
+    /// <summary>The time in whole nanoseconds of tick <paramref name="tick"/>.</summary>
+    public long NsAt(ulong tick) => NsAt(tick, TickFs);
+
+    /// <summary>The tick at time <paramref name="ns"/> (the last tick at or before it) under a tick of <paramref name="tickFs"/> fs.</summary>
+    public static ulong TickAt(double ns, long tickFs) => ns <= 0 ? 0 : (ulong)(ns * PhysicalTime.FsPerNs / Math.Max(1, tickFs));
+
+    /// <summary>The tick at time <paramref name="ns"/> (the last tick at or before it).</summary>
+    public ulong TickAt(double ns) => TickAt(ns, TickFs);
+
+    /// <summary>The length of the run in whole nanoseconds.</summary>
+    public long TotalNs => NsAt(TotalTicks);
 
     /// <summary>
     /// Maximum transitions retained per signal in the LIVE incremental merge
@@ -91,7 +107,7 @@ public class WaveformData
         var payload = new SerializedForm
         {
             TotalTicks  = TotalTicks,
-            TimescaleNs = TimescaleNs,
+            TickFs      = TickFs,
             Signals     = Signals
         };
         return System.Text.Json.JsonSerializer.Serialize(payload,
@@ -113,7 +129,8 @@ public class WaveformData
                 Signals     = payload.Signals ?? new(),
                 TimeLabels  = new(),
                 TotalTicks  = payload.TotalTicks,
-                TimescaleNs = payload.TimescaleNs
+                // Snapshots stored before v3.2.0 carry the tick in ns.
+                TickFs      = payload.TickFs > 0 ? payload.TickFs : Math.Max(1, payload.TimescaleNs) * PhysicalTime.FsPerNs,
             };
         }
         catch
@@ -130,7 +147,9 @@ public class WaveformData
     {
         /// <summary>Total simulated ticks captured by the waveform.</summary>
         public ulong TotalTicks { get; set; }
-        /// <summary>Timescale resolution in nanoseconds per tick (canonical 10).</summary>
+        /// <summary>Femtoseconds per tick.</summary>
+        public long TickFs { get; set; }
+        /// <summary>Nanoseconds per tick, as snapshots stored before v3.2.0 wrote it (read only).</summary>
         public int TimescaleNs { get; set; }
         /// <summary>Per-signal sampled transitions.</summary>
         public List<WaveformSignal>? Signals { get; set; }
@@ -143,8 +162,8 @@ public class WaveformData
     /// <see cref="Signals"/> and <see cref="TotalTicks"/> on every render
     /// and so picks up appended transitions automatically.
     /// </summary>
-    public static WaveformData CreateEmpty(int timescaleNs)
-        => new WaveformData { TimescaleNs = timescaleNs };
+    public static WaveformData CreateEmpty(long tickFs)
+        => new WaveformData { TickFs = tickFs };
 
     /// <summary>
     /// Appends transitions that have arrived in <paramref name="history"/>
@@ -206,7 +225,7 @@ public class WaveformData
             {
                 if (timeMoment > maxTimeMoment) maxTimeMoment = timeMoment;
                 ulong tick = (ulong)(timeMoment / 1000);
-                long ns = (long)tick * TimescaleNs;
+                long ns = NsAt(tick);
                 for (int r = 0; r < rows.Count; r++)
                     localAppended |= AppendLive(sigs[r], ns, rows[r].Project(raw));
             });
@@ -298,9 +317,9 @@ public class WaveformData
     /// Collapses the tick*1000+delta encoding to tick-level transitions.
     /// </summary>
     /// <param name="history">The signal history produced by the VHDL simulation engine.</param>
-    /// <param name="timescaleNs">Nanoseconds per tick used for time label formatting. Defaults to 10.</param>
+    /// <param name="tickFs">Femtoseconds per tick (the run's effective tick).</param>
     /// <returns>A new <see cref="WaveformData"/> instance with chart-ready signal data and time labels.</returns>
-    public static WaveformData FromSignalHistory(SignalHistory history, int timescaleNs = 10)
+    public static WaveformData FromSignalHistory(SignalHistory history, long tickFs)
     {
         // Retrieve all signals being tracked and determine the simulation time boundaries
         var trackedSignals = history.GetTrackedSignals();
@@ -326,14 +345,14 @@ public class WaveformData
             string portType = signal.IsPort ? signal.PortType.ToString() : "INTERNAL";
 
             foreach (var row in RowsOf(signal))
-                waveformSignals.Add(BuildSignal(row.Name, row.Meta, portType, rawHistory, timescaleNs, row.Project));
+                waveformSignals.Add(BuildSignal(row.Name, row.Meta, portType, rawHistory, tickFs, row.Project));
         }
 
         return new WaveformData
         {
             Signals = waveformSignals,
             TotalTicks = totalTicks,
-            TimescaleNs = timescaleNs
+            TickFs = tickFs
         };
     }
 
@@ -364,7 +383,7 @@ public class WaveformData
     /// record field), <paramref name="meta"/> gives its type and width.
     /// </summary>
     private static WaveformSignal BuildSignal(string name, Variable meta, string portType,
-        List<(long TimeMoment, object Value, int SourceLine)> rawHistory, int timescaleNs,
+        List<(long TimeMoment, object Value, int SourceLine)> rawHistory, long tickFs,
         Func<object?, object?> project)
     {
         // Classify the signal for chart rendering
@@ -376,7 +395,7 @@ public class WaveformData
         // unchanged state is skipped).
         var sig = new WaveformSignal { Name = name, DataType = dataType, BitWidth = bitWidth, PortType = portType };
         foreach (var entry in rawHistory)
-            AppendLive(sig, (long)(ulong)(entry.TimeMoment / 1000) * timescaleNs, project(entry.Value), entry.SourceLine);
+            AppendLive(sig, NsAt((ulong)(entry.TimeMoment / 1000), tickFs), project(entry.Value), entry.SourceLine);
         return sig;
     }
 
@@ -389,7 +408,7 @@ public class WaveformData
     /// both <c>null</c> when the signal has no sample yet at that time.
     /// </summary>
     public (double? Value, string? Label) ValueAt(WaveformSignal signal, ulong tick)
-        => signal.ValueAtNs((long)tick * Math.Max(1, TimescaleNs));
+        => signal.ValueAtNs(NsAt(tick));
 
     /// <summary>
     /// The full transition in effect at <paramref name="tick"/> (last-write-wins,
@@ -400,7 +419,7 @@ public class WaveformData
     /// pre-formatted hex label.
     /// </summary>
     public WaveformTransition? TransitionAt(WaveformSignal signal, ulong tick)
-        => signal.TransitionAtOrBefore((long)tick * Math.Max(1, TimescaleNs));
+        => signal.TransitionAtOrBefore(NsAt(tick));
 
     /// <summary>
     /// Determines the sort order for a signal based on its port type.
@@ -909,7 +928,7 @@ public sealed class WaveformTransitionCollapser
 {
     private readonly string _dataType;
     private readonly int _bitWidth;
-    private readonly int _timescaleNs;
+    private readonly long _tickFs;
     private bool _hasPending;
     private WaveformTransition _pending;
     private ulong _lastTick;
@@ -917,11 +936,11 @@ public sealed class WaveformTransitionCollapser
     private string? _prevLbl;
 
     /// <summary>Creates a collapser for one signal.</summary>
-    public WaveformTransitionCollapser(string dataType, int bitWidth, int timescaleNs)
+    public WaveformTransitionCollapser(string dataType, int bitWidth, long tickFs)
     {
         _dataType = dataType;
         _bitWidth = bitWidth;
-        _timescaleNs = Math.Max(1, timescaleNs);
+        _tickFs = tickFs;
     }
 
     /// <summary>
@@ -932,7 +951,7 @@ public sealed class WaveformTransitionCollapser
     {
         finalized = default;
         ulong tick = (ulong)(timeMoment / 1000);
-        long ns = (long)tick * _timescaleNs;
+        long ns = WaveformData.NsAt(tick, _tickFs);
         double? val = WaveformData.ChartValue(value, _dataType, _bitWidth);
         string? lbl = (_dataType != "std_logic" && value != null)
             ? WaveformData.DisplayLabel(value, _dataType, _bitWidth)

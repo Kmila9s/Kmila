@@ -132,7 +132,7 @@ public class SimulationCoordinator : IDisposable
             int projectId = _lastEndedProjectId;
             if (projectId <= 0) return;
 
-            var wave = WaveformData.FromSignalHistory(history, _builder.LastTickResNs);
+            var wave = WaveformData.FromSignalHistory(history, _builder.LastTickFs);
             // Long-run Phase 2: give the cached run its full on-disk history (no-op
             // for runs that fit in memory). The snapshot below still persists the
             // in-memory window only — Archive is never serialized.

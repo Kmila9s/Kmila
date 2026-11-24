@@ -53,7 +53,7 @@ public sealed record CompareOptions
     public static CompareOptions Strict(IEnumerable<string> ports, bool ignoreT0) => new()
     {
         Signals = ports.ToList(),
-        SnapFs = 1_000_000,
+        SnapFs = Interpreter.Models.PhysicalTime.FsPerNs,
         IgnoreT0 = ignoreT0,
         InitialValue = "U",
     };

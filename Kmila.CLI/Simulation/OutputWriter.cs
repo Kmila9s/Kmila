@@ -56,7 +56,7 @@ public static class OutputWriter
         switch (fmt)
         {
             case OutputFormat.Vcd:
-                return result.History.ExportToVcd(result.Entity, timescaleNs: result.TickResNs);
+                return result.History.ExportToVcd(result.Entity, result.TickFs);
 
             case OutputFormat.Txt:
                 return result.History.ExportToText();
@@ -70,16 +70,16 @@ public static class OutputWriter
                     entity      = result.Entity,
                     durationMs  = result.DurationMs,
                     totalTicks  = result.TotalTicks,
-                    tickResNs   = result.TickResNs,
+                    tickFs      = result.TickFs,
                     signalCount = result.SignalCount,
                     log         = result.Log,
-                    vcd         = result.History.ExportToVcd(result.Entity, timescaleNs: result.TickResNs),
+                    vcd         = result.History.ExportToVcd(result.Entity, result.TickFs),
                 }, new JsonSerializerOptions { WriteIndented = true });
 
             case OutputFormat.Svg:
             {
-                var data = WaveformData.FromSignalHistory(result.History, result.TickResNs);
-                long endNs = (long)result.TotalTicks * result.TickResNs;
+                var data = WaveformData.FromSignalHistory(result.History, result.TickFs);
+                long endNs = WaveformData.NsAt(result.TotalTicks, result.TickFs);
                 if (endNs <= 0) endNs = 1;
                 var title = $"{result.Entity} — 0..{endNs}ns";
                 return WaveformExporter.BuildSvg(

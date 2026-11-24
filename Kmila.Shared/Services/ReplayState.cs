@@ -1071,7 +1071,6 @@ public class ReplayState
         // times); the shared cursor is in ticks. Convert via the captured
         // waveform's timescale so wire-value colouring + the waveform cursor
         // land on the right column.
-        int scale = Math.Max(1, _cachedWaveform?.TimescaleNs ?? 10);
-        _cursor.SetCursorTick((ulong)Math.Max(0, step.T / scale));
+        _cursor.SetCursorTick(WaveformData.TickAt(step.T, _cachedWaveform?.TickFs ?? Interpreter.Models.PhysicalTime.DefaultTickFs));
     }
 }
