@@ -959,7 +959,7 @@
     {
         var engine = Replay.LiveEngine;
         if (engine == null) return false;
-        var live = WaveformData.CreateEmpty(Builder.LastTickResNs);
+        var live = WaveformData.CreateEmpty(Builder.LastTickFs);
         live.MergeFrom(engine.History);
         if (live.Signals.Count == 0) return false;
         _waveformData   = live;
@@ -989,7 +989,7 @@
                 bool firstFrame = _waveformData == null;
                 if (firstFrame)
                 {
-                    _waveformData = WaveformData.CreateEmpty(Builder.LastTickResNs);
+                    _waveformData = WaveformData.CreateEmpty(Builder.LastTickFs);
                     _lastBuiltTime  = Sim.Time;
                     _lastBuiltScale = Sim.Scale;
                 }
@@ -1136,7 +1136,7 @@
         _liveMergeSuspended = false;
         _compareSnapshots = null;
         if (!HydrateWaveformFromLiveEngine())
-            _waveformData = WaveformData.CreateEmpty(Builder.LastTickResNs);
+            _waveformData = WaveformData.CreateEmpty(Builder.LastTickFs);
         DockState.SetActive(EditorTab.Waveforms);
         StateHasChanged();
     }
@@ -3209,7 +3209,7 @@ end architecture behavioral;",
                 {
                     if (_waveformData == null)
                     {
-                        _waveformData = WaveformData.CreateEmpty(Builder.LastTickResNs);
+                        _waveformData = WaveformData.CreateEmpty(Builder.LastTickFs);
                         _lastBuiltTime  = Sim.Time;
                         _lastBuiltScale = Sim.Scale;
                     }
@@ -3480,7 +3480,7 @@ end architecture behavioral;",
                 // _waveformData pointing at the saved run. The finished run is
                 // captured as a snapshot (SimulationCoordinator) and cached
                 // (Sim.LastWaveform), so it's one click away in the Runs tab.
-                wd = WaveformData.FromSignalHistory(history, Builder.LastTickResNs);
+                wd = WaveformData.FromSignalHistory(history, Builder.LastTickFs);
                 _liveMergeSuspended = false;
             }
             else
@@ -3492,7 +3492,7 @@ end architecture behavioral;",
                 }
                 else
                 {
-                    wd = WaveformData.FromSignalHistory(history, Builder.LastTickResNs);
+                    wd = WaveformData.FromSignalHistory(history, Builder.LastTickFs);
                     _waveformData = wd;
                 }
                 _lastBuiltTime  = Sim.Time;

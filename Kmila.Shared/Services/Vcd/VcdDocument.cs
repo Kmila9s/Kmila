@@ -9,7 +9,7 @@ namespace Kmila.Shared.Services.Vcd;
 public sealed class VcdDocument
 {
     /// <summary>Femtoseconds per VCD time unit (from <c>$timescale</c>; 1 ps when absent).</summary>
-    public long TimescaleFs { get; internal set; } = 1_000;
+    public long TimescaleFs { get; internal set; } = Interpreter.Models.PhysicalTime.FsPerPs;
 
     /// <summary>Outermost scope of the first declared variable (the design or testbench), or empty.</summary>
     public string Module { get; internal set; } = "";

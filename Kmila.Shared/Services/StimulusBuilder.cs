@@ -18,7 +18,7 @@ public static class StimulusBuilder
     /// <param name="entity">The VHDL entity to simulate.</param>
     /// <param name="portMoments">Port moment configurations from the UI (may be null).</param>
     /// <param name="duration">Total simulation duration.</param>
-    /// <param name="tickResNs">Nanoseconds per tick (default: TimeClock.NS_PER_TICK = 10).</param>
+    /// <param name="tickResNs">Requested tick in nanoseconds (default 10); the run narrows it to the design's static delays, in fs.</param>
     /// <param name="systemClockMhz">Effective system clock frequency (MHz) for this run.</param>
     /// <param name="options">Clocks, port initial values and initial-value policy (null: propose the clock by name, LRM).</param>
     /// <returns>A fully configured <see cref="SimulationConfig"/> ready for execution by SimulationRunner.</returns>
@@ -54,15 +54,9 @@ public static class StimulusBuilder
     {
         ArgumentNullException.ThrowIfNull(entity);
 
-        // The tick lands every static delay of the design exactly (`wait for 1 ns` under a 10 ns request → 1 ns).
-        tickResNs = StaticDelays.TickNs(entity, tickResNs > 0 ? tickResNs : TimeClock.NS_PER_TICK);
-
-        // Convert duration to ticks
-        ulong totalTicks = (ulong)(totalNs / tickResNs);
-        if (totalTicks == 0) totalTicks = 1;
-
-        var clocks = new List<ClockConfig>();
-        var stimuli = new List<StimulusEvent>();
+        // Stimuli and clock edges, first in femtoseconds: the tick is chosen to land on them.
+        var timedStimuli = new List<(long Fs, Variable Signal, string Value, AssignmentTarget? Part)>();
+        var clockSpecs = new List<(Variable Port, long HalfFs, bool InitialHigh)>();
 
         // Ports stimuli resolve against. Defensive against null entries in
         // the HashSet and against ports with a null Name — both have been
@@ -99,16 +93,7 @@ public static class StimulusBuilder
                 // SimulationRunner now applies tick-0 events naturally so we
                 // no longer pre-seed signal.Value here.
                 foreach (var pmv in pm.Values)
-                {
-                    ulong tick = ConvertToTicks(pmv.Time, pmv.TimeScale, tickResNs);
-                    stimuli.Add(new StimulusEvent
-                    {
-                        Tick = tick,
-                        Signal = signal,
-                        Value = pmv.Value,
-                        Target = part,
-                    });
-                }
+                    timedStimuli.Add((FsOf(pmv.Time, pmv.TimeScale), signal, pmv.Value, part));
             }
         }
 
@@ -117,9 +102,9 @@ public static class StimulusBuilder
         // bench feeding clk transitions taken from a GHDL VCD).
         if (systemClockMhz <= 0) systemClockMhz = 50;
         double systemPeriodNs = 1_000.0 / systemClockMhz;
-        stimuli.RemoveAll(st => string.Equals(st.Value, "CLOCK", StringComparison.OrdinalIgnoreCase));
+        timedStimuli.RemoveAll(st => string.Equals(st.Value, "CLOCK", StringComparison.OrdinalIgnoreCase));
         IEnumerable<ClockSpec> declared = options?.Clocks
-            ?? (ClockPortPolicy.Suggest(entity) is { } suggested && !stimuli.Any(st => ReferenceEquals(st.Signal, suggested))
+            ?? (ClockPortPolicy.Suggest(entity) is { } suggested && !timedStimuli.Any(st => ReferenceEquals(st.Signal, suggested))
                 ? [new ClockSpec(suggested.Name, systemPeriodNs)]
                 : []);
         foreach (var spec in declared)
@@ -128,13 +113,29 @@ public static class StimulusBuilder
                     && p.PortType is Constants.PortType.IN or Constants.PortType.INOUT)
                 ?? throw new InvalidOperationException($"clock \"{spec.Port}\" is not an input port of {entity.Name}");
             double halfPeriodNs = (spec.PeriodNs > 0 ? spec.PeriodNs : systemPeriodNs) / 2.0;
-            clocks.Add(new ClockConfig
-            {
-                Signal = port,
-                HalfPeriodTicks = (ulong)Math.Max(1, (long)Math.Round(halfPeriodNs / tickResNs)),
-                InitialHigh = spec.InitialHigh,
-            });
+            clockSpecs.Add((port, Math.Max(1, (long)Math.Round(halfPeriodNs * PhysicalTime.FsPerNs)), spec.InitialHigh));
         }
+
+        // The tick lands exactly on every static delay of the design, every stimulus and
+        // every clock edge, down to 1 fs (`wait for 500 ps` or an input at 5 ns under a
+        // 10 ns request, G103).
+        long tickFs = StaticDelays.TickFs(entity, tickResNs > 0 ? tickResNs * PhysicalTime.FsPerNs : PhysicalTime.DefaultTickFs);
+        foreach (long fs in timedStimuli.Select(st => st.Fs).Concat(clockSpecs.Select(c => c.HalfFs)))
+            if (fs > 0) tickFs = StaticDelays.Gcd(tickFs, fs);
+
+        ulong totalTicks = (ulong)Math.Max(1, totalNs * PhysicalTime.FsPerNs / tickFs);
+        // History instants are tick*1000+delta in a long: refuse a run that would overflow them.
+        if (totalTicks > long.MaxValue / 1000)
+            throw new InvalidOperationException(
+                $"a run of {totalNs} ns at a tick of {tickFs} fs exceeds the engine's time range; shorten the run or use rounder delays");
+
+        var stimuli = timedStimuli
+            .Select(st => new StimulusEvent { Tick = (ulong)(st.Fs / tickFs), Signal = st.Signal, Value = st.Value, Target = st.Part })
+            .OrderBy(st => st.Tick)
+            .ToList();
+        var clocks = clockSpecs
+            .Select(c => new ClockConfig { Signal = c.Port, HalfPeriodTicks = (ulong)(c.HalfFs / tickFs), InitialHigh = c.InitialHigh })
+            .ToList();
 
         // Initial values of input ports (the actual's initial value in a testbench).
         var portInitials = new List<StimulusEvent>();
@@ -145,14 +146,11 @@ public static class StimulusBuilder
             portInitials.Add(new StimulusEvent { Signal = target.Base, Value = value, Target = target.IsPartial ? target : null });
         }
 
-        // Sort stimuli by tick
-        stimuli.Sort((a, b) => a.Tick.CompareTo(b.Tick));
-
         return new SimulationConfig
         {
             Entity = entity,
             TotalTicks = totalTicks,
-            TickResNs = tickResNs,
+            TickFs = tickFs,
             LineMap = lineMap,
             Clocks = clocks,
             Stimuli = stimuli,
@@ -161,28 +159,11 @@ public static class StimulusBuilder
         };
     }
 
-    /// <summary>
-    /// Converts a time value + scale string to simulation ticks.
-    /// </summary>
-    /// <param name="time">The numeric time value to convert.</param>
-    /// <param name="timeScale">The time scale unit (NS, US, MS, S, M, H).</param>
-    /// <param name="tickResNs">The tick resolution in nanoseconds.</param>
-    /// <returns>The equivalent number of simulation ticks.</returns>
-    private static ulong ConvertToTicks(int time, string timeScale, int tickResNs)
-    {
-        // Convert the time value to nanoseconds based on the scale unit
-        double ns = timeScale.ToUpperInvariant() switch
+    /// <summary>The time <paramref name="time"/> <paramref name="timeScale"/> (NS, US, MS, S, M, H; NS by default) in femtoseconds.</summary>
+    private static long FsOf(int time, string timeScale) =>
+        time * PhysicalTime.UnitFs[timeScale.ToUpperInvariant() switch
         {
-            "NS" => time,                       // nanoseconds (1:1)
-            "US" => time * 1_000.0,             // microseconds -> ns
-            "MS" => time * 1_000_000.0,         // milliseconds -> ns
-            "S" => time * 1_000_000_000.0,      // seconds -> ns
-            "M" => time * 60_000_000_000.0,     // minutes -> ns
-            "H" => time * 3_600_000_000_000.0,  // hours -> ns
-            _ => time                            // default: assume NS
-        };
-        // Divide nanoseconds by tick resolution to get tick count
-        ulong ticks = (ulong)(ns / tickResNs);
-        return ticks;
-    }
+            "US" => "us", "MS" => "ms", "S" => "sec", "M" => "min", "H" => "hr",
+            _ => "ns",
+        }];
 }

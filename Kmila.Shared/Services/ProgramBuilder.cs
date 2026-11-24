@@ -69,7 +69,7 @@ public class ProgramBuilder : IDisposable
     /// Workbench (testbench) mode surfaces these in the Output panel so the
     /// user can read a testbench's self-check messages; the port-moment path
     /// simply has no subscriber. Forwarded from
-    /// <see cref="Interpreter.Services.ISimulationRunner.OnReport"/>.
+    /// <see cref="Interpreter.Services.SimulationRunner.OnReport"/>.
     /// </summary>
     public event Action<string>? OnReport;
     /// <summary>
@@ -103,21 +103,16 @@ public class ProgramBuilder : IDisposable
     /// <summary>Error that aborted the last simulation run, or null when it completed or was stopped.</summary>
     public string? LastRunError => _simulationRunner?.Error;
     /// <summary>
-    /// Effective ns-per-tick used by the most recent run. Persisted on the
-    /// builder (not the config) so the waveform factory — which is called
-    /// from an event handler on a later frame — can label time axes with
-    /// the same scale the simulation actually ran at.
-    /// Defaults to <see cref="TimeMachine.Models.TimeClock.NS_PER_TICK"/>
-    /// (10) so call sites that haven't been updated still get sensible
-    /// labels.
+    /// Effective tick (femtoseconds) of the most recent run, narrowed to the
+    /// design's static delays. Persisted on the builder (not the config) so the
+    /// waveform factory — called from an event handler on a later frame — labels
+    /// time axes with the scale the simulation actually ran at.
     /// </summary>
-    public int LastTickResNs { get; private set; } = TimeMachine.Models.TimeClock.NS_PER_TICK;
+    public long LastTickFs { get; private set; } = Interpreter.Models.PhysicalTime.DefaultTickFs;
     // Legacy timer for step-by-step simulation (TimeMachine path)
     private TimeMachine.Repositories.Timer _timeMachine = new();
-    // Active run driver: SimulationRunner (Visual mode) or FastSimulationRunner
-    // (Fast mode). Both implement ISimulationRunner and produce identical
-    // waveforms — see RunSimulationAsync's fastRun branch.
-    private ISimulationRunner? _simulationRunner;
+    // Active run driver (event-driven in both run modes; Fast mode only drops the live visuals).
+    private SimulationRunner? _simulationRunner;
     // Cancellation token source for cooperative cancellation of async operations
     private readonly CancellationTokenSource _cts = new();
 
@@ -359,7 +354,7 @@ public class ProgramBuilder : IDisposable
     /// Defaults to 50 MHz when the caller didn't compute one (kept for
     /// call sites that predate the FPGA-sourced clock).
     /// </param>
-    /// <param name="tickResNs">Tick resolution in nanoseconds for the simulation clock.</param>
+    /// <param name="tickResNs">Requested tick in nanoseconds (narrowed to the design's static delays, in fs).</param>
     /// <param name="fastRun">When true, runs without per-tick throttling for maximum speed.</param>
     /// <param name="initialValues">Initial values of objects declared without <c>:=</c> (the app setting).</param>
     public async Task RunSimulationAsync(
@@ -383,7 +378,7 @@ public class ProgramBuilder : IDisposable
             options: new StimulusOptions { InitialValues = initialValues },
             lineMap: Design?.Unit?.LineMap);
         // The effective tick (narrowed to the design's static delays) labels the waveform.
-        LastTickResNs = config.TickResNs;
+        LastTickFs = config.TickFs;
 
         // Surface the config to stdout (and therefore /logs via the Console
         // redirector wired up in Program.cs) so the user can see exactly what
@@ -431,13 +426,10 @@ public class ProgramBuilder : IDisposable
     /// </summary>
     private async Task RunConfigAsync(SimulationConfig config, bool fastRun)
     {
-        // Dispose previous runner if any. Fast mode swaps in the event-driven
-        // FastSimulationRunner (skips idle ticks); Visual mode keeps the
-        // reference SimulationRunner (live-updating tick-by-tick).
+        // Dispose previous runner if any. Both run modes use the same
+        // event-driven runner; Fast mode only skips the live-waveform timer.
         _simulationRunner?.Dispose();
-        var runner = fastRun
-            ? (ISimulationRunner)new FastSimulationRunner()
-            : new SimulationRunner();
+        var runner = new SimulationRunner();
         _simulationRunner = runner;
         LastRunStopReason = RunStopReason.None;
 
@@ -447,7 +439,7 @@ public class ProgramBuilder : IDisposable
         // history cap actually evicts.
         LastTrace?.Dispose();
         LastTrace = null;
-        var trace = _traceStorage?.StartSession(LastTickResNs);
+        var trace = _traceStorage?.StartSession(LastTickFs);
         LastTrace = trace;
 
         // Live-update timer: periodically pushes the running SignalHistory
@@ -563,15 +555,10 @@ public class ProgramBuilder : IDisposable
         }
         finally
         {
-            // Perf diagnostic (surfaces in /logs). For a FAST run, visitedTicks
-            // vs totalTicks shows how much idle time was skipped: a ratio near
-            // 100% means the design has activity almost every tick (e.g. a clock
-            // at the tick resolution — a 50 MHz clock toggles every 10 ns tick),
-            // so there is nothing to skip and Fast's only gain is dropping the
-            // live-UI overhead. A small ratio means Fast is paying off.
+            // Perf diagnostic (surfaces in /logs): visitedTicks vs totalTicks shows how
+            // much idle time the event-driven runner skipped.
             perfSw.Stop();
-            var visited = _simulationRunner is Interpreter.Services.FastSimulationRunner fsr
-                ? fsr.VisitedTicks : (int?)null;
+            int? visited = _simulationRunner?.VisitedTicks;
             var pct = visited.HasValue && config != null && config.TotalTicks > 0
                 ? $" visitedTicks={visited} ({100.0 * visited.Value / config.TotalTicks:F1}% of ticks ran)"
                 : string.Empty;
@@ -607,7 +594,7 @@ public class ProgramBuilder : IDisposable
     /// <param name="testbenchRelativePath">Project-relative path of the chosen testbench file.</param>
     /// <param name="totalNs">Total simulated time in nanoseconds (exact: a <see cref="TimeSpan"/> only holds 100 ns steps).</param>
     /// <param name="systemClockMhz">Effective system clock frequency (MHz) for this run.</param>
-    /// <param name="tickResNs">Tick resolution in nanoseconds for the simulation clock.</param>
+    /// <param name="tickResNs">Requested tick in nanoseconds (narrowed to the design's static delays, in fs).</param>
     /// <param name="fastRun">When true, runs without per-tick throttling for maximum speed.</param>
     public async Task RunTestbenchAsync(
         string projectBasePath,
@@ -672,7 +659,7 @@ public class ProgramBuilder : IDisposable
             tickResNs: tickResNs,
             systemClockMhz: systemClockMhz,
             lineMap: unit.LineMap);
-        LastTickResNs = config.TickResNs; // narrowed to the design's static delays
+        LastTickFs = config.TickFs; // narrowed to the design's static delays
 
         Console.WriteLine($"[Sim.TB] entity={entity.Name} totalTicks={config.TotalTicks} " +
             $"clocks={config.Clocks.Count} stimuli={config.Stimuli.Count}");

@@ -41,7 +41,7 @@ public sealed class TraceSession : IDisposable
     internal const long MaxPendingSamples = 1_000_000;
 
     private readonly string _path;
-    private readonly int _tickResNs;
+    private readonly long _tickFs;
     private readonly TraceStorage _storage;
     private readonly ILogger _log;
     private readonly Channel<Batch> _queue =
@@ -74,10 +74,10 @@ public sealed class TraceSession : IDisposable
         public long Count;
     }
 
-    internal TraceSession(string path, int tickResNs, TraceStorage storage, ILogger log)
+    internal TraceSession(string path, long tickFs, TraceStorage storage, ILogger log)
     {
         _path = path;
-        _tickResNs = Math.Max(1, tickResNs);
+        _tickFs = tickFs;
         _storage = storage;
         _log = log;
     }
@@ -261,7 +261,7 @@ public sealed class TraceSession : IDisposable
             DataType = dataType,
             BitWidth = bitWidth,
             PortType = portType,
-            Collapser = new WaveformTransitionCollapser(dataType, bitWidth, _tickResNs),
+            Collapser = new WaveformTransitionCollapser(dataType, bitWidth, _tickFs),
         };
         _db!.Execute("INSERT INTO Signal (Name, DataType, BitWidth, PortType, Count) VALUES (?, ?, ?, ?, 0)",
             st.Name, st.DataType, st.BitWidth, st.PortType);

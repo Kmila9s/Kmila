@@ -20,7 +20,7 @@ public static class TestbenchRunner
     /// <param name="extraFiles">Additional design sources.</param>
     /// <param name="testbenchFile">The <c>*_tb.vhd(l)</c> testbench (absolute path).</param>
     /// <param name="totalNs">Simulated duration in ns.</param>
-    /// <param name="tickResNs">Tick resolution in ns.</param>
+    /// <param name="tickResNs">Requested tick in ns (narrowed to the design's static delays).</param>
     /// <param name="systemClockMhz">System clock in MHz (for the engine's clock math).</param>
     public static async Task<SimRunResult> RunAsync(
         string topFile, IReadOnlyList<string> extraFiles, string testbenchFile,
@@ -72,7 +72,7 @@ public static class TestbenchRunner
             {
                 Entity = Path.GetFileNameWithoutExtension(tbName),
                 History = history,
-                TickResNs = builder.LastTickResNs, // the effective tick (narrowed to the design's static delays)
+                TickFs = builder.LastTickFs, // the effective tick (narrowed to the design's static delays)
                 TotalTicks = 0,
                 DurationMs = sw.ElapsedMilliseconds,
                 SignalCount = history.SignalCount,

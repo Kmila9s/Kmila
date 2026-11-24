@@ -18,7 +18,7 @@ public sealed class ConfigFile
     [JsonPropertyName("clockMHZ")] public int? ClockMhz { get; set; }
     /// <summary>Default FPGA device model.</summary>
     [JsonPropertyName("fpga")] public string? Fpga { get; set; }
-    /// <summary>Default tick resolution in ns.</summary>
+    /// <summary>Default requested tick in ns (narrowed to the design's static delays).</summary>
     [JsonPropertyName("tickResNs")] public int? TickResNs { get; set; }
     /// <summary>Default output format (vcd|txt|csv|json|svg).</summary>
     [JsonPropertyName("format")] public string? Format { get; set; }

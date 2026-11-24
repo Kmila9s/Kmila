@@ -215,7 +215,7 @@ public static class SimCommand
         int assertExit = 0;
         if (assertTokens.Count > 0)
         {
-            var model = Tui.WaveModel.FromVcd(result.History.ExportToVcd(result.Entity, timescaleNs: result.TickResNs));
+            var model = Tui.WaveModel.FromVcd(result.History.ExportToVcd(result.Entity, result.TickFs));
             List<AssertionChecker.Result> checks;
             try { checks = AssertionChecker.Evaluate(model, assertTokens); }
             catch (FormatException ex) { Console.Error.WriteLine($"kmila sim: {ex.Message}"); return 64; }

@@ -62,7 +62,7 @@ public sealed class HeadlessSimulator
             Stimulus       = StimulusOptionsOf(request),
         });
 
-        string vcd = run.History.ExportToVcd(run.Entity.Name, timescaleNs: run.TickResNs);
+        string vcd = run.History.ExportToVcd(run.Entity.Name, run.TickFs);
 
         return new SimulateResponse
         {
@@ -70,7 +70,7 @@ public sealed class HeadlessSimulator
             Entity      = run.Entity.Name,
             DurationMs  = run.DurationMs,
             TotalTicks  = run.TotalTicks,
-            TickResNs   = run.TickResNs,
+            TickFs      = run.TickFs,
             SignalCount = run.History.SignalCount,
             Vcd         = vcd,
             Log         = run.Log,
@@ -154,8 +154,8 @@ public sealed class HeadlessSimulator
             options: options.Stimulus,
             lineMap: design.Unit?.LineMap);
         Phase("stimulus-end");
-        if (config.TickResNs != tickResNs)
-            log.Add($"[sim] tick adjusted to {config.TickResNs} ns (static delays of the design)");
+        if (config.TickFs != tickResNs * IModels.PhysicalTime.FsPerNs)
+            log.Add($"[sim] tick adjusted to {config.TickFs} fs (static delays of the design)");
 
         log.Add($"[sim] entity={entity.Name} ports={entity.Ports.Count} totalTicks={config.TotalTicks} stimuli={config.Stimuli.Count} clocks={config.Clocks.Count}");
 
@@ -189,7 +189,6 @@ public sealed class HeadlessSimulator
         {
             Entity     = entity,
             History    = history,
-            TickResNs  = config.TickResNs,
             Config     = config,
             DurationMs = sw.ElapsedMilliseconds,
             Log        = log,
@@ -252,7 +251,7 @@ public sealed class HeadlessRunOptions
     public IReadOnlyList<string>? Files { get; init; }
     /// <summary>Simulated duration in nanoseconds.</summary>
     public long TotalNs { get; init; }
-    /// <summary>Nanoseconds per engine tick; 0 or less uses <see cref="TimeClock.NS_PER_TICK"/>.</summary>
+    /// <summary>Requested tick in nanoseconds (narrowed to the design's static delays, in fs); 0 or less uses <see cref="TimeClock.NS_PER_TICK"/>.</summary>
     public int TickResNs { get; init; }
     /// <summary>System clock frequency (MHz) driving clock ports; 0 or less uses 50.</summary>
     public int SystemClockMhz { get; init; }
@@ -269,7 +268,8 @@ public sealed class HeadlessRunResult
 {
     public required Entity Entity { get; init; }
     public required SignalHistory History { get; init; }
-    public int TickResNs { get; init; }
+    /// <summary>The run's effective tick in femtoseconds (what <see cref="TotalTicks"/> and the history count).</summary>
+    public long TickFs => Config.TickFs;
     /// <summary>The stimulus configuration the engine executed (clocks, timed inputs, initial values).</summary>
     public required IModels.SimulationConfig Config { get; init; }
     public ulong TotalTicks => Config.TotalTicks;

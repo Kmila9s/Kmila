@@ -101,13 +101,12 @@ public class SimulationParameters
     public string? TestbenchFile { get; private set; }
 
     /// <summary>
-    /// Run mode chosen in the Run bar. <c>true</c> = Fast: the event-driven
-    /// <c>FastSimulationRunner</c> (skips idle ticks) with live visuals off — a
-    /// progress bar during the run, the full waveform built once at the end.
-    /// <c>false</c> = Visual (default): the reference <c>SimulationRunner</c> with
-    /// the live-updating waveform + step/breakpoint replay. Both produce the same
-    /// final waveform; Fast is for seconds-scale runs where the live redraw is the
-    /// bottleneck. Session state — see <see cref="SetFastMode"/>.
+    /// Run mode chosen in the Run bar. Both modes use the same event-driven
+    /// <c>SimulationRunner</c>. <c>true</c> = Fast: live visuals off — a progress
+    /// bar during the run, the full waveform built once at the end. <c>false</c> =
+    /// Visual (default): the live-updating waveform + step/breakpoint replay. Both
+    /// produce the same final waveform; Fast is for seconds-scale runs where the
+    /// live redraw is the bottleneck. Session state — see <see cref="SetFastMode"/>.
     /// </summary>
     public bool FastMode { get; private set; }
 
@@ -122,8 +121,8 @@ public class SimulationParameters
     /// when not yet estimable (the run just started, &lt;1% done) or not running.
     /// Derived from the observed progress rate in <see cref="SetProgress"/> —
     /// no upfront model, so it self-calibrates within the first moments of a run.
-    /// In Fast mode the estimate is rougher because progress jumps over idle
-    /// ticks, but it still converges as the run proceeds.
+    /// The estimate is rough because progress jumps over idle ticks, but it
+    /// converges as the run proceeds.
     /// </summary>
     public double? RemainingSeconds { get; private set; }
 

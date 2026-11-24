@@ -1027,40 +1027,39 @@ public interface IFileSystem
 
 ### 11.3 Simulation Tick Resolution (important note)
 
-> **Heads-up — fixed-tick Nyquist limit.** The batch simulator advances in
-> discrete ticks. By default one tick is `TimeClock.NS_PER_TICK = 10 ns`,
-> which means the fastest clock the engine can represent without aliasing
-> is **50 MHz** (two ticks per period = 20 ns period). Any clock frequency
-> above ~50 MHz — whether it comes from the Run-bar override or from the
-> selected FPGA's PLL default — gets clamped by `Math.Max(1, …)` on the
-> half-period calculation and ends up toggling every single tick, which
-> is indistinguishable from 50 MHz in the waveform. In other words,
-> configuring a 100 MHz clock and a 200 MHz clock both render the same
-> square wave.
+> **Since v3.2.0 (G103) the requested tick is only a starting point.** The
+> engine counts in ticks of a whole number of **femtoseconds**
+> (`SimulationConfig.TickFs`). `StimulusBuilder` narrows the requested tick
+> to the greatest common divisor of it, the design's static delays
+> (`StaticDelays.TickFs`: `wait for`, `after` over literals and constants),
+> every stimulus instant and every clock half period. So a 100 MHz clock,
+> a `wait for 500 ps` or an input at 5 ns land exactly whatever the setting.
+> The runner is event-driven (it jumps to the next event), so a finer tick
+> does not make a run slower. Delays that read signals at run time are still
+> rounded up to whole ticks. The waveform viewer draws in whole ns
+> (`WaveformData.NsAt`); the VCD/API/CLI output is exact (`1ps`, or `1fs`
+> when an instant is not a whole ps).
 
-This is a fundamental consequence of discrete-time simulation, not a bug
-in the injector. Finer time resolution is available as a user preference
-in **Settings → Simulation → Tick resolution**:
+The requested tick is a user preference in **Settings → Simulation → Tick resolution**:
 
 | Mode | Tick | Max faithful clock | Cost per run | When to use |
 |------|------|-------------------|--------------|-------------|
 | **Default** (baseline) | 10 ns | 50 MHz | Fastest, lowest memory | Learning-oriented / 50 MHz-class designs — matches every lesson and snapshot captured before v1.14.x |
-| **High precision** | 1 ns | 500 MHz | ~10× tick count: ~10× slower, ~10× more `SignalHistory` memory | Accurately visualising 100 MHz+ clocks, fine-grained propagation delays |
+| **High precision** | 1 ns | 500 MHz | Same events, so about the same cost (event-driven runner) | Accurately visualising 100 MHz+ clocks, fine-grained propagation delays |
 | **Adaptive** (auto) | computed per-run from the effective clock frequency | matches the clock | Only pays the precision cost for runs that actually need it | Recommended for most users once validated — fast for slow designs, accurate for fast ones |
 
-Default mode is preserved for backwards compatibility: existing projects,
-lessons, and `SimulationSnapshot` JSON blobs all encode tick counts
-against the 10 ns scale, so switching a saved run to a finer resolution
-would re-scale its time axis. The preference is persisted globally
+Saved runs carry their own tick (`WaveformData` JSON `TickFs`; snapshots
+from before v3.2.0 carry `TimescaleNs` and are read as that many ns), so a
+saved run replays on its own time axis. The preference is persisted globally
 through `AppSettings` (key `KMILA_TICK_RESOLUTION_MODE`) and read at
 `ProgramBuilder.RunSimulationAsync` time, so changing the mode takes
 effect on the next Run — no app restart required.
 
-**Implementation:** `StimulusBuilder.BuildConfig` already takes
-`tickResNs` as a parameter. The mode only changes how that parameter is
-computed upstream — the simulator itself is agnostic to the value and
-just counts ticks. `WaveformData.FromSignalHistory` is called with the
-same `tickResNs` so time labels on the waveform stay truthful.
+**Implementation:** `StimulusBuilder.BuildConfig` takes the requested
+`tickResNs`; the mode only changes how it is computed upstream. The
+effective tick comes back as `SimulationConfig.TickFs` (and
+`ProgramBuilder.LastTickFs`, the API's `tickFs`), and
+`WaveformData.FromSignalHistory` is called with it so time labels stay truthful.
 
 ## 12. Testing Strategy
 

@@ -55,11 +55,11 @@ public sealed class TraceStorage
     }
 
     /// <summary>Starts a trace session for one run.</summary>
-    /// <param name="tickResNs">Nanoseconds per simulator tick (waveform timescale).</param>
-    public TraceSession StartSession(int tickResNs)
+    /// <param name="tickFs">Femtoseconds per simulator tick (the run's effective tick).</param>
+    public TraceSession StartSession(long tickFs)
     {
         var path = Path.Combine(Directory, $"run-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}{Extension}");
-        return new TraceSession(path, tickResNs, this, _log);
+        return new TraceSession(path, tickFs, this, _log);
     }
 
     /// <summary>

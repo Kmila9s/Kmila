@@ -17,8 +17,8 @@ public sealed class SimRunResult
     public required string Entity { get; init; }
     /// <summary>The engine's recorded signal history — the source for every output format.</summary>
     public required SignalHistory History { get; init; }
-    /// <summary>Tick resolution used for the run, in ns (also the VCD timescale).</summary>
-    public int TickResNs { get; init; }
+    /// <summary>The run's effective tick, in femtoseconds (what <see cref="TotalTicks"/> counts).</summary>
+    public long TickFs { get; init; }
     /// <summary>Total number of simulated ticks.</summary>
     public ulong TotalTicks { get; init; }
     /// <summary>Wall-clock time the run took, in milliseconds.</summary>
@@ -45,7 +45,7 @@ public sealed class SimRunRequest
     public string? EntryPoint { get; init; }
     /// <summary>Total simulated duration in nanoseconds.</summary>
     public long TotalNs { get; init; } = 1000;
-    /// <summary>Tick resolution in ns.</summary>
+    /// <summary>Requested tick in ns (narrowed to the design's static delays).</summary>
     public int TickResNs { get; init; } = 10;
     /// <summary>System clock in MHz.</summary>
     public int SystemClockMhz { get; init; } = 50;
@@ -135,7 +135,7 @@ public sealed class KmilaSimulationService
         {
             Entity = run.Entity.Name,
             History = run.History,
-            TickResNs = run.TickResNs,
+            TickFs = run.TickFs,
             TotalTicks = run.TotalTicks,
             DurationMs = run.DurationMs,
             SignalCount = run.History.SignalCount,
