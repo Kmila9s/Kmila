@@ -1,7 +1,7 @@
+using Interpreter.Ir;
 using Interpreter.Models;
 using Interpreter.Services;
 using Kmila.Shared.Models;
-using Parser.Models;
 using TimeMachine.Models;
 
 namespace Kmila.Shared.Services;
@@ -15,7 +15,7 @@ public static class StimulusBuilder
     /// <summary>
     /// Builds a SimulationConfig from UI parameters.
     /// </summary>
-    /// <param name="entity">The VHDL entity to simulate.</param>
+    /// <param name="design">The design to simulate (<see cref="Kmila.Frontend.DesignResult.Ir"/>).</param>
     /// <param name="portMoments">Port moment configurations from the UI (may be null).</param>
     /// <param name="duration">Total simulation duration.</param>
     /// <param name="tickResNs">Requested tick in nanoseconds (default 10); the run narrows it to the design's static delays, in fs.</param>
@@ -23,19 +23,17 @@ public static class StimulusBuilder
     /// <param name="options">Clocks, port initial values and initial-value policy (null: propose the clock by name, LRM).</param>
     /// <returns>A fully configured <see cref="SimulationConfig"/> ready for execution by SimulationRunner.</returns>
     public static SimulationConfig BuildConfig(
-        Entity entity,
+        IrDesign design,
         List<PortMomentConfiguration>? portMoments,
         TimeSpan duration,
         int tickResNs = TimeClock.NS_PER_TICK,
         int systemClockMhz = 50,
-        StimulusOptions? options = null,
-        ElaborationLineMap? lineMap = null)
-        => BuildConfigNs(entity, portMoments,
+        StimulusOptions? options = null)
+        => BuildConfigNs(design, portMoments,
             totalNs: (long)Math.Round(duration.TotalSeconds * 1e9),
             tickResNs: tickResNs,
             systemClockMhz: systemClockMhz,
-            options: options,
-            lineMap: lineMap);
+            options: options);
 
     /// <summary>
     /// Direct nanosecond-precision overload for callers that need sub-100ns
@@ -44,35 +42,27 @@ public static class StimulusBuilder
     /// and silently truncates the run.
     /// </summary>
     public static SimulationConfig BuildConfigNs(
-        Entity entity,
+        IrDesign design,
         List<PortMomentConfiguration>? portMoments,
         long totalNs,
         int tickResNs = TimeClock.NS_PER_TICK,
         int systemClockMhz = 50,
-        StimulusOptions? options = null,
-        ElaborationLineMap? lineMap = null)
+        StimulusOptions? options = null)
     {
-        ArgumentNullException.ThrowIfNull(entity);
+        ArgumentNullException.ThrowIfNull(design);
 
         // Stimuli and clock edges, first in femtoseconds: the tick is chosen to land on them.
-        var timedStimuli = new List<(long Fs, Variable Signal, string Value, AssignmentTarget? Part)>();
-        var clockSpecs = new List<(Variable Port, long HalfFs, bool InitialHigh)>();
+        var timedStimuli = new List<(long Fs, IrSignal Signal, string Value, string? Part)>();
+        var clockSpecs = new List<(IrSignal Port, long HalfFs, bool InitialHigh)>();
 
-        // Ports stimuli resolve against. Defensive against null entries in
-        // the HashSet and against ports with a null Name — both have been
-        // observed coming out of the parser on certain malformed or
-        // incomplete port blocks.
-        var portSet = new HashSet<Variable>(
-            entity.Ports?.Where(p => p is not null && !string.IsNullOrEmpty(p.Name)) ?? []);
         if (portMoments != null)
         {
             foreach (var pm in portMoments)
             {
                 if (string.IsNullOrEmpty(pm.PortName)) continue;
                 // A port name with selectors (`p.lo`, `v(3)`) drives that part of the port.
-                if (AssignmentTarget.Resolve(pm.PortName, portSet) is not { } target) continue;
-                var signal = target.Base;
-                var part = target.IsPartial ? target : null;
+                if (design.ResolvePort(pm.PortName) is not { } target) continue;
+                var (signal, part) = target;
 
                 if (pm.Values == null || pm.Values.Count == 0)
                     continue;
@@ -104,14 +94,13 @@ public static class StimulusBuilder
         double systemPeriodNs = 1_000.0 / systemClockMhz;
         timedStimuli.RemoveAll(st => string.Equals(st.Value, "CLOCK", StringComparison.OrdinalIgnoreCase));
         IEnumerable<ClockSpec> declared = options?.Clocks
-            ?? (ClockPortPolicy.Suggest(entity) is { } suggested && !timedStimuli.Any(st => ReferenceEquals(st.Signal, suggested))
+            ?? (ClockPortPolicy.Suggest(design) is { } suggested && !timedStimuli.Any(st => ReferenceEquals(st.Signal, suggested))
                 ? [new ClockSpec(suggested.Name, systemPeriodNs)]
                 : []);
         foreach (var spec in declared)
         {
-            var port = portSet.FirstOrDefault(p => p.Name.Equals(spec.Port, StringComparison.OrdinalIgnoreCase)
-                    && p.PortType is Constants.PortType.IN or Constants.PortType.INOUT)
-                ?? throw new InvalidOperationException($"clock \"{spec.Port}\" is not an input port of {entity.Name}");
+            var port = (design.ResolvePort(spec.Port) is { Part: null, Port: { PortMode: IrPortMode.In or IrPortMode.InOut } clockPort } ? clockPort : null)
+                ?? throw new InvalidOperationException($"clock \"{spec.Port}\" is not an input port of {design.Name}");
             double halfPeriodNs = (spec.PeriodNs > 0 ? spec.PeriodNs : systemPeriodNs) / 2.0;
             clockSpecs.Add((port, Math.Max(1, (long)Math.Round(halfPeriodNs * PhysicalTime.FsPerNs)), spec.InitialHigh));
         }
@@ -119,7 +108,7 @@ public static class StimulusBuilder
         // The tick lands exactly on every static delay of the design, every stimulus and
         // every clock edge, down to 1 fs (`wait for 500 ps` or an input at 5 ns under a
         // 10 ns request, G103).
-        long tickFs = StaticDelays.TickFs(entity, tickResNs > 0 ? tickResNs * PhysicalTime.FsPerNs : PhysicalTime.DefaultTickFs);
+        long tickFs = StaticDelays.TickFs(design, tickResNs > 0 ? tickResNs * PhysicalTime.FsPerNs : PhysicalTime.DefaultTickFs);
         foreach (long fs in timedStimuli.Select(st => st.Fs).Concat(clockSpecs.Select(c => c.HalfFs)))
             if (fs > 0) tickFs = StaticDelays.Gcd(tickFs, fs);
 
@@ -130,7 +119,7 @@ public static class StimulusBuilder
                 $"a run of {totalNs} ns at a tick of {tickFs} fs exceeds the engine's time range; shorten the run or use rounder delays");
 
         var stimuli = timedStimuli
-            .Select(st => new StimulusEvent { Tick = (ulong)(st.Fs / tickFs), Signal = st.Signal, Value = st.Value, Target = st.Part })
+            .Select(st => new StimulusEvent { Tick = (ulong)(st.Fs / tickFs), Signal = st.Signal, Value = st.Value, Part = st.Part })
             .OrderBy(st => st.Tick)
             .ToList();
         var clocks = clockSpecs
@@ -141,17 +130,16 @@ public static class StimulusBuilder
         var portInitials = new List<StimulusEvent>();
         foreach (var (name, value) in options?.PortInitials ?? [])
         {
-            if (AssignmentTarget.Resolve(name, portSet) is not { } target)
+            if (design.ResolvePort(name) is not { } target)
                 throw new InvalidOperationException($"initial value for unknown port \"{name}\"");
-            portInitials.Add(new StimulusEvent { Signal = target.Base, Value = value, Target = target.IsPartial ? target : null });
+            portInitials.Add(new StimulusEvent { Signal = target.Port, Value = value, Part = target.Part });
         }
 
         return new SimulationConfig
         {
-            Entity = entity,
+            Design = design,
             TotalTicks = totalTicks,
             TickFs = tickFs,
-            LineMap = lineMap,
             Clocks = clocks,
             Stimuli = stimuli,
             PortInitials = portInitials,

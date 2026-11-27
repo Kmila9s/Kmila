@@ -3,8 +3,7 @@ using Interpreter.Services;
 using Kmila.Shared.Services;
 using Parser.Models;
 using static Parser.Models.Constants;
-using Entity = Interpreter.Services.Entity;
-using Architecture = Interpreter.Services.Architecture;
+using Interpreter.Ir;
 
 namespace Kmila.Shared.Services.VisualRun;
 
@@ -30,9 +29,9 @@ namespace Kmila.Shared.Services.VisualRun;
 /// </summary>
 public sealed class VisualRunCoordinator : IDisposable
 {
-    private readonly Entity _entity;
-    private readonly Architecture _arch;
-    private readonly HashSet<Variable> _allSignals;
+    private readonly IrDesign _design;
+    // The objects that hold the ports' values during the run (in declaration order).
+    private readonly List<Variable> _ports;
     private readonly Dictionary<string, Variable> _portsByName;
     // Phase 1: ports the user is driving directly via Switch/Button widgets.
     // The auto-clock loop must NOT toggle these — otherwise it'd race with
@@ -106,30 +105,22 @@ public sealed class VisualRunCoordinator : IDisposable
     /// <summary>Raised after the loop task has fully completed (canceled or errored). Safe place to flip UI back to idle.</summary>
     public event Action? OnStopped;
 
-    /// <summary>Creates a coordinator that will drive the given entity's architecture.</summary>
-    /// <param name="entity">Entity to simulate; must have an architecture.</param>
+    /// <summary>Creates a coordinator that will drive <paramref name="design"/>.</summary>
+    /// <param name="design">The design to simulate (<see cref="Kmila.Frontend.ParsedUnit.IrOf"/>).</param>
     /// <param name="ringCapacity">Capacity of the frame history ring buffer.</param>
     /// <param name="userDrivenPorts">Ports driven directly by the user; the auto-clock loop leaves these alone.</param>
     /// <param name="traductor">Optional translator used to localize error messages.</param>
-    public VisualRunCoordinator(Entity entity, int ringCapacity = 2000, IEnumerable<string>? userDrivenPorts = null, Traductor? traductor = null)
+    public VisualRunCoordinator(IrDesign design, int ringCapacity = 2000, IEnumerable<string>? userDrivenPorts = null, Traductor? traductor = null)
     {
-        _entity = entity ?? throw new ArgumentNullException(nameof(entity));
+        _design = design ?? throw new ArgumentNullException(nameof(design));
         _traductor = traductor;
-        _arch = entity.Architecture
-            ?? throw new InvalidOperationException(LocalizeErr("VISUAL_ERR_NO_ARCHITECTURE",
-                "Entity '{0}' has no architecture.", entity.Name));
-        _allSignals = new HashSet<Variable>();
-        foreach (var p in entity.Ports) _allSignals.Add(p);
-        foreach (var s in _arch.Signals) _allSignals.Add(s);
-        _portsByName = entity.Ports.ToDictionary(p => p.Name, StringComparer.OrdinalIgnoreCase);
+        _ports = [.. design.Ports.Select(design.Binding.Cell)];
+        _portsByName = _ports.ToDictionary(p => p.Name, StringComparer.OrdinalIgnoreCase);
         _userDrivenPorts = new HashSet<string>(
             userDrivenPorts ?? Enumerable.Empty<string>(),
             StringComparer.OrdinalIgnoreCase);
         Frames = new FrameRing(ringCapacity);
     }
-
-    /// <summary>The entity's ports.</summary>
-    public IReadOnlyCollection<Variable> Ports => _entity.Ports;
 
     /// <summary>Returns the current value of the named port, or an empty string if not found.</summary>
     /// <param name="portName">Name of the port to read.</param>
@@ -259,16 +250,17 @@ public sealed class VisualRunCoordinator : IDisposable
         {
             InitializeSignals();
             _engine = new DeltaCycleEngine();
-            _engine.Initialize(_allSignals, _arch.Tasks);
+            _engine.Initialize(_design);
 
             // Phase 1 auto-clock: any IN port whose name reads as a clock
             // (clk / clock / aclk / pclk / clk_*) gets a square wave at
             // CLOCK_HALF_PERIOD_TICKS — UNLESS the user has wired a
             // switch/button to it, in which case they drive it manually.
-            _clockPorts = _entity.Ports
-                .Where(p => (p.PortType == PortType.IN || p.PortType == PortType.INOUT)
+            _clockPorts = _design.Ports
+                .Where(p => p.PortMode is IrPortMode.In or IrPortMode.InOut
                     && ClockPortPolicy.IsClockPortName(p.Name)
                     && !_userDrivenPorts.Contains(p.Name))
+                .Select(_design.Binding.Cell)
                 .ToList();
 
             ulong tick = 0;
@@ -344,7 +336,7 @@ public sealed class VisualRunCoordinator : IDisposable
         catch (OperationCanceledException) { /* expected on Stop */ }
         catch (Exception ex)
         {
-            OnError?.Invoke(LocalizeErr("VISUAL_ERR_RUNTIME", "Runtime error: {0}", (LineMap?.Locate(ex) ?? ex).Message));
+            OnError?.Invoke(LocalizeErr("VISUAL_ERR_RUNTIME", "Runtime error: {0}", (_design.LineMap?.Locate(ex) ?? ex).Message));
         }
         finally
         {
@@ -354,9 +346,6 @@ public sealed class VisualRunCoordinator : IDisposable
         }
     }
 
-    /// <summary>Where the lines of an elaborated design come from, so a run-time error names the user's file and line (G82).</summary>
-    public Interpreter.Services.ElaborationLineMap? LineMap { get; set; }
-
     /// <summary>Initial values of objects declared without <c>:=</c> (the app setting; LRM by default).</summary>
     public InitialValuePolicy InitialValues { get; set; } = InitialValuePolicy.Lrm;
 
@@ -364,8 +353,8 @@ public sealed class VisualRunCoordinator : IDisposable
     // other object starts under the initial-value policy, like a timed run.
     private void InitializeSignals()
     {
-        var widgetDriven = new HashSet<Variable>(_entity.Ports.Where(p => p.PortType is PortType.IN or PortType.INOUT));
-        InitialValueSeeder.Apply(InitialValues, InitialValueSeeder.ObjectsOf(_entity), widgetDriven);
+        var widgetDriven = new HashSet<Variable>(_design.Ports.Where(p => p.PortMode is IrPortMode.In or IrPortMode.InOut).Select(_design.Binding.Cell));
+        InitialValueSeeder.Apply(InitialValues, InitialValueSeeder.ObjectsOf(_design), widgetDriven);
         foreach (var port in widgetDriven) port.Value = port.Size > 1 ? new string('0', port.Size) : "0";
 
         // Seed InputStateMap with current values for every input/inout port
@@ -471,8 +460,8 @@ public sealed class VisualRunCoordinator : IDisposable
 
     private void SnapshotFrame(ulong tick)
     {
-        var dict = new Dictionary<string, string>(_entity.Ports.Count, StringComparer.OrdinalIgnoreCase);
-        foreach (var p in _entity.Ports)
+        var dict = new Dictionary<string, string>(_ports.Count, StringComparer.OrdinalIgnoreCase);
+        foreach (var p in _ports)
             dict[p.Name] = p.Value?.ToString() ?? "";
         Frames.Push(new VisualFrame(tick, dict));
     }

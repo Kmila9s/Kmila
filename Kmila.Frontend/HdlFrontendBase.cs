@@ -24,6 +24,16 @@ public abstract class HdlFrontendBase : IHdlFrontend
     /// </summary>
     protected abstract ParsedUnit ParseCore(string source, IReadOnlyList<string> companions, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Lowers one parsed design unit (with its body) to the language-neutral IR the engine runs;
+    /// <paramref name="lineMap"/> locates the lines of an elaborated text.
+    /// </summary>
+    protected abstract Interpreter.Ir.IrDesign Lower(Entity unit, Interpreter.Services.ElaborationLineMap? lineMap);
+
+    /// <summary><see cref="ParseCore"/> with this front-end's <see cref="Lower"/> attached to the unit.</summary>
+    private ParsedUnit Parse(string source, IReadOnlyList<string> companions, CancellationToken cancellationToken) =>
+        ParseCore(source, companions, cancellationToken).LoweredBy(Lower);
+
     /// <inheritdoc/>
     /// <remarks>Text-only (no registry access). Languages without an elaborator keep this default.</remarks>
     public virtual string? ElaborateSource(IReadOnlyList<string> files, string entry) => null;
@@ -57,14 +67,14 @@ public abstract class HdlFrontendBase : IHdlFrontend
     public ParsedUnit ParseSource(string source, CancellationToken cancellationToken = default)
     {
         using var _ = EngineState.Enter(cancellationToken);
-        return ParseCore(source, [], cancellationToken);
+        return Parse(source, [], cancellationToken);
     }
 
     public ParsedUnit ParseFile(string path, CancellationToken cancellationToken = default)
     {
         string text;
         try { text = File.ReadAllText(path); }
-        catch (Exception ex) { return new ParsedUnit(string.Empty, [], [], ExceptionDispatchInfo.Capture(ex)); }
+        catch (Exception ex) { return new ParsedUnit(string.Empty, [], [], ExceptionDispatchInfo.Capture(ex)).LoweredBy(Lower); }
         return ParseSource(text, cancellationToken);
     }
 
@@ -119,7 +129,7 @@ public abstract class HdlFrontendBase : IHdlFrontend
             }
         }
 
-        var unit = ParseCore(text ?? File.ReadAllText(target), elaborated ? [] : sources, cancellationToken);
+        var unit = Parse(text ?? File.ReadAllText(target), elaborated ? [] : sources, cancellationToken);
         string? topName = string.IsNullOrEmpty(request.Entry) ? null : ResolveEntityName(sources, request.Entry!) ?? request.Entry;
         var top = PickTop(unit.Entities, topName);
         var entryError = CheckEntry(request, topName, top, unit, log);
@@ -158,7 +168,7 @@ public abstract class HdlFrontendBase : IHdlFrontend
         EngineState.Reset();
         var existing = files.Where(File.Exists).ToList();
         ScanCore(existing, null);
-        return existing.Select(f => (f, ParseCore(File.ReadAllText(f), existing, cancellationToken))).ToList();
+        return existing.Select(f => (f, Parse(File.ReadAllText(f), existing, cancellationToken))).ToList();
     }
 
     public Entity? PickTop(IEnumerable<Entity> entities, string? entry) =>

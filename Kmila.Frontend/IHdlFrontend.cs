@@ -1,4 +1,6 @@
+using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
+using Interpreter.Ir;
 using Interpreter.Services;
 using Parser.Models;
 
@@ -140,6 +142,21 @@ public sealed class ParsedUnit
     public Interpreter.Services.ElaborationLineMap? LineMap { get; }
 
     private readonly ExceptionDispatchInfo? _error;
+    private Func<Entity, ElaborationLineMap?, IrDesign> _lower = null!;
+    private readonly ConditionalWeakTable<Entity, IrDesign> _ir = new();
+
+    /// <summary>Sets how this unit's design units lower to the IR (the producing front-end's); returns the unit.</summary>
+    internal ParsedUnit LoweredBy(Func<Entity, ElaborationLineMap?, IrDesign> lower)
+    {
+        _lower = lower;
+        return this;
+    }
+
+    /// <summary>
+    /// The language-neutral form of <paramref name="unit"/> (one of <see cref="Entities"/>, with an
+    /// architecture): what the engine, the stimulus builder and the harness read. Lowered once per unit.
+    /// </summary>
+    public IrDesign IrOf(Entity unit) => _ir.GetValue(unit, u => _lower(u, LineMap));
 
     /// <summary>The text that was parsed.</summary>
     public string Source { get; }
@@ -186,6 +203,9 @@ public sealed class DesignResult
 
     /// <summary>The top entity: <see cref="DesignRequest.Entry"/> with an architecture, else the first with one.</summary>
     public Entity? Top { get; }
+
+    /// <summary>The language-neutral form of <see cref="Top"/>, or null when there is no top.</summary>
+    public IrDesign? Ir => Top is null ? null : Unit!.IrOf(Top);
 
     /// <summary>True when the parsed text is the elaborated (flattened) design.</summary>
     public bool Elaborated { get; }
