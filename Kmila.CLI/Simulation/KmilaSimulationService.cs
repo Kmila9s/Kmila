@@ -133,7 +133,7 @@ public sealed class KmilaSimulationService
 
         return new SimRunResult
         {
-            Entity = run.Entity.Name,
+            Entity = run.Design.Name,
             History = run.History,
             TickFs = run.TickFs,
             TotalTicks = run.TotalTicks,

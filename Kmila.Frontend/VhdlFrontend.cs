@@ -49,6 +49,9 @@ public sealed class VhdlFrontend : HdlFrontendBase
         return new ParsedUnit(source, parser.Entities, parser.Diagnostics, error);
     }
 
+    protected override Interpreter.Ir.IrDesign Lower(Entity unit, ElaborationLineMap? lineMap) =>
+        Interpreter.Ir.Vhdl.VhdlDesignAdapter.From(unit, lineMap);
+
     /// <summary>Parses a companion unit's text with <paramref name="seed"/> entities visible; returns its entities.</summary>
     private static List<Entity> ParseUnit(string text, List<Entity> seed, CancellationToken cancellationToken)
     {

@@ -66,13 +66,13 @@ public static class PracticeOracle
 
             // Reference: a testbench applying the configuration Kmila just executed.
             string bench = Path.Combine(dir, harness.TopName + language.PrimaryExtension);
-            await File.WriteAllTextAsync(bench, harness.Generate(HarnessSpec.From(run.Entity.Name, run.Entity.Ports, run.Config, run.TickFs)), ct);
+            await File.WriteAllTextAsync(bench, harness.Generate(HarnessSpec.From(run.Config)), ct);
             var golden = await reference.RunAsync(new ReferenceRequest([design, bench], harness.TopName, totalNs), ct);
             if (!golden.Ok) return new OracleResult(test.Id, false, null, $"reference exit={golden.ExitCode}: {Tail(golden.Log)}");
 
             var diff = WaveformComparer.Compare(
                 VcdReader.Parse(golden.Vcd!),
-                VcdReader.Parse(run.History.ExportToVcd(run.Entity.Name, run.TickFs)),
+                VcdReader.Parse(run.History.ExportToVcd(run.Design.Name, run.TickFs)),
                 CompareOptions.Strict(exercise.OutputPortsToCompare, ignoreT0: false) with
                 {
                     SampleTimesFs = exercise.GradedInstantsNs(test).Select(ns => ns * Interpreter.Models.PhysicalTime.FsPerNs).ToList(),

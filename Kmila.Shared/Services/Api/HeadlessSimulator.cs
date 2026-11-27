@@ -62,12 +62,12 @@ public sealed class HeadlessSimulator
             Stimulus       = StimulusOptionsOf(request),
         });
 
-        string vcd = run.History.ExportToVcd(run.Entity.Name, run.TickFs);
+        string vcd = run.History.ExportToVcd(run.Design.Name, run.TickFs);
 
         return new SimulateResponse
         {
             RunId       = Guid.NewGuid().ToString("N").Substring(0, 12),
-            Entity      = run.Entity.Name,
+            Entity      = run.Design.Name,
             DurationMs  = run.DurationMs,
             TotalTicks  = run.TotalTicks,
             TickFs      = run.TickFs,
@@ -141,23 +141,22 @@ public sealed class HeadlessSimulator
 
         if (design.Entities.Count == 0)
             throw new InvalidOperationException("Parser produced no entities.");
-        var entity = design.Top
+        var top = design.Ir
             ?? throw new InvalidOperationException("No entity with architecture found.");
 
         Phase("stimulus-begin");
         var config = StimulusBuilder.BuildConfigNs(
-            entity,
+            top,
             options.PortMoments is { Count: > 0 } ? options.PortMoments : null,
             totalNs: options.TotalNs,
             tickResNs: tickResNs,
             systemClockMhz: systemClockMhz,
-            options: options.Stimulus,
-            lineMap: design.Unit?.LineMap);
+            options: options.Stimulus);
         Phase("stimulus-end");
         if (config.TickFs != tickResNs * IModels.PhysicalTime.FsPerNs)
             log.Add($"[sim] tick adjusted to {config.TickFs} fs (static delays of the design)");
 
-        log.Add($"[sim] entity={entity.Name} ports={entity.Ports.Count} totalTicks={config.TotalTicks} stimuli={config.Stimuli.Count} clocks={config.Clocks.Count}");
+        log.Add($"[sim] entity={top.Name} ports={top.Ports.Count} totalTicks={config.TotalTicks} stimuli={config.Stimuli.Count} clocks={config.Clocks.Count}");
 
         using var runner = new SimulationRunner();
         // Surface runtime errors and VHDL `report` output into the log —
@@ -187,7 +186,6 @@ public sealed class HeadlessSimulator
         sw.Stop();
         return new HeadlessRunResult
         {
-            Entity     = entity,
             History    = history,
             Config     = config,
             DurationMs = sw.ElapsedMilliseconds,
@@ -266,7 +264,8 @@ public sealed class HeadlessRunOptions
 /// <summary>Output of <see cref="HeadlessSimulator.RunProjectAsync"/>.</summary>
 public sealed class HeadlessRunResult
 {
-    public required Entity Entity { get; init; }
+    /// <summary>The design that ran (the configuration's).</summary>
+    public Interpreter.Ir.IrDesign Design => Config.Design;
     public required SignalHistory History { get; init; }
     /// <summary>The run's effective tick in femtoseconds (what <see cref="TotalTicks"/> and the history count).</summary>
     public long TickFs => Config.TickFs;

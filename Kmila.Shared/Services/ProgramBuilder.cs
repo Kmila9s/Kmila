@@ -365,18 +365,16 @@ public class ProgramBuilder : IDisposable
         bool fastRun = false,
         InitialValuePolicy initialValues = InitialValuePolicy.Lrm)
     {
-        // Get first entity with architecture
-        var entity = Design?.Top;
-        if (entity == null)
-            throw new InvalidOperationException("No entity with architecture found.");
+        // The top design unit (the first with a body unless an entry was named).
+        var design = Design?.Ir
+            ?? throw new InvalidOperationException("No entity with architecture found.");
 
         // Build simulation config from UI parameters
         // The clock is the clock-named port, proposed visibly (the «auto clock» badge).
-        var config = StimulusBuilder.BuildConfig(entity, portMoments, duration,
+        var config = StimulusBuilder.BuildConfig(design, portMoments, duration,
             tickResNs: tickResNs,
             systemClockMhz: systemClockMhz,
-            options: new StimulusOptions { InitialValues = initialValues },
-            lineMap: Design?.Unit?.LineMap);
+            options: new StimulusOptions { InitialValues = initialValues });
         // The effective tick (narrowed to the design's static delays) labels the waveform.
         LastTickFs = config.TickFs;
 
@@ -387,7 +385,7 @@ public class ProgramBuilder : IDisposable
         // the entire Run click before the simulator gets a chance.
         try
         {
-            Console.WriteLine($"[Sim] Entity={entity?.Name ?? "?"} ports={entity?.Ports?.Count ?? 0} " +
+            Console.WriteLine($"[Sim] Entity={design.Name} ports={design.Ports.Count} " +
                 $"totalTicks={config?.TotalTicks} clocks={config?.Clocks?.Count ?? 0} stimuli={config?.Stimuli?.Count ?? 0}");
             if (config?.Clocks != null)
             {
@@ -398,14 +396,8 @@ public class ProgramBuilder : IDisposable
                         $"halfPeriodTicks={clk.HalfPeriodTicks} initialHigh={clk.InitialHigh}");
                 }
             }
-            if (entity?.Ports != null)
-            {
-                foreach (var p in entity.Ports)
-                {
-                    if (p is null) continue;
-                    Console.WriteLine($"[Sim.Port] name={p.Name ?? "?"} dir={p.PortType} size={p.Size}");
-                }
-            }
+            foreach (var p in design.Ports)
+                Console.WriteLine($"[Sim.Port] name={p.Name} dir={p.PortMode} size={p.Width}");
         }
         catch (Exception diagEx)
         {
@@ -654,11 +646,10 @@ public class ProgramBuilder : IDisposable
 
         // Testbench drives its own clock/reset in VHDL → no UI port moments.
         var config = StimulusBuilder.BuildConfigNs(
-            entity, portMoments: null,
+            unit.IrOf(entity), portMoments: null,
             totalNs: totalNs,
             tickResNs: tickResNs,
-            systemClockMhz: systemClockMhz,
-            lineMap: unit.LineMap);
+            systemClockMhz: systemClockMhz);
         LastTickFs = config.TickFs; // narrowed to the design's static delays
 
         Console.WriteLine($"[Sim.TB] entity={entity.Name} totalTicks={config.TotalTicks} " +

@@ -1,5 +1,4 @@
-using Interpreter.Services;
-using Parser.Models;
+using Interpreter.Ir;
 
 namespace Kmila.Shared.Services;
 
@@ -13,13 +12,10 @@ public static class ClockPortPolicy
 {
     private static readonly char[] Separators = { '_', '-', '.' };
 
-    /// <summary>The clock-named port of <paramref name="entity"/> (inputs first), or null.</summary>
-    public static Variable? Suggest(Entity entity)
-    {
-        var ports = entity.Ports?.Where(p => p is not null).ToList() ?? [];
-        return ports.FirstOrDefault(p => p.PortType == Constants.PortType.IN && IsClockPortName(p.Name))
-            ?? ports.FirstOrDefault(p => IsClockPortName(p.Name));
-    }
+    /// <summary>The clock-named port of <paramref name="design"/> (inputs first), or null.</summary>
+    public static IrSignal? Suggest(IrDesign design) =>
+        design.Ports.FirstOrDefault(p => p.PortMode == IrPortMode.In && IsClockPortName(p.Name))
+            ?? design.Ports.FirstOrDefault(p => IsClockPortName(p.Name));
 
     /// <summary>
     /// True when a port name reads like a clock — exact <c>clk</c>/<c>clock</c>, a <c>clk</c>/<c>clock</c>

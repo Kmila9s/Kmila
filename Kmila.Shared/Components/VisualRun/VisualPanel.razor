@@ -778,8 +778,8 @@
     private ProjectFile? _designFile;
     private ProjectFile? _kvizFile;
     private Entity? _entity;
-    // Where the flattened design's lines come from (G82): run-time errors name the user's file and line.
-    private Interpreter.Services.ElaborationLineMap? _lineMap;
+    // What the run simulates: _entity in its neutral form (with the elaborated text's line map, G82).
+    private Interpreter.Ir.IrDesign? _ir;
     private KvizDoc _doc = new();
     private VisualRunCoordinator? _coord;
     private string? _selectedId;
@@ -1630,6 +1630,7 @@
             });
             design.ThrowIfFailed();
             _entity = design.Top;
+            _ir = design.Ir;
             if (_entity == null)
             {
                 _loadError = Traductor.T("VISUAL_NO_ENTITY_FOUND");
@@ -1648,8 +1649,11 @@
                 {
                     var unit = frontend.ParseSource(flat);
                     unit.ThrowIfFailed();
-                    _entity = frontend.PickTop(unit.Entities, _entity.Name) ?? _entity;
-                    _lineMap = unit.LineMap;
+                    if (frontend.PickTop(unit.Entities, _entity.Name) is { } flatTop)
+                    {
+                        _entity = flatTop;
+                        _ir = unit.IrOf(flatTop);
+                    }
                 }
             }
             catch (Exception elabEx)
@@ -1664,6 +1668,7 @@
         {
             _loadError = string.Format(Traductor.T("VISUAL_PARSE_FAILED"), ex.Message);
             _entity = null;
+            _ir = null;
         }
     }
 
@@ -1752,7 +1757,7 @@
         try { await JS.InvokeVoidAsync("kmilaAudio.unlock"); }
         catch { /* JS not ready during prerender / no-audio browser */ }
         await ParseEntityAsync();
-        if (_entity == null) return;
+        if (_ir == null) return;
         _coord?.Dispose();
         var userDrivenPorts = _doc.Components
             .Where(c => c.Type == "switch" || c.Type == "button")
@@ -1761,7 +1766,7 @@
             .ToList();
         int ringTicks = Math.Max(_doc.Settings.RingBufferTicks, _settingsRingBuffer);
         if (ringTicks <= 0) ringTicks = 2000;
-        _coord = new VisualRunCoordinator(_entity, ringTicks, userDrivenPorts, Traductor) { LineMap = _lineMap };
+        _coord = new VisualRunCoordinator(_ir, ringTicks, userDrivenPorts, Traductor);
         _coord.Speed = _speedIndex;
         _coord.InitialValues = _initialValues;
         _coord.CustomTickDelayMs = _customDelayMs;
